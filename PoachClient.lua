@@ -154,10 +154,20 @@ end
 
 -- Screen ----------------------------------------------------------------
 
+-- Two layers: the HUD button sits under the other windows (DisplayOrder -1), while the Poach
+-- window, the top banners and messages sit above every HUD button (DisplayOrder 5)
 local gui = make("ScreenGui", {
 	Name = "PoachGui",
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = -1,
+	Parent = playerGui,
+})
+local front = make("ScreenGui", {
+	Name = "PoachWindowGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 5,
 	Parent = playerGui,
 })
 
@@ -214,7 +224,7 @@ local toast = make("TextLabel", {
 	TextColor3 = COLORS.gold,
 	Visible = false,
 	ZIndex = 10,
-	Parent = gui,
+	Parent = front,
 })
 round(toast, 12)
 fitText(toast, 22)
@@ -240,7 +250,7 @@ local window = make("Frame", {
 	Size = UDim2.fromScale(0.92, 0.92),
 	BackgroundColor3 = COLORS.panel,
 	Visible = false,
-	Parent = gui,
+	Parent = front,
 })
 round(window, 18)
 make("UISizeConstraint", { MaxSize = Vector2.new(640, 470), Parent = window })
@@ -800,7 +810,7 @@ local function topPanel(name, color, withButton)
 		BackgroundTransparency = 0.05,
 		Visible = false,
 		ZIndex = 5,
-		Parent = gui,
+		Parent = front,
 	})
 	round(frame, 14)
 	make("UISizeConstraint", { MaxSize = Vector2.new(460, 92), Parent = frame })
