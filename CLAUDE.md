@@ -27,11 +27,11 @@
   New server features follow this pattern. Never add a second DataStore, save loop or PlayerAdded data owner.
 - **Configs** are ModuleScripts in ReplicatedStorage:
   - `ShopConfig`: passes, products, `EggsEnabled`
-  - `CreatureConfig`: creatures, rarities, eggs, odds, slots
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes` and `EmployeeRemotes` in ReplicatedStorage.
+  - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes` and `PoachRemotes` in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
-  - HUD button slots: EGGS 0, SHOP 1, TEAM 2. They use the shared responsive layout: a left column, or a top row on short (phone) screens.
+  - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3. They use the shared responsive layout: a left column, or a top row on short (phone) screens.
   - Pop-up messages go at the bottom center.
   - Everything must work on a phone.
 - **Studio-only debug tools** live in the shop's Debug tab. Add buttons with `ShopServer.addDebugAction`. They must stay behind `RunService:IsStudio()` and `ShopConfig.DebugInStudio`, so they never run on live servers.
@@ -72,6 +72,13 @@
     employees = { { id = GUID, creature = "CodingCat", hiredAt = os.time() }, ... },
     incubators = { false or { egg = "Garage", startedAt, hatchAt }, ... }, -- 3 slots, false = empty
     pending = nil or { id, creature, hiredAt },
+  },
+  poach = {                                      -- PoachServer.serialize (optional: older saves have none)
+    hrLevel = number, shieldLeft = seconds, cooldownUntil = os.time(),
+    losses = { os.time(), ... },                 -- recent losses, for the loss limit
+    gained = { [employeeId] = { from = UserId, refund } },  -- moves the other save hasn't confirmed yet
+    lost = { [employeeId] = { to = UserId, at } },          -- who took our employees (last 30 days, max 50)
+    refund = nil or number,                      -- Cash of a negotiation the server stopped during
   },
 }
 ```

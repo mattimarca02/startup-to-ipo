@@ -2,14 +2,15 @@
 
 A Roblox idle tycoon, published as **Build your Startup!** (place `86395856666175`, universe `10768772528`).
 
-Each player gets a garage plot and buys upgrades from a green pad to earn Cash every second. While they're offline they keep earning at 50%, for up to 8 hours. Recruiting eggs hatch creature employees who walk around the garage and add income. A shop sells game passes and developer products. Later milestones add poaching employees from other players and an IPO rebirth with a permanent multiplier.
+Each player gets a garage plot and buys upgrades from a green pad to earn Cash every second. While they're offline they keep earning at 50%, for up to 8 hours. Recruiting eggs hatch creature employees who walk around the garage and add income. A shop sells game passes and developer products. Players can poach employees from each other in the same server and defend with an HR Department or a Poach Shield. A later milestone adds an IPO rebirth with a permanent multiplier.
 
 | Milestone | What | Status |
 |---|---|---|
 | 1 | Garage plot, upgrades, Cash per second, saving, offline income | Done |
 | 2 | Recruiting eggs, 3 incubators, 12 creature employees, team slots | Done. Egg shop items stay off sale until `ShopConfig.EggsEnabled = true` |
 | 3 | Shop: 4 game passes, 5 developer products | Done |
-| Next | Poaching, IPO rebirth | Not started |
+| 3 (poaching) | Poach employees from other players, HR Department pad, Counter-Offer, Headhunter pass, Poach Shield product | In review on `milestone-3-poaching`. Headhunter and Poach Shield have `id = 0` until the owner runs the sync |
+| Next | IPO rebirth | Not started |
 
 ## Folder structure
 
@@ -20,11 +21,13 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `TycoonCore.lua` | ServerScriptService | Script | Plots, upgrades, Cash, offline income, saving and loading. Owns all player data. |
 | `ShopServer.lua` | ServerScriptService | ModuleScript | Game passes, developer products, VIP perks, Studio Debug tab |
 | `EmployeeServer.lua` | ServerScriptService | ModuleScript | Eggs, incubators, hatch rolls, team slots, employees in the garage |
+| `PoachServer.lua` | ServerScriptService | ModuleScript | Poaching negotiations, protection and shields, Counter-Offers, the purple HR Department pad |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
-| `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts. Game balance lives here. |
+| `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
 | `ShopClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | SHOP button, shop window, pop-up messages, Debug tab |
 | `EmployeeClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | EGGS and TEAM buttons, Recruiting window, hatch reveal, employees walking |
+| `PoachClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | POACH button, Poach window, negotiation mini-screen, "you're being poached" alerts, Counter-Offer card |
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 
 Other files:
