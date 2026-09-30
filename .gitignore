@@ -1,0 +1,22 @@
+# Secrets: never commit your Roblox API key
+.env
+.env.*
+*.env
+*.key
+*.pem
+secrets/
+
+# Python cache
+__pycache__/
+
+# Place files: the live place is in Team Create, the repo only tracks scripts.
+# Binary place files can't be merged and may hold old or private data.
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
