@@ -2,6 +2,7 @@
 -- Put this Script in ServerScriptService. It builds everything by itself.
 -- Game passes and developer products live in ShopServer (ServerScriptService) and ShopConfig (ReplicatedStorage).
 -- Eggs and creature employees live in EmployeeServer (ServerScriptService) and CreatureConfig (ReplicatedStorage).
+-- Poaching and the HR Department live in PoachServer (ServerScriptService) and CreatureConfig.Poaching.
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
@@ -18,6 +19,7 @@ end
 
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
+local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
 
 -- Upgrades are bought in this order. cost = Cash, income = Cash per second.
 local UPGRADES = {
@@ -35,7 +37,7 @@ local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, slot, folder, pad, cash, income, shop, team, loaded, ready, saving }
+local playerData = {} -- player -> { owned, slot, folder, pad, cash, income, shop, team, poach, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -163,6 +165,20 @@ local function load(player)
 	return result, true
 end
 
+-- Reads someone else's save without loading it. Poaching uses it to check that an employee
+-- moving between two players was saved on both sides. Returns (save or nil, worked).
+local function peekSave(userId)
+	if not store then return nil, false end
+	local ok, result = pcall(function()
+		return store:GetAsync("player_" .. userId)
+	end)
+	if not ok then
+		warn("Could not read a save for a poaching check: " .. tostring(result))
+		return nil, false
+	end
+	return result, true
+end
+
 -- Returns true if the save worked (the shop needs to know before confirming a purchase)
 local function save(player)
 	local data = playerData[player]
@@ -184,6 +200,7 @@ local function save(player)
 		lastSeen = os.time(),
 		shop = ShopServer.serialize(data),
 		team = EmployeeServer.serialize(data),
+		poach = PoachServer.serialize(data),
 	}
 	local ok, err = pcall(function()
 		store:SetAsync("player_" .. player.UserId, payload)
@@ -214,6 +231,18 @@ EmployeeServer.init({
 	save = save,
 	updateIncome = updateIncome,
 	plotCenter = plotCenter,
+})
+
+-- Poaching (milestone 3 poaching) ---------------------------------------
+
+PoachServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+	updateIncome = updateIncome,
+	plotCenter = plotCenter,
+	peekSave = peekSave,
 })
 
 -- Players joining and leaving -------------------------------------------
@@ -273,6 +302,7 @@ Players.PlayerAdded:Connect(function(player)
 	end
 	ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
 	EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
+	PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
 
 	for i, upg in ipairs(UPGRADES) do
 		if data.owned[upg.name] then
