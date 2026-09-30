@@ -400,6 +400,12 @@ local function productText(product)
 	if effect.instantHatches then
 		text ..= "\nYou have " .. (player:GetAttribute("InstantHatches") or 0)
 	end
+	if effect.shieldMinutes then
+		local left = (player:GetAttribute("PoachShieldUntil") or 0) - workspace:GetServerTimeNow()
+		if left > 0 then
+			text ..= "\nProtected: " .. formatTime(left) .. " left"
+		end
+	end
 	return text
 end
 
@@ -530,6 +536,14 @@ if debugRemote then
 		debugRow("🎲", "Next hatch: " .. rarity.key, "The next egg you hatch will be " .. rarity.key .. ".", "Set", "ForceRarity", rarity.key)
 	end
 	debugRow("⏩", "Skip egg timers", "Every egg in your incubators becomes ready now.", "Skip", "SkipEggTimers")
+
+	-- Poaching (milestone 3 poaching)
+	debugRow("🤖", "Spawn dummy target", "Adds a fake player with 6 employees to the Poach window, to test alone.", "Spawn", "PoachSpawnDummy")
+	debugRow("🏢", "Dummy HR level +1", "Raises the dummy's HR Department (after Lv 5 it goes back to 0).", "+1", "PoachDummyHR")
+	debugRow("🦹", "Dummy poaches me", "The dummy negotiates for your best employee and always wins, unless you get a Poach Shield first. Tests the warning and the Counter-Offer.", "Poach me", "PoachDummyAttack")
+	debugRow("✅", "Next poach: success", "Your next negotiation always works.", "Set", "PoachForce", "success")
+	debugRow("❌", "Next poach: failure", "Your next negotiation always fails.", "Set", "PoachForce", "fail")
+	debugRow("🧹", "Clear shields and cooldowns", "For everyone in this server: no shields, no loss limit, no waiting.", "Clear", "PoachClearTimers")
 end
 
 -- Tabs, opening and closing ---------------------------------------------

@@ -58,6 +58,15 @@ ShopConfig.Passes = {
 		needsEggs = true,
 		effect = { autoHatch = true },
 	},
+	{
+		key = "Headhunter",
+		name = "Headhunter",
+		description = "+10% success chance every time you poach an employee.",
+		icon = "🎯",
+		price = 149,
+		id = 1998465892,
+		effect = { poachBonus = 0.1 },
+	},
 }
 
 -- Developer products: can be bought again and again. tab = which shop tab shows it.
@@ -113,6 +122,16 @@ ShopConfig.Products = {
 		id = 3715692116,
 		needsEggs = true,
 		effect = { instantHatches = 1 },
+	},
+	{
+		key = "PoachShield",
+		tab = "Boosts",
+		name = "Poach Shield",
+		description = "Nobody can poach your employees for 1 hour. Buy again to add time.",
+		icon = "🛡️",
+		price = 49,
+		id = 3715702908,
+		effect = { shieldMinutes = 60 },
 	},
 }
 

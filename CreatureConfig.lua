@@ -106,6 +106,35 @@ CreatureConfig.Creatures = {
 	},
 }
 
+-- Poaching: hiring employees away from other players in the same server (milestone 3 poaching).
+-- Chances go from 0 to 1 (0.4 = 40%). Times are in seconds. Shields and protection only count
+-- down while you're playing (offline players can't be poached anyway).
+CreatureConfig.Poaching = {
+	-- Chance to win the negotiation, by rarity. false = can never be poached.
+	BaseChance = { Common = 0.6, Uncommon = 0.5, Rare = 0.4, Epic = 0.3, Legendary = false },
+	MinChance = 0.05, -- however strong the HR Department, the chance never drops below this
+	MaxChance = 0.9,
+	CostIncomeSeconds = 300, -- a poach costs this many seconds of the employee's income...
+	MinCost = 500, -- ...but never less than this
+	NegotiationSeconds = { 8, 10 }, -- each negotiation takes a random time between these two
+	AttackerCooldown = 30, -- wait between two poaching attempts
+	ShieldAfterPoach = 10 * 60, -- after losing an employee, nobody can poach you for this long
+	CounterOfferSeconds = 5 * 60, -- time to buy the poached employee back (once)
+	CounterOfferPrice = 0.5, -- buy-back price, as a share of what the poacher paid; the poacher gets it
+	MaxLosses = 1, -- a player loses at most this many employees...
+	LossWindow = 10 * 60, -- ...in this much time
+	NewPlayerShield = 15 * 60, -- brand-new players are protected for their first minutes of play
+	-- HR Department: defense levels bought with Cash on the purple pad in the garage.
+	-- defense is taken off every poacher's chance (0.05 = 5% less).
+	HRDepartment = {
+		{ cost = 2500, defense = 0.05 },
+		{ cost = 10000, defense = 0.1 },
+		{ cost = 40000, defense = 0.15 },
+		{ cost = 120000, defense = 0.2 },
+		{ cost = 350000, defense = 0.25 },
+	},
+}
+
 -- Helpers used by both the server and the screens -----------------------
 
 local function findBy(list, key)
@@ -171,6 +200,30 @@ function CreatureConfig.formatTime(seconds)
 	return string.format("%d:%02d", m, s)
 end
 
+-- What poaching this creature costs (the poacher pays it before the negotiation starts)
+function CreatureConfig.poachCost(creature)
+	local rules = CreatureConfig.Poaching
+	return math.max(rules.MinCost, math.floor(creature.income * rules.CostIncomeSeconds))
+end
+
+-- How much an HR Department level takes off poaching chances (level 0 = no HR Department)
+function CreatureConfig.hrDefense(level)
+	local info = CreatureConfig.Poaching.HRDepartment[level]
+	return info and info.defense or 0
+end
+
+-- Chance (0 to 1) that poaching this creature works, or nil if it can never be poached.
+-- defense = the target's HR Department, bonus = the poacher's Headhunter pass.
+-- Only the server's number counts; screens use this to show it.
+function CreatureConfig.poachChance(creature, defense, bonus)
+	local rules = CreatureConfig.Poaching
+	local base = rules.BaseChance[creature.rarity]
+	if not base then
+		return nil
+	end
+	return math.clamp(base - (defense or 0) + (bonus or 0), rules.MinChance, rules.MaxChance)
+end
+
 -- Warn early about mistakes in the lists above
 do
 	local seen = {}
@@ -192,6 +245,11 @@ do
 			if weight > 0 and #CreatureConfig.creaturesOfRarity(rarityKey) == 0 then
 				warn("CreatureConfig: " .. egg.name .. " can roll " .. rarityKey .. " but no creature has that rarity")
 			end
+		end
+	end
+	for _, rarity in ipairs(CreatureConfig.Rarities) do
+		if CreatureConfig.Poaching.BaseChance[rarity.key] == nil then
+			warn("CreatureConfig: Poaching.BaseChance needs " .. rarity.key .. " (a chance, or false)")
 		end
 	end
 end

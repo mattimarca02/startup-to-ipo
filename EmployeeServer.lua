@@ -3,6 +3,8 @@
 -- TycoonCore owns player data and saving, and plugs this module in with EmployeeServer.init.
 -- Everything is decided here on the server: buying, timers, the random hatch roll, slots and
 -- income. The client only shows the state and asks for actions.
+-- PoachServer moves employees between players with hasFreeSlot / releaseEmployee /
+-- finishRelease / addEmployee (see "Poaching" below).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -336,6 +338,48 @@ local function resolvePending(player, choice)
 	return true, creature.name .. " joined your team!"
 end
 
+-- Poaching (PoachServer moves employees between two players' teams) ---------------
+
+function EmployeeServer.hasFreeSlot(player)
+	local team = getTeam(player)
+	return team ~= nil and #team.employees < maxEmployees(player)
+end
+
+-- Takes an employee off the team and returns it (nil if it isn't there).
+-- keepInSave: it stays in this player's save ("outgoing") until finishRelease, so an employee
+-- that is moving to another player is never lost if the server stops halfway.
+function EmployeeServer.releaseEmployee(player, id, keepInSave)
+	local team, data = getTeam(player)
+	local employee = team and removeEmployee(team, id)
+	if not employee then return nil end
+	if keepInSave then
+		team.outgoing[id] = employee
+	end
+	placeEmployees(data)
+	core.updateIncome(player)
+	push(player)
+	return employee
+end
+
+-- The other player's save has the employee now: stop saving it here
+function EmployeeServer.finishRelease(player, id)
+	local team = getTeam(player)
+	if team then
+		team.outgoing[id] = nil
+	end
+end
+
+-- Puts an employee (same ID) on the team. False if the team is full.
+function EmployeeServer.addEmployee(player, employee)
+	local team, data = getTeam(player)
+	if not team or #team.employees >= maxEmployees(player) then return false end
+	table.insert(team.employees, { id = employee.id, creature = employee.creature, hiredAt = os.time() })
+	placeEmployees(data)
+	core.updateIncome(player)
+	push(player)
+	return true
+end
+
 local ACTIONS = {
 	BuyEgg = buyEgg,
 	Hatch = function(player, index)
@@ -380,6 +424,7 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 		employees = {}, -- { id, creature, hiredAt } (saved)
 		incubators = {}, -- [1..INCUBATORS] = { egg, startedAt, hatchAt } or false (saved)
 		pending = nil, -- a hatched creature waiting for a free desk (saved)
+		outgoing = {}, -- employee ID -> employee being poached away: still saved here until the new owner's save has it
 		models = {}, -- employee ID -> Model in the garage
 		incubatorParts = {},
 		revealQueue = {},
@@ -456,6 +501,9 @@ function EmployeeServer.serialize(data)
 	if not team then return nil end
 	local employees, incubators = {}, {}
 	for _, e in ipairs(team.employees) do
+		table.insert(employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt })
+	end
+	for _, e in pairs(team.outgoing) do -- being poached: see releaseEmployee
 		table.insert(employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt })
 	end
 	for i = 1, INCUBATORS do
