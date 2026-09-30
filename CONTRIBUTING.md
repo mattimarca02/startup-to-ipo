@@ -82,7 +82,7 @@ If Studio lists your script in the **Drafts** window (**View → Drafts**), righ
 
 Whoever is named here is the only person editing that script right now. Claim a script before changing it and clear it when your pull request is merged. Add a row when you create a new script.
 
-Team: @mattimarca02 (owner) · @teammate (add your GitHub name)
+Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
