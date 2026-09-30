@@ -64,7 +64,7 @@ ShopConfig.Passes = {
 		description = "+10% success chance every time you poach an employee.",
 		icon = "🎯",
 		price = 149,
-		id = 0,
+		id = 1998465892,
 		effect = { poachBonus = 0.1 },
 	},
 }
@@ -130,7 +130,7 @@ ShopConfig.Products = {
 		description = "Nobody can poach your employees for 1 hour. Buy again to add time.",
 		icon = "🛡️",
 		price = 49,
-		id = 0,
+		id = 3715702908,
 		effect = { shieldMinutes = 60 },
 	},
 }
