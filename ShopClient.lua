@@ -540,7 +540,7 @@ if debugRemote then
 	-- Poaching (milestone 3 poaching)
 	debugRow("🤖", "Spawn dummy target", "Adds a fake player with 6 employees to the Poach window, to test alone.", "Spawn", "PoachSpawnDummy")
 	debugRow("🏢", "Dummy HR level +1", "Raises the dummy's HR Department (after Lv 5 it goes back to 0).", "+1", "PoachDummyHR")
-	debugRow("🦹", "Dummy poaches me", "The dummy takes your best employee: test the victim side and the Counter-Offer.", "Poach me", "PoachDummyAttack")
+	debugRow("🦹", "Dummy poaches me", "The dummy negotiates for your best employee and always wins, unless you get a Poach Shield first. Tests the warning and the Counter-Offer.", "Poach me", "PoachDummyAttack")
 	debugRow("✅", "Next poach: success", "Your next negotiation always works.", "Set", "PoachForce", "success")
 	debugRow("❌", "Next poach: failure", "Your next negotiation always fails.", "Set", "PoachForce", "fail")
 	debugRow("🧹", "Clear shields and cooldowns", "For everyone in this server: no shields, no loss limit, no waiting.", "Clear", "PoachClearTimers")

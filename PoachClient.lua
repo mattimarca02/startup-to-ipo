@@ -951,6 +951,7 @@ local resultGui = make("ScreenGui", {
 	Parent = playerGui,
 })
 local overlay = make("TextButton", {
+	Name = "Overlay",
 	Size = UDim2.fromScale(1, 1),
 	BackgroundColor3 = Color3.new(0, 0, 0),
 	BackgroundTransparency = 0.35,
@@ -959,6 +960,7 @@ local overlay = make("TextButton", {
 	Parent = resultGui,
 })
 local resultCard = make("Frame", {
+	Name = "Card",
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
 	Size = UDim2.fromScale(0.9, 0.9),
@@ -998,8 +1000,9 @@ local nameLabel = resultLabel(0.53, 0.09, Enum.Font.GothamBold, 28)
 local roleLabel = resultLabel(0.62, 0.06, Enum.Font.Gotham, 17)
 local statusLabel = resultLabel(0.69, 0.14, Enum.Font.Gotham, 16)
 
-local function resultButton()
+local function resultButton(name)
 	local button = make("TextButton", {
+		Name = name,
 		Position = UDim2.fromScale(0.05, 0.85),
 		Size = UDim2.fromScale(0.9, 0.11),
 		BackgroundColor3 = COLORS.buy,
@@ -1012,8 +1015,8 @@ local function resultButton()
 	fitText(button, 20)
 	return button
 end
-local primaryButton = resultButton()
-local secondaryButton = resultButton()
+local primaryButton = resultButton("PrimaryButton")
+local secondaryButton = resultButton("SecondaryButton")
 
 local cardQueue = {}
 local showingCard = false

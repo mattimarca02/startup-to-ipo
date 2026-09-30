@@ -57,14 +57,16 @@ local function percent(chance)
 	return math.floor(chance * 100 + 0.5) .. "%"
 end
 
-local function getPoach(player)
-	local data = core.getData(player)
-	return data and data.poach, data
-end
-
--- A target is another player in this server, or the Studio test dummy
+-- A target (or, in Studio, an attacker) is another player in this server, or the Studio test dummy
 local function isDummy(target)
 	return target ~= nil and target == dummy
+end
+
+-- The player's poaching state and their data (the dummy has no data: it has no Cash or save)
+local function getPoach(player)
+	if isDummy(player) then return dummy.poach, nil end
+	local data = core.getData(player)
+	return data and data.poach, data
 end
 
 local function userIdOf(target)
@@ -110,7 +112,7 @@ end
 -- Copies the state the screens show onto the player (the server never reads these back)
 local function publish(player)
 	local poach = getPoach(player)
-	if not poach then return end
+	if not poach or isDummy(player) then return end
 	player:SetAttribute("PoachShieldUntil", poach.shieldUntil)
 	player:SetAttribute("PoachCooldownUntil", poach.cooldownUntil)
 	player:SetAttribute("HRLevel", poach.hrLevel)
@@ -227,12 +229,12 @@ local function transfer(from, to, id, refund, payment)
 		if payment and fromData then
 			fromData.cash.Value += payment
 		end
-		task.spawn(core.save, from)
+		task.defer(core.save, from) -- deferred: saves after the caller has also set shields and cooldowns
 		return true
 	end
 	EmployeeServer.addEmployee(to, employee)
 	if isDummy(from) then
-		task.spawn(core.save, to)
+		task.defer(core.save, to)
 		return true
 	end
 
@@ -241,7 +243,7 @@ local function transfer(from, to, id, refund, payment)
 	toPoach.lost[id] = nil
 	fromPoach.gained[id] = nil
 	inTransit[id] = true
-	task.spawn(function()
+	task.defer(function()
 		if confirmSave(to, id, true) then
 			local _, fromData = getPoach(from)
 			if fromData then
@@ -295,9 +297,11 @@ local function cancel(negotiation, reason)
 	local poach, data = getPoach(attacker)
 	if not poach or poach.negotiation ~= negotiation then return end
 	poach.negotiation = nil
-	data.cash.Value += negotiation.cost
+	if data then
+		data.cash.Value += negotiation.cost
+	end
 	send(attacker, "Cancelled", { reason = reason, refund = negotiation.cost })
-	send(negotiation.target, "AttackOver", { attacker = attacker.DisplayName, creature = negotiation.creature, result = "cancelled" })
+	send(negotiation.target, "AttackOver", { attacker = nameOf(attacker), creature = negotiation.creature, result = "cancelled" })
 end
 
 -- A successful poach: the employee moves, the victim gets protected and one Counter-Offer
@@ -345,9 +349,9 @@ local function finish(negotiation)
 		problem = name .. " left the server"
 	elseif not findEmployee(target, negotiation.employeeId) or inTransit[negotiation.employeeId] then
 		problem = "the employee isn't on " .. name .. "'s team anymore"
-	elseif protection(target, os.time()) then
+	elseif not negotiation.ignoreShields and protection(target, os.time()) then
 		problem = name .. " got protected"
-	elseif not EmployeeServer.hasFreeSlot(attacker) then
+	elseif data and not EmployeeServer.hasFreeSlot(attacker) then
 		problem = "your team filled up"
 	end
 	if problem then
@@ -372,8 +376,30 @@ local function finish(negotiation)
 		return
 	end
 	send(attacker, "Result", { success = false, target = name, creature = creature.key, cost = negotiation.cost })
-	send(target, "AttackOver", { attacker = attacker.DisplayName, creature = creature.key, result = "defended" })
-	task.spawn(core.save, attacker) -- the Cash is spent: save it now
+	send(target, "AttackOver", { attacker = nameOf(attacker), creature = creature.key, result = "defended" })
+	if data then
+		task.spawn(core.save, attacker) -- the Cash is spent: save it now
+	end
+end
+
+-- Starts the timer. The attacker has already paid (the Studio dummy never pays).
+local function begin(attacker, target, employeeId, creature, cost, chance, ignoreShields)
+	local seconds = rng:NextNumber(RULES.NegotiationSeconds[1], RULES.NegotiationSeconds[2])
+	local negotiation = {
+		attacker = attacker,
+		target = target,
+		targetId = userIdOf(target),
+		employeeId = employeeId,
+		creature = creature.key,
+		cost = cost,
+		chance = chance, -- fixed now, so the chance you saw is the chance you get
+		ignoreShields = ignoreShields, -- Studio Debug tab only
+	}
+	getPoach(attacker).negotiation = negotiation
+	negotiations[negotiation.targetId] = negotiation
+	send(attacker, "Negotiating", { target = nameOf(target), creature = creature.key, seconds = seconds, chance = chance, cost = cost })
+	send(target, "UnderAttack", { attacker = nameOf(attacker), creature = creature.key, seconds = seconds })
+	task.delay(seconds, finish, negotiation)
 end
 
 -- Actions the client can ask for ------------------------------------------------
@@ -410,21 +436,7 @@ local function start(player, targetUserId, employeeId)
 	if data.cash.Value < cost then return false, "Not enough Cash (" .. ShopConfig.formatCash(cost) .. ")" end
 
 	data.cash.Value -= cost -- saved as a refund until the negotiation ends (see serialize)
-	local seconds = rng:NextNumber(RULES.NegotiationSeconds[1], RULES.NegotiationSeconds[2])
-	local negotiation = {
-		attacker = player,
-		target = target,
-		targetId = userIdOf(target),
-		employeeId = employeeId,
-		creature = creature.key,
-		cost = cost,
-		chance = chance, -- fixed now, so the chance you saw is the chance you get
-	}
-	poach.negotiation = negotiation
-	negotiations[negotiation.targetId] = negotiation
-	send(player, "Negotiating", { target = name, creature = creature.key, seconds = seconds, chance = chance, cost = cost })
-	send(target, "UnderAttack", { attacker = player.DisplayName, creature = creature.key, seconds = seconds })
-	task.delay(seconds, finish, negotiation)
+	begin(player, target, employeeId, creature, cost, chance, false)
 	return true, "Negotiating with " .. name .. "'s " .. creature.name .. " (" .. percent(chance) .. " chance)"
 end
 
@@ -680,13 +692,15 @@ end
 -- Studio Debug tab -------------------------------------------------------------
 
 local function spawnDummy()
-	if dummy and negotiations[DUMMY_ID] then
-		cancel(negotiations[DUMMY_ID], "Deal called off: the dummy was reset.")
+	for _, negotiation in pairs(negotiations) do
+		if dummy and (negotiation.target == dummy or negotiation.attacker == dummy) then
+			cancel(negotiation, "Deal called off: the dummy was reset.")
+		end
 	end
 	dummy = {
 		name = "Dummy Startup 🤖",
 		employees = {},
-		poach = { hrLevel = 0, shieldUntil = 0, cooldownUntil = 0, losses = {} },
+		poach = { hrLevel = 0, shieldUntil = 0, cooldownUntil = 0, losses = {}, negotiation = nil },
 	}
 	for _, key in ipairs(DUMMY_TEAM) do
 		table.insert(dummy.employees, { id = HttpService:GenerateGUID(false), creature = key })
@@ -704,8 +718,12 @@ local function addDebugActions()
 		return "Dummy's HR Department is now Lv " .. dummy.poach.hrLevel
 			.. " (-" .. percent(CreatureConfig.hrDefense(dummy.poach.hrLevel)) .. " chance)"
 	end)
+	-- The dummy negotiates for your best employee: it always works, and ignores the shields you
+	-- already have, unless you leave, fire that employee, or get a Poach Shield during the negotiation
 	ShopServer.addDebugAction("PoachDummyAttack", function(player, data)
 		if not dummy then spawnDummy() end
+		if dummy.poach.negotiation then return "The dummy is already negotiating" end
+		if negotiations[player.UserId] then return "Someone is already negotiating with you" end
 		local best, bestCreature
 		for _, employee in ipairs(data.team.employees) do
 			local creature = CreatureConfig.getCreature(employee.creature)
@@ -715,8 +733,8 @@ local function addDebugActions()
 			end
 		end
 		if not best then return "You have no employee the dummy could poach (Legendaries are safe)" end
-		poached(dummy, player, best.id, bestCreature, CreatureConfig.poachCost(bestCreature)) -- ignores your shields
-		return "The dummy poached your " .. bestCreature.name .. " (your shields were ignored)"
+		begin(dummy, player, best.id, bestCreature, CreatureConfig.poachCost(bestCreature), 1, true)
+		return "The dummy is negotiating for your " .. bestCreature.name .. ". A Poach Shield now stops it."
 	end)
 	ShopServer.addDebugAction("PoachForce", function(_, data, result)
 		if result ~= "success" and result ~= "fail" then return "Bad result" end
