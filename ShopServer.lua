@@ -8,6 +8,9 @@
 --   ShopServer.hasAutoHatch(player)                -> true if eggs should hatch by themselves
 --   ShopServer.getLuckMultiplier(player)           -> 2 while Luck Boost runs, otherwise 1
 --   ShopServer.useInstantHatch(player)             -> true if a token was used (skip one egg timer)
+-- And for poaching (PoachServer):
+--   ShopServer.getPoachBonus(player)               -> extra poach chance from Headhunter (0.1 = +10%)
+--   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -37,6 +40,7 @@ local core -- { getData, save, updateIncome }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
+local productHandlers = {} -- effect field -> function(player, data, effect), added by other systems
 local doorCooldown = {} -- player -> os.clock() of the last "VIP only" message
 
 -- Helpers ---------------------------------------------------------------
@@ -194,6 +198,18 @@ function ShopServer.useInstantHatch(player)
 	return true
 end
 
+-- Headhunter: added to every poaching chance
+function ShopServer.getPoachBonus(player)
+	local bonus = 0
+	local shop = getShop(player)
+	if shop then
+		for _, effect in ipairs(ownedEffects(shop)) do
+			bonus += effect.poachBonus or 0
+		end
+	end
+	return bonus
+end
+
 -- Game passes -----------------------------------------------------------
 
 -- Returns true/false, or nil if Roblox couldn't be reached (we'll try again later)
@@ -305,9 +321,14 @@ local function waitForData(player)
 end
 
 -- Gives the reward. Must not wait/yield, so a save always has both the reward and the PurchaseId, or neither.
-local function applyProduct(data, product)
+local function applyProduct(player, data, product)
 	local shop, effect = data.shop, product.effect
 	local gained = {}
+	for field, handler in pairs(productHandlers) do
+		if effect[field] then
+			table.insert(gained, handler(player, data, effect)) -- e.g. Poach Shield (PoachServer)
+		end
+	end
 	if effect.incomeMinutes then
 		local amount = ShopConfig.cashPackAmount(product, data.income.Value)
 		data.cash.Value += amount
@@ -342,7 +363,7 @@ local function grantProduct(player, product, purchaseId)
 
 	local shop = data.shop
 	if not shop.receiptSet[purchaseId] then
-		local gained = applyProduct(data, product)
+		local gained = applyProduct(player, data, product)
 		rememberReceipt(shop, purchaseId)
 		publish(player)
 		notify(player, product.name .. ": " .. gained)
@@ -515,6 +536,13 @@ end
 -- They only ever run in Studio: the Debug remote doesn't exist on live servers.
 function ShopServer.addDebugAction(name, handler)
 	extraDebugActions[name] = handler
+end
+
+-- Lets other systems grant product effects they own (PoachServer: Poach Shield).
+-- handler(player, data, effect) runs inside ProcessReceipt, so it must not wait/yield,
+-- and returns what was gained, like "+60 min of Poach Shield".
+function ShopServer.addProductHandler(field, handler)
+	productHandlers[field] = handler
 end
 
 -- Setup -----------------------------------------------------------------
