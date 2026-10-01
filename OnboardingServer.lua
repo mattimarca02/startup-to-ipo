@@ -9,6 +9,7 @@
 --   OnboardingTarget (Vector3 or nil) -> where the glowing arrow points
 --   OnboardingTracker (boolean)       -> show the goal tracker
 --   OnboardingGoal_<key>, OnboardingGoalTarget_<key> (numbers) -> each goal's progress
+-- OnboardingRemotes.OnboardingNotify fires a display-only pop-up (e.g. the free egg message).
 -- Goals are checked here from the server's own data; the client can't finish one.
 -- The only thing the client can ask (OnboardingRemotes.OnboardingAction) is "DismissTracker":
 -- hide the tracker for good. It grants nothing.
@@ -19,6 +20,7 @@ local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
+local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- the free egg's name, for the toast
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer")) -- for the Studio Debug tab
 
@@ -64,6 +66,13 @@ local function setAttribute(player, name, value)
 	end
 end
 
+-- Pop-up messages. Display-only: nothing here grants anything, OnboardingClient just shows the text.
+local function notify(player, text)
+	if remotes.notify and player.Parent then
+		remotes.notify:FireClient(player, text)
+	end
+end
+
 -- Gives the free egg. seenIntro flips in the same step, so the save that has the egg also says
 -- it was given (one save holds both, they can't be written apart).
 local function grantFreeEgg(player, data)
@@ -75,6 +84,8 @@ local function grantFreeEgg(player, data)
 	end
 	onboarding.seenIntro = true
 	print(player.Name .. " is new: free " .. OnboardingConfig.FreeEgg .. " egg in incubator " .. index)
+	local egg = CreatureConfig.getEgg(OnboardingConfig.FreeEgg)
+	notify(player, string.format(OnboardingConfig.FreeEggMessage, egg and egg.name or OnboardingConfig.FreeEgg))
 	return true
 end
 
@@ -304,6 +315,9 @@ function OnboardingServer.init(coreApi)
 	remotes.action.Name = "OnboardingAction"
 	remotes.action.OnServerInvoke = onAction
 	remotes.action.Parent = folder
+	remotes.notify = Instance.new("RemoteEvent")
+	remotes.notify.Name = "OnboardingNotify"
+	remotes.notify.Parent = folder
 	folder.Parent = ReplicatedStorage
 
 	if RunService:IsStudio() then

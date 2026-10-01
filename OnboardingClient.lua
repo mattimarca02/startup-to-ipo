@@ -9,7 +9,9 @@ local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- money format for the Seed goal
-local onboardingAction = ReplicatedStorage:WaitForChild("OnboardingRemotes"):WaitForChild("OnboardingAction")
+local onboardingRemotes = ReplicatedStorage:WaitForChild("OnboardingRemotes")
+local onboardingAction = onboardingRemotes:WaitForChild("OnboardingAction")
+local onboardingNotify = onboardingRemotes:WaitForChild("OnboardingNotify")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -143,6 +145,38 @@ local gui = make("ScreenGui", {
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	Parent = playerGui,
 })
+
+-- Pop-up messages (e.g. the free egg): bottom middle, clear of the other windows' own toasts
+local toast = make("TextLabel", {
+	Name = "Toast",
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(0.5, 0, 1, -184),
+	Size = UDim2.new(0.6, 0, 0, 48),
+	BackgroundColor3 = COLORS.panel,
+	BackgroundTransparency = 0.1,
+	Font = Enum.Font.GothamBold,
+	TextColor3 = COLORS.gold,
+	Visible = false,
+	ZIndex = 10,
+	Parent = gui,
+})
+round(toast, 12)
+fitText(toast, 22)
+make("UISizeConstraint", { MaxSize = Vector2.new(520, 48), Parent = toast })
+
+local toastToken = 0
+local function showToast(text)
+	toastToken += 1
+	local myToken = toastToken
+	toast.Text = text
+	toast.Visible = true
+	task.delay(3.5, function()
+		if toastToken == myToken then
+			toast.Visible = false
+		end
+	end)
+end
+onboardingNotify.OnClientEvent:Connect(showToast)
 
 local card = make("Frame", {
 	Name = "GoalTracker",

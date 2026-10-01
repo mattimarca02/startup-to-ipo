@@ -19,6 +19,10 @@ OnboardingConfig.Enabled = true
 -- This works while ShopConfig.EggsEnabled is false: that flag only controls Robux items.
 OnboardingConfig.FreeEgg = "Garage"
 
+-- The pop-up OnboardingClient shows when the free egg is granted. "%s" becomes the egg's name
+-- (from CreatureConfig), filled in by OnboardingServer.
+OnboardingConfig.FreeEggMessage = "You got a free %s Egg! It's hatching in the incubator."
+
 -- The glowing arrow ends (for good) once the player has this many employees and garage upgrades
 OnboardingConfig.ArrowEndsAt = { employees = 1, upgrades = 2 }
 
