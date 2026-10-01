@@ -31,3 +31,28 @@ Finding numbers here (F1, F2, ...) are this review's own. "M4 F9" and "M4 F2" me
 | IPO save | `commitIpo`'s transform (`TycoonCore.lua:257-273`) doesn't touch `payload.onboarding`, so the IPO save keeps it. See section 4. |
 
 Minor: bad values inside the section are coerced silently (`seenIntro = "yes"` becomes `false`) with no warning (`OnboardingServer.lua:222-227`), while CLAUDE.md asks for a warning. It's safe, because `hasProgress` still guards the free egg. Recorded as **F9** (Low).
+
+## 2. Duplicate or lost free egg
+
+**Result: no way to get a second free egg in normal play.** The egg and `seenIntro = true` are always written by the same save, because they live in the same payload (`OnboardingServer.lua:76-90`). They can't be saved apart.
+
+| Scenario | What happens |
+|---|---|
+| Double join (two `PlayerAdded` for one player) | Roblox doesn't fire that. A second session of the same account kicks the first; see "two servers". |
+| Leaves in the first seconds, while loading | Nothing is saved (section 1). Next join they're still new and get the egg then. Nothing lost, nothing doubled. |
+| Leaves in the first seconds, after loading | The leave save holds the egg and `seenIntro = true` together. Next join: section present, no new egg. |
+| That leave save fails | Neither the egg nor `seenIntro` is stored. Next join gives the egg once. Correct. |
+| Rejoin mid-tutorial | `arrowDone`, `dismissed` and finished `goals` are saved and come back. The egg keeps its real-clock timer. Works. |
+| Save fails to load | `loadOk = false` → `legacy = true`, no egg (`OnboardingServer.lua:244-247`), and the session never saves. Correct. |
+| Two servers at once | There's no session lock (known, planned for M9). If the player hops to server B before server A's first save lands, B reads "no save" and gives the egg again. A's save then lands and B's later saves overwrite it, so the player ends with **one** egg and loses A's few seconds of progress. That's the old no-lock problem, not a duplicate. Recorded as **F8** (Low). |
+| An IPO | The section is kept (section 4), so `seenIntro` stays true. |
+| A Robux purchase in the first minute | `ProcessReceipt` saves right away, and that save already has `seenIntro = true`. |
+
+**Is `hasProgress` airtight?** It's only asked when the save has *no* onboarding section (`OnboardingServer.lua:248`, `:253`), so after the first M5 save it no longer matters. It checks Cash, upgrades, employees, pending hire, every incubator, parked eggs, IPO count/Shares/lifetime/perks, receipts, Instant Hatch tokens and HR/poach notes (`OnboardingServer.lua:41-52`). The shapes match the real data: `shop.receipts` is an array (`ShopServer.lua:281`), `poach.lost`/`gained` are maps (`PoachServer.lua:658-659`), and PoachServer's offline `refund` is already added to Cash before onboarding runs (`PoachServer.lua:688-691`).
+
+One theoretical hole: a player who hatches the free egg and **fires** that employee within the same second has no trace left (Cash 0, no employee, lifetime 0). That only matters if the onboarding section is then also lost, which needs code from before M4 F2 to save over it. Not reachable today; no fix needed beyond publishing with **Shut down all servers**.
+
+Two smaller gaps were found:
+
+- **F3 (Low):** "new player" means two different things. Onboarding treats a pre-M5 save with no progress as new and gives the free egg (`OnboardingServer.lua:248-255`), but PoachServer's 15-minute new-player shield only goes to `saved == nil` (`TycoonCore.lua:452`, `PoachServer.lua:694-695`). Players who joined before M5 and left without buying anything (likely a large share of past visitors) get the tutorial but can be poached as soon as their first employee hatches.
+- **F4 (Low):** `OnboardingConfig.Enabled = false` still saves a section with `seenIntro = false, legacy = false`. If it's switched back on, those players skip the egg (they have progress) but are not `legacy`, so the arrow and tracker show up for veterans (`OnboardingServer.lua:169`, `:248`, `:253`).
