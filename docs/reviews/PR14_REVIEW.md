@@ -52,3 +52,30 @@ Branch `fix-security-review`, reviewed at commit `bc6420c` (#14 already merged w
 ### F5 (Low): giving the employee back ignores whether it worked, and doesn't restore the exact old state
 `PoachServer.lua:256` ignores the return value of `EmployeeServer.addEmployee(from, employee)`, and that function re-checks capacity (`EmployeeServer.lua:422`). A team can be over capacity: the Extra Employee Slots pass check timed out at join (M4 re-review finding 1), a Studio Debug "Ignore passes I really own", or a lowered perk. In that case the employee can't be given back. It stays only in `from`'s `outgoing` table: off the team, invisible and earning nothing for the rest of the session. It is still saved, and it comes back on the next join, so it is not lost. Even when the give-back works, the employee goes to the end of the list and `hiredAt` is reset to now. That doesn't matter today, because `hiredAt` is only saved, never read.
 **Fix:** give it back without the capacity check: re-insert the original `employee` table at its old index and clear `team.outgoing[id]` (for example with a small `EmployeeServer.restoreEmployee`). Only reachable after F4's duplicate.
+
+## 3. Load retry and kick
+
+**Result: the retry is safe. No half-loaded player is ever saved, and a double join gains nothing.** Two Mediums: a corrupt save still locks the player out, and the "never play unsaved" promise has a gap when the whole DataStore is missing.
+
+| Question | Answer |
+|---|---|
+| Save from a half-loaded player during the ~6 s of retries | Impossible. `data.loaded` is false until `TycoonCore.lua:494`, so `save()` returns at `:207`. Autosave, `BindToClose` and leaving all write nothing. Every other module loop skips the player because it has no `data.ready` or `data.poach` yet. |
+| Leaving during the retry | `load` stops retrying when `player.Parent` is nil (`:185`). PlayerRemoving clears `playerData`, and the check at `:449` returns before the kick or any setup. |
+| Double join | Same server: a rejoin is a new Player object, and the old thread returns at `:449`. Two servers: the same race as before #14 (there is no session lock). The extra wait doesn't make it worse, because a kicked session never saves. |
+| Is the kick message safe? | Yes. It's a constant string with no player data, and nothing is saved, so "your progress is safe" is true for a DataStore outage. |
+
+### F1 (Medium, from before #14, still open): a corrupt save kicks the player every time they join
+`TycoonCore.lua:458-459`: `cash.Value = saved.cash or 0` and `ipairs(saved.owned or {})` still have no type checks (M4 re-review finding 2). A bad value makes the setup `pcall` fail, which kicks the player (`:488-492`). #14 now reuses that kick path, and its message, "Please rejoin in a moment: your progress is safe", promises something a rejoin can't deliver: the player is locked out for good. The retry doesn't cause this (`GetAsync` succeeds) and doesn't fix it.
+**Fix (M4 re-review):** use `tonumber(saved.cash) or 0` and check `typeof(saved.owned) == "table"`, skipping bad values with a warning, as CLAUDE.md requires.
+
+### F2 (Medium): with no DataStore at all, a live server still runs every session without saving
+`TycoonCore.lua:16-22, 175, 450`. If `GetDataStore` fails when the server starts, `store` is nil. `load` then returns `(nil, false)`, but the kick is skipped because it requires `store and not ok`. Every player on that server plays a fresh, never-saved session with no warning. Poaching (`PoachServer.lua:156, 434`) and IPO (`IpoServer.lua:174`) are refused for everyone. #14's ROADMAP line promises "no silent unsaved session", and this path breaks that promise. `GetDataStore` rarely fails on live servers, but when it does, every player on that server loses their whole session.
+**Fix:** at startup, retry `GetDataStore` a few times. If `store` is still nil and `not RunService:IsStudio()`, kick joining players with `LOAD_FAILED_MESSAGE`. Keep the current "play unsaved" behaviour only in Studio.
+
+### F6 (Low, check in Studio): in a published place with Studio API access off, playtests now get kicked
+`TycoonCore.lua:175-189, 450`. In a published place, `GetDataStore` usually works even with API access off, but `GetAsync` fails. Before #14 you played unsaved, and the warning told you to turn on API access. Now you're kicked after about 6 s of retries in every F5 playtest. Turning on API access fixes it, but beginners will see "Your startup couldn't load".
+**Fix:** in `RunService:IsStudio()`, don't kick: leave `data.loaded = false` (play unsaved) and keep the warning. Confirm with one playtest with API access off.
+
+### F7 (Low): during an outage, the retry triples load requests
+`TycoonCore.lua:176-187`. During a DataStore outage, every join and rejoin makes three `GetAsync` calls, so kicked players who rejoin use up the server's request budget faster.
+**Fix (optional):** check `DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.GetAsync)` before each retry, or keep it at 3 and accept it.
