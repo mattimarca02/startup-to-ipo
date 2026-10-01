@@ -2,7 +2,7 @@
 
 PR #6, branch `milestone-4-ipo`. Code reviewed at commit `e9be034`. All `file:line` references point at that commit.
 
-**Status: complete.** Ranked findings and the verdict are in sections 8 and 9.
+**Status: review complete; fixes applied.** Ranked findings and the verdict are in sections 8 and 9. Each finding shows whether it was fixed, and in which commit.
 
 ## Severity scale
 
@@ -19,11 +19,15 @@ These were found before the review was interrupted. Each one was checked again a
 
 ### F1 (Medium): an IPO resets the HR Department, but ROADMAP says it's kept
 
+**Status: Fixed** in `3997046`. The reset scope is now `IpoConfig.Resets` (`HRDepartment = false`), and the IPO screen texts are built from it. No Poach Shield was added after an IPO: it wasn't part of this fix round.
+
 - **Where:** `TycoonCore.lua:248-250` (the save written during the IPO sets `hrLevel = 0`), `TycoonCore.lua:264` (calls `PoachServer.resetHrDepartment`), `PoachServer.lua:628-637` (the reset itself). The texts say the same: `IpoClient.lua:491`, `IpoClient.lua:602`, `IpoConfig.lua:6`.
 - **What breaks:** ROADMAP M4 says "Keeps employees, passes, owned products and HR level". The code does the opposite. The player loses up to $522,500 of HR levels, and loses their poaching defense right when they restart with $0 and can't buy it back.
 - **Fix:** delete the two reset spots in TycoonCore and `resetHrDepartment` in PoachServer, then update the three texts. Consider a short Poach Shield after every IPO (duration in `IpoConfig`), so a fresh start isn't an easy target.
 
 ### F2 (Medium): `save()` throws away any save section it doesn't know
+
+**Status: Fixed** in `2f998a7`. Unknown top-level sections are written back unchanged, and eggs above the current incubator count are "parked" and saved. Servers running code from before this fix can't be protected: publish with **Shut down all servers**.
 
 - **Where:** `TycoonCore.lua:203-211` builds the payload only from the sections this version knows. `EmployeeServer.lua:498-502` drops saved incubators above the current count, and `EmployeeServer.lua:529` saves only up to that count.
 - **What breaks:** code that doesn't know a section deletes it on the next save. Two real cases:
@@ -37,6 +41,8 @@ These were found before the review was interrupted. Each one was checked again a
 
 ### F3 (Low): an open Counter-Offer isn't covered by the IPO lock
 
+**Status: Fixed** in `ac0a84a`.
+
 - **Where:** `PoachServer.lua:615-626` (`isBusy` ignores `poach.counterOffer`). `PoachServer.lua:466` checks only `isOnline(attacker)`, and `PoachServer.lua:104-107` only checks that the poacher's data exists, not `data.ready`.
 - **What breaks:**
   - **The poacher loses the Cash.** Player A poached from B and is now going public (`data.ready = false`, save in flight). B makes the Counter-Offer. It goes through, because nothing checks A's `ready`. In `transfer` (`PoachServer.lua:257-266`), A gets the payment once B's save lands. If that happens before A's IPO save finishes, `commitIpo` then sets A's Cash to 0 (`TycoonCore.lua:257`), so A loses the payment B made. It also breaks the promise in `IpoServer.lua:183` that "poaching waits" during an IPO.
@@ -44,6 +50,8 @@ These were found before the review was interrupted. Each one was checked again a
 - **Fix:** count `poach.counterOffer` in `isBusy`, and refuse a Counter-Offer while the poacher's `data.ready` is false. Refuse with "try again", don't drop the offer.
 
 ### F4 (Low): the confirm screen doesn't say how many eggs will be lost
+
+**Status: Fixed** in `0b589f0`. The egg counts come from the server (read-only `Preview` action), and the Cash amount is redrawn when it changes.
 
 - **Where:** `IpoClient.lua:594-614` (confirm text), `EmployeeServer.lua:543-553` (`clearIncubators`).
 - **What breaks:**
@@ -54,11 +62,15 @@ These were found before the review was interrupted. Each one was checked again a
 
 ### F5 (Low): saves from before M4 get an uncapped starting valuation
 
+**Status: Fixed** in `478a1b6`.
+
 - **Where:** `TycoonCore.lua:382-391`.
 - **What breaks:** an old save's valuation is its Cash plus the cost of its upgrades, with no limit. Before M4, Cash had nothing to buy late in the game (ECONOMY.md finding 3), so an old save can hold hundreds of millions. That save is IPO-ready on its first join, and Shares grow with valuation (`IpoConfig.lua:124-127`). A $250M save gets 100 Shares on its first IPO, enough for a large part of the IPO shop (525 Shares buys everything). Its leaderboard "best" is inflated the same way. Only dev saves exist today.
 - **Fix:** `legacyValuation = math.min(legacyValuation, IpoConfig.ipoValuation(0))`.
 
 ### F6 (Low): an unfinished poach transfer can cross an IPO
+
+**Status: Skipped.** Its fix is a ROADMAP note, and ROADMAP is only changed when the code and the docs disagree. It stays recorded here.
 
 - **Where:** `PoachServer.lua:615-626` (`isBusy` checks only the in-memory `inTransit` list of this server), `PoachServer.lua:281-298` (`reconcile` on the next join).
 - **What breaks:** if a server stops halfway through moving an employee, a `gained` note stays in the save, and nothing stops an IPO. On a later join, `reconcile` can hand the employee back and refund Cash paid before the IPO into the new run. It needs a server crash at exactly the wrong moment, and the amount is one poach cost.
@@ -66,11 +78,15 @@ These were found before the review was interrupted. Each one was checked again a
 
 ### F7 (Low): small things
 
+**Status: Fixed** in `eaa6709`. `IpoServer.isBusy` is now used for the message.
+
 - **Wrong message during an IPO.** `IpoServer.lua:235` answers "Still loading" while an IPO is being saved (`data.ready = false`), so the "Your IPO is already being filed" check at `IpoServer.lua:157` can never run. `EmployeeServer.lua:410` and `PoachServer.lua:543` show the same "Still loading" during an IPO. **Fix:** show "Your IPO is being filed" when the IPO is the reason.
 - **`addEarnings` accepts NaN.** At `IpoServer.lua:124-134`, NaN passes `amount <= 0`. A NaN valuation then passes the `ipo.valuation < needed` check (`IpoServer.lua:165`), because every comparison with NaN is false. `sharesFor` turns it into NaN Shares, which pass `ipo.shares < cost` (`IpoServer.lua:222`), so every perk becomes free. No caller can send NaN today (Income is an IntValue, and Debug amounts are checked), so this is a missing safety net, not a live bug. **Fix:** reject `amount ~= amount` and `math.huge`.
 - **`IpoServer.isBusy` is never used.** See `IpoServer.lua:11` and `IpoServer.lua:119-121`. **Fix:** remove it, or use it for the message fix above.
 
 ### F8 (balance, not a bug): every run gets much longer
+
+**Status: Skipped.** No numbers changed. Mattia will retune with the simulator after the merge.
 
 - **Where:** `IpoConfig.lua:25` (`StageGrowthPerIpo = 1.5`), `IpoConfig.lua:31` (`BonusExponent = 0.75`).
 - **What happens:** by IPO 10 the stages are 1.5^9 = 38x bigger, but the multiplier is only x3.6. Employee income is capped by the slots, so the 10th run takes roughly 10x longer than the first.
@@ -112,6 +128,8 @@ The only open item here is F7's NaN safety net, which no client can reach today.
 
 ### F9 (High): a player who leaves while their save is still loading loses employees, poaching data and IPO progress
 
+**Status: Fixed** in `82d193f`. Saving is allowed only after every module has finished loading (inside `pcall`). `save()` refuses a save with a missing section. The join pass check gives up waiting after 10 s. Shop and team sections skip bad values. The `reconcile` note change wasn't needed, because nothing is saved before loading finishes.
+
 This is older than M4, but M4 adds the most valuable part of the save to what's lost.
 
 - **Where:**
@@ -130,6 +148,8 @@ This is older than M4, but M4 adds the most valuable part of the save to what's 
 - **Not tested in a playtest on purpose:** Studio uses the real DataStore, so reproducing this would overwrite Mattia's real save. It's verified by reading the code. The cause is an `...Async` call, and those always yield.
 
 ### F10 (Low): leaving mid-IPO and joining another server straight away can undo the IPO
+
+**Status: Skipped.** It needs session locking, which is planned for M9.
 
 - **Where:** there's no session lock, so two servers can hold the same save. This is already planned for M9.
 - **What breaks:** the second server can read the save before the first server's IPO save lands. It then plays on with the state from before the IPO, and its saves overwrite the IPO. Nothing is duplicated (the Shares from the lost IPO are lost too), and the player can go public again.
@@ -198,18 +218,18 @@ Checked against the save written during the IPO (`TycoonCore.lua:240-252`) and t
 
 ## 8. All findings, ranked
 
-| # | Severity | Where | What breaks | Fix |
-|---|---|---|---|---|
-| F9 | **High** | `TycoonCore.lua:374`, `ShopServer.lua:307`, `PoachServer.lua:656` | Leaving while the save is still loading writes a save without `team`, `poach` and `ipo`: employees, HR and IPO progress are lost. Older than M4; M4 makes it worse. | Set `data.loaded` only after every `setupPlayer` has finished, inside `pcall`. Keep `gained` notes in `data.poach.gained` until resolved. |
-| F1 | Medium | `TycoonCore.lua:248-250`, `:264`, `PoachServer.lua:628-637` | An IPO resets the HR level; ROADMAP says it's kept. | Remove the reset, update the 3 texts, consider a short Poach Shield after an IPO. |
-| F2 | Medium | `TycoonCore.lua:203-211`, `EmployeeServer.lua:498-502` | Code that doesn't know a section deletes it: an old server wipes `ipo` and incubators 4 and 5 during the M4 rollout or a rollback. | Copy back unknown sections in `save()`. Publish M4 with **Shut down all servers**. |
-| F3 | Low | `PoachServer.lua:466`, `:104-107`, `:615-626` | A Counter-Offer during the poacher's IPO save can wipe the payment the poacher should get. A victim can go public with an open Counter-Offer and lose the buy-back. | Refuse a Counter-Offer while the poacher isn't ready; count an open Counter-Offer in `isBusy`. |
-| F4 | Low | `IpoClient.lua:594-614` | The confirm screen doesn't count the eggs that will be lost or warn about ready ones, and its Cash amount can be out of date. | Have the server send the egg counts, show a warning for ready eggs, refresh the Cash. |
-| F5 | Low | `TycoonCore.lua:382-391` | Old saves get an uncapped valuation, so lots of Shares on the first IPO. | `math.min(legacyValuation, IpoConfig.ipoValuation(0))`. |
-| F6 | Low | `PoachServer.lua:281-298`, `:615-626` | After a crash, an unfinished poach can refund Cash from before the IPO into the new run. | Accept it and list it in ROADMAP "Known low risks". |
-| F7 | Low | `IpoServer.lua:235`, `:124-134`, `:119-121` | "Still loading" shows during an IPO; `addEarnings` has no NaN check (not reachable today); `isBusy` is unused. | Show "Your IPO is being filed", reject NaN and infinity, use or remove `isBusy`. |
-| F10 | Low | no session lock (M9) | Leaving mid-IPO and joining another server fast can undo the IPO. Nothing is duplicated. | M9 session locking. |
-| F8 | Balance | `IpoConfig.lua:25`, `:31` | Each run gets much longer (stages x38 by IPO 10, multiplier only x3.6). | Try 1.3 and 1; rerun `tools/economy_sim.py` with the real values. |
+| # | Severity | Where | What breaks | Fix | Status |
+|---|---|---|---|---|---|
+| F9 | **High** | `TycoonCore.lua:374`, `ShopServer.lua:307`, `PoachServer.lua:656` | Leaving while the save is still loading writes a save without `team`, `poach` and `ipo`: employees, HR and IPO progress are lost. Older than M4; M4 makes it worse. | Set `data.loaded` only after every `setupPlayer` has finished, inside `pcall`. Keep `gained` notes in `data.poach.gained` until resolved. | Fixed `82d193f` |
+| F1 | Medium | `TycoonCore.lua:248-250`, `:264`, `PoachServer.lua:628-637` | An IPO resets the HR level; ROADMAP says it's kept. | Remove the reset, update the 3 texts, consider a short Poach Shield after an IPO. | Fixed `3997046` |
+| F2 | Medium | `TycoonCore.lua:203-211`, `EmployeeServer.lua:498-502` | Code that doesn't know a section deletes it: an old server wipes `ipo` and incubators 4 and 5 during the M4 rollout or a rollback. | Copy back unknown sections in `save()`. Publish M4 with **Shut down all servers**. | Fixed `2f998a7` |
+| F3 | Low | `PoachServer.lua:466`, `:104-107`, `:615-626` | A Counter-Offer during the poacher's IPO save can wipe the payment the poacher should get. A victim can go public with an open Counter-Offer and lose the buy-back. | Refuse a Counter-Offer while the poacher isn't ready; count an open Counter-Offer in `isBusy`. | Fixed `ac0a84a` |
+| F4 | Low | `IpoClient.lua:594-614` | The confirm screen doesn't count the eggs that will be lost or warn about ready ones, and its Cash amount can be out of date. | Have the server send the egg counts, show a warning for ready eggs, refresh the Cash. | Fixed `0b589f0` |
+| F5 | Low | `TycoonCore.lua:382-391` | Old saves get an uncapped valuation, so lots of Shares on the first IPO. | `math.min(legacyValuation, IpoConfig.ipoValuation(0))`. | Fixed `478a1b6` |
+| F6 | Low | `PoachServer.lua:281-298`, `:615-626` | After a crash, an unfinished poach can refund Cash from before the IPO into the new run. | Accept it and list it in ROADMAP "Known low risks". | Skipped |
+| F7 | Low | `IpoServer.lua:235`, `:124-134`, `:119-121` | "Still loading" shows during an IPO; `addEarnings` has no NaN check (not reachable today); `isBusy` is unused. | Show "Your IPO is being filed", reject NaN and infinity, use or remove `isBusy`. | Fixed `eaa6709` |
+| F10 | Low | no session lock (M9) | Leaving mid-IPO and joining another server fast can undo the IPO. Nothing is duplicated. | M9 session locking. | Skipped (M9) |
+| F8 | Balance | `IpoConfig.lua:25`, `:31` | Each run gets much longer (stages x38 by IPO 10, multiplier only x3.6). | Try 1.3 and 1; rerun `tools/economy_sim.py` with the real values. | Skipped (retune later) |
 
 **Counts:** Critical 0 · High 1 · Medium 2 · Low 6 · plus 1 balance note.
 
