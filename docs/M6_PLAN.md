@@ -175,3 +175,68 @@ The rules that apply, from CLAUDE.md and ROADMAP.md (CLAUDE.md has the purchase 
 | Pressure and wording | The window uses a calm tone and no fake urgency: no flashing red countdown, no "you will lose everything" text, no "come back or else". A lost streak is stated as a fact ("Your streak was Day 4. Today is Day 1."). This matters more as soon as under-16s unlock. |
 
 **What I could not check from here:** the current Roblox policy pages on rewards and monetization. The above applies the rules in the repo. Before launch, someone should read Roblox's current "Paid Random Items" and monetization policies in the Creator Hub and confirm. Nothing in this plan depends on a gray area, because nothing is sold.
+
+## 6. UI (phone first)
+
+**Facts about today's screen** (from the HUD code): the five HUD buttons are 76 px tall with an 86 px step, centered on the left. On a 320 x 568 portrait phone a **sixth** button in that column would end at about y = 580, off the bottom of the screen. On short screens (height under 460) the buttons switch to a top row of 64 px buttons. So a sixth HUD slot would force a re-layout of all four clients that place buttons (Shop, Employee, Poach, Ipo).
+
+**Proposal:**
+
+- **No sixth HUD slot.** The HUD slot list in CLAUDE.md stays as it is. The daily reward gets a small **gift chip** (about 48 x 48) with a dot while a reward is waiting, placed next to the valuation bar, found the way the M5 goal card finds it (`IpoGui.ValuationBar`, the lesson from M5 F1) and clamped to stay on screen. It is not part of the shared button column. If it doesn't fit on a very narrow screen, it goes under the bar and the goal card moves down with it. This is open question 4.
+- **The window** is a normal one-at-a-time window (`OpenPanel = "Daily"`, same pattern as Shop and IPO), on the high layer like the IPO window. It turns off the touch controls while open, like Shop does, so a thumb can't walk the character off while claiming.
+  - 7 cards in a grid: 4 on the first row and 3 on the second in portrait, one row of 7 on a landscape phone. Cards are sized by scale (the window is about 92% of the screen, like Shop), and each shows: the day, an icon, the reward text, and for eggs a short odds line.
+  - Today's card is highlighted, past days are ticked, future days are dimmed. Tapping an egg card opens its odds.
+  - One large **Claim** button (at least 56 px high), disabled with the reason when it can't be used: "Next reward in 5h 12m", "Free an incubator first", "Your IPO is being filed...". Everything is tap only: **no free-text input anywhere**.
+  - The streak line: "Streak: Day 3 of 7 · best 9", and the "You missed 2 days" line from section 1 when it applies.
+- **The pop-up** after claiming ("Day 3: Garage Egg, it's incubating") goes at the bottom center. The offsets already in use are -16 (Shop, IPO), -72 (egg), -128 (poach) and -184 (onboarding), so the Daily toast takes -240.
+- **Fit with the M5 tracker.** The goal card already hides itself while any window is open (`OnboardingClient`, the `OpenPanel` check), so the Daily window needs no new rule for it. The window never opens by itself for a player in the first minute: the server sets a `DailyAutoOpen` attribute that is false until the M5 arrow is done (or the player is a pre-M5 veteran), so a new player's first screen stays the free egg and the arrow. The chip is still there; it just doesn't pop up. Auto-open also waits until no other window is open and no poach panel is showing (the same hide rule M9's M5-F2 fix will give the goal card), and happens at most once per join.
+- **Client rules** (same as the other clients): the UI is built in code, only displays server state (attributes and one `DailyRemotes.DailyAction("Claim")` call inside a `pcall`), and never changes data. Test at 320 x 568, 375 x 667 and a short landscape phone (667 x 375) in **Test -> Device**.
+
+## 7. Files, build order, risks
+
+**New files** (each one Studio script = one `.lua` at the repo root, listed in README):
+
+| File | Where | What |
+|---|---|---|
+| `DailyConfig.lua` | ReplicatedStorage | The calendar, caps, reset hour, texts (section 2). |
+| `DailyServer.lua` | ServerScriptService | `init(core)`, `setupPlayer(player, data, savedDaily)`, `serialize(data)`, the `Claim` action, the state attributes, `DailyRemotes`, the Studio Debug buttons. |
+| `DailyClient.lua` | StarterPlayerScripts | The chip, window, calendar cards, toast. Display only. |
+
+**Changed files:**
+
+| File | Change |
+|---|---|
+| `TycoonCore.lua` | `daily = true` in `KNOWN_SECTIONS`; require/init `DailyServer`; `setupPlayer` after Onboarding; `serialize` in the payload; `data.daily` in the "every part" check. About 10 lines, same pattern as `onboarding`. |
+| `IpoServer.lua` | One new server-only function, `IpoServer.grantShares(player, n)` (adds Shares, refreshes the `IpoShares` attribute). Today Shares are only added by the IPO and a Studio debug button. |
+| `IpoClient.lua` | (Optional, build step 3) one extra line on the IPO confirmation when a daily reward is waiting. |
+| `tools/economy_sim.py`, `docs/ECONOMY.md` | The calendar hook and a short "daily rewards" section, so the table in section 2 can be rerun (new `DAILY_*` block in the CONFIG). |
+| `README.md`, `CONTRIBUTING.md`, `ROADMAP.md` | File table, Ownership rows, Status. |
+| `CLAUDE.md` | Add `DailyConfig`, `DailyRemotes` and the `daily` save block to the lists. Only with your OK: it is the project rules file. |
+
+`EmployeeServer.lua` is **not** changed: `EmployeeServer.grantEgg` already does what the egg days need. `ShopServer.lua` is not changed: Debug buttons use the existing `ShopServer.addDebugAction`.
+
+**Ownership first.** CONTRIBUTING's Ownership table still lists TycoonCore, EmployeeServer, ShopClient and the three Onboarding scripts as claimed on `milestone-5-onboarding` (already merged). Before any code, clear those rows and claim TycoonCore, IpoServer, IpoClient (if used) and the three new Daily files on `milestone-6-daily-rewards`. That row edit is the one thing allowed straight to `main`.
+
+**Build order, 4 small commits** (after each: playtest in Studio, read Output, paste the changed scripts into Studio):
+
+1. **Config, save and wiring, no gameplay.** `DailyConfig`, `DailyServer` with `setupPlayer` and `serialize` only, the `TycoonCore` changes, `IpoServer.grantShares`. Test: new save, an old save without `daily`, bad values in `daily` (warning, no error), save and rejoin, an IPO keeps `daily`. Nothing can be claimed yet.
+2. **The claim.** `DailyRemotes`, state attributes, the `Claim` action with every check from section 3, rewards (Cash only to `cash.Value`, eggs via `grantEgg`, Shares via `grantShares`), immediate save, and Studio-only Debug buttons (set the last claim N days back, reset the streak, show the state). Test table: claim, claim twice, skip a day, skip 3 days, egg day with 3 full incubators, claim during an IPO save, rejoin right after a claim, two clients.
+3. **The screen.** `DailyClient`: chip, window, cards, Claim button, toast, auto-open rule, phone layouts, the IPO confirmation line. Test with **Test -> Device** at the three sizes, with the M5 tracker visible, with a poach panel open.
+4. **Economy and docs.** Sim hook and ECONOMY.md section, README, CONTRIBUTING, ROADMAP Status (and CLAUDE.md if you agree). Then a review pass like M4 and M5 (`docs/reviews/M6_REVIEW.md`) before the PR.
+
+**Done when** (ROADMAP): rewards save; can't be claimed twice; changing the device clock or timezone changes nothing; old saves load; the IPO keeps the streak; the first-IPO time in the sim is unchanged.
+
+**Risks to watch:**
+
+- **Two servers at once** can't be closed until M9's session lock (section 3). Small reward, honest in the review.
+- **Egg day with every incubator busy** blocks the claim for that moment, and a player who never frees one before UTC midnight loses the streak for a reason they could fix. Mitigation: the card says why, and Garage eggs hatch in 60 s. If it shows up in testing, the fix is an `EmployeeServer` change (a pending daily egg, like `team.pending`), which would need claiming that script.
+- **Publishing needs Shut down all servers** (new save section).
+- **UTC reset time** is odd for some players (open question 3).
+
+## 8. Open questions for you (5)
+
+1. **Missed day: back to Day 1, or gentler?** ROADMAP says reset, and this plan does that with a clear message. A gentler version would drop you back by only a few days. A harsh reset can make a returning player feel it isn't worth restarting. My pick: Day 1, as ROADMAP says; we can soften it later from config without a save change.
+2. **Is the "While you were away" screen and the 2x offline earnings product part of this milestone?** ROADMAP M6 lists both, but you asked for the daily loop. The away screen needs TycoonCore to tell the client the offline amount (a display change), and the 2x product needs a new product ID from `sync_monetization.py`, plus a rule for how a purchase doubles an amount that was already paid at load. My pick: build the calendar first as M6 (this plan), and do the away screen and product as a second branch right after.
+3. **UTC calendar day or a rolling 24 hours?** UTC is simple, shows the same countdown for everyone, and a day is "7 different days". Rolling 24 h is personal but drifts later each day. My pick: UTC, reset at 00:00 UTC (config).
+4. **Gift chip next to the valuation bar, or a sixth HUD slot?** The chip leaves the five-slot layout alone. A sixth slot looks consistent but means re-centering the buttons in four clients and re-testing every phone size. My pick: the chip.
+5. **Is the Day 7 prize right: a Unicorn Egg plus 3 Shares?** It is the weekly "wow" and the only Shares source outside an IPO (about +7% Shares per month in the sim). If you'd rather keep Shares purely for IPOs, set `shares = nil` in config and Day 7 is just the Unicorn Egg.
