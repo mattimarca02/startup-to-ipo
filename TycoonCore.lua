@@ -4,6 +4,8 @@
 -- Eggs and creature employees live in EmployeeServer (ServerScriptService) and CreatureConfig (ReplicatedStorage).
 -- Poaching and the HR Department live in PoachServer (ServerScriptService) and CreatureConfig.Poaching.
 -- Valuation, the IPO rebirth and the IPO shop live in IpoServer (ServerScriptService) and IpoConfig (ReplicatedStorage).
+-- The first minute for new players (free egg, arrow, goals) lives in OnboardingServer (ServerScriptService) and OnboardingConfig (ReplicatedStorage).
+-- The 7-day login calendar lives in DailyServer (ServerScriptService) and DailyConfig (ReplicatedStorage).
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
@@ -24,6 +26,8 @@ local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
+local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
+local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
 -- Upgrades are bought in this order. cost = Cash, income = Cash per second.
 local UPGRADES = {
@@ -44,10 +48,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -203,7 +207,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -226,6 +230,8 @@ local function save(player, transform)
 		team = EmployeeServer.serialize(data),
 		poach = PoachServer.serialize(data),
 		ipo = IpoServer.serialize(data),
+		onboarding = OnboardingServer.serialize(data),
+		daily = DailyServer.serialize(data),
 	}
 	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
 		if payload[key] == nil then
@@ -365,6 +371,29 @@ PoachServer.init({
 	peekSave = peekSave,
 })
 
+-- First minute for new players (milestone 5) -----------------------------
+
+OnboardingServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+	updateIncome = updateIncome,
+	nextUpgradeCost = function(data) -- what the green pad sells now, or nil when everything is bought
+		local _, upg = nextUpgrade(data)
+		return upg and upg.cost
+	end,
+})
+
+-- Daily login calendar (milestone 6) -------------------------------------
+
+DailyServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+})
+
 -- Players joining and leaving -------------------------------------------
 
 local function teleportToPlot(character, slot)
@@ -453,6 +482,8 @@ Players.PlayerAdded:Connect(function(player)
 		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
+		DailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg
 	end)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
 	if not setupOk then

@@ -9,6 +9,7 @@
 --   IpoServer.perk(data, key)         -> what a perk adds right now (see IpoConfig.Perks)
 --   IpoServer.addEarnings(player, n)  -> Cash the startup earned (raises the valuation)
 --   IpoServer.isBusy(data)            -> true while an IPO is being saved
+--   IpoServer.grantShares(player, n)  -> server only (DailyServer): n Shares as a gift
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -133,6 +134,19 @@ function IpoServer.addEarnings(player, amount)
 	player:SetAttribute("IpoValuation", ipo.valuation)
 	player:SetAttribute("IpoBest", ipo.best)
 	refreshPad(ipo)
+end
+
+-- Server only (DailyServer's Day 7): adds Shares as a gift. No remote can call this.
+-- The Shareholder pass is NOT applied: it doubles the Shares an IPO pays (see preview), nothing else.
+-- Returns true if they were added (false while loading, during an IPO save, or for a bad amount).
+function IpoServer.grantShares(player, amount)
+	local ipo = getIpo(player)
+	if not ipo or ipo.busy or typeof(amount) ~= "number" or amount ~= amount or amount % 1 ~= 0 or amount < 1 or amount > MAX_DEBUG_AMOUNT then
+		return false
+	end
+	ipo.shares += amount
+	publish(player)
+	return true
 end
 
 -- Going public -----------------------------------------------------------
