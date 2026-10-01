@@ -31,3 +31,24 @@ Branch `fix-security-review`, reviewed at commit `bc6420c` (#14 already merged w
 ### F3 (Low): the call-off runs before the IPO is saved
 `IpoServer.lua:189` calls off the deals, and the save comes after it at `:203-211`. If `commitIpo` fails, the IPO doesn't happen. Even so, the victim has lost their one-time Counter-Offer, and the poacher was told "Deal called off: X went public." even though X didn't go public.
 **Fix:** move `core.callOffPoachDeals(player)` after the `if not ok` check. It isn't needed before the save: during the save `data.ready = false`, so `protection()` already reports "Still loading". A negotiation that finishes in that window is cancelled and refunded by `finish` (`PoachServer.lua:376`), and no new deal can start.
+
+## 2. Employee integrity (duplicates and losses)
+
+**Result: no employee is lost from a save, and none is duplicated.** The duplicate check works: `addEmployee` checks the team and `pending` (`EmployeeServer.lua:423`), and loading keeps only the first copy of an ID (`:531-540`, `:553-554`). Loading puts team members before `outgoing` ones (`:574-579`), so the copy it keeps is the team one. That also fixes `reconcile` (`PoachServer.lua:304`), which used to remove only one copy. Two Lows remain on the new "the move failed, give it back" path.
+
+| Case | What happens |
+|---|---|
+| Two poaches of the same employee at once | Impossible. There is one negotiation per target (`negotiations`, "Busy"), and `inTransit` blocks every other move and Counter-Offer until both saves are written. |
+| Team full | `transfer` checks `hasFreeSlot(to)` before releasing anything (`PoachServer.lua:228`), so nothing moves. |
+| `addEmployee(to)` refuses (ID already there) | New: the employee is given back to `from` (`:251-259`). See **F4** and **F5**. |
+| Player leaves during a move | Unchanged by #14. `confirmSave` reads back the save written when they left, and `gained` + `reconcile` undo the move on their next join. |
+| IPO during a move | Blocked: `isBusy` still checks `inTransit` on `employees` and `outgoing` (`:644-649`). |
+| Counter-Offer for an employee still in `outgoing` | `addEmployee` now clears `outgoing` (`EmployeeServer.lua:426`), so the employee is saved once, not twice. This is correct. |
+
+### F4 (Low): a poach that can't be completed after a successful roll keeps the poacher's Cash
+`PoachServer.lua:399-406`. If `poached()` returns false, `finish` treats it as "defended": the Cash is spent and the cooldown is set. Before #14, `transfer` could not fail at that point. Now it can, through the new duplicate refusal at `:251`. That needs the poacher to already hold the same ID, so it only follows an earlier duplication bug. The poacher then loses Cash and gets a misleading "failed" result.
+**Fix:** when `success` is true but `poached()` returns false, refund `negotiation.cost` (with a "deal fell through" message) instead of sending the "defended" result.
+
+### F5 (Low): giving the employee back ignores whether it worked, and doesn't restore the exact old state
+`PoachServer.lua:256` ignores the return value of `EmployeeServer.addEmployee(from, employee)`, and that function re-checks capacity (`EmployeeServer.lua:422`). A team can be over capacity: the Extra Employee Slots pass check timed out at join (M4 re-review finding 1), a Studio Debug "Ignore passes I really own", or a lowered perk. In that case the employee can't be given back. It stays only in `from`'s `outgoing` table: off the team, invisible and earning nothing for the rest of the session. It is still saved, and it comes back on the next join, so it is not lost. Even when the give-back works, the employee goes to the end of the list and `hiredAt` is reset to now. That doesn't matter today, because `hiredAt` is only saved, never read.
+**Fix:** give it back without the capacity check: re-insert the original `employee` table at its old index and clear `team.outgoing[id]` (for example with a small `EmployeeServer.restoreEmployee`). Only reachable after F4's duplicate.
