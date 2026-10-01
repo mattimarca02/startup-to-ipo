@@ -309,6 +309,9 @@ IpoServer.init({
 	isPoachBusy = function(player)
 		return PoachServer.isBusy(player)
 	end,
+	countEggs = function(player)
+		return EmployeeServer.countEggs(player)
+	end,
 	onPerksChanged = function(player)
 		EmployeeServer.refreshCapacity(player) -- extra incubators and desks
 		updateIncome(player)

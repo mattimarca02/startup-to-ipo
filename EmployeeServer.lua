@@ -554,6 +554,30 @@ end
 
 -- IPO (IpoServer and TycoonCore call these) ----------------------------------------
 
+-- The eggs going public would clear: (still incubating, ready to hatch). Parked eggs count too.
+function EmployeeServer.countEggs(player)
+	local team = getTeam(player)
+	if not team then return 0, 0 end
+	local now = os.time()
+	local incubating, ready = 0, 0
+	local function add(egg)
+		if egg then
+			if egg.hatchAt <= now then
+				ready += 1
+			else
+				incubating += 1
+			end
+		end
+	end
+	for i = 1, #team.incubators do
+		add(team.incubators[i])
+	end
+	for _, egg in pairs(team.parked) do
+		add(egg)
+	end
+	return incubating, ready
+end
+
 -- Going public empties every incubator (the eggs are part of the run that resets)
 function EmployeeServer.clearIncubators(player)
 	local team, data = getTeam(player)

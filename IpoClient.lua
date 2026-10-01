@@ -458,12 +458,12 @@ local function makeCard(page, order, icon, withButton)
 	return parts
 end
 
--- Asks the server and shows its answer
+-- Asks the server and shows its answer. Returns success, plus any extra info the server sent.
 local busy = false
 local function request(action, arg)
 	if busy then return false end
 	busy = true
-	local ok, success, message = pcall(function()
+	local ok, success, message, extra = pcall(function()
 		return ipoAction:InvokeServer(action, arg)
 	end)
 	busy = false
@@ -474,7 +474,7 @@ local function request(action, arg)
 	if message then
 		showToast(message)
 	end
-	return success
+	return success, extra
 end
 
 -- IPO tab ---------------------------------------------------------------
@@ -616,30 +616,65 @@ round(yesButton, 12)
 fitText(yesButton, 22)
 
 local confirmFor -- the IPO number on the confirm screen
+local confirmEggs -- { incubating, ready }: the eggs this IPO would clear (from the server)
 local confirmToken = 0
 local function closeConfirm()
 	confirm.Visible = false
 	confirmFor = nil
 end
 
-goButton.Activated:Connect(function()
-	local info = stageInfo()
-	if not info.ready or cooldownLeft() > 0 then return end
-	local count = ipoCount()
-	confirmFor = count + 1
+-- The confirm screen's text. Redrawn when Cash changes, so the amount it resets is never out of date.
+local function renderConfirm()
+	if not confirmFor then return end
+	local count = confirmFor - 1
 	local shares = IpoConfig.sharesFor(valuation(), count, sharesPassMultiplier())
 	local cashText = ShopConfig.formatCash((player:FindFirstChild("leaderstats") and player.leaderstats.Cash.Value) or 0)
+	local incubating, ready = confirmEggs.incubating, confirmEggs.ready
 	local resets = {}
 	for _, item in ipairs(IpoConfig.resetItems(true)) do
-		table.insert(resets, item.key == "Cash" and ("your " .. cashText .. " Cash") or item.name)
+		if item.key == "Cash" then
+			table.insert(resets, "your " .. cashText .. " Cash")
+		elseif item.key == "Eggs" then
+			local eggs = incubating + ready
+			if eggs > 0 then
+				table.insert(resets, eggs .. (eggs == 1 and " egg" or " eggs") .. " in incubators")
+			end
+		else
+			table.insert(resets, item.name)
+		end
+	end
+	local warning = ""
+	if ready > 0 then
+		warning = string.format('<font color="#FF5050">⚠️ %d %s ready to hatch! Hatch %s first, or %s lost.</font>\n\n',
+			ready, ready == 1 and "egg is" or "eggs are", ready == 1 and "it" or "them", ready == 1 and "it's" or "they're")
 	end
 	local keeps = resetNames(false)
 	confirmText.Text = string.format(
 		'Go public with IPO #%d?\n\n<font color="#FFC83C">You get: 📜 %d Shares and %s income forever</font>\n\n'
-			.. '<font color="#FF8C8C">Resets: %s</font>\n\n'
+			.. '<font color="#FF8C8C">Resets: %s</font>\n\n%s'
 			.. "Employees, %spasses, boosts, shields and perks stay.",
 		confirmFor, shares, IpoConfig.formatMultiplier(IpoConfig.multiplier(count + 1)),
-		joinList(resets), #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "")
+		joinList(resets), warning, #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "")
+end
+
+task.spawn(function()
+	local cash = player:WaitForChild("leaderstats"):WaitForChild("Cash")
+	cash.Changed:Connect(function()
+		if confirm.Visible then
+			renderConfirm()
+		end
+	end)
+end)
+
+goButton.Activated:Connect(function()
+	local info = stageInfo()
+	if not info.ready or cooldownLeft() > 0 then return end
+	-- Ask the server which eggs this IPO would clear, so the screen can warn about them
+	local ok, eggs = request("Preview")
+	if not ok or typeof(eggs) ~= "table" then return end
+	confirmEggs = { incubating = tonumber(eggs.incubating) or 0, ready = tonumber(eggs.ready) or 0 }
+	confirmFor = ipoCount() + 1
+	renderConfirm()
 	confirm.Visible = true
 	confirmToken += 1
 	local myToken = confirmToken

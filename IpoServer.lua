@@ -26,7 +26,7 @@ local MAX_DEBUG_AMOUNT = 1e12
 
 local IpoServer = {}
 
-local core -- { getData, save, updateIncome, plotCenter, commitIpo, isPoachBusy, onPerksChanged }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotCenter, commitIpo, isPoachBusy, countEggs, onPerksChanged }, given by TycoonCore
 local remotes = {}
 
 -- Helpers ---------------------------------------------------------------
@@ -234,7 +234,14 @@ local function onAction(player, action, arg)
 	local ipo, data = getIpo(player)
 	if not ipo or not data.ready then return false, "Still loading, try again in a moment" end
 
-	if action == "GoPublic" then
+	if action == "Preview" then
+		-- For the confirm screen: the eggs going public would clear (read only, changes nothing)
+		local incubating, ready = 0, 0
+		if IpoConfig.Resets.Eggs then
+			incubating, ready = core.countEggs(player)
+		end
+		return true, nil, { incubating = incubating, ready = ready }
+	elseif action == "GoPublic" then
 		return goPublic(player, arg)
 	elseif action == "BuyPerk" then
 		return buyPerk(player, arg)
