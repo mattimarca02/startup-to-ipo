@@ -62,3 +62,47 @@ The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M
 
 ### R7 (Low): no proof the 22 checks pass
 `tools/daily_test.py:243-305`. The test copies the code between the `SANITIZE` markers and stubs `typeof` with `type`, which is fine for these inputs. It couldn't be run here (no `luau`). The checks read correctly, but run `python tools/daily_test.py` once before merging and paste the "N passed, 0 failed" line in the PR.
+
+## 3. F2: GetDataStore retried at startup, live servers kick without a store
+
+**Result: Studio vs live detection is sound and there is no double kick, but the startup retry yields before `PlayerAdded` is connected, and a server with no store never recovers.** Two Mediums.
+
+| Question | Answer |
+|---|---|
+| How is Studio told from live? | `RunService:IsStudio()` (`TycoonCore.lua:34, 502`). It is true in every Studio session (Play, Play Here, Start Server/clients, Team Create) and false on every Roblox game server. It can't misfire either way. |
+| Double kick? | No. The no-store kick at `:502-507` returns before setup, so the setup kick at `:548-552` can't follow. A kicked player's leave `save` returns at `:261` (`data.loaded` is false). |
+| Kick loop? | Yes, server-wide: R2. |
+| Can the retry delay or block joins? | Yes: R1. |
+
+### R1 (Medium, new in F2): players who join during the startup retry are never set up, and never kicked
+`TycoonCore.lua:22-32` vs `:460`. The retry loop yields (`task.wait(1)`, then `task.wait(2)`) at the top of the script, before the modules are required and before `Players.PlayerAdded:Connect` runs. TycoonCore has no catch-up loop over `Players:GetPlayers()`. Anyone who joins in those ~3 s (on a live server, often the very player whose join started the server; in Studio, the local tester) never gets a plot, `leaderstats` or `playerData`. They aren't kicked either, so it is exactly the silent broken session F2 set out to prevent, and every module's remotes are missing for those ~3 s. It only happens when `GetDataStore` fails, which is rare on live servers, but it is the normal case in an unpublished copy of the place in Studio.
+**Fix:** after `Players.PlayerAdded:Connect(onPlayerAdded)`, add `for _, p in ipairs(Players:GetPlayers()) do task.spawn(onPlayerAdded, p) end` (name the handler first). Or, simpler, move the store lookup into a `getStore()` used by `load()` (see R2), so the top of the script never yields.
+
+### R2 (Medium): a live server with no store kicks every joiner for its whole life
+`TycoonCore.lua:22-39, 224, 502`. `store` is decided once at startup and never tried again. If `GetDataStore` failed for a few seconds at start, the server stays up and matchmaking keeps sending players to it (and back to it on rejoin, the message says "rejoin in a moment"), and every one of them is kicked until the server empties. The kick protects the save, so no data is lost, but the server is useless and players see repeated "couldn't load".
+**Fix:** look the store up lazily: `local function getStore() if not store then local ok, s = pcall(DataStoreService.GetDataStore, DataStoreService, "StartupTycoon_v1"); if ok then store = s end end return store end`, called from `load`, `peekSave` and `save`. Keep the startup attempt (no `task.wait` needed). A server whose store comes back then heals on the next join. `GetDataStore` is not a budgeted request, so calling it per join is cheap.
+
+## 4. Anything else new
+
+- **Yields between a check and its use:** the only new yield is R1's. F3 moved the call-off past the save's yield, but everything after `data.ready = true` is synchronous (section 1). F1 adds no yield.
+- **DataStore calls without `pcall`:** none. `GetDataStore` (`:23-25`), `GetAsync` (`:227`, `:243`) and `SetAsync` (`:299`) are all wrapped.
+- **Remotes:** none added. `GoPublic` twice: `ipo.busy` and `data.ready`. `CounterOffer` twice: cleared before anything that could yield (`PoachServer.lua:496`).
+- **M4 (IPO reset):** the reset is applied in `commitIpo` before the call-off, and the call-off only refunds the *poacher* and drops V's unsaved Counter-Offer, so the Cash reset can't swallow a refund.
+- **M5 (onboarding):** see section 2 and R5.
+- **M6 (daily claim):** a claim needs `data.ready` (`DailyServer.lua:219`), which is false for the whole IPO save and until the "all modules loaded" gate. F1's sanitizer runs before `DailyServer.setupPlayer` and doesn't touch `daily`. No change.
+
+### R8 (Low, from before #14): the IPO section still accepts infinity
+`IpoServer.lua:336-339`. `number()` rejects NaN and negatives but not `math.huge`, so a corrupt `ipo.count = inf` passes: the IPO can never be confirmed again (`ipoNumber ~= ipo.count + 1`), and `shares = inf` buys every perk. Not a kick and not reachable from a client, but it is the same class of bug F1 fixed. **Fix:** add `and value < math.huge` to `number()`.
+
+## Summary
+
+| Severity | Count | Findings |
+|---|---|---|
+| Critical | 0 | |
+| High | 0 | |
+| Medium | 2 | R1 joiners during the startup retry are never set up; R2 a server with no store kicks everyone forever |
+| Low | 6 | R3 dummy deal during the IPO save (Studio); R4 misleading call-off comment and message; R5 non-table save treated as new and overwritten; R6 bad `lastSeen` pays the offline cap; R7 tests not run here; R8 IPO numbers accept inf |
+
+**Top 3:** R1, R2, R5.
+
+**Verdict: merge.** F3 is correct: the refund is paid exactly once in every case, and a failed save leaves memory and the DataStore consistent. F1 rejects every bad shape without a kick and never destroys a real Cash value. Both Mediums are in F2 and only happen when `GetDataStore` itself fails, which is rare on live servers. Fix R1 and R2 before launch (one small `getStore()` fixes both), and run `tools/daily_test.py` once before merging.
