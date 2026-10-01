@@ -117,3 +117,31 @@ One weak spot (UX, not security):
 **F7 (Low): the free-egg toast is sent during the load, often before the screen is up.** `notify` fires from inside `setupPlayer` (`OnboardingServer.lua:88`, called from `TycoonCore.lua:453`). Roblox holds the event until `OnboardingClient` connects (`:200`), but the toast then shows for 3.5 s, which may still be during the loading screen or before the camera is on the plot. **Fix:** send it on the first update loop after `data.ready`, or when the client first asks for state.
 
 **F10 (Low): the "All goals done!" card ignores open windows for 3 s.** While `celebrating`, `refreshTracker` returns before the `OpenPanel` check (`OnboardingClient.lua:333-334`), so the card stays on top of a window opened in those 3 seconds. **Fix:** apply `card.Visible = playerGui:GetAttribute("OpenPanel") == nil` during the celebration too.
+
+## 6. Ranked findings
+
+| # | Level | Where | What breaks | Fix |
+|---|---|---|---|---|
+| F1 | **Medium** | `OnboardingClient.lua:287-288` | Looks for `ValuationBar` in `IpoWindowGui`, but it's in `IpoGui`. The card never follows the bar: on portrait phones under ~358 px its X button is off-screen, and on short narrow landscape screens it covers the valuation bar. | `WaitForChild("IpoGui", 30)`; retest in Test → Device at 320 × 568 and a small landscape size. |
+| F2 | Low | `OnboardingClient.lua:278-282`, `PoachClient.lua:807-816`, `:878-880` | On landscape phones the card overlaps the Negotiation / Poach Alert panels (both at y = 76). | Hide the card while a poach panel shows, or place it below them. |
+| F3 | Low | `OnboardingServer.lua:248-255`, `TycoonCore.lua:452`, `PoachServer.lua:694-695` | Pre-M5 saves with no progress get the tutorial but not the 15-minute new-player poach shield, so their first employee can be taken. | Give the new-player shield whenever the free egg is given (e.g. a small `PoachServer.grantNewPlayerShield(player)` called from `grantFreeEgg`; PoachServer must be claimed first). |
+| F4 | Low | `OnboardingServer.lua:169`, `:248`, `:253` | Sessions with `Enabled = false` save `seenIntro = false, legacy = false`; turning it back on shows the arrow and tracker to veterans. | In `setupPlayer`, treat any `not seenIntro and hasProgress(data)` as legacy, whether or not the section exists. |
+| F5 | Low | `OnboardingServer.lua:195-197`, `OnboardingClient.lua:337-347` | Closing the tracker during an IPO save (or while loading) isn't saved; it comes back next session, with a "Still loading" reason. | Retry the dismiss until the server accepts it; say "Your IPO is being filed" when that's the reason. |
+| F6 | Low | `OnboardingServer.lua:131`, `:183-185` | The tracker disappears if the player loses their only employee before a goal is finished. Poached employees count toward "Hire 3". | Save a `trackerShown` flag the first time it appears and use it in `started`. |
+| F7 | Low | `OnboardingServer.lua:88`, `TycoonCore.lua:453` | The free-egg toast is sent during the load and may be shown behind the loading screen. | Send it from the first update after `data.ready`. |
+| F8 | Low | `TycoonCore.lua:423` (no session lock) | Hopping servers before the first save lands can give the egg again in the new server; the player ends with one egg but loses the first session's seconds of progress. Older than M5. | Session lock in M9, as planned. |
+| F9 | Low | `OnboardingServer.lua:222-227` | Bad values in the section are coerced silently, without the warning CLAUDE.md asks for. Safe (`hasProgress` still guards the egg). | `warn` when a field is present but isn't a boolean, or `goals` isn't a table. |
+| F10 | Low | `OnboardingClient.lua:333-334` | The "All goals done!" card stays over a window opened during its 3 s. | Respect `OpenPanel` while celebrating. |
+
+**Counts:** Critical 0 · High 0 · Medium 1 · Low 9.
+
+## 7. Verdict
+
+**Merge.** Nothing blocks it.
+
+- Save integrity holds: the onboarding section is inside the M4 F9 gate, survives M4 code and IPOs, and old saves load correctly.
+- The free egg can't be duplicated: the egg and `seenIntro` always land in the same save, and no remote can reach `grantEgg`.
+- No client input grants anything.
+- **Fix F1 before publishing.** It's a one-word change in `OnboardingClient.lua` (already claimed by this branch), and "everything must work on a phone" is a project rule.
+- Publish with **Shut down all servers**, because M5 adds a new save section (CLAUDE.md, M4 F2).
+- The Lows can go to the ROADMAP backlog, like the M4 re-review's.
