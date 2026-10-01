@@ -71,6 +71,12 @@ Play-through rate is Roblox's #1 discovery signal.
   3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule.
   4. Kept unknown sections are frozen as of join and go stale; re-check them against `team`/`ipo` on load.
   5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
+- From the PR #14 re-review (docs/reviews/PR14_REREVIEW.md), Low findings not fixed:
+  - R3: a Studio dummy deal (`ignoreShields`) that ends during the IPO save moves the employee, then errors; check `poachOf(target) == nil` in `finish` before the `ignoreShields` branch.
+  - R4: a deal cancelled during a failed IPO save says "got protected" and a comment claims it is left as it was; reword both ("X is going public").
+  - R6: a `lastSeen` that is a finite number but absurdly old (0, -1) pays the full offline cap; require `lastSeen > 0` or ignore values over a year old.
+  - R7: run `python tools/daily_test.py` and paste the "N passed, 0 failed" line in the PR before merging.
+  - R8: `IpoServer` `number()` accepts `math.huge` (`ipo.count = inf` blocks every IPO); add `and value < math.huge`.
 - From the M5 review (docs/reviews/M5_REVIEW.md), Low findings not fixed:
   - F2: the goal card overlaps the Negotiation / Poach Alert panels on landscape phones; hide it while a poach panel shows.
   - F4: with `OnboardingConfig.Enabled = false` the saved section is `seenIntro = false, legacy = false`; treat `not seenIntro and hasProgress(data)` as legacy.
