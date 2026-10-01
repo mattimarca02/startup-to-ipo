@@ -84,14 +84,14 @@ BEHAVIOURS = {
 IPO_ENABLED_IN_MAIN_TABLE = False   # the main tables ignore IPO; the IPO section turns it on
 IPO_STAGES = [                      # valuation (total Cash earned in this run) needed for each stage. Source: IpoConfig.Stages
     ("Garage", 0),
-    ("Seed", 2_500),
-    ("Series A", 25_000),
-    ("Series B", 250_000),
-    ("IPO-ready", 2_500_000),
+    ("Seed", 1_800),
+    ("Series A", 6_300),
+    ("Series B", 23_400),
+    ("IPO-ready", 81_000),
 ]
 IPO_BONUS_PER_IPO = 0.5             # IpoConfig.BonusPerIpo: income multiplier = 1 + this * IPOs ^ IPO_BONUS_EXPONENT
 IPO_BONUS_EXPONENT = 0.75           # IpoConfig.BonusExponent (below 1 => diminishing returns per IPO)
-IPO_THRESHOLD_GROWTH = 1.5          # IpoConfig.StageGrowthPerIpo: next run's stage thresholds are this many times bigger per IPO done
+IPO_THRESHOLD_GROWTH = 2.5          # IpoConfig.StageGrowthPerIpo: next run's stage thresholds are this many times bigger per IPO done
 IPO_KEEPS_EMPLOYEES = True          # IpoConfig.Resets: employees are never in the Resets table, always kept
 IPO_RESET_UPGRADES = True           # IpoConfig.Resets.Upgrades = true (cash and incubating eggs also reset)
 IPO_RESETS_HR = False               # IpoConfig.Resets.HRDepartment = false: the HR level is kept across an IPO
@@ -550,6 +550,9 @@ def main():
     print("# Economy simulator output")
     print(f"Assumptions: claim delay without Auto-Hatch {CLAIM_DELAY_MANUAL}s; wait up to {WAIT_SECONDS}s for a better buy; "
           f"sessions {BEHAVIOURS}")
+    print("IPO perk effects (FasterEggs, ExtraIncubator, ExtraSlot, OfflineCap, BaseLuck, CheaperPoach) are "
+          "NOT modeled: every IPO figure below assumes no perks bought. A perk-buying player is estimated "
+          "to be roughly 15-25% faster per IPO cycle than these numbers show.")
     report_main(n)
     report_slots_pass(n)
     report_passes(n)
