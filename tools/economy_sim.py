@@ -80,19 +80,21 @@ BEHAVIOURS = {
     "idler":  [(0, 1)],                        # logs in for 1 minute a day: collects offline cash, spends it, leaves
 }
 
-# --- IPO rebirth: PLACEHOLDER. Update these to the real IpoConfig.lua after milestone-4-ipo is merged. ---
+# --- IPO rebirth. Source: IpoConfig.lua ---
 IPO_ENABLED_IN_MAIN_TABLE = False   # the main tables ignore IPO; the IPO section turns it on
-IPO_STAGES = [                      # valuation (total Cash earned in this run) needed for each stage
+IPO_STAGES = [                      # valuation (total Cash earned in this run) needed for each stage. Source: IpoConfig.Stages
     ("Garage", 0),
-    ("Seed", 50_000),
-    ("Series A", 500_000),
-    ("Series B", 5_000_000),
-    ("IPO-ready", 50_000_000),      # 10x per stage
+    ("Seed", 2_500),
+    ("Series A", 25_000),
+    ("Series B", 250_000),
+    ("IPO-ready", 2_500_000),
 ]
-IPO_MULT_PER_IPO = 0.5              # income multiplier = 1 + this * number_of_IPOs  (x1.5, x2.0, x2.5 ...)
-IPO_THRESHOLD_GROWTH = 3.0          # next run's stage thresholds are this many times bigger per IPO done
-IPO_KEEPS_EMPLOYEES = True          # CLAUDE.md / ROADMAP: employees, passes and HR level are kept
-IPO_RESET_UPGRADES = True           # cash, garage upgrades and incubating eggs reset
+IPO_BONUS_PER_IPO = 0.5             # IpoConfig.BonusPerIpo: income multiplier = 1 + this * IPOs ^ IPO_BONUS_EXPONENT
+IPO_BONUS_EXPONENT = 0.75           # IpoConfig.BonusExponent (below 1 => diminishing returns per IPO)
+IPO_THRESHOLD_GROWTH = 1.5          # IpoConfig.StageGrowthPerIpo: next run's stage thresholds are this many times bigger per IPO done
+IPO_KEEPS_EMPLOYEES = True          # IpoConfig.Resets: employees are never in the Resets table, always kept
+IPO_RESET_UPGRADES = True           # IpoConfig.Resets.Upgrades = true (cash and incubating eggs also reset)
+IPO_RESETS_HR = False               # IpoConfig.Resets.HRDepartment = false: the HR level is kept across an IPO
 
 SIM_DAYS = 7
 DAY = 24 * 3600
@@ -145,7 +147,9 @@ class Player:
 
     # -- income -------------------------------------------------------------
     def ipo_mult(self):
-        return 1 + IPO_MULT_PER_IPO * self.ipos
+        if self.ipos <= 0:
+            return 1
+        return 1 + IPO_BONUS_PER_IPO * self.ipos ** IPO_BONUS_EXPONENT
 
     def base_income(self):
         return sum(u[2] for u in UPGRADES[: self.upgrades]) + sum(self.roster)
@@ -282,7 +286,8 @@ class Player:
         self.cash = 0.0
         self.upgrades = 1
         self.incubators = []
-        self.hr = 0
+        if IPO_RESETS_HR:
+            self.hr = 0
         if not IPO_KEEPS_EMPLOYEES:
             self.roster = []
         return True
@@ -483,17 +488,24 @@ def report_passes(n):
     return result
 
 
+def ipo_mult_at(count):
+    if count <= 0:
+        return 1.0
+    return 1 + IPO_BONUS_PER_IPO * count ** IPO_BONUS_EXPONENT
+
+
 def report_ipo(n, days=30):
-    print(f"\n## 4. IPO rebirth, PLACEHOLDER numbers, {days} days (median of {n} runs)")
+    print(f"\n## 4. IPO rebirth, real IpoConfig.lua numbers, {days} days (median of {n} runs)")
     print("Stages (valuation): " + ", ".join(f"{k} {fmt_cash(v)}" for k, v in IPO_STAGES) +
-          f". Each IPO: income x(1 + {IPO_MULT_PER_IPO} x IPOs). Next-run thresholds x{IPO_THRESHOLD_GROWTH} per IPO.\n")
+          f". Each IPO: income x(1 + {IPO_BONUS_PER_IPO} x IPOs^{IPO_BONUS_EXPONENT}). Next-run thresholds x{IPO_THRESHOLD_GROWTH} per IPO.\n")
     print("| Behaviour | Seed | Series A | Series B | IPO-ready = 1st IPO | IPOs in 30 days | Income multiplier at day 30 |")
     print("|---|---|---|---|---|---|---|")
     for b in BEHAVIOURS:
         runs = [run(b, seed, days=days, use_ipo=True) for seed in range(n)]
         cols = [fmt_time(median_time(runs, f"stage {name}")) for name, _ in IPO_STAGES[1:]]
         counts = [len(r.ipo_times) for r in runs]
-        print(f"| {b} | " + " | ".join(cols) + f" | {statistics.median(counts):.0f} | x{1 + IPO_MULT_PER_IPO * statistics.median(counts):.1f} |")
+        median_count = statistics.median(counts)
+        print(f"| {b} | " + " | ".join(cols) + f" | {median_count:.0f} | x{ipo_mult_at(median_count):.2f} |")
 
 
 def report_detail(n):
