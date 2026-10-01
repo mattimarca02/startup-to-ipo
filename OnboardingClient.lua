@@ -1,4 +1,4 @@
--- OnboardingClient: the glowing arrow for new players (milestone 5).
+-- OnboardingClient: the glowing arrow and the goal tracker for new players (milestone 5).
 -- Put this LocalScript in StarterPlayer > StarterPlayerScripts. It builds everything by itself.
 -- It only shows what OnboardingServer puts on the player (attributes). It never decides or
 -- grants anything, and it has nothing to type in.
@@ -8,8 +8,41 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- money format for the Seed goal
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local COLORS = {
+	panel = Color3.fromRGB(28, 30, 38),
+	text = Color3.new(1, 1, 1),
+	subtext = Color3.fromRGB(185, 190, 205),
+	buy = Color3.fromRGB(0, 200, 90), -- same green as the buy pad
+	gold = Color3.fromRGB(255, 200, 60),
+}
+
+-- UI helpers ------------------------------------------------------------
+
+local function make(className, props)
+	local inst = Instance.new(className)
+	local parent = props.Parent
+	props.Parent = nil
+	for key, value in pairs(props) do
+		inst[key] = value
+	end
+	inst.Parent = parent
+	return inst
+end
+
+local function round(inst, radius)
+	make("UICorner", { CornerRadius = UDim.new(0, radius), Parent = inst })
+end
+
+-- Text shrinks to fit small phone screens but never grows past maxSize
+local function fitText(inst, maxSize)
+	inst.TextScaled = true
+	make("UITextSizeConstraint", { MaxTextSize = maxSize, MinTextSize = 8, Parent = inst })
+end
 
 -- The glowing arrow -------------------------------------------------------
 -- A beam from the player to the target, and a bouncing arrow above the target. Both exist only
@@ -94,3 +127,125 @@ RunService.RenderStepped:Connect(function()
 	marker.StudsOffset = Vector3.new(0, ARROW.markerHeight + math.sin(t * 5) * 0.6, 0)
 	beam.Transparency = NumberSequence.new(0.25 + 0.2 * math.sin(t * 4))
 end)
+
+-- Goal tracker ------------------------------------------------------------
+-- A small card right under the IPO valuation bar (IpoClient), the same width, so it follows the
+-- HUD layout on every screen size. Hidden while a window is open ("OpenPanel").
+
+local HEADER_HEIGHT = 24
+local ROW_HEIGHT = 22
+local GAP = 6 -- between the valuation bar and the card
+
+local gui = make("ScreenGui", {
+	Name = "OnboardingGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	Parent = playerGui,
+})
+
+local card = make("Frame", {
+	Name = "GoalTracker",
+	Size = UDim2.fromOffset(250, HEADER_HEIGHT + ROW_HEIGHT * #OnboardingConfig.Goals + 8),
+	BackgroundColor3 = COLORS.panel,
+	BackgroundTransparency = 0.15,
+	Visible = false,
+	Parent = gui,
+})
+round(card, 12)
+make("UIStroke", { Thickness = 2, Color = COLORS.buy, Transparency = 0.4, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = card })
+
+local title = make("TextLabel", {
+	Position = UDim2.fromOffset(10, 4),
+	Size = UDim2.new(1, -20, 0, HEADER_HEIGHT - 4),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBold,
+	Text = "🎯 Goals",
+	TextColor3 = COLORS.buy,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = card,
+})
+fitText(title, 16)
+
+local rows = {} -- goal key -> { name, progress }
+for i, goal in ipairs(OnboardingConfig.Goals) do
+	local y = HEADER_HEIGHT + (i - 1) * ROW_HEIGHT
+	local name = make("TextLabel", {
+		Position = UDim2.fromOffset(10, y),
+		Size = UDim2.new(0.68, -10, 0, ROW_HEIGHT - 2),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLORS.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = card,
+	})
+	fitText(name, 15)
+	local progress = make("TextLabel", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, y),
+		Size = UDim2.new(0.32, -10, 0, ROW_HEIGHT - 2),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamBold,
+		Text = "",
+		TextColor3 = COLORS.subtext,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = card,
+	})
+	fitText(progress, 15)
+	rows[goal.key] = { name = name, progress = progress }
+end
+
+-- Sits under the valuation bar. IpoClient places that bar with offsets in a ScreenGui like this
+-- one, so the same numbers line up. Without it (IpoClient missing), a fixed spot top-left.
+local valuationBar
+local function place()
+	if valuationBar and valuationBar.Parent then
+		local position, size = valuationBar.Position, valuationBar.Size
+		card.Position = UDim2.fromOffset(position.X.Offset, position.Y.Offset + size.Y.Offset + GAP)
+		card.Size = UDim2.fromOffset(size.X.Offset, card.Size.Y.Offset)
+	elseif gui.AbsoluteSize.Y < 460 then -- short phone screen: under the HUD button row
+		card.Position = UDim2.fromOffset(10, 76)
+	else
+		card.Position = UDim2.fromOffset(98, 84)
+	end
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+place()
+task.spawn(function()
+	local ipoGui = playerGui:WaitForChild("IpoWindowGui", 30)
+	valuationBar = ipoGui and ipoGui:WaitForChild("ValuationBar", 30)
+	if valuationBar then
+		valuationBar:GetPropertyChangedSignal("Position"):Connect(place)
+		valuationBar:GetPropertyChangedSignal("Size"):Connect(place)
+		place()
+	end
+end)
+
+local function progressText(goal, current, target)
+	if goal.kind == "stage" then
+		return IpoConfig.formatShort(current) .. " / " .. IpoConfig.formatShort(target)
+	end
+	return current .. "/" .. target
+end
+
+local function refreshTracker()
+	for _, goal in ipairs(OnboardingConfig.Goals) do
+		local row = rows[goal.key]
+		local current = player:GetAttribute("OnboardingGoal_" .. goal.key)
+		local target = player:GetAttribute("OnboardingGoalTarget_" .. goal.key)
+		local done = typeof(current) == "number" and typeof(target) == "number" and current >= target
+		row.name.Text = (done and "✅" or goal.icon) .. " " .. goal.text
+		row.name.TextColor3 = done and COLORS.subtext or COLORS.text
+		row.progress.Text = typeof(current) == "number" and typeof(target) == "number" and progressText(goal, current, target) or ""
+		row.progress.TextColor3 = done and COLORS.buy or COLORS.subtext
+	end
+	card.Visible = player:GetAttribute("OnboardingTracker") == true and playerGui:GetAttribute("OpenPanel") == nil
+end
+
+player.AttributeChanged:Connect(function(name)
+	if name == "OnboardingTracker" or string.sub(name, 1, 14) == "OnboardingGoal" then
+		refreshTracker()
+	end
+end)
+playerGui:GetAttributeChangedSignal("OpenPanel"):Connect(refreshTracker)
+refreshTracker()

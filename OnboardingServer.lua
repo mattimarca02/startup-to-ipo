@@ -7,11 +7,15 @@
 -- Settings (the free egg, goals, arrow) live in OnboardingConfig (ReplicatedStorage).
 -- The screen (OnboardingClient) only reads what this module puts on the player:
 --   OnboardingTarget (Vector3 or nil) -> where the glowing arrow points
+--   OnboardingTracker (boolean)       -> show the goal tracker
+--   OnboardingGoal_<key>, OnboardingGoalTarget_<key> (numbers) -> each goal's progress
+-- Goals are checked here from the server's own data; the client can't finish one.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 
 local OnboardingServer = {}
@@ -93,8 +97,57 @@ local function arrowTarget(data, now)
 	return incubating
 end
 
--- Runs every second for each loaded player: ends the arrow once it's done its job, and tells
--- the screen where it points
+-- Goals ---------------------------------------------------------------------
+
+local function stageNumber(key)
+	for i, stage in ipairs(IpoConfig.Stages) do
+		if stage.key == key then
+			return i
+		end
+	end
+	return nil
+end
+
+-- (where the player is now, what the goal needs), from the server's own data.
+-- nil for a goal this version can't check (it's skipped, never blocks the tracker).
+local function goalProgress(data, goal)
+	if goal.kind == "employees" then
+		return #data.team.employees, goal.target
+	elseif goal.kind == "stage" then
+		local index = stageNumber(goal.stage)
+		if index then
+			return data.ipo.valuation, IpoConfig.stageValuation(index, data.ipo.count)
+		end
+	end
+	return nil
+end
+
+-- Marks goals that just became true as finished (saved, so they stay finished even if an IPO
+-- or a poach takes the player back below), and sends each goal's progress to the screen.
+-- Returns true when every goal is finished.
+local function updateGoals(player, data)
+	local onboarding = data.onboarding
+	local allDone = true
+	for _, goal in ipairs(OnboardingConfig.Goals) do
+		local current, target = goalProgress(data, goal)
+		if current then
+			if not onboarding.goals[goal.key] and current >= target then
+				onboarding.goals[goal.key] = true
+			end
+			if onboarding.goals[goal.key] then
+				current = target
+			else
+				allDone = false
+			end
+			setAttribute(player, "OnboardingGoal_" .. goal.key, math.min(current, target))
+			setAttribute(player, "OnboardingGoalTarget_" .. goal.key, target)
+		end
+	end
+	return allDone
+end
+
+-- Runs every second for each loaded player: ends the arrow once it's done its job, tells the
+-- screen where it points, and checks the goals
 local function update(player, data, now)
 	local onboarding = data.onboarding
 	local active = OnboardingConfig.Enabled and not onboarding.legacy
@@ -105,6 +158,15 @@ local function update(player, data, now)
 		end
 	end
 	setAttribute(player, "OnboardingTarget", active and not onboarding.arrowDone and arrowTarget(data, now) or nil)
+
+	local showTracker = false
+	if active then
+		updateGoals(player, data)
+		-- It appears once the free egg has hatched (or the player is already past that point)
+		showTracker = #data.team.employees >= OnboardingConfig.TrackerAfterEmployees
+			or onboarding.arrowDone or next(onboarding.goals) ~= nil
+	end
+	setAttribute(player, "OnboardingTracker", showTracker)
 end
 
 -- Saving (TycoonCore calls these) ----------------------------------------------
@@ -184,6 +246,12 @@ end
 
 function OnboardingServer.init(coreApi)
 	core = coreApi
+
+	for _, goal in ipairs(OnboardingConfig.Goals) do
+		if goal.kind == "stage" and not stageNumber(goal.stage) then
+			warn("OnboardingConfig: goal " .. goal.key .. " needs a stage IpoConfig doesn't have: " .. tostring(goal.stage))
+		end
+	end
 
 	-- Every second: arrow (and goals) for every loaded player
 	task.spawn(function()
