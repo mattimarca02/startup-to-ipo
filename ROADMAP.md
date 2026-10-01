@@ -62,6 +62,7 @@ Play-through rate is Roblox's #1 discovery signal.
   5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
 - F6: poach refund after a crash.
 - F8: IPO balance retune.
+- Before launch: sync ALL scripts to Studio and verify checksums (ShopConfig Luck Boost text was still stale in Studio on 2026-10-01 because the Studio write was permission-blocked).
 
 ### Launch requirements (start now, they take time)
 - New games first reach age-checked players 16+ only. Under-16s unlock after 250 plays by "highly engaged" players within 60 days.
