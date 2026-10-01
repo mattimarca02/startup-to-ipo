@@ -86,23 +86,27 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| TycoonCore | ServerScriptService | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| ShopClient | StarterPlayerScripts | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | free | | |
+| IpoServer | ServerScriptService | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
-| OnboardingConfig | ReplicatedStorage | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| IpoClient | StarterPlayerScripts | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
+| DailyServer | ServerScriptService | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
+| DailyConfig | ReplicatedStorage | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
+| DailyClient | StarterPlayerScripts | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
+| OnboardingServer | ServerScriptService | free | | |
+| OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
 | tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
 | docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |

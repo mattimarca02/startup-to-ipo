@@ -27,14 +27,17 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   - `Module.serialize(data)`
 
   New server features follow this pattern. Never add a second DataStore, save loop or PlayerAdded data owner.
+  Current ones: `ShopServer`, `EmployeeServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `DailyServer` (the daily calendar; its client is `DailyClient`). `DailyServer.setupPlayer` runs last, inside the all-modules-loaded gate, after `EmployeeServer` (a claim can grant an egg). A claim never yields between the "today is free" check and writing `lastClaimDay`.
 - **Configs** are ModuleScripts in ReplicatedStorage:
   - `ShopConfig`: passes, products, `EggsEnabled`
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
   - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes` and `OnboardingRemotes` in ReplicatedStorage.
+  - `DailyConfig`: the 7-day login calendar (rewards, grace days, reset hour, texts). Daily Shares are granted as they are and are **never doubled** by the Shareholder pass; daily Cash is a gift and never goes through `addEarnings` (it must not raise the IPO valuation)
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes`, `OnboardingRemotes` and `DailyRemotes` (`DailyAction`, only `"Claim"`) in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
+  - The daily gift chip (DailyClient) is not a HUD slot: it sits right of the valuation bar, which leaves room for it (`IpoClient` `CHIP_ROOM`). Its pop-up goes at -240.
   - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4. They use the shared responsive layout: a column centered on the left, or a top row on short (phone) screens (height under 460).
   - Pop-up messages go at the bottom center.
   - Everything must work on a phone.
@@ -90,6 +93,11 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lifetime = number, best = number,            -- Cash earned ever; best valuation on any run (leaderboard)
     lastIpoAt = os.time(),                       -- for the IPO cooldown
     perks = { [perkKey] = level },               -- IPO shop perks
+  },
+  daily = {                                      -- DailyServer.serialize (optional: older saves have none)
+    lastClaimDay = number,                       -- UTC day number of the last claim (0 = never)
+    streak = number, best = number,              -- claims in a row (one missed day keeps the place), longest ever
+    claims = number,                             -- total claims
   },
   onboarding = {                                 -- OnboardingServer.serialize (optional: older saves have none)
     seenIntro = boolean,                         -- the free egg was given (or wasn't needed): never given twice
