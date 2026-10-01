@@ -103,7 +103,9 @@ local function publish(player, data, now)
 	local info = status(daily, now)
 	local reward = DailyConfig.getDay(info.day)
 	local blocked = ""
-	if not info.claimedToday and reward and reward.egg and not hasFreeIncubator(data) then
+	if not data.loaded then
+		blocked = TEXTS.NotLoaded -- the save didn't load: a claim could never be saved
+	elseif not info.claimedToday and reward and reward.egg and not hasFreeIncubator(data) then
 		blocked = TEXTS.NoIncubator
 	end
 	-- The M5 first minute keeps the screen for the free egg and the arrow: no pop-up then
@@ -120,7 +122,7 @@ local function publish(player, data, now)
 	setAttribute(player, "DailyKept", info.kept == true)
 	setAttribute(player, "DailyLostDay", info.lostDay)
 	setAttribute(player, "DailyBlocked", blocked)
-	setAttribute(player, "DailyAutoOpen", DailyConfig.AutoOpen and not firstMinute)
+	setAttribute(player, "DailyAutoOpen", DailyConfig.AutoOpen and not firstMinute and data.loaded == true)
 end
 
 -- "Day 3: Garage Egg, it's incubating"
