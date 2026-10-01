@@ -286,12 +286,57 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+STORE_TESTS = r"""-- Tests for TycoonCore's getStore (lazy retry) and readableSave (R5) ----------------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function typeof(v) return type(v) end
+local FAILS = 2 -- GetDataStore errors this many times, then works
+local CALLS = 0
+local DataStoreService = {}
+function DataStoreService:GetDataStore(name)
+	CALLS += 1
+	if FAILS > 0 then FAILS -= 1; error("503 unavailable") end
+	return { name = name }
+end
+__GETSTORE__
+__READABLE__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+check("getStore fails while unavailable (1)", getStore() == nil)
+check("getStore fails while unavailable (2)", getStore() == nil)
+check("every call retried", CALLS == 2, CALLS)
+local st = getStore()
+check("getStore succeeds on the 3rd try", st ~= nil and st.name == "StartupTycoon_v1")
+check("store is cached afterwards", getStore() == st and CALLS == 3, CALLS)
+check("failures warned", #WARNINGS == 2, #WARNINGS)
+WARNINGS = {}
+check("table save is readable", readableSave({ cash = 1 }, true, "P") == true)
+check("missing save (nil) is a new player, not a failure", readableSave(nil, true, "P") == true)
+check("string save is a load failure", readableSave("junk", true, "P") == false)
+check("number save is a load failure", readableSave(5, true, "P") == false)
+check("boolean save is a load failure", readableSave(false, true, "P") == false)
+check("non-table save warns", #WARNINGS == 3, #WARNINGS)
+check("a failed read stays failed", readableSave(nil, false, "P") == false)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
     start = text.index("-- SANITIZE-BEGIN") + len("-- SANITIZE-BEGIN")
     end = text.index("-- SANITIZE-END")
     return text[start:end]
+
+
+def marked_source(name):
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
+    return text[start:text.index("-- %s-END" % name)]
 
 
 def run_luau(luau, source):
@@ -321,6 +366,10 @@ def main():
     result2 = run_luau(luau, SANITIZE_TESTS.replace("__SANITIZE__", sanitize_source()))
     print("TycoonCore save check: " + (result2.stdout.strip() or result2.stderr.strip()))
     if result2.returncode != 0 or " 0 failed" not in result2.stdout:
+        code = 1
+    result3 = run_luau(luau, STORE_TESTS.replace("__GETSTORE__", marked_source("GETSTORE")).replace("__READABLE__", marked_source("READABLE")))
+    print("TycoonCore store check: " + (result3.stdout.strip() or result3.stderr.strip()))
+    if result3.returncode != 0 or " 0 failed" not in result3.stdout:
         code = 1
     return code
 
