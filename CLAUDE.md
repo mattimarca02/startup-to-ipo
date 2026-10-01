@@ -1,5 +1,7 @@
 # CLAUDE.md: project rules for Claude Code
 
+Read ROADMAP.md first. At the end of every milestone, update its Status section.
+
 "Startup to IPO" is a Roblox idle tycoon, published as **Build your Startup!** (place `86395856666175`, universe `10768772528`). Two collaborators build it together in Team Create. See `README.md` for the file layout and `CONTRIBUTING.md` for the workflow and the Ownership table.
 
 ## How to work with us
