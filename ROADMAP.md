@@ -10,11 +10,11 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE M3: poaching (merged). PR #2 poaching-cleanup merged: 2-player poach, counter-offer and the leave/refund case all passed manual testing.
 - DONE M4 (2026-10-01): IPO rebirth merged (PR #6, branch milestone-4-ipo): valuation, 5 funding stages, Go Public with two-step confirm, x multiplier + Shares, IPO shop (6 perks), gold IPO pad, in-server leaderboard, Debug tools. Mattia's playtest passed: eggs, HR, IPO, perks, poach UI and IPO screen at phone size, and the rejoin test. The early start on claude/task-1iff57 was reviewed and replaced (its IpoConfig was rewritten); that branch is no longer needed. Publish needs **Shut down all servers** (new save section, see F2 in docs/reviews/M4_REVIEW.md).
 - The game now belongs to the Roblox group (universe 10768772528, place 86395856666175, same IDs as before). The sandbox copy is archived.
-- NOT SYNCED: game pass "Shareholder" (2x Shares, R$ 199) is in ShopConfig with id = 0 and shows "Coming soon". Run sync_monetization on the PC to create it on Roblox.
+- DONE: Shareholder game pass (2x Shares per IPO, 199 R$, ID 2001728902) created with sync_monetization and merged (PR #10). Studio test passed: +20 Shares with the pass ON vs +10 OFF at IPO #2. The IPO retune is merged too (PR #9).
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
-- Next steps: create the Shareholder pass on PC.
+- Next steps: M5 (first minute / onboarding).
 
 ## Milestones, in order
 
