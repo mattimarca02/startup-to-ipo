@@ -70,10 +70,24 @@ Two smaller gaps were found:
 | Goals | Computed every second from server data only (`OnboardingServer.lua:129-163`). There's no remote that reports progress, and finishing a goal grants nothing. |
 | Arrow target | Picked by the server (`OnboardingServer.lua:96-114`) and sent as an attribute. The client only draws it. |
 | Hatching the free egg | Uses the normal `ProximityPrompt` → `hatch()` path, which checks the owner, `data.ready` and the timer (`EmployeeServer.lua:486-490`, `:246-251`). No onboarding exception. |
-| Studio Debug buttons | Registered only when `RunService:IsStudio()` (`OnboardingServer.lua:323-325`), and ShopServer's debug handler also refuses unless `IsStudio()` and `ShopConfig.DebugInStudio` (`ShopServer.lua:525`). |
+| Studio Debug buttons | Registered only when `RunService:IsStudio()` (`OnboardingServer.lua:323-325`), and ShopServer's debug handler also refuses unless `IsStudio()` and `ShopConfig.DebugInStudio` (`ShopServer.lua:524`, and the remote itself only exists in Studio, `:593`). |
 
 **No client input goes unvalidated.** The only value a client sends in M5 is the `action` string, and it's type-checked and matched exactly.
 
 One weak spot (UX, not security):
 
 - **F5 (Low):** `DismissTracker` is refused while `data.ready` is false, which includes the few seconds an IPO is being saved, and the reply says "Still loading" (`OnboardingServer.lua:195-197`). The client has already hidden the card and only `warn`s (`OnboardingClient.lua:337-347`), so the X isn't saved and the tracker comes back next session.
+
+## 4. Interaction with M2, M3 and M4
+
+| System | Result |
+|---|---|
+| Eggs with `EggsEnabled = false` (M2/M3) | Works. `EggsEnabled` is only read by `ShopConfig.lua:179` (which Robux items are for sale). The free Garage egg, the Cash egg shop and the Hatch prompt don't check it. "Hire 3" can be finished with Cash eggs. |
+| Free egg and incubator perks | A new player has 3 base incubators and no FasterEggs perk, so the free egg always fits and runs the normal `hatchSeconds`. `grantEgg` uses the same `startEgg` as a bought egg. |
+| IPO reset (M4) | **Kept, and that's correct.** The IPO save's transform leaves `payload.onboarding` alone (`TycoonCore.lua:257-273`) and `IpoConfig.Resets` has no onboarding entry. `seenIntro` stays true, so an IPO never gives a second egg. `arrowDone` and finished goals stay, so the arrow doesn't come back on the reset garage (`OnboardingServer.lua:173`). Even without the section, a post-IPO save has `ipo.count > 0`, so `hasProgress` would be true. |
+| Seed goal after an IPO | Uses `stageValuation(index, ipo.count)` (`OnboardingServer.lua:135`), so the target grows with each IPO like the HUD does. Seed is always below the IPO-ready valuation, and the check runs every second while ready, so Seed is always marked before anyone can go public. |
+| During an IPO save | `data.ready` is false, so the onboarding loop skips the player (`OnboardingServer.lua:340`). Nothing changes mid-IPO. |
+| Poaching (M3): being poached | A brand-new player has the 15-minute new-player shield (`CreatureConfig.lua:126`), which covers the whole first minute. Exception: F3 (pre-M5 saves with no progress get no shield). Finished goals stay finished if an employee is taken later (`OnboardingServer.lua:150-155`). |
+| Poaching (M3): poaching others | An employee taken from another player counts toward "Hire 3" (`OnboardingServer.lua:131` counts `team.employees`, and `addEmployee` puts them there). Not abusable (no reward), but see F6. |
+
+- **F6 (Low):** the tracker can disappear before it's finished. It only shows once `#employees >= TrackerAfterEmployees` or the arrow is done or a goal is finished (`OnboardingServer.lua:183-185`). A player who loses their only employee before any of that (fires it, or F3's unshielded case) loses the tracker until they hire again. Also, "Hire 3 employees" is completed by poaching, which the text doesn't suggest. Fix: save a `trackerShown` flag once it first appears, and use it in place of the employee count.
