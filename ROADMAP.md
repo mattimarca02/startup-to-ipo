@@ -14,7 +14,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
-- DONE (PR open, not merged): Shares per IPO grow with the IPO count (`IpoConfig.sharesFor`: SharesPerIpo * (1 + 0.3 * IPOs)). Results in docs/ECONOMY.md section 3c. Needs the manual Mac tests in the PR before merging. Suggested next: cap the Shares ratio at 4.
+- DONE (PR open, not merged): Shares per IPO grow with the IPO count (`IpoConfig.sharesFor`: SharesPerIpo * (1 + 0.3 * IPOs)). Results in docs/ECONOMY.md section 3c. Needs the manual Mac tests in the PR before merging. Ratio cap 4 added too (2nd commit). Suggested next: SharesRatioCap 2 or a longer IPO cooldown.
 - Next steps: M5 (first minute / onboarding).
 
 ## Milestones, in order
