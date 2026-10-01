@@ -40,8 +40,12 @@ local MAX_PLOTS = 6
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
 
+-- The parts of the save this version writes. Any other part of a loaded save was written by
+-- newer (or other) code: it's kept and written back unchanged, never deleted.
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true }
+
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -213,6 +217,11 @@ local function save(player, transform)
 		poach = PoachServer.serialize(data),
 		ipo = IpoServer.serialize(data),
 	}
+	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
+		if payload[key] == nil then
+			payload[key] = value
+		end
+	end
 	if transform then
 		transform(payload)
 	end
@@ -368,7 +377,7 @@ Players.PlayerAdded:Connect(function(player)
 	folder.Name = player.Name .. "_Startup"
 	folder.Parent = workspace
 
-	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, loaded = false }
+	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	playerData[player] = data
 
 	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotCenter(slot), Color3.fromRGB(90, 90, 100))
@@ -384,6 +393,12 @@ Players.PlayerAdded:Connect(function(player)
 			cash.Value = saved.cash or 0
 			for _, name in ipairs(saved.owned or {}) do
 				data.owned[name] = true
+			end
+			for key, value in pairs(saved) do
+				if not KNOWN_SECTIONS[key] then
+					data.unknownSections[key] = value
+					warn("Keeping a part of " .. player.Name .. "'s save this version doesn't know: " .. tostring(key))
+				end
 			end
 		end
 		ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts

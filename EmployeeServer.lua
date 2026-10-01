@@ -475,6 +475,7 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 	local team = {
 		employees = {}, -- { id, creature, hiredAt } (saved)
 		incubators = {}, -- [1..incubatorCount] = { egg, startedAt, hatchAt } or false (saved)
+		parked = {}, -- incubator number -> egg above incubatorCount: still saved, back in place when the perk is (saved)
 		pending = nil, -- a hatched creature waiting for a free desk (saved)
 		outgoing = {}, -- employee ID -> employee being poached away: still saved here until the new owner's save has it
 		models = {}, -- employee ID -> Model in the garage
@@ -496,8 +497,13 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 			end
 		end
 		for i, state in ipairs(typeof(savedTeam.incubators) == "table" and savedTeam.incubators or {}) do
-			if i <= count and typeof(state) == "table" and CreatureConfig.getEgg(state.egg) then
-				team.incubators[i] = { egg = state.egg, startedAt = state.startedAt or 0, hatchAt = state.hatchAt or 0 }
+			if typeof(state) == "table" and CreatureConfig.getEgg(state.egg) then
+				local egg = { egg = state.egg, startedAt = state.startedAt or 0, hatchAt = state.hatchAt or 0 }
+				if i <= count then
+					team.incubators[i] = egg
+				else
+					team.parked[i] = egg -- e.g. incubators 4-5 while the Extra Incubator perk didn't load: never deleted
+				end
 			end
 		end
 		local p = savedTeam.pending
@@ -526,8 +532,16 @@ function EmployeeServer.serialize(data)
 	for _, e in pairs(team.outgoing) do -- being poached: see releaseEmployee
 		table.insert(employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt })
 	end
-	for i = 1, incubatorCount(data) do
+	local count = incubatorCount(data)
+	local last = count
+	for i in pairs(team.parked) do
+		last = math.max(last, i)
+	end
+	for i = 1, last do -- parked eggs above the current count are saved too (false fills the gaps)
 		local egg = team.incubators[i]
+		if i > count then
+			egg = team.parked[i]
+		end
 		incubators[i] = egg and { egg = egg.egg, startedAt = egg.startedAt, hatchAt = egg.hatchAt } or false
 	end
 	local p = team.pending
@@ -549,17 +563,19 @@ function EmployeeServer.clearIncubators(player)
 		team.incubators[i] = false
 		refreshIncubator(data, i, now)
 	end
+	table.clear(team.parked)
 	push(player)
 end
 
--- After an IPO perk changes: builds new incubators (or, after the Studio Debug reset, removes
--- extra ones and their eggs) and sends the new desk count
+-- After an IPO perk changes: builds new incubators, with any parked egg back in them (or, after
+-- the Studio Debug reset, removes extra ones and parks their eggs) and sends the new desk count
 function EmployeeServer.refreshCapacity(player)
 	local team, data = getTeam(player)
 	if not team then return end
 	local count = incubatorCount(data)
 	for i = #team.incubators + 1, count do
-		team.incubators[i] = false
+		team.incubators[i] = team.parked[i] or false
+		team.parked[i] = nil
 		buildIncubator(player, data, i)
 	end
 	for i = #team.incubators, count + 1, -1 do
@@ -570,6 +586,7 @@ function EmployeeServer.refreshCapacity(player)
 			parts.egg:Destroy()
 			team.incubatorParts[i] = nil
 		end
+		team.parked[i] = team.incubators[i] or nil
 		team.incubators[i] = nil
 	end
 	push(player)
