@@ -10,6 +10,7 @@ local TweenService = game:GetService("TweenService")
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local DailyConfig = require(ReplicatedStorage:WaitForChild("DailyConfig")) -- the gift chip's room, and the reminder on the confirm screen
 local remotes = ReplicatedStorage:WaitForChild("IpoRemotes")
 local ipoAction = remotes:WaitForChild("IpoAction")
 local ipoEvent = remotes:WaitForChild("IpoEvent")
@@ -19,6 +20,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 local PANEL_NAME = "Ipo"
 local HUD_SLOT = 4 -- EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4
 local CONFIRM_SECONDS = 15 -- the confirm screen closes itself after this long
+-- DailyClient's gift chip sits right of the valuation bar: on narrow screens the bar leaves room for it
+local CHIP_ROOM = DailyConfig.Enabled and (DailyConfig.ChipSize + DailyConfig.ChipGap) or 0
 
 local COLORS = {
 	panel = Color3.fromRGB(28, 30, 38),
@@ -173,7 +176,7 @@ local buttonStroke = make("UIStroke", { Thickness = 3, Transparency = 0.5, Apply
 
 -- Valuation bar: stage, progress to the next stage, multiplier and Shares. Top-left, right of
 -- the button column on big screens; next to the HUD row on short phone screens (or under it
--- if the screen is narrow).
+-- if the screen is narrow). It always leaves CHIP_ROOM on its right for the daily gift chip.
 local hudBar = make("TextButton", {
 	Name = "ValuationBar",
 	Size = UDim2.fromOffset(250, 64),
@@ -227,13 +230,13 @@ local function placeHud()
 		ipoButton.Size = UDim2.fromOffset(64, 64)
 		ipoButton.Position = UDim2.fromOffset(10 + HUD_SLOT * 72, 6)
 		local rowEnd = 10 + (HUD_SLOT + 1) * 72
-		local width = math.clamp(gui.AbsoluteSize.X - rowEnd - 10, 0, 250)
+		local width = math.clamp(gui.AbsoluteSize.X - rowEnd - 10 - CHIP_ROOM, 0, 250)
 		if width >= 180 then
 			hudBar.Position = UDim2.fromOffset(rowEnd, 6)
 			hudBar.Size = UDim2.fromOffset(width, 64)
 		else
 			hudBar.Position = UDim2.fromOffset(10, 76)
-			hudBar.Size = UDim2.fromOffset(math.min(250, gui.AbsoluteSize.X - 20), 64)
+			hudBar.Size = UDim2.fromOffset(math.min(250, gui.AbsoluteSize.X - 20 - CHIP_ROOM), 64)
 		end
 	else
 		ipoButton.AnchorPoint = Vector2.new(0, 0.5)
@@ -241,7 +244,7 @@ local function placeHud()
 		ipoButton.Position = UDim2.new(0, 12, 0.5, (HUD_SLOT - 2) * 86)
 		-- Right of the button column, so it never covers a HUD button
 		hudBar.Position = UDim2.fromOffset(98, 12)
-		hudBar.Size = UDim2.fromOffset(math.clamp(gui.AbsoluteSize.X - 108, 180, 250), 64)
+		hudBar.Size = UDim2.fromOffset(math.clamp(gui.AbsoluteSize.X - 108 - CHIP_ROOM, 150, 250), 64)
 	end
 end
 placeHud()
@@ -649,12 +652,17 @@ local function renderConfirm()
 			ready, ready == 1 and "egg is" or "eggs are", ready == 1 and "it" or "them", ready == 1 and "it's" or "they're")
 	end
 	local keeps = resetNames(false)
+	-- A daily reward claimed now would land on the run that's about to reset: say so
+	local daily = ""
+	if DailyConfig.Enabled and player:GetAttribute("DailyReady") == true then
+		daily = "\n\n" .. DailyConfig.Texts.IpoReminder
+	end
 	confirmText.Text = string.format(
 		'Go public with IPO #%d?\n\n<font color="#FFC83C">You get: 📜 %d Shares and %s income forever</font>\n\n'
 			.. '<font color="#FF8C8C">Resets: %s</font>\n\n%s'
-			.. "Employees, %spasses, boosts, shields and perks stay.",
+			.. "Employees, %spasses, boosts, shields and perks stay.%s",
 		confirmFor, shares, IpoConfig.formatMultiplier(IpoConfig.multiplier(count + 1)),
-		joinList(resets), warning, #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "")
+		joinList(resets), warning, #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "", daily)
 end
 
 task.spawn(function()
