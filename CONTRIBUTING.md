@@ -86,9 +86,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | free | | |
+| EmployeeServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
@@ -96,9 +96,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | free | | |
+| PoachServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | free | | |
+| IpoServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |

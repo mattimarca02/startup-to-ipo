@@ -15,6 +15,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
 - Next steps: M5 (first minute / onboarding).
+- DONE (PR open, not merged, branch fix-security-review): 3 security-review fixes. (1) Going public calls off poach deals against you and refunds the poacher, and drops your Counter-Offer, instead of refusing the IPO. (2) No employee duplication: addEmployee refuses a duplicate ID and clears `outgoing`, saves with duplicate IDs load clean, no poaching with a save that didn't load. (3) A failed save load is retried 3 times, then the player is kicked (no silent unsaved session). Needs the 2-client Mac tests in the PR before merging.
 
 ## Milestones, in order
 
