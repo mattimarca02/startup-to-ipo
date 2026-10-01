@@ -11,6 +11,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - IN REVIEW M4: IPO rebirth built on milestone-4-ipo (PR open): valuation, 5 funding stages, Go Public with two-step confirm, x multiplier + Shares, IPO shop (6 perks), gold IPO pad, in-server leaderboard, Debug tools. Merge after Mattia's playtest. The early start on claude/task-1iff57 was reviewed and replaced (its IpoConfig was rewritten); that branch is no longer needed.
 - NOT SYNCED: game pass "Shareholder" (2x Shares, R$ 199) is in ShopConfig with id = 0 and shows "Coming soon". Run sync_monetization on the PC to create it on Roblox.
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
+- Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua after M4 merges and retune.
 
 ## Milestones, in order
 
