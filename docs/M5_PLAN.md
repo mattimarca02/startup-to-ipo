@@ -47,3 +47,19 @@ onboarding = {         -- OnboardingServer.serialize (optional: older/other save
 - A save with no `onboarding` key (every existing save today) defaults to `seenIntro = false` — on next login the player gets the free-egg flow once, then it's marked seen and never repeats. This matches the "new fields are optional and get defaults" rule in CLAUDE.md's Save format section.
 - Follows the standard module contract: `OnboardingServer.init(core)`, `OnboardingServer.setupPlayer(player, data, savedOnboarding)`, `OnboardingServer.serialize(data)` — same shape as `ShopServer`/`EmployeeServer`/`PoachServer`/`IpoServer`. No second DataStore, no second save loop.
 - `seenIntro` is set to `true` by the **server**, at the moment it grants the free egg (not when the client claims to have seen the arrow) — see section 4.
+
+## 4. Server authority
+
+Nothing the client reports grants a reward — same rule as purchases:
+
+- The free Garage Egg is placed into `team.incubators[1]` by server code in `PlayerAdded` (inside `OnboardingServer.setupPlayer`, called from `TycoonCore` after `EmployeeServer.setupPlayer`, the same spot `IpoServer`/`PoachServer` already hook in). The client never asks for it and can't ask twice — `seenIntro` is checked and flipped server-side in that same call, before any client script runs.
+- The 60s hatch timer and the auto-hatch-this-one-egg behavior (if we go that route — open question 1) follow the existing `hatch()`/incubator-ready path in `EmployeeServer`; the client only touches a `ProximityPrompt` that triggers a server-validated `Hatch` action, exactly like every other egg today. No new trust boundary.
+- The goal tracker is **read-only on the client**: it displays `team.employees` count and `IpoValuation`/stage attributes the server already pushes/sets. The client never tells the server "I hired 3" or "I reached Seed" — there is no such remote. If we ever want a reward for finishing the tracker (not in this plan — see section 2, goals don't grant anything), it would have to be the server noticing the same state change it already owns, never a client claim.
+- `OnboardingClient.lua` sends no new remote calls that affect `playerData` — at most it might ask `EmployeeServer`'s existing `Sync` action to refresh state after the panel opens, which already exists and is already server-validated.
+
+## 5. Phone layout and safety
+
+- **No sixth HUD button.** `CLAUDE.md`'s HUD convention is EGGS 0 / SHOP 1 / TEAM 2 / POACH 3 / IPO 4, with the responsive column/top-row split at 460px height. The goal tracker is a small dismissible card using the existing bottom-center pop-up convention (same area as `showToast` in `EmployeeClient.lua`), not a new panel and not a new `OpenPanel` state, so it can't block or compete with any existing window on a phone screen.
+- **The arrow/beam** must be visible and not obstruct touch controls — reuse the existing `BillboardGui`/`ProximityPrompt` approach already used for incubators and the IPO pad, scaled the same way, tested at the same screen sizes other panels are (`Test → Device`, per CLAUDE.md Testing section).
+- **No free-text input anywhere in onboarding.** The flow is 100% server-driven state + taps/touches (walk to egg, touch pad, touch hatch prompt) — it never asks the player to type anything, so it adds no new surface to the chat/age-safety picture. `ChatTags.lua` and chat itself are untouched by this milestone.
+- Per ROADMAP's "Launch requirements" section, new Roblox games first reach only age-checked 16+ players; under-16 access unlocks later after 250 "highly engaged" plays. M5 doesn't change that gate or interact with chat, so there's nothing in this milestone that needs separate under-16 handling — it's a pure solo-garage flow for the player's own screen.
