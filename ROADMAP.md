@@ -12,8 +12,9 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - The game now belongs to the Roblox group (universe 10768772528, place 86395856666175, same IDs as before). The sandbox copy is archived.
 - NOT SYNCED: game pass "Shareholder" (2x Shares, R$ 199) is in ShopConfig with id = 0 and shows "Coming soon". Run sync_monetization on the PC to create it on Roblox.
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
-- Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua now that M4 has merged, and retune.
-- Next steps: retune the IPO numbers with economy_sim.py using the real IpoConfig.lua; fix the Luck Boost wording (Legendary 8.0% to 9.7%, not "2x"); create the Shareholder pass on PC.
+- DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
+- DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
+- Next steps: create the Shareholder pass on PC.
 
 ## Milestones, in order
 
