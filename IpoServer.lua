@@ -123,7 +123,9 @@ end
 -- Cash the startup earned raises the valuation (spending never lowers it)
 function IpoServer.addEarnings(player, amount)
 	local ipo = getIpo(player)
-	if not ipo or ipo.busy or amount <= 0 then return end
+	if not ipo or ipo.busy or typeof(amount) ~= "number" or amount ~= amount or amount == math.huge or amount <= 0 then
+		return -- nothing, or not a real amount (NaN or infinity would break the valuation and Shares)
+	end
 	amount = math.floor(amount)
 	ipo.valuation += amount
 	ipo.lifetime += amount
@@ -232,7 +234,9 @@ end
 local function onAction(player, action, arg)
 	if typeof(action) ~= "string" then return false, "Bad request" end
 	local ipo, data = getIpo(player)
-	if not ipo or not data.ready then return false, "Still loading, try again in a moment" end
+	if not ipo or not data.ready then
+		return false, IpoServer.isBusy(data) and "Your IPO is being filed, one moment" or "Still loading, try again in a moment"
+	end
 
 	if action == "Preview" then
 		-- For the confirm screen: the eggs going public would clear (read only, changes nothing)

@@ -545,7 +545,9 @@ end
 local function onAction(player, action, a, b)
 	if typeof(action) ~= "string" then return false, "Bad request" end
 	local poach, data = getPoach(player)
-	if not poach or not data.ready then return false, "Still loading, try again in a moment" end
+	if not poach or not data.ready then
+		return false, IpoServer.isBusy(data) and "Your IPO is being filed, one moment" or "Still loading, try again in a moment"
+	end
 
 	if action == "Targets" then
 		local last = lastTargetsCall[player]

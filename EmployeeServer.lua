@@ -407,7 +407,9 @@ local ACTIONS = {
 local function onAction(player, action, arg)
 	if typeof(action) ~= "string" then return false, "Bad request" end
 	local team, data = getTeam(player)
-	if not team or not data.ready then return false, "Still loading, try again in a moment" end
+	if not team or not data.ready then
+		return false, IpoServer.isBusy(data) and "Your IPO is being filed, one moment" or "Still loading, try again in a moment"
+	end
 
 	if action == "Sync" then
 		-- The screen is ready: send the state and any reveals that happened before it was
