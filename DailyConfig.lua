@@ -5,7 +5,9 @@
 -- again at Day 1. Everything is decided by DailyServer on the server, from its own clock:
 -- the client only asks "Claim". Nothing here is sold for Robux.
 --
--- Safe to change any time: rewards, texts, icons and the numbers below.
+-- Safe to change any time: rewards, texts, icons and the numbers below, EXCEPT ResetHourUtc:
+-- decide it before shipping. Moving it earlier later lets every player claim one extra day
+-- (the hours between the old and new reset count as a new day).
 -- Never rename or reuse a day's "key" once it has shipped.
 -- Calendar Cash is a gift: it never counts toward the IPO valuation (see DailyServer).
 
@@ -35,7 +37,7 @@ DailyConfig.GraceDays = 1
 DailyConfig.CashMaxMinutes = 60 -- hard cap on any cashMinutes, so a bad config can't print money
 DailyConfig.MinCash = 300 -- a Cash day never gives less (a brand-new player has $0 Income before the free Desk)
 DailyConfig.MaxShares = 5 -- the config check warns above this (the cheapest IPO perk level costs 5)
-DailyConfig.ResetHourUtc = 0 -- a new day starts at this hour, UTC, for every player at the same moment
+DailyConfig.ResetHourUtc = 0 -- a new day starts at this hour, UTC, for every player at the same moment. Don't change after launch (see top)
 DailyConfig.ClaimDebounce = 1 -- seconds between two Claim requests from one player
 
 -- The window opens by itself once per join when a reward is waiting, a few seconds after the
