@@ -89,7 +89,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TycoonCore | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
 | ShopServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
 | EmployeeServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| ShopConfig | ReplicatedStorage | Mattia, IPO (+ Luck Boost text only) | milestone-4-ipo, fix-luck-boost-text | 2026-10-01 |
+| ShopConfig | ReplicatedStorage | Mattia, Shareholder pass | pass-shareholder | 2026-10-01 |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
