@@ -166,7 +166,7 @@ local function goPublic(player, ipoNumber)
 		return false, "You need a valuation of " .. ShopConfig.formatCash(needed) .. " to go public"
 	end
 	if core.isPoachBusy(player) then
-		return false, "Finish your poaching deal first (or wait until nobody is poaching you)"
+		return false, "Finish your poaching deal or Counter-Offer first (or wait until nobody is poaching you)"
 	end
 
 	local reward = preview(player, ipo)

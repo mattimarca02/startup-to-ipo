@@ -465,6 +465,10 @@ local function counterOffer(player)
 	if os.time() > offer.expiresAt then return drop("Too late: the Counter-Offer expired") end
 	local attacker = offer.attacker
 	if not isOnline(attacker) then return drop(offer.attackerName .. " left the server with them") end
+	local attackerData = not isDummy(attacker) and core.getData(attacker)
+	if attackerData and not attackerData.ready then -- their IPO is being saved: wait, but keep the offer
+		return false, offer.attackerName .. " is busy right now, try again in a moment"
+	end
 	if not findEmployee(attacker, offer.employeeId) then return drop(offer.attackerName .. " doesn't have them anymore") end
 	if inTransit[offer.employeeId] then return false, "The paperwork isn't done yet, try again in a moment" end
 	if not EmployeeServer.hasFreeSlot(player) then return false, "Your team is full: make room first" end
@@ -611,12 +615,12 @@ end
 
 -- IPO (IpoServer and TycoonCore call these) ---------------------------------------
 
--- True while this player is in a deal: poaching someone, being poached, or an employee of
--- theirs is still moving between two saves. Going public waits until it's over.
+-- True while this player is in a deal: poaching someone, being poached, has a Counter-Offer
+-- open, or an employee of theirs is still moving between two saves. Going public waits until it's over.
 function PoachServer.isBusy(player)
 	local poach, data = getPoach(player)
 	if not poach then return false end
-	if poach.negotiation or negotiations[player.UserId] then return true end
+	if poach.negotiation or negotiations[player.UserId] or poach.counterOffer then return true end
 	for _, employee in ipairs(data.team and data.team.employees or {}) do
 		if inTransit[employee.id] then return true end
 	end
