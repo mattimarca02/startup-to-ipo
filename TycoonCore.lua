@@ -10,15 +10,32 @@
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
--- GetDataStore errors when the place isn't published, so it's wrapped in pcall too.
--- If it fails, the game still runs but progress isn't loaded or saved.
-local storeOk, store = pcall(function()
-	return DataStoreService:GetDataStore("StartupTycoon_v1")
-end)
-if not storeOk then
-	warn("DataStore unavailable, progress will not be saved: " .. tostring(store))
-	store = nil
+-- GetDataStore errors when the place isn't published, so it's wrapped in pcall too, and tried
+-- again a few times (STORE_TRIES) in case Roblox is only briefly unavailable at server start.
+-- If it still fails, the game runs without a DataStore: in Studio that means playing without
+-- saving, but on a live server joining players are kicked (see PlayerAdded), so nobody plays
+-- a session that can never be saved.
+local STORE_TRIES = 3
+local store
+for attempt = 1, STORE_TRIES do
+	local storeOk, result = pcall(function()
+		return DataStoreService:GetDataStore("StartupTycoon_v1")
+	end)
+	if storeOk then
+		store = result
+		break
+	end
+	warn(string.format("DataStore unavailable (try %d of %d): %s", attempt, STORE_TRIES, tostring(result)))
+	if attempt < STORE_TRIES then task.wait(attempt) end -- 1s, then 2s
+end
+if not store then
+	if RunService:IsStudio() then
+		warn("No DataStore: this Studio session will play WITHOUT saving. Publish the place and turn on Game Settings > Security > Enable Studio Access to API Services to test saving.")
+	else
+		warn("No DataStore on a live server: joining players will be kicked so nobody plays an unsaved session.")
+	end
 end
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
@@ -207,7 +224,7 @@ end
 -- longer each time). If it still fails, the player is kicked (see PlayerAdded), never left
 -- playing a session that can't save.
 local function load(player)
-	if not store then return nil, false end -- no DataStore (unpublished place in Studio): play fresh, never save
+	if not store then return nil, false end -- no DataStore: PlayerAdded decides (Studio plays fresh, a live server kicks)
 	for attempt = 1, LOAD_TRIES do
 		local ok, result = pcall(function()
 			return store:GetAsync("player_" .. player.UserId)
@@ -482,8 +499,9 @@ Players.PlayerAdded:Connect(function(player)
 	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
-	if store and not ok then
-		-- The DataStore didn't answer after every try: playing on could never save, so send them back
+	if not ok and (store or not RunService:IsStudio()) then
+		-- The DataStore didn't answer after every try (or there is none on a live server): playing on
+		-- could never save, so send them back. Only Studio without a DataStore plays unsaved.
 		warn("Kicking " .. player.Name .. ": their save couldn't be read, so this session could never save")
 		player:Kick(LOAD_FAILED_MESSAGE)
 		return
