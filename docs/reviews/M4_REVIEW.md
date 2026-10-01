@@ -99,6 +99,42 @@ These were found before the review was interrupted. Each one was checked again a
 
 The only open item here is F7's NaN safety net, which no client can reach today.
 
+## 3. Data integrity
+
+### What holds up
+
+- **Double-firing.** A second `GoPublic` while the first is saving is refused because `data.ready` is false (`IpoServer.lua:235`). After the first one finishes, the old IPO number is refused (`IpoServer.lua:154`). Two `BuyPerk` calls run one after the other without yielding, so each one checks the Shares again.
+- **Leaving during the IPO save.** The leave save waits for the save lock (`TycoonCore.lua:194-197`). `commitIpo` applies the reset without yielding (`TycoonCore.lua:257-266`), and so does `goPublic` (`IpoServer.lua:187-209`). So the leave save always writes the state after the IPO.
+- **Server shutdown during an IPO.** It works the same way: `BindToClose` saves wait for the lock. If the server dies first, either the IPO save landed in full or it didn't land at all.
+- **A save that reports failure but actually landed.** Nothing changes in memory, and the next save writes the state from before the IPO. The IPO is undone, not doubled.
+- **Old saves.** A save without `ipo` gets a guessed valuation (see F5 for the missing cap).
+- **A broken `ipo` section.** A non-table is treated as "no IPOs yet". Negative numbers and NaN become 0. Unknown perks are skipped with a warning (`IpoServer.lua:306-326`). IpoServer's own loading is solid.
+
+### F9 (High): a player who leaves while their save is still loading loses employees, poaching data and IPO progress
+
+This is older than M4, but M4 adds the most valuable part of the save to what's lost.
+
+- **Where:**
+  - `TycoonCore.lua:374` sets `data.loaded = ok` **before** the modules set up their parts of the save (`TycoonCore.lua:381-394`).
+  - The first of those, `ShopServer.setupPlayer`, waits for Roblox. It calls `checkPasses` (`ShopServer.lua:307`), which makes about 5 `UserOwnsGamePassAsync` web calls on every join (`ShopServer.lua:245-254`). When Roblox's servers are slow, those calls are retried with waits of 1, 2 and 3 seconds (`ShopServer.lua:230-241`).
+- **What breaks:** while those calls are running, `data.team`, `data.poach` and `data.ipo` don't exist yet, but `save()` is already allowed. If the player leaves (or the server shuts down) in that moment, the save written on leaving has Cash, upgrades and the shop, and **no `team`, `poach` or `ipo`** (`TycoonCore.lua:203-211`, where each `serialize` returns nil). Their employees, eggs, HR level, IPO count, Shares and perks are gone for good.
+  - The window is usually under a second. During a Roblox web outage it can reach about 30 seconds, which is exactly when players leave and rejoin.
+  - An autosave in that window writes the same incomplete save. The next save fixes it, but a server crash in between makes the loss permanent.
+- **Same root cause, two more ways in:**
+  1. **A broken section stops the setup with an error.** For example, `shop.luckLeft` stored as text makes `luckLeft > 0` error (`ShopServer.lua:284-285`), or `team.incubators` that isn't a table makes `ipairs` error (`EmployeeServer.lua:498`). `data.loaded` is already true, so the next autosave overwrites the save without the sections that never loaded. CLAUDE.md says bad values must be "skipped with a warning, never an error".
+  2. **A poaching note can be lost.** `PoachServer.setupPlayer` holds the `gained` notes in a local table (`PoachServer.lua:656`) while `reconcile` waits for the other player's save (`PoachServer.lua:283`). If the player leaves then, the leave save has no `gained` notes, so an unfinished employee move can never be undone (it can stay duplicated).
+- **Fix:**
+  - Set `data.loaded` only after every `setupPlayer` has finished, right before `data.ready = true` (`TycoonCore.lua:416`). Use the local `ok` in between.
+  - Run the setup inside `pcall`. If it errors, keep `loaded = false` (so this session never overwrites the save) and warn.
+  - In `reconcile`, keep each note in `data.poach.gained` until that note is resolved.
+- **Not tested in a playtest on purpose:** Studio uses the real DataStore, so reproducing this would overwrite Mattia's real save. It's verified by reading the code. The cause is an `...Async` call, and those always yield.
+
+### F10 (Low): leaving mid-IPO and joining another server straight away can undo the IPO
+
+- **Where:** there's no session lock, so two servers can hold the same save. This is already planned for M9.
+- **What breaks:** the second server can read the save before the first server's IPO save lands. It then plays on with the state from before the IPO, and its saves overwrite the IPO. Nothing is duplicated (the Shares from the lost IPO are lost too), and the player can go public again.
+- **Fix:** M9 session locking. Nothing to do in M4.
+
 ## Coverage so far
 
 | Area | Status |
