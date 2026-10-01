@@ -1,7 +1,7 @@
 -- OnboardingClient: the glowing arrow and the goal tracker for new players (milestone 5).
 -- Put this LocalScript in StarterPlayer > StarterPlayerScripts. It builds everything by itself.
 -- It only shows what OnboardingServer puts on the player (attributes). It never decides or
--- grants anything, and it has nothing to type in.
+-- grants anything, and it has nothing to type in. Its only request is closing the tracker.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- money format for the Seed goal
+local onboardingAction = ReplicatedStorage:WaitForChild("OnboardingRemotes"):WaitForChild("OnboardingAction")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -132,7 +133,7 @@ end)
 -- A small card right under the IPO valuation bar (IpoClient), the same width, so it follows the
 -- HUD layout on every screen size. Hidden while a window is open ("OpenPanel").
 
-local HEADER_HEIGHT = 24
+local HEADER_HEIGHT = 30
 local ROW_HEIGHT = 22
 local GAP = 6 -- between the valuation bar and the card
 
@@ -156,7 +157,7 @@ make("UIStroke", { Thickness = 2, Color = COLORS.buy, Transparency = 0.4, ApplyS
 
 local title = make("TextLabel", {
 	Position = UDim2.fromOffset(10, 4),
-	Size = UDim2.new(1, -20, 0, HEADER_HEIGHT - 4),
+	Size = UDim2.new(1, -50, 0, HEADER_HEIGHT - 8),
 	BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold,
 	Text = "🎯 Goals",
@@ -165,6 +166,22 @@ local title = make("TextLabel", {
 	Parent = card,
 })
 fitText(title, 16)
+
+-- X: closes the tracker for good (the server saves it)
+local closeButton = make("TextButton", {
+	Name = "Close",
+	AnchorPoint = Vector2.new(1, 0),
+	Position = UDim2.new(1, -4, 0, 4),
+	Size = UDim2.fromOffset(30, 26),
+	BackgroundColor3 = COLORS.panel,
+	BackgroundTransparency = 0.3,
+	Font = Enum.Font.GothamBold,
+	Text = "✕",
+	TextColor3 = COLORS.subtext,
+	Parent = card,
+})
+round(closeButton, 8)
+fitText(closeButton, 16)
 
 local rows = {} -- goal key -> { name, progress }
 for i, goal in ipairs(OnboardingConfig.Goals) do
@@ -228,7 +245,11 @@ local function progressText(goal, current, target)
 	return current .. "/" .. target
 end
 
+local closed = false -- closed with the X on this screen (the server saves it too)
+local celebrating = false
+
 local function refreshTracker()
+	local allDone = true
 	for _, goal in ipairs(OnboardingConfig.Goals) do
 		local row = rows[goal.key]
 		local current = player:GetAttribute("OnboardingGoal_" .. goal.key)
@@ -238,11 +259,47 @@ local function refreshTracker()
 		row.name.TextColor3 = done and COLORS.subtext or COLORS.text
 		row.progress.Text = typeof(current) == "number" and typeof(target) == "number" and progressText(goal, current, target) or ""
 		row.progress.TextColor3 = done and COLORS.buy or COLORS.subtext
+		allDone = allDone and done
 	end
-	card.Visible = player:GetAttribute("OnboardingTracker") == true and playerGui:GetAttribute("OpenPanel") == nil
+	local show = player:GetAttribute("OnboardingTracker") == true and not closed
+	-- Every goal just got finished: show the ticks for a moment before the card goes away.
+	-- Only a message: finishing the goals gives nothing.
+	if not show and allDone and card.Visible and not closed and not celebrating then
+		celebrating = true
+		title.Text = "🎉 All goals done!"
+		title.TextColor3 = COLORS.gold
+		closeButton.Visible = false
+		task.delay(3, function()
+			celebrating = false
+			closed = true
+			card.Visible = false
+		end)
+	end
+	if celebrating then return end
+	card.Visible = show and playerGui:GetAttribute("OpenPanel") == nil
 end
 
+closeButton.Activated:Connect(function()
+	closed = true
+	card.Visible = false
+	task.spawn(function()
+		local ok, result, message = pcall(function()
+			return onboardingAction:InvokeServer("DismissTracker")
+		end)
+		if not ok or not result then
+			warn("Couldn't save closing the goal tracker: " .. tostring(ok and message or result))
+		end
+	end)
+end)
+
 player.AttributeChanged:Connect(function(name)
+	if name == "OnboardingTracker" and player:GetAttribute(name) == true and not celebrating then
+		-- The server shows it again (only the Studio Debug restart does that): start fresh
+		closed = false
+		title.Text = "🎯 Goals"
+		title.TextColor3 = COLORS.buy
+		closeButton.Visible = true
+	end
 	if name == "OnboardingTracker" or string.sub(name, 1, 14) == "OnboardingGoal" then
 		refreshTracker()
 	end

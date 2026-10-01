@@ -10,6 +10,8 @@
 --   OnboardingTracker (boolean)       -> show the goal tracker
 --   OnboardingGoal_<key>, OnboardingGoalTarget_<key> (numbers) -> each goal's progress
 -- Goals are checked here from the server's own data; the client can't finish one.
+-- The only thing the client can ask (OnboardingRemotes.OnboardingAction) is "DismissTracker":
+-- hide the tracker for good. It grants nothing.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,10 +23,11 @@ local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local OnboardingServer = {}
 
 local core -- { getData, save, updateIncome, nextUpgradeCost }, given by TycoonCore
+local remotes = {}
 
 -- The fields of the saved "onboarding" section this version knows. Others were written by newer
 -- code: they're kept and saved back unchanged, never deleted.
-local KNOWN_FIELDS = { seenIntro = true, legacy = true, arrowDone = true, goals = true }
+local KNOWN_FIELDS = { seenIntro = true, legacy = true, arrowDone = true, dismissed = true, goals = true }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -161,12 +164,30 @@ local function update(player, data, now)
 
 	local showTracker = false
 	if active then
-		updateGoals(player, data)
-		-- It appears once the free egg has hatched (or the player is already past that point)
-		showTracker = #data.team.employees >= OnboardingConfig.TrackerAfterEmployees
+		local allDone = updateGoals(player, data)
+		-- It appears once the free egg has hatched (or the player is already past that point),
+		-- and stays until every goal is finished or the player closes it
+		local started = #data.team.employees >= OnboardingConfig.TrackerAfterEmployees
 			or onboarding.arrowDone or next(onboarding.goals) ~= nil
+		showTracker = started and not allDone and not onboarding.dismissed
 	end
 	setAttribute(player, "OnboardingTracker", showTracker)
+end
+
+-- Actions the client can ask for ------------------------------------------------
+
+local function onAction(player, action)
+	if typeof(action) ~= "string" then return false, "Bad request" end
+	local data = core.getData(player)
+	if not data or not data.ready or not data.onboarding then
+		return false, "Still loading, try again in a moment"
+	end
+	if action == "DismissTracker" then
+		data.onboarding.dismissed = true -- saved: the tracker stays closed
+		setAttribute(player, "OnboardingTracker", false)
+		return true
+	end
+	return false, "Unknown action"
 end
 
 -- Saving (TycoonCore calls these) ----------------------------------------------
@@ -180,6 +201,7 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		seenIntro = false, -- the free egg was given, or the player didn't need it (saved)
 		legacy = false, -- had a save before milestone 5: counts as already onboarded (saved)
 		arrowDone = false, -- the arrow did its job and is gone for good (saved)
+		dismissed = false, -- the player closed the goal tracker with its X (saved)
 		goals = {}, -- goal key -> true once finished; stays finished (saved)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
 	}
@@ -187,6 +209,7 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		onboarding.seenIntro = savedOnboarding.seenIntro == true
 		onboarding.legacy = savedOnboarding.legacy == true
 		onboarding.arrowDone = savedOnboarding.arrowDone == true
+		onboarding.dismissed = savedOnboarding.dismissed == true
 		-- Every finished goal key is kept, even ones this version's config doesn't list
 		for _, key in ipairs(typeof(savedOnboarding.goals) == "table" and savedOnboarding.goals or {}) do
 			if typeof(key) == "string" then
@@ -232,6 +255,7 @@ function OnboardingServer.serialize(data)
 		seenIntro = onboarding.seenIntro,
 		legacy = onboarding.legacy,
 		arrowDone = onboarding.arrowDone,
+		dismissed = onboarding.dismissed,
 		goals = goals,
 	}
 	for key, value in pairs(onboarding.unknown) do -- written by newer code: kept as it was
@@ -246,6 +270,14 @@ end
 
 function OnboardingServer.init(coreApi)
 	core = coreApi
+
+	local folder = Instance.new("Folder")
+	folder.Name = "OnboardingRemotes"
+	remotes.action = Instance.new("RemoteFunction")
+	remotes.action.Name = "OnboardingAction"
+	remotes.action.OnServerInvoke = onAction
+	remotes.action.Parent = folder
+	folder.Parent = ReplicatedStorage
 
 	for _, goal in ipairs(OnboardingConfig.Goals) do
 		if goal.kind == "stage" and not stageNumber(goal.stage) then

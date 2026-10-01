@@ -32,7 +32,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
   - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes` and `IpoRemotes` in ReplicatedStorage.
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes` and `OnboardingRemotes` in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
   - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4. They use the shared responsive layout: a column centered on the left, or a top row on short (phone) screens (height under 460).
@@ -95,6 +95,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     seenIntro = boolean,                         -- the free egg was given (or wasn't needed): never given twice
     legacy = boolean,                            -- had a save before M5: counts as already onboarded
     arrowDone = boolean,                         -- the glowing arrow did its job (never comes back)
+    dismissed = boolean,                         -- the player closed the goal tracker with its X
     goals = { goalKey, ... },                    -- finished goals (stay finished)
   },
 }
