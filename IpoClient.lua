@@ -10,7 +10,13 @@ local TweenService = game:GetService("TweenService")
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
-local DailyConfig = require(ReplicatedStorage:WaitForChild("DailyConfig")) -- the gift chip's room, and the reminder on the confirm screen
+-- DailyConfig gives the gift chip's room and the reminder on the confirm screen. If it's missing
+-- (not pasted into Studio yet) the IPO HUD still builds, just without the chip room.
+local dailyModule = ReplicatedStorage:WaitForChild("DailyConfig", 5)
+local DailyConfig = dailyModule and require(dailyModule)
+if not DailyConfig then
+	warn("IpoClient: DailyConfig not found in ReplicatedStorage, continuing without the daily gift chip room")
+end
 local remotes = ReplicatedStorage:WaitForChild("IpoRemotes")
 local ipoAction = remotes:WaitForChild("IpoAction")
 local ipoEvent = remotes:WaitForChild("IpoEvent")
@@ -21,7 +27,7 @@ local PANEL_NAME = "Ipo"
 local HUD_SLOT = 4 -- EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4
 local CONFIRM_SECONDS = 15 -- the confirm screen closes itself after this long
 -- DailyClient's gift chip sits right of the valuation bar: on narrow screens the bar leaves room for it
-local CHIP_ROOM = DailyConfig.Enabled and (DailyConfig.ChipSize + DailyConfig.ChipGap) or 0
+local CHIP_ROOM = DailyConfig and DailyConfig.Enabled and (DailyConfig.ChipSize + DailyConfig.ChipGap) or 0
 
 local COLORS = {
 	panel = Color3.fromRGB(28, 30, 38),
@@ -654,7 +660,7 @@ local function renderConfirm()
 	local keeps = resetNames(false)
 	-- A daily reward claimed now would land on the run that's about to reset: say so
 	local daily = ""
-	if DailyConfig.Enabled and player:GetAttribute("DailyReady") == true then
+	if DailyConfig and DailyConfig.Enabled and player:GetAttribute("DailyReady") == true then
 		daily = "\n\n" .. DailyConfig.Texts.IpoReminder
 	end
 	confirmText.Text = string.format(
