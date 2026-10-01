@@ -418,7 +418,8 @@ Players.PlayerAdded:Connect(function(player)
 			end
 		end
 		ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
-		-- Saves from before milestone 4 have no valuation: count the upgrades they bought plus their Cash
+		-- Saves from before milestone 4 have no valuation: count the upgrades they bought plus their Cash,
+		-- capped at the first IPO-ready valuation (a huge old bank can't buy a pile of Shares on day one)
 		local legacyValuation = 0
 		if saved and saved.ipo == nil then
 			legacyValuation = cash.Value
@@ -427,6 +428,7 @@ Players.PlayerAdded:Connect(function(player)
 					legacyValuation += upg.cost
 				end
 			end
+			legacyValuation = math.min(legacyValuation, IpoConfig.ipoValuation(0))
 		end
 		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
