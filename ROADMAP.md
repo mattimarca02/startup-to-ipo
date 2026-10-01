@@ -8,10 +8,12 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE Shop: passes 2x Cash 199, VIP 249, Extra Employee Slots 149, Auto-Hatch 199, Headhunter 149. Products: Pile/Bag/Vault of Cash 29/99/299, Luck Boost 49, Instant Hatch 25, Poach Shield 49. All exist on Roblox.
 - DONE M2: recruiting eggs, creature employees. ShopConfig.EggsEnabled = false and the 4 egg items are off sale until launch.
 - DONE M3: poaching (merged). PR #2 poaching-cleanup merged: 2-player poach, counter-offer and the leave/refund case all passed manual testing.
-- IN REVIEW M4: IPO rebirth built on milestone-4-ipo (PR open): valuation, 5 funding stages, Go Public with two-step confirm, x multiplier + Shares, IPO shop (6 perks), gold IPO pad, in-server leaderboard, Debug tools. Merge after Mattia's playtest. The early start on claude/task-1iff57 was reviewed and replaced (its IpoConfig was rewritten); that branch is no longer needed.
+- DONE M4 (2026-10-01): IPO rebirth merged (PR #6, branch milestone-4-ipo): valuation, 5 funding stages, Go Public with two-step confirm, x multiplier + Shares, IPO shop (6 perks), gold IPO pad, in-server leaderboard, Debug tools. Mattia's playtest passed: eggs, HR, IPO, perks, poach UI and IPO screen at phone size, and the rejoin test. The early start on claude/task-1iff57 was reviewed and replaced (its IpoConfig was rewritten); that branch is no longer needed. Publish needs **Shut down all servers** (new save section, see F2 in docs/reviews/M4_REVIEW.md).
+- The game now belongs to the Roblox group (universe 10768772528, place 86395856666175, same IDs as before). The sandbox copy is archived.
 - NOT SYNCED: game pass "Shareholder" (2x Shares, R$ 199) is in ShopConfig with id = 0 and shows "Coming soon". Run sync_monetization on the PC to create it on Roblox.
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
-- Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua after M4 merges and retune.
+- Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua now that M4 has merged, and retune.
+- Next steps: retune the IPO numbers with economy_sim.py using the real IpoConfig.lua; fix the Luck Boost wording (Legendary 8.0% to 9.7%, not "2x"); create the Shareholder pass on PC.
 
 ## Milestones, in order
 
@@ -47,10 +49,18 @@ Play-through rate is Roblox's #1 discovery signal.
 - Done when: assets uploaded and a few variants ready for Roblox's thumbnail testing.
 
 ### M9: Pre-launch hardening
-- DataStore session locking (prevent the two-server edge case), request budgets, retry logic.
+- DataStore session locking (prevent the two-server edge case), request budgets, retry logic. (F10)
 - Full exploit review of every RemoteEvent. Mobile pass on every screen.
 - Analytics: onboarding funnel, economy events and purchase events via AnalyticsService.
 - Reset all dev saves, set EggsEnabled = true, run sync_monetization (PC), final 2-client test, then publish.
+- From the M4 re-review (docs/reviews/M4_REREVIEW.md), 5 Low findings:
+  1. If the pass check times out, loading continues without passes; pay the missing offline difference when it answers, and refuse `GoPublic` until it answers.
+  2. Type-check `saved.cash`/`saved.owned` inside the load `pcall` instead of kicking the player on a bad value.
+  3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule.
+  4. Kept unknown sections are frozen as of join and go stale; re-check them against `team`/`ipo` on load.
+  5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
+- F6: poach refund after a crash.
+- F8: IPO balance retune.
 
 ### Launch requirements (start now, they take time)
 - New games first reach age-checked players 16+ only. Under-16s unlock after 250 plays by "highly engaged" players within 60 days.
