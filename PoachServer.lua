@@ -591,6 +591,7 @@ local function buildHrPad(player, data)
 		poach.hrLevel += 1
 		label.Text = hrLabelText(poach.hrLevel)
 		publish(player)
+		task.spawn(core.save, player) -- the Cash is spent: save it now
 		send(player, "Notice", { text = "HR Department Lv " .. poach.hrLevel .. ": poachers get -" .. percent(nextLevel.defense) .. " chance" })
 	end)
 end

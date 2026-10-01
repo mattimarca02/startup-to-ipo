@@ -86,15 +86,15 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
-| ShopServer | ServerScriptService | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
-| EmployeeServer | ServerScriptService | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
-| ShopConfig | ReplicatedStorage | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
-| CreatureConfig | ReplicatedStorage | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
+| TycoonCore | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | free | | |
+| EmployeeServer | ServerScriptService | free | | |
+| ShopConfig | ReplicatedStorage | free | | |
+| CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
+| ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
-| PoachClient | StarterPlayerScripts | Mattia, poaching | milestone-3-poaching | 2026-10-01 |
+| PoachServer | ServerScriptService | free | | |
+| PoachClient | StarterPlayerScripts | free | | |

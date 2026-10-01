@@ -9,7 +9,7 @@ Each player gets a garage plot and buys upgrades from a green pad to earn Cash e
 | 1 | Garage plot, upgrades, Cash per second, saving, offline income | Done |
 | 2 | Recruiting eggs, 3 incubators, 12 creature employees, team slots | Done. Egg shop items stay off sale until `ShopConfig.EggsEnabled = true` |
 | 3 | Shop: 4 game passes, 5 developer products | Done |
-| 3 (poaching) | Poach employees from other players, HR Department pad, Counter-Offer, Headhunter pass, Poach Shield product | Done. Headhunter and Poach Shield show "Coming soon" in the shop until the owner runs the sync (`id = 0`) |
+| 3 (poaching) | Poach employees from other players, HR Department pad, Counter-Offer, Headhunter pass, Poach Shield product | Done. Headhunter and Poach Shield have their IDs and are on sale |
 | Next | IPO rebirth | Not started |
 
 ## Folder structure
