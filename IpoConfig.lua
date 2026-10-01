@@ -39,6 +39,7 @@ IpoConfig.BonusExponent = 0.75
 IpoConfig.SharesPerIpo = 10
 IpoConfig.SharesGrowthPerIpo = 0.3
 IpoConfig.SharesExponent = 0.5
+IpoConfig.SharesRatioCap = 4 -- waiting longer than 4x IPO-ready (e.g. offline Cash) gives no more Shares: ratio 4 = x2
 
 IpoConfig.StartingCash = 0 -- Cash after an IPO (the first garage upgrade is free)
 IpoConfig.CooldownSeconds = 60 -- wait at least this long between two IPOs
@@ -154,7 +155,7 @@ end
 
 -- Shares for going public now. passMultiplier = 2 with the Shareholder pass.
 function IpoConfig.sharesFor(valuation, ipoCount, passMultiplier)
-	local ratio = math.max(0, valuation / IpoConfig.ipoValuation(ipoCount))
+	local ratio = math.min(IpoConfig.SharesRatioCap, math.max(0, valuation / IpoConfig.ipoValuation(ipoCount)))
 	local growth = 1 + IpoConfig.SharesGrowthPerIpo * math.max(0, ipoCount or 0)
 	return math.floor(IpoConfig.SharesPerIpo * growth * ratio ^ IpoConfig.SharesExponent * (passMultiplier or 1))
 end

@@ -102,6 +102,7 @@ IPO_RESET_UPGRADES = True           # IpoConfig.Resets.Upgrades = true (cash and
 IPO_RESETS_HR = False               # IpoConfig.Resets.HRDepartment = false: the HR level is kept across an IPO
 IPO_SHARES_PER_IPO = 10             # IpoConfig.SharesPerIpo: Shares = this * (1 + growth * IPOs done) * (valuation / IPO-ready valuation) ^ exponent
 IPO_SHARES_GROWTH = 0.3             # IpoConfig.SharesGrowthPerIpo
+IPO_SHARES_RATIO_CAP = 4            # IpoConfig.SharesRatioCap
 IPO_SHARES_EXPONENT = 0.5           # IpoConfig.SharesExponent
 SHAREHOLDER_MULT = 2                # ShopConfig Passes.Shareholder: 2x Shares per IPO (199 R$)
 IPO_COOLDOWN_SECONDS = 60           # IpoConfig.CooldownSeconds (not modeled: every gap between IPOs is far longer)
@@ -297,7 +298,7 @@ class Player:
         if not self.use_ipo or self.stage_index() < len(IPO_STAGES) - 1:
             return False
         # the sim goes public the moment IPO-ready is reached, so the ratio is ~1 (a player who waits gets more)
-        ratio = max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale))
+        ratio = min(IPO_SHARES_RATIO_CAP, max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale)))
         gained = int(IPO_SHARES_PER_IPO * (1 + IPO_SHARES_GROWTH * self.ipos) * ratio ** IPO_SHARES_EXPONENT * self.share_mult)
         self.shares += gained
         self.shares_log.append(gained)
