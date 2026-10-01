@@ -126,3 +126,52 @@ dayNumber = math.floor((os.time() - DailyConfig.ResetHourUtc * 3600) / 86400)
 | **Egg days with no free incubator** | Refused before anything is changed, so no marker is written and the day is not consumed. |
 
 **Never trusted from the client:** a time, a date, a streak, a day number, a reward amount, or "I claimed already". The only message a client sends is `Claim`.
+
+## 4. Save
+
+A new optional top-level section, written by `DailyServer.serialize` through TycoonCore's `save()` like every other module (no second DataStore, no second save loop):
+
+```lua
+daily = {                       -- DailyServer.serialize (optional: older saves have none)
+  lastClaimDay = number,        -- day number (see section 3) of the last claim; 0 = never claimed
+  streak = number,              -- consecutive days claimed (0 = none yet); the next reward is day (streak % #Days) + 1
+  best = number,                -- longest streak ever (display only)
+  claims = number,              -- total claims (display and analytics only)
+}
+```
+
+**Rules from CLAUDE.md, and how this follows them:**
+
+- **Optional with defaults (F2 behaviour).** A save with no `daily` section (every save today) loads as `lastClaimDay = 0, streak = 0, best = 0, claims = 0`: the player can claim Day 1 on their first join after M6. Bad values are skipped with a `warn`, never an error. Unknown fields inside the section are kept and written back, the same way `OnboardingServer` does (`KNOWN_FIELDS`, M4 re-review finding 3).
+- **TycoonCore changes** (all small, the same pattern as `onboarding`): add `daily = true` to `KNOWN_SECTIONS` so older code can't wipe it and this code keeps newer ones; add `data.daily` to the "a save must have every part" check in `save()`; add `daily = DailyServer.serialize(data)` to the payload; call `DailyServer.setupPlayer(player, data, saved and saved.daily)`.
+- **Joins the "all modules loaded" gate (M4 F9).** `DailyServer.setupPlayer` runs inside the same setup `pcall`, after `OnboardingServer.setupPlayer` and before `data.loaded = ok`. It does no DataStore call and nothing that yields, so it can't delay the gate. If it errors, the player is kicked and nothing is saved, so a half-loaded `daily` can never overwrite a good one. `save()` also refuses while `data.daily` is missing.
+- **Section order matters for one thing only:** `DailyServer` must run after `EmployeeServer.setupPlayer`, because a claim calls `EmployeeServer.grantEgg`. Setup itself grants nothing.
+- **Nothing is changed at load.** The "missed a day" case is computed from `lastClaimDay` when the player asks for the state, so loading and rejoining never change the save. Only a successful claim writes to it.
+- **Old code after a rollback** keeps the section (it is in `KNOWN_SECTIONS` only for M6 code, but M4+ code already writes back unknown sections). Code from before the M4 F2 fix would drop it, which is why the publish needs **Shut down all servers**, as for M4 and M5.
+
+**What an IPO does to the streak: it keeps it.** Checked in the code:
+
+- `IpoConfig.Resets` lists only Cash, Upgrades, Eggs and HRDepartment.
+- `commitIpo`'s transform in `TycoonCore.lua` changes only `payload.cash`, `payload.owned`, `payload.team.incubators`, `payload.poach.hrLevel` and `payload.ipo`. It never touches `payload.daily`.
+
+So the streak, `lastClaimDay` and `best` survive an IPO with no code change, and no entry is needed in `IpoConfig.Resets` (the streak is real time, like shields and cooldowns, not part of the run). What an IPO does change:
+
+- **Cash rewards scale up** after an IPO, because the multiplier raises Income.
+- **A claim made before an IPO** puts the Cash on the run that is about to be reset, and a Day 3/5/7 egg in an incubator is cleared by the IPO (`Resets.Eggs = true`). The Daily window warns once: "Tip: claim after your IPO" is **not** needed for fairness (no exploit: the reward is gone, nothing is gained), but it is a polite line on the IPO confirmation. Open for the UI step, not a rule.
+- **Claim during the IPO save** is refused (section 3) so nothing is granted into a state that is about to be replaced.
+
+## 5. Roblox rules and monetization
+
+The rules that apply, from CLAUDE.md and ROADMAP.md (CLAUDE.md has the purchase rules; the under-16 rules are in ROADMAP's Launch requirements, not in CLAUDE.md):
+
+| Rule | How M6 follows it |
+|---|---|
+| Nothing is sold for the daily reward | There is **no Robux button, product or pass in the daily window**: no "restore my streak", no "2x today's reward", no "skip the wait". Every player gets the same calendar for free. |
+| Paid random rewards (loot-box style) need odds shown, and the design rule is "show odds for every egg and boost" | The reward is **fixed and known in advance** (the whole calendar is visible), and nothing is bought with Robux. The eggs on days 3, 5 and 7 are free and their hatch is random, so each egg card shows its odds from the same `CreatureConfig.getOdds` the egg panel uses. |
+| Not tied to a pass in a way that breaks the rules | No pass changes whether, when or what you can claim. One honest side effect: Cash days are minutes of **your current Income**, and a 2x Cash pass already doubles Income, so pass owners see a bigger Cash number. It is the same proportional rule as offline earnings, it is not a paid reward, and the card says "10 min of your income" so it isn't hidden. If you'd rather not have it, the server can compute from Income without passes (open for review, not a question). |
+| Developer products only in `ProcessReceipt` | M6 adds no purchase. (The "2x offline earnings" product from the ROADMAP is a separate piece, see open question 2; if built, it follows the `ProcessReceipt` rules.) |
+| Never trust the client | Section 3. The client sends only `Claim`. |
+| Under 16 / chat safety | New games first reach 16+ players only (ROADMAP Launch requirements). The daily window has **no free-text input**: only taps (Claim, Close). Nothing links to chat, trading or other players. |
+| Pressure and wording | The window uses a calm tone and no fake urgency: no flashing red countdown, no "you will lose everything" text, no "come back or else". A lost streak is stated as a fact ("Your streak was Day 4. Today is Day 1."). This matters more as soon as under-16s unlock. |
+
+**What I could not check from here:** the current Roblox policy pages on rewards and monetization. The above applies the rules in the repo. Before launch, someone should read Roblox's current "Paid Random Items" and monetization policies in the Creator Hub and confirm. Nothing in this plan depends on a gray area, because nothing is sold.
