@@ -38,6 +38,8 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
 
 4. **Work and test.** Change the scripts, playtest in Studio (F5) and check the Output window for red errors. Keep Studio and the `.lua` files matching (see [the sync rule](#keeping-studio-and-the-repo-in-sync)).
 
+   Studio playtests need **Enable Studio Access to API Services** turned ON (Game Settings > Security). With it off, saves can't load and the 6 s load retry kicks you out of the playtest.
+
 5. **Commit small.** Commit each time something works:
    ```
    git status

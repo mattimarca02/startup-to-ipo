@@ -92,6 +92,7 @@ Play-through rate is Roblox's #1 discovery signal.
   - PR14 F5: the give-back after a failed move ignores `EmployeeServer.addEmployee`'s result and its capacity check; add `EmployeeServer.restoreEmployee` that re-inserts the original employee at its old index and clears `team.outgoing[id]`.
   - PR14 F7: during a DataStore outage the load retry makes 3 `GetAsync` calls per join; check `GetRequestBudgetForRequestType` before each retry (or accept it).
   - PR14 F8: the comment on `PoachServer.isBusy` says a poacher can never stop an IPO, but a finished poach holds it for up to ~60 s while it saves; say so.
+- Studio playtests need **Enable Studio Access to API Services** ON (Game Settings > Security), or the 6 s load retry kicks the player. (PR14 F6, no code change.)
 - Before launch: read Roblox's current policy pages on rewards (Paid Random Items, monetization, and anything on daily or login rewards) in the Creator Hub and confirm the M6 calendar still fits (no Robux in the daily window, fixed and visible rewards, odds shown for the eggs).
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums.
