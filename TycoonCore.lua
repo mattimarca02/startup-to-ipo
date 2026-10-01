@@ -168,6 +168,41 @@ end
 
 -- Saving and loading ----------------------------------------------------
 
+-- Reads the basic fields of a loaded save, skipping bad values with a warning instead of erroring.
+-- A corrupt field must never lock a player out: it gets a safe default (0 Cash, no upgrades, no offline time).
+-- Returns cash (a whole number >= 0), a list of upgrade names, and lastSeen (a number or nil).
+-- (tools/daily_test.py runs the code between the two SANITIZE markers, so keep it free of Roblox calls except warn.)
+-- SANITIZE-BEGIN
+local MAX_CASH = 2 ^ 53 -- Cash is a whole number; far above anything the game can earn
+local function sanitizeSave(saved, playerName)
+	local cash, owned, lastSeen = 0, {}, nil
+	local rawCash = tonumber(saved.cash)
+	if rawCash ~= nil and rawCash == rawCash and rawCash >= 0 and rawCash ~= math.huge then -- not NaN, not negative, not inf
+		cash = math.floor(math.min(rawCash, MAX_CASH))
+	elseif saved.cash ~= nil then
+		warn("Ignoring a bad Cash value in " .. playerName .. "'s save: " .. tostring(saved.cash))
+	end
+	if typeof(saved.owned) == "table" then
+		for _, name in ipairs(saved.owned) do
+			if typeof(name) == "string" then
+				table.insert(owned, name)
+			else
+				warn("Skipping a bad upgrade name in " .. playerName .. "'s save: " .. tostring(name))
+			end
+		end
+	elseif saved.owned ~= nil then
+		warn("Ignoring a bad upgrade list in " .. playerName .. "'s save: " .. tostring(saved.owned))
+	end
+	local rawSeen = tonumber(saved.lastSeen)
+	if rawSeen ~= nil and rawSeen == rawSeen and rawSeen ~= math.huge and rawSeen ~= -math.huge then
+		lastSeen = rawSeen
+	elseif saved.lastSeen ~= nil then
+		warn("Ignoring a bad lastSeen value in " .. playerName .. "'s save: " .. tostring(saved.lastSeen))
+	end
+	return cash, owned, lastSeen
+end
+-- SANITIZE-END
+
 -- Returns (save or nil, worked). A failed read is tried again (LOAD_TRIES in all, waiting a bit
 -- longer each time). If it still fails, the player is kicked (see PlayerAdded), never left
 -- playing a session that can't save.
@@ -453,10 +488,17 @@ Players.PlayerAdded:Connect(function(player)
 		player:Kick(LOAD_FAILED_MESSAGE)
 		return
 	end
+	local lastSeen = nil
 	local setupOk, setupError = pcall(function()
+		if saved and typeof(saved) ~= "table" then
+			warn("Ignoring " .. player.Name .. "'s save: it isn't a table (" .. typeof(saved) .. ")")
+			saved = nil
+		end
 		if saved then
-			cash.Value = saved.cash or 0
-			for _, name in ipairs(saved.owned or {}) do
+			local savedCash, savedOwned
+			savedCash, savedOwned, lastSeen = sanitizeSave(saved, player.Name)
+			cash.Value = savedCash
+			for _, name in ipairs(savedOwned) do
 				data.owned[name] = true
 			end
 			for key, value in pairs(saved) do
@@ -501,9 +543,9 @@ Players.PlayerAdded:Connect(function(player)
 	updateIncome(player)
 
 	-- Offline earnings: the startup keeps making money while you're away
-	if saved and saved.lastSeen then
+	if lastSeen then
 		local cap = OFFLINE_CAP_SECONDS + IpoServer.perk(data, "OfflineCap")
-		local away = math.clamp(os.time() - saved.lastSeen, 0, cap)
+		local away = math.clamp(os.time() - lastSeen, 0, cap)
 		local earned = math.floor(away * income.Value * OFFLINE_RATE)
 		if earned > 0 then
 			cash.Value += earned
