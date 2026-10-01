@@ -16,13 +16,15 @@ local IpoConfig = {}
 -- current run (since your last IPO). The last stage is the one that lets you go public.
 IpoConfig.Stages = {
 	{ key = "Garage", name = "Garage", icon = "🏚️", valuation = 0 },
-	{ key = "Seed", name = "Seed", icon = "🌱", valuation = 2500 },
-	{ key = "SeriesA", name = "Series A", icon = "💼", valuation = 25000 },
-	{ key = "SeriesB", name = "Series B", icon = "🚀", valuation = 250000 },
-	{ key = "IpoReady", name = "IPO-ready", icon = "🔔", valuation = 2500000 },
+	{ key = "Seed", name = "Seed", icon = "🌱", valuation = 1800 },
+	{ key = "SeriesA", name = "Series A", icon = "💼", valuation = 6300 },
+	{ key = "SeriesB", name = "Series B", icon = "🚀", valuation = 23400 },
+	{ key = "IpoReady", name = "IPO-ready", icon = "🔔", valuation = 81000 },
 }
 -- Every IPO you've done makes the stages of the next run this many times bigger (1 = never grows)
-IpoConfig.StageGrowthPerIpo = 1.5
+-- Retuned via tools/economy_sim.py (see docs/ECONOMY.md section 3): first IPO ~10-15 min active play,
+-- IPO 5 in a few hours, IPO 10 after 2+ days, a 2h single-session binge caps around IPO 5.
+IpoConfig.StageGrowthPerIpo = 2.5
 
 -- Permanent income multiplier: 1 + BonusPerIpo * IPOs ^ BonusExponent.
 -- An exponent below 1 makes each IPO add a bit less than the one before (x1.5, x1.84, x2.14...).
