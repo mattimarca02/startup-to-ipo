@@ -54,7 +54,7 @@ One theoretical hole: a player who hatches the free egg and **fires** that emplo
 
 Two smaller gaps were found:
 
-- **F3 (Low):** "new player" means two different things. Onboarding treats a pre-M5 save with no progress as new and gives the free egg (`OnboardingServer.lua:248-255`), but PoachServer's 15-minute new-player shield only goes to `saved == nil` (`TycoonCore.lua:452`, `PoachServer.lua:694-695`). Players who joined before M5 and left without buying anything (likely a large share of past visitors) get the tutorial but can be poached as soon as their first employee hatches.
+- **F3 (Low) — Fixed in `f68f3f7`** (`grantFreeEgg` sets the shield itself, PoachServer untouched): "new player" means two different things. Onboarding treats a pre-M5 save with no progress as new and gives the free egg (`OnboardingServer.lua:248-255`), but PoachServer's 15-minute new-player shield only goes to `saved == nil` (`TycoonCore.lua:452`, `PoachServer.lua:694-695`). Players who joined before M5 and left without buying anything (likely a large share of past visitors) get the tutorial but can be poached as soon as their first employee hatches.
 - **F4 (Low):** `OnboardingConfig.Enabled = false` still saves a section with `seenIntro = false, legacy = false`. If it's switched back on, those players skip the egg (they have progress) but are not `legacy`, so the arrow and tracker show up for veterans (`OnboardingServer.lua:169`, `:248`, `:253`).
 
 ## 3. Server authority
@@ -104,7 +104,7 @@ One weak spot (UX, not security):
 | Toast position | `-184` from the bottom, above the poach (`-128`), egg (`-72`) and shop/IPO (`-16`) toasts. Bottom center, as CLAUDE.md asks. |
 | Tracker and open windows | Hidden while `OpenPanel` is set (`:334`), except for F10. |
 
-**F1 (Medium): the goal card never finds the valuation bar, so it's misplaced or cut off on some phones.**
+**F1 (Medium) — Fixed in `b578fdd`: the goal card never finds the valuation bar, so it's misplaced or cut off on some phones.**
 
 - **Where:** `OnboardingClient.lua:287-288` waits for `IpoWindowGui.ValuationBar`, but the bar's parent is `IpoGui` (`IpoClient.lua:177-185`, `Parent = gui`; `IpoWindowGui` is `front`). After 30 seconds `WaitForChild` returns nil without a warning, and the card always uses the fixed fallback spots (`OnboardingClient.lua:278-282`). The phone pass didn't catch it because on a normal desktop screen the fallback `(98, 84)` happens to sit right under the bar.
 - **What breaks:**
@@ -112,7 +112,7 @@ One weak spot (UX, not security):
   - **Short and narrow landscape screens (height under 460, width under 560):** the bar moves to `(10, 76)` (`IpoClient.lua:235`), the same spot as the card's fallback, so the card covers the valuation bar.
 - **Fix:** `playerGui:WaitForChild("IpoGui", 30)` in place of `"IpoWindowGui"`. Then test at 320 × 568 and a small landscape device in **Test → Device**.
 
-**F2 (Low): on landscape phones the card overlaps the poaching panels.** On short screens the Negotiation and Poach Alert panels sit at y = 76, centered, up to 460 px wide and 92 px tall (`PoachClient.lua:807-816`, `:878-880`). The card is at y = 76 too (fallback `(10, 76)`, or `(370, 76)` once F1 is fixed). On an 844 × 390 phone they overlap by about 70 px; on a 667 × 375 phone by about 150 px. New players are shielded from poach alerts, but a new player who poaches someone sees the Negotiation panel. **Fix:** hide the card while either poach panel is visible, or move it below them.
+**F2 (Low) — Skipped (not a trivial position change: needs the poach panels' state; moved to M9):** on landscape phones the card overlaps the poaching panels.** On short screens the Negotiation and Poach Alert panels sit at y = 76, centered, up to 460 px wide and 92 px tall (`PoachClient.lua:807-816`, `:878-880`). The card is at y = 76 too (fallback `(10, 76)`, or `(370, 76)` once F1 is fixed). On an 844 × 390 phone they overlap by about 70 px; on a 667 × 375 phone by about 150 px. New players are shielded from poach alerts, but a new player who poaches someone sees the Negotiation panel. **Fix:** hide the card while either poach panel is visible, or move it below them.
 
 **F7 (Low): the free-egg toast is sent during the load, often before the screen is up.** `notify` fires from inside `setupPlayer` (`OnboardingServer.lua:88`, called from `TycoonCore.lua:453`). Roblox holds the event until `OnboardingClient` connects (`:200`), but the toast then shows for 3.5 s, which may still be during the loading screen or before the camera is on the plot. **Fix:** send it on the first update loop after `data.ready`, or when the client first asks for state.
 
@@ -122,16 +122,16 @@ One weak spot (UX, not security):
 
 | # | Level | Where | What breaks | Fix |
 |---|---|---|---|---|
-| F1 | **Medium** | `OnboardingClient.lua:287-288` | Looks for `ValuationBar` in `IpoWindowGui`, but it's in `IpoGui`. The card never follows the bar: on portrait phones under ~358 px its X button is off-screen, and on short narrow landscape screens it covers the valuation bar. | `WaitForChild("IpoGui", 30)`; retest in Test → Device at 320 × 568 and a small landscape size. |
-| F2 | Low | `OnboardingClient.lua:278-282`, `PoachClient.lua:807-816`, `:878-880` | On landscape phones the card overlaps the Negotiation / Poach Alert panels (both at y = 76). | Hide the card while a poach panel shows, or place it below them. |
-| F3 | Low | `OnboardingServer.lua:248-255`, `TycoonCore.lua:452`, `PoachServer.lua:694-695` | Pre-M5 saves with no progress get the tutorial but not the 15-minute new-player poach shield, so their first employee can be taken. | Give the new-player shield whenever the free egg is given (e.g. a small `PoachServer.grantNewPlayerShield(player)` called from `grantFreeEgg`; PoachServer must be claimed first). |
-| F4 | Low | `OnboardingServer.lua:169`, `:248`, `:253` | Sessions with `Enabled = false` save `seenIntro = false, legacy = false`; turning it back on shows the arrow and tracker to veterans. | In `setupPlayer`, treat any `not seenIntro and hasProgress(data)` as legacy, whether or not the section exists. |
-| F5 | Low | `OnboardingServer.lua:195-197`, `OnboardingClient.lua:337-347` | Closing the tracker during an IPO save (or while loading) isn't saved; it comes back next session, with a "Still loading" reason. | Retry the dismiss until the server accepts it; say "Your IPO is being filed" when that's the reason. |
-| F6 | Low | `OnboardingServer.lua:131`, `:183-185` | The tracker disappears if the player loses their only employee before a goal is finished. Poached employees count toward "Hire 3". | Save a `trackerShown` flag the first time it appears and use it in `started`. |
-| F7 | Low | `OnboardingServer.lua:88`, `TycoonCore.lua:453` | The free-egg toast is sent during the load and may be shown behind the loading screen. | Send it from the first update after `data.ready`. |
-| F8 | Low | `TycoonCore.lua:423` (no session lock) | Hopping servers before the first save lands can give the egg again in the new server; the player ends with one egg but loses the first session's seconds of progress. Older than M5. | Session lock in M9, as planned. |
-| F9 | Low | `OnboardingServer.lua:222-227` | Bad values in the section are coerced silently, without the warning CLAUDE.md asks for. Safe (`hasProgress` still guards the egg). | `warn` when a field is present but isn't a boolean, or `goals` isn't a table. |
-| F10 | Low | `OnboardingClient.lua:333-334` | The "All goals done!" card stays over a window opened during its 3 s. | Respect `OpenPanel` while celebrating. |
+| F1 | **Medium** (Fixed `b578fdd`) | `OnboardingClient.lua:287-288` | Looks for `ValuationBar` in `IpoWindowGui`, but it's in `IpoGui`. The card never follows the bar: on portrait phones under ~358 px its X button is off-screen, and on short narrow landscape screens it covers the valuation bar. | `WaitForChild("IpoGui", 30)`; retest in Test → Device at 320 × 568 and a small landscape size. |
+| F2 | Low (Skipped, in ROADMAP M9) | `OnboardingClient.lua:278-282`, `PoachClient.lua:807-816`, `:878-880` | On landscape phones the card overlaps the Negotiation / Poach Alert panels (both at y = 76). | Hide the card while a poach panel shows, or place it below them. |
+| F3 | Low (Fixed `f68f3f7`) | `OnboardingServer.lua:248-255`, `TycoonCore.lua:452`, `PoachServer.lua:694-695` | Pre-M5 saves with no progress get the tutorial but not the 15-minute new-player poach shield, so their first employee can be taken. | Give the new-player shield whenever the free egg is given (e.g. a small `PoachServer.grantNewPlayerShield(player)` called from `grantFreeEgg`; PoachServer must be claimed first). |
+| F4 | Low (Skipped, in ROADMAP M9) | `OnboardingServer.lua:169`, `:248`, `:253` | Sessions with `Enabled = false` save `seenIntro = false, legacy = false`; turning it back on shows the arrow and tracker to veterans. | In `setupPlayer`, treat any `not seenIntro and hasProgress(data)` as legacy, whether or not the section exists. |
+| F5 | Low (Skipped, in ROADMAP M9) | `OnboardingServer.lua:195-197`, `OnboardingClient.lua:337-347` | Closing the tracker during an IPO save (or while loading) isn't saved; it comes back next session, with a "Still loading" reason. | Retry the dismiss until the server accepts it; say "Your IPO is being filed" when that's the reason. |
+| F6 | Low (Skipped, in ROADMAP M9) | `OnboardingServer.lua:131`, `:183-185` | The tracker disappears if the player loses their only employee before a goal is finished. Poached employees count toward "Hire 3". | Save a `trackerShown` flag the first time it appears and use it in `started`. |
+| F7 | Low (Skipped, in ROADMAP M9) | `OnboardingServer.lua:88`, `TycoonCore.lua:453` | The free-egg toast is sent during the load and may be shown behind the loading screen. | Send it from the first update after `data.ready`. |
+| F8 | Low (Skipped, in ROADMAP M9) | `TycoonCore.lua:423` (no session lock) | Hopping servers before the first save lands can give the egg again in the new server; the player ends with one egg but loses the first session's seconds of progress. Older than M5. | Session lock in M9, as planned. |
+| F9 | Low (Skipped, in ROADMAP M9) | `OnboardingServer.lua:222-227` | Bad values in the section are coerced silently, without the warning CLAUDE.md asks for. Safe (`hasProgress` still guards the egg). | `warn` when a field is present but isn't a boolean, or `goals` isn't a table. |
+| F10 | Low (Skipped, in ROADMAP M9) | `OnboardingClient.lua:333-334` | The "All goals done!" card stays over a window opened during its 3 s. | Respect `OpenPanel` while celebrating. |
 
 **Counts:** Critical 0 · High 0 · Medium 1 · Low 9.
 
