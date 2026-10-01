@@ -153,3 +153,29 @@ This is a personal game, so normally only its owner can create a key that works 
 8. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** before your first change. Claim your scripts in the Ownership table first.
 
 **Mac note:** `.bat` files only work on Windows. On Mac, run `python3 sync_monetization.py` instead.
+
+## Connecting Claude Code to Studio (Mac)
+
+With the Roblox Studio MCP connected, Claude Code can read the place and push `.lua` files straight into Studio scripts, so you don't have to copy and paste them (see [Keeping Studio and the repo in sync](CONTRIBUTING.md#keeping-studio-and-the-repo-in-sync)). Each person sets this up once on their own Mac.
+
+1. **Turn on the MCP server in Studio:** open the place, open the **Assistant** panel, click **⋯ → Manage MCP Servers**, and turn on **Enable Studio as MCP server**.
+2. **Register it with Claude Code** (once per Mac, for all projects). In Terminal, run:
+
+   ```
+   claude mcp add --scope user Roblox_Studio -- /Applications/RobloxStudio.app/Contents/MacOS/StudioMCP
+   ```
+
+   If you use Claude Code only in VS Code and Terminal says `command not found: claude`, add the same server to the `mcpServers` section of `~/.claude.json` instead:
+
+   ```json
+   "Roblox_Studio": {
+     "type": "stdio",
+     "command": "/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP",
+     "args": []
+   }
+   ```
+
+3. **Restart Claude Code** (in VS Code: **Cmd+Shift+P → Developer: Reload Window**).
+4. **Check it works:** with Studio open on the place, ask Claude Code to list the scripts in the place. It should find **Build your Startup! (placeId: 86395856666175)** and list scripts such as `ServerScriptService.TycoonCore`.
+
+**Rules still apply:** Claude Code only pushes scripts claimed by the person it's working for (see the Ownership table in [CONTRIBUTING.md](CONTRIBUTING.md)), and the `.lua` file in the repo stays the official copy. The MCP needs no API key.
