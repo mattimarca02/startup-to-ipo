@@ -11,7 +11,7 @@ Each player gets a garage plot and buys upgrades from a green pad to earn Cash e
 | 3 | Shop: 4 game passes, 5 developer products | Done |
 | 3 (poaching) | Poach employees from other players, HR Department pad, Counter-Offer, Headhunter pass, Poach Shield product | Done. Headhunter and Poach Shield have their IDs and are on sale |
 | 4 | IPO rebirth: valuation, funding stages, Go Public, Shares, IPO shop perks, in-server leaderboard, Shareholder pass | Done (PR open). The Shareholder pass shows "Coming soon" until the owner runs the sync (`id = 0`) |
-| 5 | First minute: free egg for new players, glowing arrow, goal tracker | In progress (branch `milestone-5-onboarding`) |
+| 5 | First minute: free egg for new players, glowing arrow, goal tracker | Built, waiting for the Studio playtest (branch `milestone-5-onboarding`) |
 
 ## Folder structure
 

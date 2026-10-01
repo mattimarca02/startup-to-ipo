@@ -14,7 +14,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
-- Next steps: M5 (first minute / onboarding).
+- BUILT, NOT YET PLAYTESTED: M5 (2026-10-01) on branch milestone-5-onboarding (pushed, no PR yet). Code only: nothing synced to Studio or Roblox. New OnboardingServer (registered in the F9 load gate), OnboardingClient, OnboardingConfig and an optional `onboarding` save section. A brand-new player (no progress at all) gets one free Garage Egg, incubating on spawn, given only by the server. They tap the normal Hatch prompt (no auto-hatch exception). A glowing arrow goes pad, then egg, then pad, and ends after 1 employee + 2 upgrades. A goal tracker under the valuation bar ("Hire 3 employees", "Reach Seed stage") stays until both are done, with an X that is saved. Old saves with progress count as onboarded: no egg, arrow or tracker. No reward, no economy or IPO numbers changed, `EggsEnabled` untouched. Studio Debug: "Restart tutorial", "Act like an old save". Waiting on Mattia's playtest (new player, rejoin mid-tutorial, old save, phone size), then the PR.
+- Next steps: M5 playtest + PR, then M6 (daily rewards).
 
 ## Milestones, in order
 
