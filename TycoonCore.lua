@@ -39,6 +39,8 @@ local PLOT_SPACING = 90
 local MAX_PLOTS = 6
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
+local LOAD_TRIES = 3 -- reads of a joining player's save before giving up and kicking them
+local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a moment: your progress is safe."
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
@@ -162,16 +164,24 @@ end
 
 -- Saving and loading ----------------------------------------------------
 
+-- Returns (save or nil, worked). A failed read is tried again (LOAD_TRIES in all, waiting a bit
+-- longer each time). If it still fails, the player is kicked (see PlayerAdded), never left
+-- playing a session that can't save.
 local function load(player)
-	if not store then return nil, false end -- no DataStore: play fresh, never save
-	local ok, result = pcall(function()
-		return store:GetAsync("player_" .. player.UserId)
-	end)
-	if not ok then
-		warn("Could not load data. In Studio, turn on API access. Error: " .. tostring(result))
-		return nil, false
+	if not store then return nil, false end -- no DataStore (unpublished place in Studio): play fresh, never save
+	for attempt = 1, LOAD_TRIES do
+		local ok, result = pcall(function()
+			return store:GetAsync("player_" .. player.UserId)
+		end)
+		if ok then
+			return result, true
+		end
+		warn(string.format("Could not load %s's data (try %d of %d). In Studio, turn on API access. Error: %s",
+			player.Name, attempt, LOAD_TRIES, tostring(result)))
+		if attempt == LOAD_TRIES or not player.Parent then break end
+		task.wait(attempt * 2) -- 2s, then 4s
 	end
-	return result, true
+	return nil, false
 end
 
 -- Reads someone else's save without loading it. Poaching uses it to check that an employee
@@ -407,6 +417,13 @@ Players.PlayerAdded:Connect(function(player)
 	-- that time must never write a save with parts missing. If a part can't be set up at all,
 	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
+	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
+	if store and not ok then
+		-- The DataStore didn't answer after every try: playing on could never save, so send them back
+		warn("Kicking " .. player.Name .. ": their save couldn't be read, so this session could never save")
+		player:Kick(LOAD_FAILED_MESSAGE)
+		return
+	end
 	local setupOk, setupError = pcall(function()
 		if saved then
 			cash.Value = saved.cash or 0
@@ -440,7 +457,7 @@ Players.PlayerAdded:Connect(function(player)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
 	if not setupOk then
 		warn("Could not set up " .. player.Name .. "'s save, so it won't be saved this session: " .. tostring(setupError))
-		player:Kick("Your startup couldn't load. Please rejoin in a moment: your progress is safe.")
+		player:Kick(LOAD_FAILED_MESSAGE)
 		return
 	end
 	data.loaded = ok -- from here on, saves are complete
