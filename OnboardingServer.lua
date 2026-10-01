@@ -83,6 +83,13 @@ local function grantFreeEgg(player, data)
 		return false
 	end
 	onboarding.seenIntro = true
+	-- Same 15-minute new-player protection a brand-new save gets from PoachServer. Needed for
+	-- pre-M5 saves with no progress, which get the egg but are not "new" to PoachServer.
+	local poach = data.poach
+	local shield = CreatureConfig.Poaching and CreatureConfig.Poaching.NewPlayerShield
+	if poach and typeof(poach.shieldUntil) == "number" and typeof(shield) == "number" then
+		poach.shieldUntil = math.max(poach.shieldUntil, os.time() + shield)
+	end
 	print(player.Name .. " is new: free " .. OnboardingConfig.FreeEgg .. " egg in incubator " .. index)
 	local egg = CreatureConfig.getEgg(OnboardingConfig.FreeEgg)
 	notify(player, string.format(OnboardingConfig.FreeEggMessage, egg and egg.name or OnboardingConfig.FreeEgg))
