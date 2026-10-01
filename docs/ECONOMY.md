@@ -75,6 +75,46 @@ Session assumptions used by the simulator: active = 3 x 20-min sessions/day, cas
 
 To change: edit `IpoConfig.lua`, then update the `IPO_*` values in the CONFIG block of `tools/economy_sim.py` to match and re-run.
 
+### 3b. Real IPO numbers in minutes of play, with Shares (`economy-sim-real-ipo`)
+
+The IPO numbers in `tools/economy_sim.py` match `IpoConfig.lua` exactly (checked line by line after PR #9). New in the script: **Shares** (with and without the Shareholder pass), a **casual30** player and the **2-hour binge** as real behaviours, and every time below is **minutes really spent online** (not wall-clock), median of 20 runs. Perks are not modelled. Run `python tools/economy_sim.py --runs 40` and read section 6 of the output.
+
+Players: **active** = 3 x 20 min/day. **casual30** = about 30% of a 16 h waking day, 4 x 72 min/day (this is a guess at "30% active"). **casual** = 1 x 10 min/day.
+
+**1. First run, minutes online to reach each funding stage (same for every behaviour: the first session is continuous)**
+
+| Seed | Series A | Series B | IPO-ready (IPO #1) |
+|---|---|---|---|
+| 4 min | 6 min | 7 min | 12 min (casual: 10 min of play, at the 2nd login, see note) |
+
+**2. Online time to IPO #N and Shares earned there (no pass / Shareholder)**
+
+| Player | IPO #1 | IPO #2 | IPO #3 | IPO #5 | IPO #10 | IPOs in 60 days |
+|---|---|---|---|---|---|---|
+| active, time online | 12 min | 20 min | 35 min | 60 min | 6.7 h | 13 |
+| active, Shares | 10 / 20 | 39 / 78 | 10 / 20 | 20 / 42 | 10 / 20 | 190 / 384 total |
+| casual30, time online | 12 min | 22 min | 40 min | 82 min | 19.2 h | 13 |
+| casual30, Shares | 10 / 20 | 10 / 20 | 10 / 20 | 10 / 20 | 10 / 21 | 138 / 280 total |
+| casual (10 min/day), time online | 10 min | 20 min | 20 min | 40 min | 3.3 h | 11 |
+| casual, Shares | 62 / 125 | 10 / 20 | 40 / 80 | 22 / 44 | 10 / 20 | 240 / 486 total |
+
+Note on Shares: the simulated player goes public the moment IPO-ready is reached, which gives exactly 10 Shares (20 with the pass). The bigger numbers (39, 62) are players who log in after hours away: the offline Cash is counted as valuation, so they arrive far above the threshold and Shares grow with the square root of that. This is how the real game works too.
+
+**3. Running out of things to do.** The base game was finished in about 7 minutes. Now the first run is still 12 minutes, but the run after it is not finished: an active player needs about **1 hour online for 5 IPOs, 6.7 hours online for 10** and still has not bought the whole IPO shop (525 Shares) after 60 days (13 IPOs, 190 Shares; 384 with the pass). So yes, the IPO now carries the mid-game: there is something to do for weeks. The 2-hour binge ends at 4 IPOs (range 4-5), as intended. The honest caveat: the first hour is fast (IPO #1, #2, #3 at 12, 20 and 35 min), and after IPO #5 it slows down sharply.
+
+**4. Casual (30% active):** same first 12 minutes, IPO #5 at 82 min online (about a day), IPO #10 at 19 h online (about 4 days at 4.8 h/day), 13 IPOs in 60 days. A once-a-day 10-minute player gets 11 IPOs in 60 days. Casual players are not locked out.
+
+**5. Numbers that look off (suggestions only, `IpoConfig.lua` unchanged)**
+
+| What | Problem | Suggested fix |
+|---|---|---|
+| Shares per IPO (`SharesPerIpo = 10`, exponent 0.5) | Shares are measured against the threshold, so they stay about 10 per IPO however long the run is. The whole shop (525) needs about 53 IPOs; the sim reaches 190 Shares in 60 days of active play. Perks will feel unreachable after the first 5 or 6. | Make Shares grow with the IPO count, for example `SharesPerIpo * (1 + 0.3 * IPOs)`, or cut perk costs by about 40%. Re-run the sim after. |
+| Late IPOs are gated by logins, not by play time | Active, casual and idler all get 10-13 IPOs in 30-60 days: employees are kept, so offline Cash alone (8 h at 50%) clears the next threshold. Extra play time buys little after IPO #5. | Fine for retention, but if you want playing to matter, raise `StageGrowthPerIpo` a little (2.5 to 3) or lower the offline rate after IPO #5. Try one change at a time. |
+| Offline overshoot pays more Shares | A player who returns after hours can get 4-6x the Shares of one who plays through (39 vs 10, casual 62 vs 10 at IPO #1). | Optional: cap the ratio in `sharesFor` at 4 (max 20 Shares), so that logging in after being away is not a Shares exploit. |
+| Multiplier | x1.50 at IPO #1, x3.81 at #10, x4.22 at #12. Slow and diminishing, not a runaway. | OK as is. |
+| First 35 minutes | IPO #1, #2 and #3 land at 12, 20 and 35 min. The second run is faster than the first (employees and the multiplier are kept). | OK; makes the loop clear early. If it feels too fast, only the Seed to Series B values need to grow. |
+| Cooldown (60 s) | Not hit by the sim: the shortest gap between two IPOs is about 1 minute online for the 10-min casual (an offline-cash jump). Cooldown still protects against abuse. | OK. |
+
 ## 4. Ten findings
 
 1. **The first employee arrives at minute 5, not minute 1.** The simulated player buys three upgrades first (they pay back faster than an egg), then the first Garage egg at about minute 3, and it hatches 60 s later. M5's "free egg and first employee within 60 seconds" is needed; today nothing in the first minutes points at eggs.
