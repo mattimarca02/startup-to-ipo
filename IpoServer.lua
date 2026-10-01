@@ -186,7 +186,6 @@ local function goPublic(player, ipoNumber)
 	end
 
 	local reward = preview(player, ipo)
-	core.callOffPoachDeals(player) -- deals against you end (poachers get their Cash back), Counter-Offer is off
 	local after = {
 		count = ipo.count + 1,
 		shares = ipo.shares + reward.shares,
@@ -209,6 +208,11 @@ local function goPublic(player, ipoNumber)
 	if not ok then
 		return false, "The IPO couldn't be saved. Nothing changed: try again in a moment."
 	end
+
+	-- Only now that the IPO is saved: deals against you end (poachers get their Cash back) and your
+	-- Counter-Offer is off. A failed save leaves every deal as it was. Nothing is needed before the
+	-- save: data.ready is false, so no new deal can start, and one that finishes meanwhile is refunded.
+	core.callOffPoachDeals(player)
 
 	ipo.count = after.count
 	ipo.shares = after.shares

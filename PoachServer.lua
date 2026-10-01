@@ -650,9 +650,10 @@ function PoachServer.isBusy(player)
 	return false
 end
 
--- Going public (IpoServer calls this right before the IPO is saved): a negotiation against this
--- player is called off and the poacher gets their Cash back, and this player's own open
--- Counter-Offer is dropped. No new deal can start while the IPO is saved (data.ready is false).
+-- Going public (IpoServer calls this right after the IPO save worked, never before: a failed save
+-- changes nothing): a negotiation against this player is called off and the poacher gets their
+-- Cash back, and this player's own open Counter-Offer is dropped. No new deal can start while the
+-- IPO is saved (data.ready is false), and one that finishes meanwhile is refunded by finish().
 function PoachServer.callOffForIpo(player)
 	local negotiation = negotiations[player.UserId]
 	if negotiation then
