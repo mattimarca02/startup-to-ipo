@@ -80,6 +80,11 @@ Play-through rate is Roblox's #1 discovery signal.
 - Phone layout check of the M5 goal card (portrait 320x568 and landscape 667x375) done by hand, and the poach shield timer display after grantFreeEgg.
 - F6: poach refund after a crash.
 - From M6: the daily claim's two-server gap (F10). With no session lock, a player who hops to a second server before the first server's claim save lands loads the old save there and can claim the same day again. Whichever server saves last wins, so the save normally ends with one reward and loses the other server's seconds of progress; a reward only survives twice if it left the save in between (e.g. the hatched employee was poached by someone else). Closed by the session lock above.
+- From the M6 review (docs/reviews/M6_REVIEW.md), Low findings not fixed:
+  - M6 F2: on Day 7, check `IpoServer.isBusy` before the egg is granted, so a Shares refusal can't consume the day with only part of the reward.
+  - M6 F4: the Studio Debug "Daily: next day" and "reset" buttons are saved to the real save (note it in the row text).
+  - M6 F5: the gift chip's room (`CHIP_ROOM`) shrinks the valuation bar and goal card on 320 px phones; check 320x568 and 568x320 by hand with the goal tracker showing, else put the chip under the bar on narrow screens.
+  - M6 F7: the chip's poach-panel hook gives up after 30 s; wait without a timeout or listen to `PlayerGui.ChildAdded`.
 - Before launch: read Roblox's current policy pages on rewards (Paid Random Items, monetization, and anything on daily or login rewards) in the Creator Hub and confirm the M6 calendar still fits (no Robux in the daily window, fixed and visible rewards, odds shown for the eggs).
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums.
