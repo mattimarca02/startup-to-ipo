@@ -2,7 +2,7 @@
 
 PR #6, branch `milestone-4-ipo`. Code reviewed at commit `e9be034`. All `file:line` references point at that commit.
 
-**Status: in progress.** Sections are added and committed one at a time, so nothing is lost if the review stops halfway.
+**Status: complete.** Ranked findings and the verdict are in sections 8 and 9.
 
 ## Severity scale
 
@@ -196,19 +196,50 @@ Checked against the save written during the IPO (`TycoonCore.lua:240-252`) and t
   - The IPO screen's maximum incubator count is worked out from IpoConfig (`EmployeeClient.lua:478`).
 - **The only plain numbers in IpoServer and IpoClient** are UI timings: the pad cooldown of 3 s, the confirm timeout of 15 s and the label distance.
 
-## Coverage so far
+## 8. All findings, ranked
+
+| # | Severity | Where | What breaks | Fix |
+|---|---|---|---|---|
+| F9 | **High** | `TycoonCore.lua:374`, `ShopServer.lua:307`, `PoachServer.lua:656` | Leaving while the save is still loading writes a save without `team`, `poach` and `ipo`: employees, HR and IPO progress are lost. Older than M4; M4 makes it worse. | Set `data.loaded` only after every `setupPlayer` has finished, inside `pcall`. Keep `gained` notes in `data.poach.gained` until resolved. |
+| F1 | Medium | `TycoonCore.lua:248-250`, `:264`, `PoachServer.lua:628-637` | An IPO resets the HR level; ROADMAP says it's kept. | Remove the reset, update the 3 texts, consider a short Poach Shield after an IPO. |
+| F2 | Medium | `TycoonCore.lua:203-211`, `EmployeeServer.lua:498-502` | Code that doesn't know a section deletes it: an old server wipes `ipo` and incubators 4 and 5 during the M4 rollout or a rollback. | Copy back unknown sections in `save()`. Publish M4 with **Shut down all servers**. |
+| F3 | Low | `PoachServer.lua:466`, `:104-107`, `:615-626` | A Counter-Offer during the poacher's IPO save can wipe the payment the poacher should get. A victim can go public with an open Counter-Offer and lose the buy-back. | Refuse a Counter-Offer while the poacher isn't ready; count an open Counter-Offer in `isBusy`. |
+| F4 | Low | `IpoClient.lua:594-614` | The confirm screen doesn't count the eggs that will be lost or warn about ready ones, and its Cash amount can be out of date. | Have the server send the egg counts, show a warning for ready eggs, refresh the Cash. |
+| F5 | Low | `TycoonCore.lua:382-391` | Old saves get an uncapped valuation, so lots of Shares on the first IPO. | `math.min(legacyValuation, IpoConfig.ipoValuation(0))`. |
+| F6 | Low | `PoachServer.lua:281-298`, `:615-626` | After a crash, an unfinished poach can refund Cash from before the IPO into the new run. | Accept it and list it in ROADMAP "Known low risks". |
+| F7 | Low | `IpoServer.lua:235`, `:124-134`, `:119-121` | "Still loading" shows during an IPO; `addEarnings` has no NaN check (not reachable today); `isBusy` is unused. | Show "Your IPO is being filed", reject NaN and infinity, use or remove `isBusy`. |
+| F10 | Low | no session lock (M9) | Leaving mid-IPO and joining another server fast can undo the IPO. Nothing is duplicated. | M9 session locking. |
+| F8 | Balance | `IpoConfig.lua:25`, `:31` | Each run gets much longer (stages x38 by IPO 10, multiplier only x3.6). | Try 1.3 and 1; rerun `tools/economy_sim.py` with the real values. |
+
+**Counts:** Critical 0 · High 1 · Medium 2 · Low 6 · plus 1 balance note.
+
+## 9. Verdict
+
+**Block the merge until F9, F1 and F2 are fixed.**
+
+- They're all small changes in TycoonCore and PoachServer, which this branch already claims.
+- **F9 is older than M4, but it should still be fixed here.** It's the only finding where an ordinary moment (leaving right after joining) destroys a save, and the IPO section is the most valuable part of the save.
+- **F1 needs a decision either way.** Either the code keeps the HR level, or ROADMAP changes. Right now they disagree.
+- **F2 only needs the copy-back code and the right publish button.**
+- **The Low findings can go in this PR or the next one.** None of them can be triggered by a client, and the game isn't launched yet.
+
+The server authority, the IPO lock, the atomic IPO save, the Shareholder placeholder and the config layout all hold up well.
+
+## Coverage
 
 | Area | Status |
 |---|---|
-| TycoonCore: save, load, `commitIpo`, legacy valuation, income loop | Read in full |
-| IpoServer: Go Public, perks, pad, setup, serialize, Debug | Read in full |
-| IpoConfig | Read in full |
-| PoachServer: `isBusy`, Counter-Offer, transfer, reconcile, HR | Read in full |
-| EmployeeServer: setup, serialize, `clearIncubators`, `refreshCapacity` | Read |
-| IpoClient: confirm screen, IPO tab texts, "Done" banner | Read |
-| Server authority (every IPO remote action, faking or skipping requirements) | **Left** |
-| Data integrity: rejoin mid-IPO, shutdown during an IPO, double-firing, old and corrupted saves | **Left** (first-pass notes only) |
-| Reset scope (exactly what's wiped and kept) | **Left** (partly covered by F1) |
-| M2 eggs (EggsEnabled false, perks, Instant Hatch) and M3 poaching | **Left** (partly covered by F3, F4, F6) |
-| Monetization: Shareholder pass placeholder (ShopConfig, ShopServer, ShopClient) | **Left** |
-| All IPO numbers in IpoConfig (sweep for hard-coded values) | **Left** |
+| TycoonCore: save, load, `commitIpo`, legacy valuation, income loop | Done |
+| IpoServer: Go Public, perks, pad, setup, serialize, Debug | Done |
+| IpoConfig | Done |
+| PoachServer: `isBusy`, Counter-Offer, transfer, reconcile, HR | Done |
+| EmployeeServer: setup, serialize, hatching, Instant Hatch, release and add, IPO hooks | Done |
+| ShopServer: setup, pass checks, receipts, Debug gate, Shares multiplier | Done |
+| IpoClient, ShopClient (purchase prompts), EmployeeClient (perk display) | IPO-related parts |
+| Server authority | Done (section 2) |
+| Data integrity | Done (section 3). Checked by reading the code; no playtest, to keep the real DataStore save safe. |
+| Reset scope | Done (section 4) |
+| M2 eggs and M3 poaching | Done (section 5) |
+| Monetization | Done (section 6) |
+| IPO numbers in IpoConfig | Done (section 7) |
+| Not covered | PoachClient, the full layout of IpoClient on a phone, `sync_monetization.py` beyond the `id = 0` rule |
