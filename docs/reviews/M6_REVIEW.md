@@ -36,7 +36,11 @@ Finding numbers here (F1, F2, ...) are this review's own. "M4 F9", "M4 F10" and 
 
 **F1 (Low): a session whose load failed still shows a claimable reward.** When `load()` fails (`TycoonCore.lua:174-177`), `saved` is nil, the daily section gets defaults and `publish` sets `DailyReady = true` with `DailyBlocked = ""`. The window auto-opens with a live Claim button, and every tap answers `NotLoaded` (`DailyServer.lua:220`). Nothing is granted, so it's safe, but the player is invited to claim something that can never work. *Fix:* in `publish`, set `DailyBlocked = TEXTS.NotLoaded` when `not data.loaded`, and `DailyAutoOpen = false` in that case.
 
+> **Status:** **Fixed** in d5d0029.
+
 **F2 (Low): a Day 7 claim can consume the day without the Shares.** If `IpoServer.grantShares` returns false (`DailyServer.lua:182-185`) the egg and Cash are already granted and the day is used up; the Shares are only `warn`ed. Today it can only fail for a bad config value (the claim already refuses while `ipo.busy`), so it's a safety-net gap, not a live bug. *Fix:* check `sharesFor(reward) > 0 and IpoServer.isBusy(data)` before step 1, so a refusal happens before anything is granted.
+
+> **Status:** **Skipped** (M9 list), commit 85a5ff9.
 
 ## 2. Day boundary and time
 
@@ -53,6 +57,8 @@ Finding numbers here (F1, F2, ...) are this review's own. "M4 F9", "M4 F10" and 
 | Unfair streak loss: egg day with every incubator busy | Refused before anything changes (`:163-170`), the day isn't consumed, and with `GraceDays = 1` even a whole blocked day costs nothing. Only a player who *also* missed the day before loses the place. Acceptable. |
 
 **F3 (Low): `ResetHourUtc` is labelled "safe to change any time", but changing it opens a one-time extra claim.** `DailyConfig.lua:8` says every number below is safe to change; `ResetHourUtc` (`:38`) moves every day number. Moving it *earlier* (e.g. 12 → 0) makes the current hours of the day count as a new day: a player who claimed at 06:00 UTC under the old value can claim again at 07:00. Moving it later just delays the next claim. The config check (`:114-141`) also doesn't check that it's a whole number from 0 to 23. *Fix:* in the header, list `ResetHourUtc` as "decide once before shipping; changing it later lets everyone claim one extra day", and warn in the config check if it's not an integer 0-23.
+
+> **Status:** **Fixed** in a4ae18f (comment only; the config check for a non-integer hour is not added).
 
 ## 3. Two servers at once (M4 F10)
 
@@ -96,6 +102,8 @@ The client rows (`ShopClient.lua:560-562`) are only built when the remote exists
 
 **F4 (Low): Debug changes are saved to the real save.** With Studio API access on, `DailyNextDay` and `DailyReset` change `data.daily`, and the next save writes it to the live DataStore key. A developer who clicks "+1 day" and claims a few times keeps those eggs, Cash and Shares on their real account. Same behaviour as the other debug tools (`GrantProduct`), so it's a convention, not a new hole. *Fix (optional):* note it in the row's description ("saved to your real save").
 
+> **Status:** **Skipped** (M9 list), commit 85a5ff9.
+
 ## 6. Client
 
 **Result: display-only, `InvokeServer` is in a `pcall` (`DailyClient.lua:522-533`), no leaking loops** (one 1-second loop for the countdown, `:604-607`; every connection is made once at script start, and the script lives in StarterPlayerScripts, which doesn't re-run on respawn). No DataStore call on the server side of M6 except through `save()`, which is `pcall`ed (`TycoonCore.lua:239-241`). Attribute reads all have defaults (`attr`, `:72-78`). The chip sits vertically inside the valuation bar's height (`:545`), and the M5 goal card sits under the bar (`OnboardingClient.lua:276`), so they can't overlap. The chip hides while a poach panel shows (`DailyClient.lua:474-475`).
@@ -112,15 +120,23 @@ The client rows (`ShopClient.lua:560-562`) are only built when the remote exists
 
 **F5 (Low): the chip's room shrinks the valuation bar and the M5 goal card on the narrowest phones.** On a 320 px portrait screen the bar's minimum width went from 180 to 150 (`IpoClient.lua:247`), so it ends up 158 px wide, and the goal card copies that width (`OnboardingClient.lua:277`). Both use `TextScaled` with an 8 pt minimum, so "Hire 3 employees" and "$1.2K / $1.8K · x1.50 · 📜 12" get small but don't break. On 568 x 320 landscape, `CHIP_ROOM` pushes the bar from the top row to the second row (`IpoClient.lua:233-239`), which moves the goal card down to y = 146 on a 320 px tall screen. *Fix:* check both sizes in **Test → Device** with the goal tracker showing. If the text is too small, put the chip *under* the right end of the bar on screens narrower than about 340 px (the plan's own fallback, open question 4) instead of shrinking the bar.
 
+> **Status:** **Skipped** (Mattia checks the phone layout by hand; M9 list), commit 85a5ff9.
+
 **F6 (Low): IpoClient now waits forever for DailyConfig.** `IpoClient.lua:13` uses `WaitForChild("DailyConfig")` with no timeout. If the new IpoClient is pasted into Studio before `DailyConfig` is added to ReplicatedStorage, the whole IPO HUD and window never build (only an "infinite yield" warning). *Fix:* `WaitForChild("DailyConfig", 10)` with `CHIP_ROOM = 0` and no reminder when it's missing, or say in README's install steps that DailyConfig goes in first.
 
+> **Status:** **Fixed** in 9053170.
+
 **F7 (Low): the chip's poach-panel hook gives up after 30 s.** `DailyClient.lua:563-566` waits 30 s for `PoachWindowGui` and 10 s per panel. On a slow phone that loads PoachClient later, the chip never hides behind the Negotiation or Poach Alert banner for that session. *Fix:* no timeout (it's a `task.spawn` already), or listen to `playerGui.ChildAdded`.
+
+> **Status:** **Skipped** (M9 list), commit 85a5ff9.
 
 ## 7. Other findings
 
 **F1 and F2** are in section 1, **F3** in section 2.
 
 **F8 (Low): CLAUDE.md doesn't list M6 yet.** `DailyConfig`, `DailyRemotes`, the `daily` save block and the Daily toast offset (-240) are missing from the project rules file. ROADMAP's M6 status already says this needs Mattia's OK. *Fix:* add them before merging, so the next milestone's Claude sees the section in the save format and doesn't write over it.
+
+> **Status:** **Fixed** in f56cb6a.
 
 Not run here: `tools/daily_test.py` needs the `luau` binary, which isn't installed in this environment. The test file runs the real `DailyServer.lua` and `DailyConfig.lua` with a fake Roblox, which is the right design; Mattia should run it once on the Mac before merging.
 
@@ -130,6 +146,10 @@ A trial merge of each PR into `milestone-6-daily-rewards` conflicts only in **CO
 
 - **#13 (IPO Shares growth)** changes only `IpoConfig.sharesFor`. It doesn't touch `IpoServer.grantShares` or the `daily` section, and daily Shares don't go through `sharesFor`, so they stay at 3. But IPOs will pay more Shares, so the plan's "+7% Shares" for the Day 7 reward gets smaller. Re-run `tools/economy_sim.py --daily` after both merge. `docs/ECONOMY.md` and `tools/economy_sim.py` merge cleanly in text, but check that the `--daily` hook still uses the new formula.
 - **#14 (security fixes)** changes `IpoServer.lua` in different places (the `core` comment and `goPublic`), not `grantShares`. In `TycoonCore.lua` it retries the load and kicks the player when the load fails; that makes **F1** impossible on live servers. It doesn't touch `save()`, `KNOWN_SECTIONS` or the setup gate, so the `daily` section is unaffected.
+
+## Status after fixes
+
+F1, F3, F6, F8 fixed; F2, F4, F5, F7 skipped and listed in ROADMAP's M9 hardening list. `tools/daily_test.py`: 69 passed, 0 failed (after F1).
 
 ## Summary
 
