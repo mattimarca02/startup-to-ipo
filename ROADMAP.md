@@ -14,8 +14,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
-- BUILT, REVIEW FIXES APPLIED, NOT YET PLAYTESTED: M5 (2026-10-01). Review (docs/reviews/M5_REVIEW.md): F1 (card now finds the valuation bar in IpoGui, fits narrow screens) and F3 (free egg also gives the 15-minute poach protection) fixed; F2 and the other Lows listed in M9. Still needs Studio paste of OnboardingClient + OnboardingServer. Original notes: on branch milestone-5-onboarding (pushed, no PR yet). Code only: nothing synced to Studio or Roblox. New OnboardingServer (registered in the F9 load gate), OnboardingClient, OnboardingConfig and an optional `onboarding` save section. A brand-new player (no progress at all) gets one free Garage Egg, incubating on spawn, given only by the server. They tap the normal Hatch prompt (no auto-hatch exception). A glowing arrow goes pad, then egg, then pad, and ends after 1 employee + 2 upgrades. A goal tracker under the valuation bar ("Hire 3 employees", "Reach Seed stage") stays until both are done, with an X that is saved. Old saves with progress count as onboarded: no egg, arrow or tracker. No reward, no economy or IPO numbers changed, `EggsEnabled` untouched. Studio Debug: "Restart tutorial", "Act like an old save". Waiting on Mattia's playtest (new player, rejoin mid-tutorial, old save, phone size), then the PR.
-- Next steps: M5 playtest + PR, then M6 (daily rewards).
+- DONE M5 (2026-10-01): onboarding merged (PR #15, branch milestone-5-onboarding). Review (docs/reviews/M5_REVIEW.md) found no Critical or High issues; F1 (goal card finds the valuation bar, fits narrow screens) and F3 (free egg also gives the 15-minute poach protection) fixed; the other Lows are in M9. Studio playtest passed: new player, poach shield, old save, rejoin mid-tutorial. New players get one free Garage Egg, a glowing arrow and a goal tracker; old saves count as onboarded. New optional `onboarding` save section. Publishing M5 needs **Shut down all servers** (new save section).
+- Next steps: Shareholder pass on PC (new group Open Cloud key is in .env.txt), then M6 (daily rewards).
 
 ## Milestones, in order
 
@@ -70,9 +70,10 @@ Play-through rate is Roblox's #1 discovery signal.
   - F8: server hop before the first save can re-give the egg (needs the session lock above).
   - F9: warn on bad values in the onboarding section.
   - F10: the "All goals done!" card ignores open windows for 3 s.
+- Phone layout check of the M5 goal card (portrait 320x568 and landscape 667x375) done by hand, and the poach shield timer display after grantFreeEgg.
 - F6: poach refund after a crash.
 - F8: IPO balance retune.
-- Before launch: sync ALL scripts to Studio and verify checksums (ShopConfig Luck Boost text was still stale in Studio on 2026-10-01 because the Studio write was permission-blocked).
+- Before launch: sync ALL scripts to Studio and verify checksums.
 
 ### Launch requirements (start now, they take time)
 - New games first reach age-checked players 16+ only. Under-16s unlock after 250 plays by "highly engaged" players within 60 days.
