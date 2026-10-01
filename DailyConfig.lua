@@ -75,7 +75,7 @@ function DailyConfig.dayNumber(seconds)
 	return math.floor((seconds - DailyConfig.ResetHourUtc * 3600) / DAY_SECONDS)
 end
 
--- When the day after `day` starts (os.time() seconds)
+-- When day number `day` starts (os.time() seconds). The next reset is dayStart(today + 1).
 function DailyConfig.dayStart(day)
 	return day * DAY_SECONDS + DailyConfig.ResetHourUtc * 3600
 end
