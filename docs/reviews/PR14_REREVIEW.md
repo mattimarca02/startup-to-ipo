@@ -31,3 +31,34 @@ Severity scale: the same as `PR14_REVIEW.md` (Critical = cheat or data/Robux los
 ### R4 (Low): "A failed save leaves every deal as it was" isn't quite true, and the poacher gets the wrong reason
 `IpoServer.lua:212-214`, `PoachServer.lua:376-377`, comment at `PoachServer.lua:653-656`. A deal whose timer ends during the save is cancelled even if the save then fails, and the poacher reads "Deal called off: X got protected." X wasn't protected: X was busy filing an IPO (which may have failed). Cash is right either way.
 **Fix:** reword the comment ("a deal whose timer ends during the save is refunded, even if the save then fails"), and in `finish` give the un-ready case its own message (shared with R3's fix): "X is going public".
+
+## 2. F1: type-checked cash, owned and lastSeen
+
+**Result: every bad shape of the three fields is rejected without a kick, and no real Cash value can be clamped away.** Three Lows, all about what "sanitized" means for the rest of the join.
+
+| Input | Result |
+|---|---|
+| `cash`: word, table, boolean, NaN, ±inf, negative | 0 with a warning (`TycoonCore.lua:196-201`) |
+| `cash`: numeric string ("42"), fraction | 42; floored |
+| `cash`: huge but finite | Clamped to 2^53, not to 0. Cash is an `IntValue` (64-bit), and no real save can get near 2^53: the best upgrade earns 120/s, and every spend is checked against Cash, so it can't go negative either. **No real progress is destroyed.** |
+| `owned`: not a table | Empty list with a warning (`:202-212`) |
+| `owned`: mixed junk | Strings kept, the rest skipped with a warning. Unknown upgrade names are kept and saved back (not lost). `owned` has always been a list (since `e381c06`), so the dictionary case can't come from old code. |
+| `lastSeen`: string, NaN, ±inf, table | Dropped with a warning: no offline income (`:213-218`) |
+| `lastSeen`: in the future | `math.clamp(... , 0, cap)` at `:566` gives 0 |
+| The whole save isn't a table | Treated as no save (`:511-514`): see R5 |
+| Nested bad values in other sections | Not F1's job, and still handled by each module: `ShopServer`, `EmployeeServer`, `PoachServer`, `OnboardingServer` and `DailyServer` all check `typeof` and skip bad entries. Exception: R8. |
+
+The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M6 "all modules loaded" gate is unchanged: `data.loaded = ok` is still set only at `:554`.
+
+**M5 `hasProgress` (second free egg).** A sanitized value only zeroes Cash or upgrades that were garbage. A second free egg needs all of these at once: no `onboarding` section (a save from before M5), `cash` and `owned` both garbage, and no employees, eggs, IPO, Shares, receipts or poach notes (`OnboardingServer.lua:41-52, 255, 260`). Such a save had no real progress to lose, so the egg is harmless. The one real path to a "new player" is R5.
+
+### R5 (Low): a save that isn't a table is treated as a brand-new player, and then overwritten
+`TycoonCore.lua:511-514`. `saved = nil` keeps `ok = true`, so the player gets the new-player poach shield (`:544`, `ok and saved == nil`), the M5 free egg (`savedOnboarding` is nil and `hasProgress` is false), and their first save overwrites the unreadable value. CLAUDE.md says "never delete what you don't know". A non-table value can only come from a tool or a bug outside this code, so it's rare, but whatever was there is gone after one autosave.
+**Fix:** keep the original value: `data.unknownSections.corruptSave = saved` before setting `saved = nil` (it is then written back next to the new save, so it can be recovered by hand), and pass `isNew = false` / count the player as `legacy` so no free egg or new-player shield is handed out on a save that only *looks* empty.
+
+### R6 (Low): a bad `lastSeen` that is a valid number gives the full offline cap
+`TycoonCore.lua:213-218, 564-571`. `lastSeen = 0`, `-1`, or `-1e12` pass the check (finite numbers), so `away` is clamped to the cap: 8 hours (plus the Night Shift perk) of offline income, which also goes through `addEarnings` and raises the IPO valuation. It needs a corrupt save, so it isn't a cheat, but it is a reward for bad data.
+**Fix:** also require `rawSeen > 0` (any real `os.time()` is far above 0), or ignore values more than a year old.
+
+### R7 (Low): no proof the 22 checks pass
+`tools/daily_test.py:243-305`. The test copies the code between the `SANITIZE` markers and stubs `typeof` with `type`, which is fine for these inputs. It couldn't be run here (no `luau`). The checks read correctly, but run `python tools/daily_test.py` once before merging and paste the "N passed, 0 failed" line in the PR.
