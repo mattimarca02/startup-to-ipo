@@ -222,6 +222,19 @@ local function sanitizeSave(saved, playerName)
 end
 -- SANITIZE-END
 
+-- A save that exists but isn't a table is unreadable, not "a new player": it counts as a failed
+-- load (no free egg, no shield, and data.loaded stays false so nothing overwrites it). A missing
+-- save (nil) stays a genuine new player.
+-- READABLE-START
+local function readableSave(saved, ok, name)
+	if ok and saved ~= nil and typeof(saved) ~= "table" then
+		warn("Not using " .. name .. "'s save: it isn't a table (" .. typeof(saved) .. ")")
+		return false
+	end
+	return ok
+end
+-- READABLE-END
+
 -- Returns (save or nil, worked). A failed read is tried again (LOAD_TRIES in all, waiting a bit
 -- longer each time). If it still fails, the player is kicked (see PlayerAdded), never left
 -- playing a session that can't save.
@@ -512,6 +525,7 @@ local function onPlayerAdded(player)
 	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
+	ok = readableSave(saved, ok, player.Name)
 	if not ok and (getStore() or not RunService:IsStudio()) then
 		-- The DataStore didn't answer after every try (or there is none on a live server): playing on
 		-- could never save, so send them back. Only Studio without a DataStore plays unsaved.
@@ -521,10 +535,6 @@ local function onPlayerAdded(player)
 	end
 	local lastSeen = nil
 	local setupOk, setupError = pcall(function()
-		if saved and typeof(saved) ~= "table" then
-			warn("Ignoring " .. player.Name .. "'s save: it isn't a table (" .. typeof(saved) .. ")")
-			saved = nil
-		end
 		if saved then
 			local savedCash, savedOwned
 			savedCash, savedOwned, lastSeen = sanitizeSave(saved, player.Name)
