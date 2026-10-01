@@ -243,22 +243,27 @@ end
 
 -- IPO (milestone 4) -----------------------------------------------------
 
--- Going public: the save is written first with the reset already in it (Cash, garage upgrades,
--- eggs in incubators, HR Department, and IpoServer's new "ipo" section). Only if that worked
--- does the game change to match. If it failed, nothing changed. Nothing here waits after the
--- save, so a save that is waiting behind this one (autosave, leaving) always sees the result.
+-- Going public: the save is written first with the reset already in it (what IpoConfig.Resets
+-- turns on, and IpoServer's new "ipo" section). Only if that worked does the game change to
+-- match. If it failed, nothing changed. Nothing here waits after the save, so a save that is
+-- waiting behind this one (autosave, leaving) always sees the result.
 local function commitIpo(player, newIpo)
 	local data = playerData[player]
 	if not data then return false end
+	local resets = IpoConfig.Resets
 	local ok = save(player, function(payload)
-		payload.cash = IpoConfig.StartingCash
-		payload.owned = {}
-		if payload.team then
+		if resets.Cash then
+			payload.cash = IpoConfig.StartingCash
+		end
+		if resets.Upgrades then
+			payload.owned = {}
+		end
+		if resets.Eggs and payload.team then
 			for i in ipairs(payload.team.incubators) do
 				payload.team.incubators[i] = false
 			end
 		end
-		if payload.poach then
+		if resets.HRDepartment and payload.poach then
 			payload.poach.hrLevel = 0
 		end
 		payload.ipo = newIpo
@@ -267,14 +272,22 @@ local function commitIpo(player, newIpo)
 		return ok
 	end
 
-	data.cash.Value = IpoConfig.StartingCash
-	table.clear(data.owned)
-	for name, item in pairs(data.items) do
-		item:Destroy()
-		data.items[name] = nil
+	if resets.Cash then
+		data.cash.Value = IpoConfig.StartingCash
 	end
-	EmployeeServer.clearIncubators(player)
-	PoachServer.resetHrDepartment(player)
+	if resets.Upgrades then
+		table.clear(data.owned)
+		for name, item in pairs(data.items) do
+			item:Destroy()
+			data.items[name] = nil
+		end
+	end
+	if resets.Eggs then
+		EmployeeServer.clearIncubators(player)
+	end
+	if resets.HRDepartment then
+		PoachServer.resetHrDepartment(player)
+	end
 	updateIncome(player)
 	refreshPad(player)
 	return true

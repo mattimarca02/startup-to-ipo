@@ -3,9 +3,9 @@
 --
 -- Valuation = all the Cash your startup earned (income, offline earnings and Cash packs).
 -- It climbs through funding stages; at the last one you can go public ("IPO").
--- Going public resets your Cash, garage upgrades, eggs in incubators and HR Department,
+-- Going public resets your Cash, garage upgrades and eggs in incubators (see Resets below),
 -- and in return gives a permanent income multiplier and Shares to spend on permanent perks.
--- Employees, game passes, boosts, shields, Shares and perks are all kept.
+-- Employees, the HR Department, game passes, boosts, shields, Shares and perks are all kept.
 --
 -- Safe to change any time: thresholds, rewards, perk prices and effects.
 -- Never change a perk "key" once players have bought it: saves store the key.
@@ -38,6 +38,23 @@ IpoConfig.SharesExponent = 0.5
 
 IpoConfig.StartingCash = 0 -- Cash after an IPO (the first garage upgrade is free)
 IpoConfig.CooldownSeconds = 60 -- wait at least this long between two IPOs
+
+-- What going public resets (true) or keeps (false). The IPO screen lists them from here.
+-- Always kept: employees, game passes, boosts, shields, Shares, perks and the IPO count.
+-- Always reset: the valuation (it's what the next IPO is measured on).
+IpoConfig.Resets = {
+	Cash = true, -- back to StartingCash
+	Upgrades = true, -- garage upgrades and the green pad
+	Eggs = true, -- eggs in incubators
+	HRDepartment = false, -- ROADMAP M4: the HR level is kept
+}
+-- How the IPO screen names each one, in this order
+IpoConfig.ResetNames = {
+	{ key = "Cash", name = "Cash" },
+	{ key = "Upgrades", name = "garage upgrades" },
+	{ key = "Eggs", name = "eggs in incubators" },
+	{ key = "HRDepartment", name = "HR Department" },
+}
 
 -- IPO shop: permanent perks bought with Shares. Each level adds perLevel (see "effect" for
 -- what that number means). costs[n] = Shares for level n, so #costs is the max level.
@@ -83,6 +100,17 @@ function IpoConfig.getPerk(key)
 		end
 	end
 	return nil
+end
+
+-- The ResetNames entries an IPO resets (reset = true) or keeps (reset = false)
+function IpoConfig.resetItems(reset)
+	local items = {}
+	for _, item in ipairs(IpoConfig.ResetNames) do
+		if (IpoConfig.Resets[item.key] == true) == reset then
+			table.insert(items, item)
+		end
+	end
+	return items
 end
 
 -- What a perk adds at this level (0 when you don't have it)

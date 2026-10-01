@@ -80,6 +80,23 @@ local function valuation()
 	return attr("IpoValuation")
 end
 
+-- { "a", "b", "c" } -> "a, b and c"
+local function joinList(words)
+	if #words <= 1 then
+		return words[1] or ""
+	end
+	return table.concat(words, ", ", 1, #words - 1) .. " and " .. words[#words]
+end
+
+-- Names of what an IPO resets (true) or keeps (false), from IpoConfig.Resets
+local function resetNames(reset)
+	local names = {}
+	for _, item in ipairs(IpoConfig.resetItems(reset)) do
+		table.insert(names, item.name)
+	end
+	return names
+end
+
 local function sharesPassMultiplier()
 	local multiplier = 1
 	for _, pass in ipairs(ShopConfig.Passes) do
@@ -488,10 +505,24 @@ local rewardCard = makeCard(ipoPage, 20, "🎁", false)
 rewardCard.name.Text = "What you get"
 local resetCard = makeCard(ipoPage, 21, "🔄", false)
 resetCard.name.Text = "What resets"
-resetCard.desc.Text = "Cash, garage upgrades and the green pad, eggs in incubators, the HR Department, and your valuation (for the next IPO)."
+do
+	local resets = resetNames(true)
+	table.insert(resets, "your valuation (for the next IPO)")
+	local text = joinList(resets)
+	resetCard.desc.Text = text:sub(1, 1):upper() .. text:sub(2) .. "."
+end
 local keepCard = makeCard(ipoPage, 22, "🔒", false)
 keepCard.name.Text = "What you keep"
-keepCard.desc.Text = "Employees, game passes, Luck Boost, Instant Hatches and shields, your Shares, IPO shop perks and your IPO count."
+do
+	local keeps = { "Employees" }
+	for _, name in ipairs(resetNames(false)) do
+		table.insert(keeps, name)
+	end
+	for _, name in ipairs({ "game passes", "Luck Boost, Instant Hatches and shields", "your Shares", "IPO shop perks and your IPO count" }) do
+		table.insert(keeps, name)
+	end
+	keepCard.desc.Text = table.concat(keeps, ", ") .. "."
+end
 
 -- Right under the progress bar, so it's visible without scrolling (the confirm screen shows the full deal)
 local goButton = make("TextButton", {
@@ -597,12 +628,18 @@ goButton.Activated:Connect(function()
 	local count = ipoCount()
 	confirmFor = count + 1
 	local shares = IpoConfig.sharesFor(valuation(), count, sharesPassMultiplier())
+	local cashText = ShopConfig.formatCash((player:FindFirstChild("leaderstats") and player.leaderstats.Cash.Value) or 0)
+	local resets = {}
+	for _, item in ipairs(IpoConfig.resetItems(true)) do
+		table.insert(resets, item.key == "Cash" and ("your " .. cashText .. " Cash") or item.name)
+	end
+	local keeps = resetNames(false)
 	confirmText.Text = string.format(
 		'Go public with IPO #%d?\n\n<font color="#FFC83C">You get: 📜 %d Shares and %s income forever</font>\n\n'
-			.. '<font color="#FF8C8C">Resets: your %s Cash, garage upgrades, eggs in incubators and HR Department</font>\n\n'
-			.. "Employees, passes, boosts, shields and perks stay.",
+			.. '<font color="#FF8C8C">Resets: %s</font>\n\n'
+			.. "Employees, %spasses, boosts, shields and perks stay.",
 		confirmFor, shares, IpoConfig.formatMultiplier(IpoConfig.multiplier(count + 1)),
-		ShopConfig.formatCash((player:FindFirstChild("leaderstats") and player.leaderstats.Cash.Value) or 0))
+		joinList(resets), #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "")
 	confirm.Visible = true
 	confirmToken += 1
 	local myToken = confirmToken

@@ -5,8 +5,9 @@
 -- Everything is decided here on the server: targets, costs, shields, cooldowns and the random
 -- roll. The client only shows the state and asks for actions. The numbers live in
 -- CreatureConfig.Poaching; the Headhunter pass and Poach Shield live in ShopConfig.
--- IPO (IpoServer): the Recruiter Network perk lowers poach costs, an IPO resets the HR Department
--- (resetHrDepartment), and nobody can go public in the middle of a deal (isBusy).
+-- IPO (IpoServer): the Recruiter Network perk lowers poach costs, an IPO keeps the HR Department
+-- (unless IpoConfig.Resets.HRDepartment is turned on: resetHrDepartment), and nobody can go
+-- public in the middle of a deal (isBusy).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -585,7 +586,7 @@ local function buildHrPad(player, data)
 	label.TextStrokeTransparency = 0
 	label.Text = hrLabelText(data.poach.hrLevel)
 	label.Parent = gui
-	data.poach.hrLabel = label -- an IPO resets the level (see resetHrDepartment)
+	data.poach.hrLabel = label -- for resetHrDepartment
 
 	local lastTouch = 0
 	pad.Touched:Connect(function(hit)
@@ -625,7 +626,8 @@ function PoachServer.isBusy(player)
 	return false
 end
 
--- Going public resets the HR Department to level 0
+-- Sets the HR Department back to level 0. Going public only calls this when
+-- IpoConfig.Resets.HRDepartment is true; it's false, because ROADMAP M4 keeps the HR level.
 function PoachServer.resetHrDepartment(player)
 	local poach = getPoach(player)
 	if not poach then return end
