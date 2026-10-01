@@ -87,6 +87,11 @@ Play-through rate is Roblox's #1 discovery signal.
   - M6 F2: on Day 7, check `IpoServer.isBusy` before the egg is granted, so a Shares refusal can't consume the day with only part of the reward.
   - M6 F4: the Studio Debug "Daily: next day" and "reset" buttons are saved to the real save (note it in the row text).
   - M6 F7: the chip's poach-panel hook gives up after 30 s; wait without a timeout or listen to `PlayerGui.ChildAdded`.
+- From the PR #14 review (docs/reviews/PR14_REVIEW.md), Low findings not fixed:
+  - PR14 F4: if `poached()` returns false after a successful roll (the new duplicate refusal), `finish` keeps the poacher's Cash as if defended; refund `negotiation.cost` with a "deal fell through" message instead.
+  - PR14 F5: the give-back after a failed move ignores `EmployeeServer.addEmployee`'s result and its capacity check; add `EmployeeServer.restoreEmployee` that re-inserts the original employee at its old index and clears `team.outgoing[id]`.
+  - PR14 F7: during a DataStore outage the load retry makes 3 `GetAsync` calls per join; check `GetRequestBudgetForRequestType` before each retry (or accept it).
+  - PR14 F8: the comment on `PoachServer.isBusy` says a poacher can never stop an IPO, but a finished poach holds it for up to ~60 s while it saves; say so.
 - Before launch: read Roblox's current policy pages on rewards (Paid Random Items, monetization, and anything on daily or login rewards) in the Creator Hub and confirm the M6 calendar still fits (no Robux in the daily window, fixed and visible rewards, odds shown for the eggs).
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums.
