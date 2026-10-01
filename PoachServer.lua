@@ -6,8 +6,8 @@
 -- roll. The client only shows the state and asks for actions. The numbers live in
 -- CreatureConfig.Poaching; the Headhunter pass and Poach Shield live in ShopConfig.
 -- IPO (IpoServer): the Recruiter Network perk lowers poach costs, an IPO keeps the HR Department
--- (unless IpoConfig.Resets.HRDepartment is turned on: resetHrDepartment), and nobody can go
--- public in the middle of a deal (isBusy).
+-- (unless IpoConfig.Resets.HRDepartment is turned on: resetHrDepartment), nobody can go public
+-- in the middle of their own deal (isBusy), and going public calls off deals against you (callOffForIpo).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -617,12 +617,13 @@ end
 
 -- IPO (IpoServer and TycoonCore call these) ---------------------------------------
 
--- True while this player is in a deal: poaching someone, being poached, has a Counter-Offer
--- open, or an employee of theirs is still moving between two saves. Going public waits until it's over.
+-- True while this player is poaching someone, or an employee of theirs is still moving between
+-- two saves. Going public waits until it's over. Deals against them don't count: going public
+-- calls those off (callOffForIpo), so a poacher can never stop someone's IPO.
 function PoachServer.isBusy(player)
 	local poach, data = getPoach(player)
 	if not poach then return false end
-	if poach.negotiation or negotiations[player.UserId] or poach.counterOffer then return true end
+	if poach.negotiation then return true end
 	for _, employee in ipairs(data.team and data.team.employees or {}) do
 		if inTransit[employee.id] then return true end
 	end
@@ -630,6 +631,24 @@ function PoachServer.isBusy(player)
 		if inTransit[id] then return true end
 	end
 	return false
+end
+
+-- Going public (IpoServer calls this right before the IPO is saved): a negotiation against this
+-- player is called off and the poacher gets their Cash back, and this player's own open
+-- Counter-Offer is dropped. No new deal can start while the IPO is saved (data.ready is false).
+function PoachServer.callOffForIpo(player)
+	local negotiation = negotiations[player.UserId]
+	if negotiation then
+		cancel(negotiation, "Deal called off: " .. player.DisplayName .. " went public.")
+	end
+	local poach = getPoach(player)
+	local offer = poach and poach.counterOffer
+	if offer then
+		poach.counterOffer = nil
+		sendCounterOffer(player)
+		local creature = CreatureConfig.getCreature(offer.creature)
+		send(player, "Notice", { text = "Going public: the Counter-Offer for " .. (creature and creature.name or "your employee") .. " is off" })
+	end
 end
 
 -- Sets the HR Department back to level 0. Going public only calls this when

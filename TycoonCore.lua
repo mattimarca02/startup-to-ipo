@@ -309,6 +309,9 @@ IpoServer.init({
 	isPoachBusy = function(player)
 		return PoachServer.isBusy(player)
 	end,
+	callOffPoachDeals = function(player)
+		PoachServer.callOffForIpo(player)
+	end,
 	countEggs = function(player)
 		return EmployeeServer.countEggs(player)
 	end,
