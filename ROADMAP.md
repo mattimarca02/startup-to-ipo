@@ -67,7 +67,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - Reset all dev saves, set EggsEnabled = true, run sync_monetization (PC), final 2-client test, then publish.
 - From the M4 re-review (docs/reviews/M4_REREVIEW.md), 5 Low findings:
   1. If the pass check times out, loading continues without passes; pay the missing offline difference when it answers, and refuse `GoPublic` until it answers.
-  2. Type-check `saved.cash`/`saved.owned` inside the load `pcall` instead of kicking the player on a bad value.
+  2. Type-check `saved.cash`/`saved.owned` inside the load `pcall` instead of kicking the player on a bad value. (Done in PR #14 F1, c564c96.)
   3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule.
   4. Kept unknown sections are frozen as of join and go stale; re-check them against `team`/`ipo` on load.
   5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
