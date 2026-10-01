@@ -277,14 +277,16 @@ local function place()
 		card.Size = UDim2.fromOffset(size.X.Offset, card.Size.Y.Offset)
 	elseif gui.AbsoluteSize.Y < 460 then -- short phone screen: under the HUD button row
 		card.Position = UDim2.fromOffset(10, 76)
+		card.Size = UDim2.fromOffset(math.min(250, gui.AbsoluteSize.X - 20), card.Size.Y.Offset)
 	else
 		card.Position = UDim2.fromOffset(98, 84)
+		card.Size = UDim2.fromOffset(math.clamp(gui.AbsoluteSize.X - 108, 180, 250), card.Size.Y.Offset)
 	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 place()
 task.spawn(function()
-	local ipoGui = playerGui:WaitForChild("IpoWindowGui", 30)
+	local ipoGui = playerGui:WaitForChild("IpoGui", 30) -- the bar is in IpoGui, not IpoWindowGui
 	valuationBar = ipoGui and ipoGui:WaitForChild("ValuationBar", 30)
 	if valuationBar then
 		valuationBar:GetPropertyChangedSignal("Position"):Connect(place)
