@@ -15,7 +15,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
 - DONE M5 (2026-10-01): onboarding merged (PR #15, branch milestone-5-onboarding). Review (docs/reviews/M5_REVIEW.md) found no Critical or High issues; F1 (goal card finds the valuation bar, fits narrow screens) and F3 (free egg also gives the 15-minute poach protection) fixed; the other Lows are in M9. Studio playtest passed: new player, poach shield, old save, rejoin mid-tutorial. New players get one free Garage Egg, a glowing arrow and a goal tracker; old saves count as onboarded. New optional `onboarding` save section. Publishing M5 needs **Shut down all servers** (new save section).
-- Next steps: Shareholder pass on PC (new group Open Cloud key is in .env.txt), then M6 (daily rewards).
+- BUILT M6 (2026-10-01, branch milestone-6-daily-rewards, PR not opened yet): 7-day login calendar. One claim per UTC day, decided by the server; one missed day keeps your place, 2+ go back to Day 1 (said calmly in the window). Rewards: Cash days (5/10/20/30 min of income, min $300, a gift that never counts toward the IPO valuation), Garage Egg (d3), Startup Egg (d5), Unicorn Egg + 3 Shares (d7, Shares not doubled by Shareholder; no egg is sold for Robux, so the Unicorn Egg stays). Gift chip right of the valuation bar (the bar leaves room on narrow screens), Daily window, IPO confirm reminder, Studio Debug (fake next day, reset). New optional `daily` save section in the all-modules-loaded gate. Logic tests: tools/daily_test.py (69 checks). Sim: tools/economy_sim.py --daily (first IPO unchanged, Shares +7-8%). Waiting for Mattia's Studio playtest. Publishing M6 needs **Shut down all servers** (new save section). CLAUDE.md doesn't list DailyConfig, DailyRemotes or the `daily` save block yet (needs Mattia's OK).
+- Next steps: Studio playtest of M6, open the M6 PR, then M6b.
 
 ## Milestones, in order
 
@@ -35,9 +36,15 @@ First-play bounce rate is Roblox's #2 discovery signal.
 
 ### M6: Daily rewards and return loop
 Play days per user and day 1/7/28 retention drive recommendations.
-- 7-day login calendar. Bigger reward each day, day 7 = a rare egg. Missing a day resets the streak, but show it clearly.
-- "While you were away" screen with offline earnings, plus a 2x offline earnings developer product.
+- 7-day login calendar. Bigger reward each day, day 7 = a rare egg. Missing one day keeps your place; missing 2 or more resets to Day 1, shown clearly and calmly.
+- A new day is the UTC calendar day, decided by the server, with a countdown to the next claim.
 - Done when: rewards save, can't be claimed twice, and timezone or clock changes can't exploit them.
+
+### M6b: While you were away
+Split out of M6 (Mattia's answer to the M6 plan, open question 2).
+- "While you were away" screen with offline earnings (TycoonCore tells the client the offline amount; display only).
+- 2x offline earnings developer product: new product in ShopConfig with `id = 0` (owner runs sync_monetization), granted only in ProcessReceipt, plus a rule for doubling an amount that was already paid at load.
+- Done when: the screen shows the real offline amount, and the product doubles it once, idempotently.
 
 ### M7: Weekly events system
 Top games update on a fixed weekday with timed events.
@@ -72,6 +79,8 @@ Play-through rate is Roblox's #1 discovery signal.
   - F10: the "All goals done!" card ignores open windows for 3 s.
 - Phone layout check of the M5 goal card (portrait 320x568 and landscape 667x375) done by hand, and the poach shield timer display after grantFreeEgg.
 - F6: poach refund after a crash.
+- From M6: the daily claim's two-server gap (F10). With no session lock, a player who hops to a second server before the first server's claim save lands loads the old save there and can claim the same day again. Whichever server saves last wins, so the save normally ends with one reward and loses the other server's seconds of progress; a reward only survives twice if it left the save in between (e.g. the hatched employee was poached by someone else). Closed by the session lock above.
+- Before launch: read Roblox's current policy pages on rewards (Paid Random Items, monetization, and anything on daily or login rewards) in the Creator Hub and confirm the M6 calendar still fits (no Robux in the daily window, fixed and visible rewards, odds shown for the eggs).
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums.
 
