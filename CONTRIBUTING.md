@@ -86,18 +86,18 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| ShopServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| EmployeeServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
+| TycoonCore | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | free | | |
+| EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| EmployeeClient | StarterPlayerScripts | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
+| ShopClient | StarterPlayerScripts | free | | |
+| EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| PoachClient | StarterPlayerScripts | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| IpoServer | ServerScriptService | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| IpoConfig | ReplicatedStorage | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
-| IpoClient | StarterPlayerScripts | Mattia, IPO | milestone-4-ipo | 2026-10-01 |
+| PoachServer | ServerScriptService | free | | |
+| PoachClient | StarterPlayerScripts | free | | |
+| IpoServer | ServerScriptService | free | | |
+| IpoConfig | ReplicatedStorage | free | | |
+| IpoClient | StarterPlayerScripts | free | | |
