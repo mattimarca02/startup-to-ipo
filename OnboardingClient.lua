@@ -71,18 +71,37 @@ targetAttachment.Parent = anchor
 
 local marker = Instance.new("BillboardGui")
 marker.Name = "ArrowMarker"
-marker.Size = UDim2.fromScale(4, 4) -- in studs, so it looks the same size as the world around it
+marker.Size = UDim2.fromScale(ARROW.markerSize, ARROW.markerSize) -- in studs, so it looks the same size as the world around it
 marker.AlwaysOnTop = true -- seen through walls and furniture
 marker.Enabled = false
 marker.Parent = anchor
+
+-- A soft round backdrop behind the chevron, so it reads against any floor or wall color
+local markerBackdrop = Instance.new("Frame")
+markerBackdrop.AnchorPoint = Vector2.new(0.5, 0.5)
+markerBackdrop.Position = UDim2.fromScale(0.5, 0.5)
+markerBackdrop.Size = UDim2.fromScale(0.85, 0.85)
+markerBackdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+markerBackdrop.BackgroundTransparency = 0.5
+markerBackdrop.Parent = marker
+local markerBackdropCorner = Instance.new("UICorner")
+markerBackdropCorner.CornerRadius = UDim.new(1, 0) -- fully round
+markerBackdropCorner.Parent = markerBackdrop
+
+local markerScale = Instance.new("UIScale") -- breathes in time with the bob
+markerScale.Parent = marker
+
 local markerLabel = Instance.new("TextLabel")
-markerLabel.Size = UDim2.fromScale(1, 1)
+markerLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+markerLabel.Position = UDim2.fromScale(0.5, 0.5)
+markerLabel.Size = UDim2.fromScale(0.75, 0.75)
 markerLabel.BackgroundTransparency = 1
 markerLabel.Font = Enum.Font.GothamBlack
 markerLabel.Text = "▼"
 markerLabel.TextScaled = true
 markerLabel.TextColor3 = ARROW.color
-markerLabel.TextStrokeTransparency = 0
+markerLabel.TextStrokeTransparency = 0.3
+markerLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 markerLabel.Parent = marker
 
 local beam = Instance.new("Beam")
@@ -90,8 +109,8 @@ beam.Attachment1 = targetAttachment
 beam.Color = ColorSequence.new(ARROW.color)
 beam.LightEmission = 1 -- glows
 beam.FaceCamera = true
-beam.Width0 = ARROW.beamWidth
-beam.Width1 = ARROW.beamWidth
+beam.Width0 = ARROW.beamWidthNear -- tapered: thin at the player, wider at the target, reads as a direction
+beam.Width1 = ARROW.beamWidthFar
 beam.Segments = 1
 beam.Enabled = false
 beam.Parent = arrowFolder
@@ -123,11 +142,13 @@ end
 player:GetAttributeChangedSignal("OnboardingTarget"):Connect(refreshArrow)
 refreshArrow()
 
--- Bounce the arrow and pulse the beam while they're showing
+-- Bounce the chevron, pulse its size gently, and pulse the beam while they're showing
 RunService.RenderStepped:Connect(function()
 	if not marker.Enabled then return end
 	local t = os.clock()
-	marker.StudsOffset = Vector3.new(0, ARROW.markerHeight + math.sin(t * 5) * 0.6, 0)
+	local bob = math.sin(t * ARROW.bobSpeed)
+	marker.StudsOffset = Vector3.new(0, ARROW.markerHeight + bob * ARROW.bobAmplitude, 0)
+	markerScale.Scale = 1 + (bob * 0.5 + 0.5) * ARROW.pulseAmount
 	beam.Transparency = NumberSequence.new(0.25 + 0.2 * math.sin(t * 4))
 end)
 

@@ -40,8 +40,13 @@ OnboardingConfig.Goals = {
 -- How the arrow looks
 OnboardingConfig.Arrow = {
 	color = Color3.fromRGB(255, 220, 60),
-	beamWidth = 1.2, -- studs
-	markerHeight = 9, -- studs above the target where the bouncing arrow floats (above the incubator timer)
+	beamWidthNear = 0.3, -- studs, at the player (tapered so it reads as a direction, not a wall)
+	beamWidthFar = 0.9, -- studs, at the target
+	markerHeight = 9, -- studs above the target where the bouncing chevron floats (above the incubator timer)
+	markerSize = 3.2, -- studs across, the chevron's billboard
+	bobAmplitude = 0.45, -- studs, how far the chevron bobs up and down
+	bobSpeed = 2.4, -- how fast it bobs (radians/sec in the sine wave)
+	pulseAmount = 0.14, -- how much the chevron grows and shrinks as it bobs
 }
 
 -- Warn early about mistakes that would break the first minute
