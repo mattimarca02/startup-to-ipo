@@ -175,6 +175,27 @@ Checked against the save written during the IPO (`TycoonCore.lua:240-252`) and t
 | Can an unfinished move from a crashed server cross an IPO? | Yes, with a small refund into the new run: **F6**. |
 | Recruiter Network perk | Lowers the poach cost. A refund always returns what was actually paid (`negotiation.cost`). Consistent. |
 
+## 6. Monetization: the Shareholder pass
+
+**Result: a clearly marked placeholder, with no live calls that could fail.**
+
+- **Clearly marked.** `ShopConfig.lua:70-78` has `id = 0` and a comment saying the owner runs `sync_monetization` on the PC. ROADMAP's Status lists it as NOT SYNCED.
+- **Can't be bought.** `ShopConfig.isForSale` is false for `id = 0` (`ShopConfig.lua:179`), so the shop shows "Coming soon" (`ShopClient.lua:426-427`) and `promptPurchase` stops before calling Roblox (`ShopClient.lua:350`).
+- **No Roblox calls for it.** The server skips `id = 0` when checking passes (`ShopServer.lua:248`), and a purchase can never match it (`ShopConfig.lua:168`).
+- **The effect is read on the server only** (`ShopServer.lua:216-225`). The IPO window's x2 preview (`IpoClient.lua:83-90`) only displays it.
+- **The sync script handles it.** `sync_monetization.py:8` creates items that still have `id = 0`.
+
+## 7. Are all IPO numbers in IpoConfig?
+
+**Result: yes.**
+
+- **In IpoConfig (`IpoConfig.lua:17-75`):** stages, growth per IPO, multiplier, Shares formula, starting Cash, cooldown, and every perk's costs and effects.
+- **Elsewhere, correctly:**
+  - The Shareholder x2 is in ShopConfig. CLAUDE.md says pass effects belong there.
+  - The 3 base incubators come from `CreatureConfig.Incubators`.
+  - The IPO screen's maximum incubator count is worked out from IpoConfig (`EmployeeClient.lua:478`).
+- **The only plain numbers in IpoServer and IpoClient** are UI timings: the pad cooldown of 3 s, the confirm timeout of 15 s and the label distance.
+
 ## Coverage so far
 
 | Area | Status |
