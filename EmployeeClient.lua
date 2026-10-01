@@ -12,6 +12,7 @@ local CollectionService = game:GetService("CollectionService")
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
 local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- IPO perks change eggs and slots
 local remotes = ReplicatedStorage:WaitForChild("EmployeeRemotes")
 local teamAction = remotes:WaitForChild("TeamAction")
 local teamUpdate = remotes:WaitForChild("TeamUpdate")
@@ -98,7 +99,12 @@ local function cashMultiplier()
 			multiplier *= pass.effect.cashMultiplier or 1
 		end
 	end
-	return multiplier
+	return multiplier * (player:GetAttribute("IpoMultiplier") or 1) -- the IPO multiplier stacks on top
+end
+
+-- What one of your IPO perks adds right now (IpoServer puts the levels on the player)
+local function perkValue(key)
+	return IpoConfig.perkValue(key, player:GetAttribute("IpoPerk_" .. key) or 0)
 end
 
 local function luckLeft()
@@ -106,13 +112,14 @@ local function luckLeft()
 end
 
 local function luckMultiplier()
-	if luckLeft() <= 0 then return 1 end
+	local perk = 1 + perkValue("BaseLuck") -- Talent Scouts IPO perk, always on
+	if luckLeft() <= 0 then return perk end
 	for _, product in ipairs(ShopConfig.Products) do
 		if product.effect.luckMultiplier then
-			return product.effect.luckMultiplier
+			return product.effect.luckMultiplier * perk
 		end
 	end
-	return 1
+	return perk
 end
 
 local function cash()
@@ -133,8 +140,9 @@ local gui = make("ScreenGui", {
 	Parent = playerGui,
 })
 
--- HUD buttons share one layout with the SHOP button (ShopClient): EGGS = slot 0, SHOP = 1, TEAM = 2.
--- A column on the left middle, or a row at the top-left on short phone screens, where the
+-- HUD buttons share one layout with the SHOP button (ShopClient):
+-- EGGS = slot 0, SHOP = 1, TEAM = 2, POACH = 3, IPO = 4.
+-- A column centered on the left, or a row at the top-left on short phone screens, where the
 -- column would sit under the joystick.
 local function hudButton(name, text, slot)
 	local button = make("TextButton", {
@@ -149,14 +157,14 @@ local function hudButton(name, text, slot)
 	fitText(button, 22)
 	make("UIStroke", { Thickness = 3, Transparency = 0.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = button })
 	local function place()
-		if gui.AbsoluteSize.Y < 420 then
+		if gui.AbsoluteSize.Y < 460 then
 			button.AnchorPoint = Vector2.new(0, 0)
 			button.Size = UDim2.fromOffset(64, 64)
 			button.Position = UDim2.fromOffset(10 + slot * 72, 6)
 		else
 			button.AnchorPoint = Vector2.new(0, 0.5)
 			button.Size = UDim2.fromOffset(76, 76)
-			button.Position = UDim2.new(0, 12, 0.5, (slot - 1) * 86)
+			button.Position = UDim2.new(0, 12, 0.5, (slot - 2) * 86)
 		end
 	end
 	place()
@@ -434,7 +442,7 @@ local function oddsText(egg)
 		local shown = percent >= 10 and string.format("%d%%", math.floor(percent + 0.5)) or string.format("%.1f%%", percent)
 		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarityColor(entry.rarity)), entry.rarity, shown))
 	end
-	return (luck > 1 and "🍀 " or "") .. table.concat(parts, " · ")
+	return (luckLeft() > 0 and "🍀 " or "") .. table.concat(parts, " · ")
 end
 
 for i, egg in ipairs(CreatureConfig.Eggs) do
@@ -446,9 +454,10 @@ for i, egg in ipairs(CreatureConfig.Eggs) do
 		request("BuyEgg", egg.key)
 	end)
 	table.insert(refreshers, function()
-		parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(egg.hatchSeconds) .. "\n" .. oddsText(egg)
+		local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - perkValue("FasterEggs")))
+		parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\n" .. oddsText(egg)
 		local freeIncubator = false
-		for index = 1, CreatureConfig.Incubators do
+		for index = 1, #state.incubators do
 			if not state.incubators[index] then
 				freeIncubator = true
 			end
@@ -464,7 +473,10 @@ end
 
 makeLine(eggsPage, 10, COLORS.gold).Text = "Incubators"
 
-for index = 1, CreatureConfig.Incubators do
+-- Cards for the most incubators anyone can have (Extra Incubator IPO perk); unused ones hide
+local extraIncubatorPerk = IpoConfig.getPerk("ExtraIncubator")
+local maxIncubators = CreatureConfig.Incubators + (extraIncubatorPerk and IpoConfig.perkValue("ExtraIncubator", #extraIncubatorPerk.costs) or 0)
+for index = 1, maxIncubators do
 	local parts = makeCard(eggsPage, 10 + index)
 	parts.button.Activated:Connect(function()
 		local slot = state.incubators[index]
@@ -476,6 +488,7 @@ for index = 1, CreatureConfig.Incubators do
 		end
 	end)
 	table.insert(refreshers, function()
+		parts.card.Visible = index <= #state.incubators
 		local slot = state.incubators[index]
 		local egg = slot and CreatureConfig.getEgg(slot.egg)
 		if not egg then
@@ -519,12 +532,12 @@ end
 
 table.insert(refreshers, function()
 	local used = 0
-	for index = 1, CreatureConfig.Incubators do
+	for index = 1, #state.incubators do
 		if state.incubators[index] then
 			used += 1
 		end
 	end
-	local bits = { "Team " .. #state.employees .. "/" .. state.maxEmployees, "Incubators " .. used .. "/" .. CreatureConfig.Incubators }
+	local bits = { "Team " .. #state.employees .. "/" .. state.maxEmployees, "Incubators " .. used .. "/" .. #state.incubators }
 	if luckLeft() > 0 then
 		table.insert(bits, "🍀 Luck " .. CreatureConfig.formatTime(luckLeft()))
 	end
@@ -612,7 +625,7 @@ table.insert(refreshers, function()
 		base += creature and creature.income or 0
 	end
 	teamStatus.Text = string.format("Team %d/%d · earns $%d/s", #state.employees, state.maxEmployees, base)
-		.. (bonus > 1 and string.format(" (x%g with your passes = $%d/s)", bonus, math.floor(base * bonus)) or "")
+		.. (bonus > 1 and string.format(" (%s with passes and IPOs = $%d/s)", IpoConfig.formatMultiplier(bonus), math.floor(base * bonus)) or "")
 	emptyLine.Visible = #state.employees == 0
 
 	local pending = state.pending and CreatureConfig.getCreature(state.pending.creature) or nil -- state.pending is false when nobody waits

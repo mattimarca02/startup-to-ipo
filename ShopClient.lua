@@ -89,19 +89,20 @@ round(shopButton, 18)
 fitText(shopButton, 22)
 make("UIStroke", { Thickness = 3, Transparency = 0.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = shopButton })
 
--- HUD buttons share one layout (EmployeeClient does the same): EGGS = slot 0, SHOP = 1, TEAM = 2.
--- A column on the left middle, or a row at the top-left on short phone screens, where the
+-- HUD buttons share one layout (EmployeeClient, PoachClient and IpoClient do the same):
+-- EGGS = slot 0, SHOP = 1, TEAM = 2, POACH = 3, IPO = 4.
+-- A column centered on the left, or a row at the top-left on short phone screens, where the
 -- column would sit under the joystick.
 local function placeHudButton(button, slot)
 	local function place()
-		if gui.AbsoluteSize.Y < 420 then
+		if gui.AbsoluteSize.Y < 460 then
 			button.AnchorPoint = Vector2.new(0, 0)
 			button.Size = UDim2.fromOffset(64, 64)
 			button.Position = UDim2.fromOffset(10 + slot * 72, 6)
 		else
 			button.AnchorPoint = Vector2.new(0, 0.5)
 			button.Size = UDim2.fromOffset(76, 76)
-			button.Position = UDim2.new(0, 12, 0.5, (slot - 1) * 86)
+			button.Position = UDim2.new(0, 12, 0.5, (slot - 2) * 86)
 		end
 	end
 	place()
@@ -544,6 +545,13 @@ if debugRemote then
 	debugRow("✅", "Next poach: success", "Your next negotiation always works.", "Set", "PoachForce", "success")
 	debugRow("❌", "Next poach: failure", "Your next negotiation always fails.", "Set", "PoachForce", "fail")
 	debugRow("🧹", "Clear shields and cooldowns", "For everyone in this server: no shields, no loss limit, no waiting.", "Clear", "PoachClearTimers")
+
+	-- IPO (milestone 4)
+	debugRow("📈", "Valuation +$100,000", "Raises your valuation (not your Cash), to climb the funding stages.", "Give", "IpoGrantValuation", "100000")
+	debugRow("🔔", "Jump to IPO-ready", "Raises your valuation to exactly what going public needs, and skips the IPO cooldown.", "Jump", "IpoJumpReady")
+	debugRow("📜", "Give 50 Shares", "Shares to try the IPO shop.", "Give", "IpoGrantShares", "50")
+	debugRow("💥", "Next IPO save fails", "The next IPO pretends its save failed. Nothing should change, and you're told.", "Set", "IpoFailNextSave")
+	debugRow("♻️", "Reset IPO progress", "0 IPOs, 0 Shares, no perks, valuation 0. Eggs in extra incubators are removed.", "Reset", "IpoReset")
 end
 
 -- Tabs, opening and closing ---------------------------------------------
