@@ -79,3 +79,42 @@ Branch `fix-security-review`, reviewed at commit `bc6420c` (#14 already merged w
 ### F7 (Low): during an outage, the retry triples load requests
 `TycoonCore.lua:176-187`. During a DataStore outage, every join and rejoin makes three `GetAsync` calls, so kicked players who rejoin use up the server's request budget faster.
 **Fix (optional):** check `DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.GetAsync)` before each retry, or keep it at 3 and accept it.
+
+## 4. Poaching blocked when a save didn't load
+
+**Result: it can't be used to grief anyone or to dodge a deal.** `data.loaded` is set only by the server (`TycoonCore.lua:494`), and a client can't change it. On a live server, a player with `loaded = false` is either still loading or about to be kicked: a failed read kicks at `:450-454` and a failed setup kicks at `:488-492`. A loading player is already hidden by `poachOf` (`data.ready` is false), so the new branches in `protection()` (`PoachServer.lua:155-158`) and `counterOffer` (`:483-485`) only matter when `store` is nil (F2, or Studio). There they correctly stop moves that could never be saved. A target can't look "unloaded" to stop a deal that's already running, because `finish` sees that state as "Still loading" and refunds the poacher.
+
+One side effect: in an unpublished Studio place, you can't poach the Debug dummy (`:434`), although the dummy can still poach you (`PoachDummyAttack` skips `start`). Test poaching in the published place with API access on (F6).
+
+## 5. Interaction with M5 (onboarding) and M6 (daily rewards)
+
+**Result: no problems.**
+
+| Situation | Free egg (M5) | Daily claim (M6) | New-player poach shield |
+|---|---|---|---|
+| Normal join | `grantFreeEgg` runs inside setup, after `PoachServer.setupPlayer`, so `data.poach` exists and the shield is raised. | The claim needs `data.ready` (`DailyServer.lua:219`). | Set at setup time: `ok and saved == nil` (`TycoonCore.lua:483`). |
+| Join delayed by retries | Same. `ok` is true after a successful retry, so OnboardingServer sees the right new/old state. | Same. | Starts when setup runs, after the delay, so the player gets the full 15 minutes of play. |
+| Failed load | Kicked before any module runs: no egg, no claim, nothing saved. | Same. | Same. |
+| IPO | `grantEgg` and the daily egg both need `data.ready`, which is false while the IPO saves. Neither touches poach state. | Same. | `callOffForIpo` doesn't change `shieldUntil`, and the IPO resets don't include the shield. |
+
+The duplicate check in `addEmployee` doesn't affect hatching: `hatch` and `resolvePending` insert directly, with fresh GUIDs.
+
+## 6. Anything else new
+
+- **Remotes:** #14 adds none. `GoPublic` sent twice is refused by `ipo.busy` and `data.ready`. `CounterOffer` sent twice: the first call clears `poach.counterOffer` before anything that could yield (`PoachServer.lua:495`).
+- **DataStore calls:** the new `GetAsync` retry is inside `pcall` (`TycoonCore.lua:177`). No new unprotected calls.
+- **Yields between a check and its use:** `goPublic` checks `isPoachBusy` and calls `callOffPoachDeals` without yielding. The only yield is inside `commitIpo`, and by then `data.ready = false` has closed every way in (section 1). `counterOffer` and `transfer` don't yield between their checks and the move. The saves are deferred, behind `inTransit`.
+- **F8 (Low): a misleading comment.** The comment on `PoachServer.isBusy` (`PoachServer.lua:637-639`) says "a poacher can never stop someone's IPO". A finished poach still holds the IPO for up to ~60 s while it saves (section 1). That's harmless, but say so in the comment.
+
+## Summary
+
+| Severity | Count | Findings |
+|---|---|---|
+| Critical | 0 | |
+| High | 0 | |
+| Medium | 2 | F1 corrupt save locks the player out (from before #14, still open); F2 no DataStore on a live server means a silent unsaved session |
+| Low | 6 | F3 call-off before the IPO save; F4 failed poach keeps the Cash; F5 give-back ignores capacity; F6 Studio kick with API access off; F7 retry budget; F8 comment |
+
+**Top 3:** F2, F1, F3.
+
+**Verdict: merge.** #14 introduces nothing Critical or High. The IPO call-off refunds exactly once, the duplicate checks hold, and the retry never saves a half-loaded player. Fix F1 and F2 before launch, and F3 when convenient. Also check F6 in Studio before the 2-client Mac tests.
