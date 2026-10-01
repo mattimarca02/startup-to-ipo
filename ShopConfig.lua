@@ -73,7 +73,7 @@ ShopConfig.Passes = {
 		description = "Get 2x Shares every time you go public (IPO).",
 		icon = "📜",
 		price = 199,
-		id = 0, -- not synced yet: the owner runs sync_monetization on the PC to create it on Roblox
+		id = 2001728902,
 		effect = { sharesMultiplier = 2 },
 	},
 }
