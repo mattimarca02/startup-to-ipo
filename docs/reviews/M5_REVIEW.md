@@ -91,3 +91,29 @@ One weak spot (UX, not security):
 | Poaching (M3): poaching others | An employee taken from another player counts toward "Hire 3" (`OnboardingServer.lua:131` counts `team.employees`, and `addEmployee` puts them there). Not abusable (no reward), but see F6. |
 
 - **F6 (Low):** the tracker can disappear before it's finished. It only shows once `#employees >= TrackerAfterEmployees` or the arrow is done or a goal is finished (`OnboardingServer.lua:183-185`). A player who loses their only employee before any of that (fires it, or F3's unshielded case) loses the tracker until they hire again. Also, "Hire 3 employees" is completed by poaching, which the text doesn't suggest. Fix: save a `trackerShown` flag once it first appears, and use it in place of the employee count.
+
+## 5. Client robustness and phone layout
+
+| Check | Result |
+|---|---|
+| `pcall` around DataStore calls | M5 adds no DataStore call. The only client request, `InvokeServer("DismissTracker")`, is in a `pcall` (`OnboardingClient.lua:341-343`). |
+| Nil checks | Attributes are type-checked before use (`OnboardingClient.lua:135`, `:312`, `:315`). `WaitForChild` on the character has a timeout (`:120`). The server loop runs each player in a `pcall` (`OnboardingServer.lua:341-344`). |
+| Arrow loop | One `RenderStepped` connection for the whole session, and it returns at once when the marker is hidden (`OnboardingClient.lua:146-153`). No leak. |
+| Arrow per respawn | A new `Attachment` goes into each new `HumanoidRootPart` (`:119-127`) and is destroyed with the old character. No leak. |
+| Toast loop | One `task.delay` per toast, using a token so only the newest one hides it (`:188-199`). No leak. |
+| Toast position | `-184` from the bottom, above the poach (`-128`), egg (`-72`) and shop/IPO (`-16`) toasts. Bottom center, as CLAUDE.md asks. |
+| Tracker and open windows | Hidden while `OpenPanel` is set (`:334`), except for F10. |
+
+**F1 (Medium): the goal card never finds the valuation bar, so it's misplaced or cut off on some phones.**
+
+- **Where:** `OnboardingClient.lua:287-288` waits for `IpoWindowGui.ValuationBar`, but the bar's parent is `IpoGui` (`IpoClient.lua:177-185`, `Parent = gui`; `IpoWindowGui` is `front`). After 30 seconds `WaitForChild` returns nil without a warning, and the card always uses the fixed fallback spots (`OnboardingClient.lua:278-282`). The phone pass didn't catch it because on a normal desktop screen the fallback `(98, 84)` happens to sit right under the bar.
+- **What breaks:**
+  - **Narrow portrait phones (under ~358 px wide, e.g. 320 px):** IpoClient shrinks the bar to fit (`IpoClient.lua:244`), but the card stays 250 px wide at x = 98. Its right edge, including the X button, is off-screen, so the player can't close it.
+  - **Short and narrow landscape screens (height under 460, width under 560):** the bar moves to `(10, 76)` (`IpoClient.lua:235`), the same spot as the card's fallback, so the card covers the valuation bar.
+- **Fix:** `playerGui:WaitForChild("IpoGui", 30)` in place of `"IpoWindowGui"`. Then test at 320 × 568 and a small landscape device in **Test → Device**.
+
+**F2 (Low): on landscape phones the card overlaps the poaching panels.** On short screens the Negotiation and Poach Alert panels sit at y = 76, centered, up to 460 px wide and 92 px tall (`PoachClient.lua:807-816`, `:878-880`). The card is at y = 76 too (fallback `(10, 76)`, or `(370, 76)` once F1 is fixed). On an 844 × 390 phone they overlap by about 70 px; on a 667 × 375 phone by about 150 px. New players are shielded from poach alerts, but a new player who poaches someone sees the Negotiation panel. **Fix:** hide the card while either poach panel is visible, or move it below them.
+
+**F7 (Low): the free-egg toast is sent during the load, often before the screen is up.** `notify` fires from inside `setupPlayer` (`OnboardingServer.lua:88`, called from `TycoonCore.lua:453`). Roblox holds the event until `OnboardingClient` connects (`:200`), but the toast then shows for 3.5 s, which may still be during the loading screen or before the camera is on the plot. **Fix:** send it on the first update loop after `data.ready`, or when the client first asks for state.
+
+**F10 (Low): the "All goals done!" card ignores open windows for 3 s.** While `celebrating`, `refreshTracker` returns before the `OpenPanel` check (`OnboardingClient.lua:333-334`), so the card stays on top of a window opened in those 3 seconds. **Fix:** apply `card.Visible = playerGui:GetAttribute("OpenPanel") == nil` during the celebration too.
