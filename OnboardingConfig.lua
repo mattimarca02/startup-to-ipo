@@ -37,17 +37,8 @@ OnboardingConfig.Goals = {
 OnboardingConfig.Arrow = {
 	color = Color3.fromRGB(255, 220, 60),
 	beamWidth = 1.2, -- studs
-	markerHeight = 7, -- studs above the target where the bouncing arrow floats
+	markerHeight = 9, -- studs above the target where the bouncing arrow floats (above the incubator timer)
 }
-
-function OnboardingConfig.getGoal(key)
-	for _, goal in ipairs(OnboardingConfig.Goals) do
-		if goal.key == key then
-			return goal
-		end
-	end
-	return nil
-end
 
 -- Warn early about mistakes that would break the first minute
 do

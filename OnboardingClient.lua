@@ -188,7 +188,7 @@ for i, goal in ipairs(OnboardingConfig.Goals) do
 	local y = HEADER_HEIGHT + (i - 1) * ROW_HEIGHT
 	local name = make("TextLabel", {
 		Position = UDim2.fromOffset(10, y),
-		Size = UDim2.new(0.68, -10, 0, ROW_HEIGHT - 2),
+		Size = UDim2.new(0.6, -10, 0, ROW_HEIGHT - 2),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
 		Text = "",
@@ -200,7 +200,7 @@ for i, goal in ipairs(OnboardingConfig.Goals) do
 	local progress = make("TextLabel", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -10, 0, y),
-		Size = UDim2.new(0.32, -10, 0, ROW_HEIGHT - 2),
+		Size = UDim2.new(0.4, -10, 0, ROW_HEIGHT - 2),
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
 		Text = "",

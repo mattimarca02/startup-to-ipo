@@ -15,10 +15,12 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
+local ShopServer = require(script.Parent:WaitForChild("ShopServer")) -- for the Studio Debug tab
 
 local OnboardingServer = {}
 
@@ -266,6 +268,31 @@ function OnboardingServer.serialize(data)
 	return section
 end
 
+-- Studio Debug tab -------------------------------------------------------------
+
+local function addDebugActions()
+	-- Start the first minute again on any save: free egg, arrow, goals. Studio only, so it can
+	-- skip the "no progress at all" rule that protects live players from a second free egg.
+	ShopServer.addDebugAction("OnboardingRestart", function(player, data)
+		local onboarding = data.onboarding
+		onboarding.seenIntro = false
+		onboarding.legacy = false
+		onboarding.arrowDone = false
+		onboarding.dismissed = false
+		table.clear(onboarding.goals)
+		if not grantFreeEgg(player, data) then
+			return "Tutorial restarted, but there was no empty incubator for the free egg"
+		end
+		return "Tutorial restarted: free " .. OnboardingConfig.FreeEgg .. " egg is incubating (saved at the next save)"
+	end)
+	-- Back to how a save from before milestone 5 behaves: no arrow, no tracker
+	ShopServer.addDebugAction("OnboardingMarkOld", function(_, data)
+		data.onboarding.seenIntro = true
+		data.onboarding.legacy = true
+		return "You now count as an old save: no arrow, no tracker (saved at the next save)"
+	end)
+end
+
 -- Setup -----------------------------------------------------------------
 
 function OnboardingServer.init(coreApi)
@@ -278,6 +305,10 @@ function OnboardingServer.init(coreApi)
 	remotes.action.OnServerInvoke = onAction
 	remotes.action.Parent = folder
 	folder.Parent = ReplicatedStorage
+
+	if RunService:IsStudio() then
+		addDebugActions()
+	end
 
 	for _, goal in ipairs(OnboardingConfig.Goals) do
 		if goal.kind == "stage" and not stageNumber(goal.stage) then

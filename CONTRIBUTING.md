@@ -92,7 +92,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | free | | |
+| ShopClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |

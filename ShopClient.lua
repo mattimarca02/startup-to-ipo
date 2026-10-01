@@ -552,6 +552,10 @@ if debugRemote then
 	debugRow("📜", "Give 50 Shares", "Shares to try the IPO shop.", "Give", "IpoGrantShares", "50")
 	debugRow("💥", "Next IPO save fails", "The next IPO pretends its save failed. Nothing should change, and you're told.", "Set", "IpoFailNextSave")
 	debugRow("♻️", "Reset IPO progress", "0 IPOs, 0 Shares, no perks, valuation 0. Eggs in extra incubators are removed.", "Reset", "IpoReset")
+
+	-- First minute (milestone 5)
+	debugRow("🐣", "Restart tutorial", "Gives the free egg again and brings back the arrow and goal tracker, on any save.", "Restart", "OnboardingRestart")
+	debugRow("👴", "Act like an old save", "Counts you as a player from before milestone 5: no arrow, no tracker.", "Set", "OnboardingMarkOld")
 end
 
 -- Tabs, opening and closing ---------------------------------------------
