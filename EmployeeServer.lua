@@ -7,6 +7,7 @@
 -- finishRelease / addEmployee (see "Poaching" below).
 -- IPO perks (IpoServer) add incubators and desks, speed up eggs and improve luck; an IPO empties
 -- the incubators (clearIncubators) and buying a perk calls refreshCapacity.
+-- OnboardingServer gives a brand-new player one free egg with grantEgg (server only, no remote).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -278,27 +279,48 @@ end
 
 -- Actions the client can ask for ------------------------------------------------
 
-local function buyEgg(player, eggKey)
-	local team, data = getTeam(player)
-	local egg = typeof(eggKey) == "string" and CreatureConfig.getEgg(eggKey)
-	if not egg then return false, "Unknown egg" end
-	local index
+-- The first empty incubator, or nil if they're all busy
+local function freeIncubator(team, data)
 	for i = 1, incubatorCount(data) do
 		if not team.incubators[i] then
-			index = i
-			break
+			return i
 		end
 	end
-	if not index then return false, "All incubators are busy" end
-	if data.cash.Value < egg.price then return false, "Not enough Cash" end
+	return nil
+end
 
-	data.cash.Value -= egg.price
+-- Starts an egg's timer in an empty incubator (buying it and the free onboarding egg both use this)
+local function startEgg(player, team, data, egg, index)
 	local now = os.time()
 	local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - IpoServer.perk(data, "FasterEggs")))
 	team.incubators[index] = { egg = egg.key, startedAt = now, hatchAt = now + seconds }
 	refreshIncubator(data, index, now)
 	push(player)
+end
+
+local function buyEgg(player, eggKey)
+	local team, data = getTeam(player)
+	local egg = typeof(eggKey) == "string" and CreatureConfig.getEgg(eggKey)
+	if not egg then return false, "Unknown egg" end
+	local index = freeIncubator(team, data)
+	if not index then return false, "All incubators are busy" end
+	if data.cash.Value < egg.price then return false, "Not enough Cash" end
+
+	data.cash.Value -= egg.price
+	startEgg(player, team, data, egg, index)
 	return true, egg.name .. " is incubating"
+end
+
+-- Server only (OnboardingServer): puts a free egg in the first empty incubator, timer running.
+-- No remote can call this. Returns the incubator number, or nil if there's no egg or no room.
+function EmployeeServer.grantEgg(player, eggKey)
+	local team, data = getTeam(player)
+	local egg = team and CreatureConfig.getEgg(eggKey)
+	if not egg then return nil end
+	local index = freeIncubator(team, data)
+	if not index then return nil end
+	startEgg(player, team, data, egg, index)
+	return index
 end
 
 local function instantHatch(player, index)
