@@ -10,6 +10,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE M3: poaching (merged). PR #2 poaching-cleanup merged: 2-player poach, counter-offer and the leave/refund case all passed manual testing.
 - IN PROGRESS M4: IPO rebirth. Branch claude/task-1iff57 has an early start (IpoConfig.lua): review it before continuing.
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
+- Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua after M4 merges and retune.
 
 ## Milestones, in order
 
