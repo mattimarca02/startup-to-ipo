@@ -55,7 +55,7 @@ Sources read: CLAUDE.md, ROADMAP.md (M6), docs/ECONOMY.md, docs/M5_PLAN.md, docs
 | | too generous (Startup d3/d5, Unicorn d7 + 10 Shares) | 11.7 | 10 | 12 | 220 (+23%) |
 | casual (1x10 min/day) | none | 10.0 (first IPO at day 2) | 7 | 10 | 229 |
 | | **proposed** | **10.0** | **7** | **10** | **246 (+7%)** |
-| | proposed, but Cash counts as valuation | 8.7 (-13%) | 7 | 10 | 211 |
+| | proposed, but Cash counts as valuation | 8.7 (day 1, not day 2) | 7 | 10 | 211 |
 | idler (1 min/day) | none | 2.0 (first IPO at hour 48) | 6 | 10 | 210 |
 | | **proposed** | **1.0 (first IPO at hour 24)** | **6** | **10** | **174** |
 
@@ -89,3 +89,40 @@ DailyConfig.ClaimDebounce = 1         -- seconds between two Claim requests from
 ```
 
 A config check at the bottom (like `IpoConfig`) warns about a missing egg key, a reward with nothing in it, or `shares` above a sensible limit.
+
+## 3. Time and exploits
+
+**Time source.** The server's `os.time()` (UTC seconds). It is the same clock the game already trusts for `lastSeen`, egg `hatchAt`, shield timers and the IPO cooldown, so there is no new kind of trust. The day number is:
+
+```lua
+dayNumber = math.floor((os.time() - DailyConfig.ResetHourUtc * 3600) / 86400)
+```
+
+- **UTC calendar days.** The day changes for every player at the same moment (UTC midnight by default), and a "Next reward in 5h 12m" countdown is the same on every phone. The cost: for players far from UTC the reset lands at an odd local hour, and someone can claim at 23:59 and again at 00:01 UTC. That doesn't cheat the calendar (still one claim per day, 7 claims need 7 different days), it only means two claims can be 2 minutes apart.
+- The alternative, a rolling 24 hours from the last claim, drifts later each day and needs a second "grace" rule. I don't recommend it; it is open question 3 if you want it.
+- The countdown on the client uses `workspace:GetServerTimeNow()` plus a server-sent reset time. Display only: the client's own clock is never used for anything.
+
+**What the server stores and decides.** Only `lastClaimDay` (a day number) and `streak`. At claim time the server computes `diff = today - lastClaimDay` itself:
+
+| diff | Meaning | Result |
+|---|---|---|
+| 0 | already claimed today | refused, nothing changes |
+| 1 | consecutive | `streak + 1`; reward is calendar day `(streak % #Days) + 1` |
+| 2 or more, or no section | missed days, or a new player | streak restarts at 1: reward is Day 1 |
+| negative, or far in the future | bad data or the server clock went back | treated as "claimed today", warning in the log, **never** grants and never locks the player out for good (a value more than 1 day ahead is clamped to today) |
+
+**What stops each trick:**
+
+| Attack | Why it fails |
+|---|---|
+| **Changing the device clock or timezone** | The client sends no time, day or streak. The only request is `Claim` (a string), and the server works everything out from its own `os.time()` and the saved `lastClaimDay`. The countdown is cosmetic. |
+| **Double claim (spamming the button, two quick requests)** | The handler has no yield between "check `diff >= 1`" and "set `lastClaimDay = today` and apply the reward", so the second request already sees today's marker and is refused. A per-player debounce (`ClaimDebounce`, 1 s) and `data.ready` add to that. The remote ignores extra arguments. |
+| **Reward without the marker (or marker without the reward)** | They are written in the same in-memory step and land in the same `save()` payload (the same argument as the M5 free egg, review section 2). They can't be saved apart. If the save fails, neither is stored and the player can claim again next join: nothing was lost or doubled, because the reward is lost with the marker. |
+| **Rejoin spam** | Joining grants nothing: a reward is only given by a `Claim` request, never by `PlayerAdded`. Rejoining just shows the same "claimed" or "ready" state read from the save. An immediate save after each claim (like `ProcessReceipt`) keeps the window short. |
+| **Two servers at once (M4 F10, M5 F8)** | The honest answer: there is **no session lock yet** (planned for M9), so M6 can't fully close this. What M6 does: Roblox lets one account be in one server at a time, so the exploit is a hop in the seconds a save is in flight. The claim saves immediately and tells the client "Claimed" only after the save answers. The worst case left is one extra reward (a few minutes of Cash, one egg) for a hop timed to the second, and the second server's later save overwrites the first, so the player ends with one copy anyway. M9's session lock closes it for good. This must be recorded in the M6 review, not hidden. |
+| **Hostile or corrupted save** | `daily` fields are type-checked on load: numbers must be finite and non-negative whole numbers, otherwise they are skipped with a `warn` (never an error). Unknown fields inside the section are kept and written back. |
+| **Client asks for a different day or a bigger reward** | No remote carries a day, an amount or a reward key. The reward is looked up in `DailyConfig` from the server's own streak, and Cash is capped by `CashMaxMinutes`. |
+| **Claiming during an IPO save** | `data.ready` is false while the IPO is saved, so the claim is refused with "Your IPO is being filed, try again in a moment" (the M5 F5 lesson: say why, and let the button retry). |
+| **Egg days with no free incubator** | Refused before anything is changed, so no marker is written and the day is not consumed. |
+
+**Never trusted from the client:** a time, a date, a streak, a day number, a reward amount, or "I claimed already". The only message a client sends is `Claim`.
