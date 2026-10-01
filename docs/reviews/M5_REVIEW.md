@@ -56,3 +56,24 @@ Two smaller gaps were found:
 
 - **F3 (Low):** "new player" means two different things. Onboarding treats a pre-M5 save with no progress as new and gives the free egg (`OnboardingServer.lua:248-255`), but PoachServer's 15-minute new-player shield only goes to `saved == nil` (`TycoonCore.lua:452`, `PoachServer.lua:694-695`). Players who joined before M5 and left without buying anything (likely a large share of past visitors) get the tutorial but can be poached as soon as their first employee hatches.
 - **F4 (Low):** `OnboardingConfig.Enabled = false` still saves a section with `seenIntro = false, legacy = false`. If it's switched back on, those players skip the egg (they have progress) but are not `legacy`, so the arrow and tracker show up for veterans (`OnboardingServer.lua:169`, `:248`, `:253`).
+
+## 3. Server authority
+
+**Result: no remote can grant anything.** M5 adds one RemoteFunction and one RemoteEvent, both in `OnboardingRemotes` (`OnboardingServer.lua:312-321`).
+
+| Remote / path | Checked |
+|---|---|
+| `OnboardingAction` (RemoteFunction) | Only `"DismissTracker"` is accepted. `action` must be a string (`OnboardingServer.lua:193`), data must be ready (`:195`), anything else is "Unknown action" (`:203`). Extra arguments are ignored. Dismissing only sets `dismissed = true` and hides the tracker; it gives nothing and can't un-finish or finish a goal. Spamming it is harmless (no yield, no save). |
+| `OnboardingNotify` (RemoteEvent, server → client) | The server only fires it (`OnboardingServer.lua:70-74`) and never listens. A client calling `FireServer` on it reaches no code: Roblox queues the calls up to a fixed limit, then drops them with a warning in the server log. Same as the existing `TeamUpdate` and `EggHatched`. Not a finding. |
+| The free egg | `EmployeeServer.grantEgg` (`EmployeeServer.lua:316-325`) is a module function, not a remote action: it isn't in `ACTIONS` (`EmployeeServer.lua:419-427`). Only `OnboardingServer.setupPlayer` and the Studio Debug restart call it. |
+| `buyEgg` refactor | Behaviour is unchanged: same validation, free incubator check, Cash check before the deduction, then the shared `startEgg` (`EmployeeServer.lua:301-312`). |
+| Goals | Computed every second from server data only (`OnboardingServer.lua:129-163`). There's no remote that reports progress, and finishing a goal grants nothing. |
+| Arrow target | Picked by the server (`OnboardingServer.lua:96-114`) and sent as an attribute. The client only draws it. |
+| Hatching the free egg | Uses the normal `ProximityPrompt` → `hatch()` path, which checks the owner, `data.ready` and the timer (`EmployeeServer.lua:486-490`, `:246-251`). No onboarding exception. |
+| Studio Debug buttons | Registered only when `RunService:IsStudio()` (`OnboardingServer.lua:323-325`), and ShopServer's debug handler also refuses unless `IsStudio()` and `ShopConfig.DebugInStudio` (`ShopServer.lua:525`). |
+
+**No client input goes unvalidated.** The only value a client sends in M5 is the `action` string, and it's type-checked and matched exactly.
+
+One weak spot (UX, not security):
+
+- **F5 (Low):** `DismissTracker` is refused while `data.ready` is false, which includes the few seconds an IPO is being saved, and the reply says "Still loading" (`OnboardingServer.lua:195-197`). The client has already hidden the card and only `warn`s (`OnboardingClient.lua:337-347`), so the X isn't saved and the tracker comes back next session.
