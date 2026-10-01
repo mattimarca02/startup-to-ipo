@@ -63,3 +63,31 @@ Nothing the client reports grants a reward — same rule as purchases:
 - **The arrow/beam** must be visible and not obstruct touch controls — reuse the existing `BillboardGui`/`ProximityPrompt` approach already used for incubators and the IPO pad, scaled the same way, tested at the same screen sizes other panels are (`Test → Device`, per CLAUDE.md Testing section).
 - **No free-text input anywhere in onboarding.** The flow is 100% server-driven state + taps/touches (walk to egg, touch pad, touch hatch prompt) — it never asks the player to type anything, so it adds no new surface to the chat/age-safety picture. `ChatTags.lua` and chat itself are untouched by this milestone.
 - Per ROADMAP's "Launch requirements" section, new Roblox games first reach only age-checked 16+ players; under-16 access unlocks later after 250 "highly engaged" plays. M5 doesn't change that gate or interact with chat, so there's nothing in this milestone that needs separate under-16 handling — it's a pure solo-garage flow for the player's own screen.
+
+## 6. Files to add or change
+
+| File | Change |
+|---|---|
+| `OnboardingServer.lua` (new) | ModuleScript, ServerScriptService. `init(core)` / `setupPlayer(player, data, savedOnboarding)` / `serialize(data)`, same contract as the other feature modules. Grants the free Garage Egg once, owns `seenIntro`/`goalsShownAt`. |
+| `OnboardingClient.lua` (new) | LocalScript, StarterPlayerScripts. Draws the arrow/beam to the first incubator and the bottom-center goal-tracker card. Pure display, reads existing remotes/attributes only. |
+| `TycoonCore.lua` | Add `onboarding = true` to `KNOWN_SECTIONS`; `require` and `init` `OnboardingServer` (after `EmployeeServer`, since it needs a free incubator slot to exist); include its `serialize()` in `save()`'s payload, same pattern as the other four modules. |
+| `EmployeeServer.lua` | Export one small function (e.g. `EmployeeServer.grantFreeEgg(player, eggKey)`) so `OnboardingServer` can place an egg into incubator 1 without going through `buyEgg`'s Cash check — reuses the same incubator-state shape `buyEgg` already writes. |
+| `README.md` | Add `OnboardingServer.lua`/`OnboardingClient.lua` rows to the file-structure table. |
+| `CONTRIBUTING.md` | Add both new files to the Ownership table, claimed by whoever builds M5. |
+| `ROADMAP.md` | Status update at the end of the milestone (not now — per CLAUDE.md, that happens when M5 is actually built and done). |
+
+## 7. Build order (3-5 small commits, for the future build branch)
+
+1. `OnboardingServer` skeleton wired into `TycoonCore`: new save section, `KNOWN_SECTIONS` entry, free-egg grant on first join (server-side only, no UI). Playtest by reading server Output — confirm the egg appears in incubator 1 and `seenIntro` is saved true.
+2. `OnboardingClient`: the glowing arrow from spawn to incubator 1, nothing else yet.
+3. Goal-tracker card (Hire 3 / Reach Seed), reading existing team/IPO state, bottom-center per the toast convention.
+4. Auto-hatch-or-prompt decision for the free egg at t=60s (pending open question 1), plus hiding the tracker once both goals are done or the time/IPO cap is hit (open question 2).
+5. Studio Debug tab button (`ShopServer.addDebugAction`, `IsStudio()`-gated like all debug tools) to reset `onboarding.seenIntro` for repeat testing, and a phone-layout pass (`Test → Device`).
+
+## 8. Open questions
+
+1. Should the free Garage Egg auto-hatch for every new player at t=60s regardless of the Auto-Hatch pass (a one-time onboarding exception), or should the player have to walk up and tap the hatch prompt themselves?
+2. Should the goal tracker hide itself after a fixed window (e.g. 10 minutes) even if "Reach Seed" isn't done yet, or stay until both goals are complete?
+3. Is a brand-new `OnboardingServer.lua` module the right shape, or would you rather fold this smaller amount of state into `EmployeeServer` (it already owns incubators) instead of a fifth feature module?
+4. Any reward at all for finishing both goals (even a cosmetic toast, no Cash/Shares), or is the tracker purely informational with no completion payoff?
+5. Should returning players who had an old save from before M5 (so `onboarding` is missing) get the free egg too, or only players with genuinely no save at all?
