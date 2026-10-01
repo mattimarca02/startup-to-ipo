@@ -8,7 +8,7 @@ python tools/economy_sim.py --runs 40
 
 All game numbers are copied by hand into the CONFIG block at the top of the script, each with a comment saying which `.lua` file it came from. **If you change a game number, change it there too.** The simulator never changes the game.
 
-> **IPO numbers are a PLACEHOLDER.** The stages, thresholds and multiplier in section 4 are made up (about 10x per stage, +0.5x income per IPO). They must be replaced with the real `IpoConfig.lua` once `milestone-4-ipo` is merged. Everything in the IPO column is only as good as those guesses.
+> **IPO numbers are real**, read from `IpoConfig.lua` after the `ipo-retune` retuning pass. The simulator does **not** model IPO shop perks (Faster Recruiting, Extra Incubator, Extra Desk, Night Shift, Talent Scouts, Recruiter Network): every figure below assumes a player with no perks. A perk-buying player is estimated to be roughly 15-25% faster per IPO cycle.
 
 ## How the simulated player behaves
 
@@ -57,17 +57,23 @@ Without any pass the game is playable: all upgrades and a full team of 5 in 7 mi
 
 Day 1, 3 and 7 for each scenario are in the script output (`python tools/economy_sim.py`).
 
-## 3. IPO rebirth (placeholder numbers, 30 days)
+## 3. IPO rebirth (real `IpoConfig.lua` numbers, retuned on `ipo-retune`)
 
-Stages: Seed 50K, Series A 500K, Series B 5M, IPO-ready 50M valuation. Each IPO: income x(1 + 0.5 x IPOs) and the next run's thresholds x3. Employees are kept; Cash, upgrades and incubating eggs reset.
+Stages: Seed 1,800, Series A 6,300, Series B 23,400, IPO-ready 81,000 valuation. Each IPO: income x(1 + 0.5 x IPOs^0.75) (diminishing returns per IPO, no stall) and the next run's stage thresholds x2.5. Employees, passes and the HR Department level are kept; Cash, garage upgrades and incubating eggs reset.
 
-| Behaviour | Seed | Series A | Series B | First IPO | IPOs in 30 days | Multiplier at day 30 |
+Session assumptions used by the simulator: active = 3 x 20-min sessions/day, casual = **one 10-min session/day**, idler = **one 1-min session/day** (collect-and-leave, a floor case, not a typical session). Real mobile sessions can run longer, so these are conservative (slower) estimates.
+
+| Behaviour | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Multiplier at IPO 10 |
 |---|---|---|---|---|---|---|
-| active | 9 min | 5 h | 11 h | 59 h | 4 | x3.0 |
-| casual | 9 min | 24 h | 48 h | 8.5 d | 2 | x2.0 |
-| idler | 24 h | 48 h | 3 d | 10 d | 2 | x2.0 |
+| active | 12 min | 5.0 h | 5.2 h | 24 h | 6.3 d | x3.81 |
+| casual | 24 h | 24.2 h | 48 h | 4 d | 20 d | x3.81 |
+| idler | 48 h | 3 d | 4 d | 6 d | 26 d | x3.81 |
 
-To change: the `IPO_*` values in the CONFIG block of the script.
+**2-hour continuous active session (binge):** median 4 IPOs (range 4-5), or median 5 (range 4-5) with an estimated +25% perk speedup applied. Caps around IPO 5 even for an uninterrupted player, as intended.
+
+**First IPO:** lands at ~10-15 min of active play (was 5+ hours with the placeholder numbers), carrying the mid-game as planned. Casual's first IPO lands at the "next day" bound (24h), not within their single 10-min session — a lower Seed threshold was tested but broke the 2h-binge cap (active players reaching IPO 6+), so Seed stayed at 1,800. No gap between consecutive IPOs 1-10 for active play exceeds 3 days.
+
+To change: edit `IpoConfig.lua`, then update the `IPO_*` values in the CONFIG block of `tools/economy_sim.py` to match and re-run.
 
 ## 4. Ten findings
 
@@ -94,7 +100,7 @@ To change: the `IPO_*` values in the CONFIG block of the script.
 | Auto-Hatch (`ShopConfig`) | Only saves clicks | No effect on income (finding 7). | Also hatch eggs while the player is away, so they join the team the moment the egg is ready. |
 | Offline cap and rate (`TycoonCore.lua`) | 8 h at 50% | Idlers get 17% of a 24-h day (finding 9). | Fine for now. Tell players clearly on the screen, or let IPO's Night Shift perk extend it. |
 | Rare/epic income gaps (`CreatureConfig.Creatures`) | Common 2 to 3, Legendary 150 to 175 | A Legendary is 50x a Common. Poaching one is a huge swing, but Legendaries can't be poached, so only Epic and below are targets. | Fine; just keep an eye on how it feels once poaching is live. |
-| IPO thresholds (`IpoConfig.lua`) | Placeholder | Seed in 9 min (finding 10). | Re-run this simulator with the real file, then choose stages so Seed takes about 1 h. |
+| IPO thresholds (`IpoConfig.lua`) | Retuned (Seed 1,800, growth x2.5) | Was Placeholder, Seed in 9 min (finding 10). | Done on `ipo-retune`: see section 3. |
 | Day-1 Cash packs (`ShopConfig` minCash) | 250 / 2,500 / 15,000 | At minute 0 the Vault (299 R$) gives 15,000: all upgrades and a Startup egg at once. Later the packs scale with income and become useless, because Cash has no use (finding 3). | Fine for monetisation; recheck after the economy changes above. |
 
 ## 6. Unfair or boring: summary
