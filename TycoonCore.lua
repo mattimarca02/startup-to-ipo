@@ -188,7 +188,11 @@ end
 -- transform (IPO only) changes the payload before it's written: see commitIpo.
 local function save(player, transform)
 	local data = playerData[player]
-	if not data or not data.loaded then return false end -- never overwrite data we failed to load
+	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
+	if not (data.shop and data.team and data.poach and data.ipo) then -- a save must have every part
+		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
+		return false
+	end
 
 	-- One save at a time per player, so an older save can never land after a newer one
 	while data.saving do
@@ -370,28 +374,40 @@ Players.PlayerAdded:Connect(function(player)
 	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotCenter(slot), Color3.fromRGB(90, 90, 100))
 	addLabel(floor, player.DisplayName .. "'s Startup", 12)
 
+	-- Saving stays off (data.loaded is false) until every module has set up its part of the save.
+	-- Some of them wait for Roblox (pass checks, poaching checks), and leaving or an autosave in
+	-- that time must never write a save with parts missing. If a part can't be set up at all,
+	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
-	data.loaded = ok
-	if saved then
-		cash.Value = saved.cash or 0
-		for _, name in ipairs(saved.owned or {}) do
-			data.owned[name] = true
-		end
-	end
-	ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
-	-- Saves from before milestone 4 have no valuation: count the upgrades they bought plus their Cash
-	local legacyValuation = 0
-	if saved and saved.ipo == nil then
-		legacyValuation = cash.Value
-		for _, upg in ipairs(UPGRADES) do
-			if data.owned[upg.name] then
-				legacyValuation += upg.cost
+	local setupOk, setupError = pcall(function()
+		if saved then
+			cash.Value = saved.cash or 0
+			for _, name in ipairs(saved.owned or {}) do
+				data.owned[name] = true
 			end
 		end
+		ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
+		-- Saves from before milestone 4 have no valuation: count the upgrades they bought plus their Cash
+		local legacyValuation = 0
+		if saved and saved.ipo == nil then
+			legacyValuation = cash.Value
+			for _, upg in ipairs(UPGRADES) do
+				if data.owned[upg.name] then
+					legacyValuation += upg.cost
+				end
+			end
+		end
+		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
+		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
+		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+	end)
+	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
+	if not setupOk then
+		warn("Could not set up " .. player.Name .. "'s save, so it won't be saved this session: " .. tostring(setupError))
+		player:Kick("Your startup couldn't load. Please rejoin in a moment: your progress is safe.")
+		return
 	end
-	IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
-	EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
-	PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+	data.loaded = ok -- from here on, saves are complete
 
 	for i, upg in ipairs(UPGRADES) do
 		if data.owned[upg.name] then

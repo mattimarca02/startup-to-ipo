@@ -488,14 +488,14 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 		team.incubators[i] = false
 	end
 	if typeof(savedTeam) == "table" then
-		for _, e in ipairs(savedTeam.employees or {}) do
+		for _, e in ipairs(typeof(savedTeam.employees) == "table" and savedTeam.employees or {}) do
 			if typeof(e) == "table" and typeof(e.id) == "string" and CreatureConfig.getCreature(e.creature) then
 				table.insert(team.employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt or 0 })
 			else
 				warn("Skipped an employee with an unknown creature: " .. tostring(typeof(e) == "table" and e.creature))
 			end
 		end
-		for i, state in ipairs(savedTeam.incubators or {}) do
+		for i, state in ipairs(typeof(savedTeam.incubators) == "table" and savedTeam.incubators or {}) do
 			if i <= count and typeof(state) == "table" and CreatureConfig.getEgg(state.egg) then
 				team.incubators[i] = { egg = state.egg, startedAt = state.startedAt or 0, hatchAt = state.hatchAt or 0 }
 			end
