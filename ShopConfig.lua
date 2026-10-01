@@ -67,6 +67,15 @@ ShopConfig.Passes = {
 		id = 1998465892,
 		effect = { poachBonus = 0.1 },
 	},
+	{
+		key = "Shareholder",
+		name = "Shareholder",
+		description = "Get 2x Shares every time you go public (IPO).",
+		icon = "📜",
+		price = 199,
+		id = 0, -- not synced yet: the owner runs sync_monetization on the PC to create it on Roblox
+		effect = { sharesMultiplier = 2 },
+	},
 }
 
 -- Developer products: can be bought again and again. tab = which shop tab shows it.

@@ -5,6 +5,8 @@
 -- income. The client only shows the state and asks for actions.
 -- PoachServer moves employees between players with hasFreeSlot / releaseEmployee /
 -- finishRelease / addEmployee (see "Poaching" below).
+-- IPO perks (IpoServer) add incubators and desks, speed up eggs and improve luck; an IPO empties
+-- the incubators (clearIncubators) and buying a perk calls refreshCapacity.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,8 +17,8 @@ local CollectionService = game:GetService("CollectionService")
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
 local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
+local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 
-local INCUBATORS = CreatureConfig.Incubators
 -- Where employees hang out, as offsets from the plot center: between the furniture rows,
 -- away from the spawn point and the green pad
 local EMPLOYEE_SPOTS = {
@@ -24,7 +26,11 @@ local EMPLOYEE_SPOTS = {
 	Vector3.new(-18, 0, 10), Vector3.new(18, 0, 10), Vector3.new(-12, 0, 21), Vector3.new(12, 0, 21),
 	Vector3.new(-25, 0, 21), Vector3.new(25, 0, 21), Vector3.new(0, 0, -6),
 }
-local INCUBATOR_SPOTS = { Vector3.new(-12, 0, -25), Vector3.new(0, 0, -25), Vector3.new(12, 0, -25) }
+-- The first three are the base incubators; the rest come from the Extra Incubator IPO perk
+local INCUBATOR_SPOTS = {
+	Vector3.new(-12, 0, -25), Vector3.new(0, 0, -25), Vector3.new(12, 0, -25),
+	Vector3.new(-24, 0, -25), Vector3.new(24, 0, -25),
+}
 local FEET = Vector3.new(0, 1, 0) -- plot center -> a model's pivot with its feet on the floor
 local GOLD = Color3.fromRGB(255, 200, 50)
 local WHITE = Color3.new(1, 1, 1)
@@ -43,7 +49,13 @@ local function getTeam(player)
 end
 
 local function maxEmployees(player)
-	return ShopServer.getMaxEmployees(player, CreatureConfig.BaseEmployeeSlots)
+	local data = core.getData(player)
+	return ShopServer.getMaxEmployees(player, CreatureConfig.BaseEmployeeSlots + IpoServer.perk(data, "ExtraSlot"))
+end
+
+-- How many eggs can incubate at once (base + Extra Incubator IPO perk)
+local function incubatorCount(data)
+	return CreatureConfig.Incubators + IpoServer.perk(data, "ExtraIncubator")
 end
 
 local function makePart(parent, name, size, position, color, material)
@@ -94,7 +106,7 @@ local function snapshot(player, team)
 	for _, employee in ipairs(team.employees) do
 		table.insert(employees, { id = employee.id, creature = employee.creature })
 	end
-	for i = 1, INCUBATORS do
+	for i = 1, incubatorCount(core.getData(player)) do
 		local egg = team.incubators[i]
 		incubators[i] = egg and { egg = egg.egg, startedAt = egg.startedAt, hatchAt = egg.hatchAt } or false
 	end
@@ -215,7 +227,8 @@ local function rollCreature(player, team, egg)
 	team.forceRarity = nil
 	if not rarity then
 		local roll = rng:NextNumber()
-		for _, entry in ipairs(CreatureConfig.getOdds(egg, ShopServer.getLuckMultiplier(player))) do
+		local luck = ShopServer.getLuckMultiplier(player) * (1 + IpoServer.perk(core.getData(player), "BaseLuck"))
+		for _, entry in ipairs(CreatureConfig.getOdds(egg, luck)) do
 			rarity = entry.rarity
 			roll -= entry.chance
 			if roll < 0 then
@@ -270,7 +283,7 @@ local function buyEgg(player, eggKey)
 	local egg = typeof(eggKey) == "string" and CreatureConfig.getEgg(eggKey)
 	if not egg then return false, "Unknown egg" end
 	local index
-	for i = 1, INCUBATORS do
+	for i = 1, incubatorCount(data) do
 		if not team.incubators[i] then
 			index = i
 			break
@@ -281,7 +294,8 @@ local function buyEgg(player, eggKey)
 
 	data.cash.Value -= egg.price
 	local now = os.time()
-	team.incubators[index] = { egg = egg.key, startedAt = now, hatchAt = now + egg.hatchSeconds }
+	local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - IpoServer.perk(data, "FasterEggs")))
+	team.incubators[index] = { egg = egg.key, startedAt = now, hatchAt = now + seconds }
 	refreshIncubator(data, index, now)
 	push(player)
 	return true, egg.name .. " is incubating"
@@ -406,7 +420,7 @@ local function onAction(player, action, arg)
 		return true
 	end
 	if action == "Hatch" or action == "InstantHatch" then
-		if typeof(arg) ~= "number" or arg % 1 ~= 0 or arg < 1 or arg > INCUBATORS then
+		if typeof(arg) ~= "number" or arg % 1 ~= 0 or arg < 1 or arg > incubatorCount(data) then
 			return false, "Bad request"
 		end
 	end
@@ -417,12 +431,50 @@ end
 
 -- Saving (TycoonCore calls these) ----------------------------------------------
 
+-- One incubator on the back of the plot. Walk up to a ready egg to hatch it.
+local function buildIncubator(player, data, i)
+	local team = data.team
+	local spot = core.plotCenter(data.slot) + (INCUBATOR_SPOTS[i] or Vector3.new(-12 + (i - 1) * 12, 0, -25))
+	local base = makePart(data.folder, "Incubator" .. i, Vector3.new(5, 1, 5), spot + Vector3.new(0, 1, 0), Color3.fromRGB(60, 62, 72), Enum.Material.Metal)
+	local glow = makePart(data.folder, "IncubatorGlow", Vector3.new(4.4, 0.2, 4.4), spot + Vector3.new(0, 1.6, 0), Color3.fromRGB(90, 200, 255), Enum.Material.Neon)
+	local egg = makePart(data.folder, "IncubatorEgg", Vector3.new(2.4, 3.2, 2.4), spot + Vector3.new(0, 3.3, 0), WHITE)
+	egg.CanCollide = false
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = egg
+
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromScale(7, 2.4) -- in studs, like the employee name tags
+	gui.StudsOffset = Vector3.new(0, 5.5, 0)
+	gui.MaxDistance = 80
+	gui.Parent = base
+	local label = makeLabel(gui, "", WHITE, UDim2.new(), UDim2.fromScale(1, 1))
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Hatch"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.Enabled = false
+	prompt:SetAttribute("OwnerUserId", player.UserId) -- other players' screens hide it
+	CollectionService:AddTag(prompt, "IncubatorPrompt")
+	prompt.Parent = base
+	prompt.Triggered:Connect(function(who)
+		if who == player and data.ready then
+			hatch(player, i, "prompt")
+		end
+	end)
+
+	team.incubatorParts[i] = { base = base, glow = glow, egg = egg, label = label, prompt = prompt }
+	refreshIncubator(data, i, os.time())
+end
+
 -- Called right after the player's save loads. savedTeam is the "team" part of the save, or nil
 -- (old saves from before milestone 2 simply start with an empty team).
 function EmployeeServer.setupPlayer(player, data, savedTeam)
 	local team = {
 		employees = {}, -- { id, creature, hiredAt } (saved)
-		incubators = {}, -- [1..INCUBATORS] = { egg, startedAt, hatchAt } or false (saved)
+		incubators = {}, -- [1..incubatorCount] = { egg, startedAt, hatchAt } or false (saved)
 		pending = nil, -- a hatched creature waiting for a free desk (saved)
 		outgoing = {}, -- employee ID -> employee being poached away: still saved here until the new owner's save has it
 		models = {}, -- employee ID -> Model in the garage
@@ -431,7 +483,8 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 		clientReady = false,
 		forceRarity = nil, -- Studio Debug tab only
 	}
-	for i = 1, INCUBATORS do
+	local count = incubatorCount(data)
+	for i = 1, count do
 		team.incubators[i] = false
 	end
 	if typeof(savedTeam) == "table" then
@@ -443,7 +496,7 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 			end
 		end
 		for i, state in ipairs(savedTeam.incubators or {}) do
-			if i <= INCUBATORS and typeof(state) == "table" and CreatureConfig.getEgg(state.egg) then
+			if i <= count and typeof(state) == "table" and CreatureConfig.getEgg(state.egg) then
 				team.incubators[i] = { egg = state.egg, startedAt = state.startedAt or 0, hatchAt = state.hatchAt or 0 }
 			end
 		end
@@ -455,41 +508,8 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 	data.team = team
 
 	-- Incubators on the back of the plot. Walk up to a ready egg to hatch it.
-	local center = core.plotCenter(data.slot)
-	for i = 1, INCUBATORS do
-		local spot = center + (INCUBATOR_SPOTS[i] or Vector3.new(-12 + (i - 1) * 12, 0, -25))
-		local base = makePart(data.folder, "Incubator" .. i, Vector3.new(5, 1, 5), spot + Vector3.new(0, 1, 0), Color3.fromRGB(60, 62, 72), Enum.Material.Metal)
-		makePart(data.folder, "IncubatorGlow", Vector3.new(4.4, 0.2, 4.4), spot + Vector3.new(0, 1.6, 0), Color3.fromRGB(90, 200, 255), Enum.Material.Neon)
-		local egg = makePart(data.folder, "IncubatorEgg", Vector3.new(2.4, 3.2, 2.4), spot + Vector3.new(0, 3.3, 0), WHITE)
-		egg.CanCollide = false
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.Sphere
-		mesh.Parent = egg
-
-		local gui = Instance.new("BillboardGui")
-		gui.Size = UDim2.fromScale(7, 2.4) -- in studs, like the employee name tags
-		gui.StudsOffset = Vector3.new(0, 5.5, 0)
-		gui.MaxDistance = 80
-		gui.Parent = base
-		local label = makeLabel(gui, "", WHITE, UDim2.new(), UDim2.fromScale(1, 1))
-
-		local prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Hatch"
-		prompt.HoldDuration = 0
-		prompt.MaxActivationDistance = 12
-		prompt.RequiresLineOfSight = false
-		prompt.Enabled = false
-		prompt:SetAttribute("OwnerUserId", player.UserId) -- other players' screens hide it
-		CollectionService:AddTag(prompt, "IncubatorPrompt")
-		prompt.Parent = base
-		prompt.Triggered:Connect(function(who)
-			if who == player and data.ready then
-				hatch(player, i, "prompt")
-			end
-		end)
-
-		team.incubatorParts[i] = { egg = egg, label = label, prompt = prompt }
-		refreshIncubator(data, i, os.time())
+	for i = 1, count do
+		buildIncubator(player, data, i)
 	end
 
 	placeEmployees(data)
@@ -506,7 +526,7 @@ function EmployeeServer.serialize(data)
 	for _, e in pairs(team.outgoing) do -- being poached: see releaseEmployee
 		table.insert(employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt })
 	end
-	for i = 1, INCUBATORS do
+	for i = 1, incubatorCount(data) do
 		local egg = team.incubators[i]
 		incubators[i] = egg and { egg = egg.egg, startedAt = egg.startedAt, hatchAt = egg.hatchAt } or false
 	end
@@ -516,6 +536,43 @@ function EmployeeServer.serialize(data)
 		incubators = incubators, -- hatch times are real clock times, so eggs keep hatching while you're offline
 		pending = p and { id = p.id, creature = p.creature, hiredAt = p.hiredAt } or nil,
 	}
+end
+
+-- IPO (IpoServer and TycoonCore call these) ----------------------------------------
+
+-- Going public empties every incubator (the eggs are part of the run that resets)
+function EmployeeServer.clearIncubators(player)
+	local team, data = getTeam(player)
+	if not team then return end
+	local now = os.time()
+	for i = 1, #team.incubators do
+		team.incubators[i] = false
+		refreshIncubator(data, i, now)
+	end
+	push(player)
+end
+
+-- After an IPO perk changes: builds new incubators (or, after the Studio Debug reset, removes
+-- extra ones and their eggs) and sends the new desk count
+function EmployeeServer.refreshCapacity(player)
+	local team, data = getTeam(player)
+	if not team then return end
+	local count = incubatorCount(data)
+	for i = #team.incubators + 1, count do
+		team.incubators[i] = false
+		buildIncubator(player, data, i)
+	end
+	for i = #team.incubators, count + 1, -1 do
+		local parts = team.incubatorParts[i]
+		if parts then
+			parts.base:Destroy()
+			parts.glow:Destroy()
+			parts.egg:Destroy()
+			team.incubatorParts[i] = nil
+		end
+		team.incubators[i] = nil
+	end
+	push(player)
 end
 
 -- Setup -----------------------------------------------------------------
@@ -552,7 +609,7 @@ function EmployeeServer.init(coreApi)
 		end)
 		ShopServer.addDebugAction("SkipEggTimers", function(player, data)
 			local now, skipped = os.time(), 0
-			for i = 1, INCUBATORS do
+			for i = 1, incubatorCount(data) do
 				local state = data.team.incubators[i]
 				if state and state.hatchAt > now then
 					state.hatchAt = now
@@ -572,7 +629,7 @@ function EmployeeServer.init(coreApi)
 			for _, player in ipairs(Players:GetPlayers()) do
 				local team, data = getTeam(player)
 				if team and data.ready then
-					for i = 1, INCUBATORS do
+					for i = 1, incubatorCount(data) do
 						local state = team.incubators[i]
 						if state and state.hatchAt <= now and not team.pending
 							and #team.employees < maxEmployees(player) and ShopServer.hasAutoHatch(player) then

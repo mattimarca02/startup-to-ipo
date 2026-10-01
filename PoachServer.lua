@@ -5,6 +5,8 @@
 -- Everything is decided here on the server: targets, costs, shields, cooldowns and the random
 -- roll. The client only shows the state and asks for actions. The numbers live in
 -- CreatureConfig.Poaching; the Headhunter pass and Poach Shield live in ShopConfig.
+-- IPO (IpoServer): the Recruiter Network perk lowers poach costs, an IPO resets the HR Department
+-- (resetHrDepartment), and nobody can go public in the middle of a deal (isBusy).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,6 +17,7 @@ local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
+local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 
 local RULES = CreatureConfig.Poaching
 local HR_PAD_OFFSET = Vector3.new(-21, 0.6, 24) -- front-left of the plot, next to the green pad
@@ -159,6 +162,14 @@ local function protection(target, now)
 		return "Busy", nil -- someone is already negotiating with this team
 	end
 	return nil
+end
+
+-- What this attacker pays to poach the creature (the Recruiter Network IPO perk makes it cheaper)
+local function costFor(attacker, creature)
+	local cost = CreatureConfig.poachCost(creature)
+	if isDummy(attacker) then return cost end
+	local _, data = getPoach(attacker)
+	return math.floor(cost * math.max(0, 1 - IpoServer.perk(data, "CheaperPoach")))
 end
 
 local function chanceFor(attacker, target, creature)
@@ -432,7 +443,7 @@ local function start(player, targetUserId, employeeId)
 	if not EmployeeServer.hasFreeSlot(player) then
 		return false, "Your team is full: fire someone first" -- checked before paying
 	end
-	local cost = CreatureConfig.poachCost(creature)
+	local cost = costFor(player, creature)
 	if data.cash.Value < cost then return false, "Not enough Cash (" .. ShopConfig.formatCash(cost) .. ")" end
 
 	data.cash.Value -= cost -- saved as a refund until the negotiation ends (see serialize)
@@ -498,7 +509,7 @@ local function targetsFor(player)
 					id = employee.id,
 					creature = creature.key,
 					chance = chanceFor(player, target, creature) or false, -- false = can't be poached
-					cost = CreatureConfig.poachCost(creature),
+					cost = costFor(player, creature),
 				})
 			end
 		end
@@ -574,6 +585,7 @@ local function buildHrPad(player, data)
 	label.TextStrokeTransparency = 0
 	label.Text = hrLabelText(data.poach.hrLevel)
 	label.Parent = gui
+	data.poach.hrLabel = label -- an IPO resets the level (see resetHrDepartment)
 
 	local lastTouch = 0
 	pad.Touched:Connect(function(hit)
@@ -594,6 +606,34 @@ local function buildHrPad(player, data)
 		task.spawn(core.save, player) -- the Cash is spent: save it now
 		send(player, "Notice", { text = "HR Department Lv " .. poach.hrLevel .. ": poachers get -" .. percent(nextLevel.defense) .. " chance" })
 	end)
+end
+
+-- IPO (IpoServer and TycoonCore call these) ---------------------------------------
+
+-- True while this player is in a deal: poaching someone, being poached, or an employee of
+-- theirs is still moving between two saves. Going public waits until it's over.
+function PoachServer.isBusy(player)
+	local poach, data = getPoach(player)
+	if not poach then return false end
+	if poach.negotiation or negotiations[player.UserId] then return true end
+	for _, employee in ipairs(data.team and data.team.employees or {}) do
+		if inTransit[employee.id] then return true end
+	end
+	for id in pairs(data.team and data.team.outgoing or {}) do
+		if inTransit[id] then return true end
+	end
+	return false
+end
+
+-- Going public resets the HR Department to level 0
+function PoachServer.resetHrDepartment(player)
+	local poach = getPoach(player)
+	if not poach then return end
+	poach.hrLevel = 0
+	if poach.hrLabel then
+		poach.hrLabel.Text = hrLabelText(0)
+	end
+	publish(player)
 end
 
 -- Saving (TycoonCore calls these) ----------------------------------------------

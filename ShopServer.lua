@@ -11,6 +11,8 @@
 -- And for poaching (PoachServer):
 --   ShopServer.getPoachBonus(player)               -> extra poach chance from Headhunter (0.1 = +10%)
 --   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
+-- And for the IPO (IpoServer):
+--   ShopServer.getSharesMultiplier(player)         -> 2 with the Shareholder pass, otherwise 1
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -36,7 +38,7 @@ local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 local ShopServer = {}
 
-local core -- { getData, save, updateIncome }, given by TycoonCore
+local core -- { getData, save, updateIncome, addEarnings }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
@@ -210,6 +212,18 @@ function ShopServer.getPoachBonus(player)
 	return bonus
 end
 
+-- Shareholder: multiplies the Shares you get from every IPO
+function ShopServer.getSharesMultiplier(player)
+	local multiplier = 1
+	local shop = getShop(player)
+	if shop then
+		for _, effect in ipairs(ownedEffects(shop)) do
+			multiplier *= effect.sharesMultiplier or 1
+		end
+	end
+	return multiplier
+end
+
 -- Game passes -----------------------------------------------------------
 
 -- Returns true/false, or nil if Roblox couldn't be reached (we'll try again later)
@@ -332,6 +346,7 @@ local function applyProduct(player, data, product)
 	if effect.incomeMinutes then
 		local amount = ShopConfig.cashPackAmount(product, data.income.Value)
 		data.cash.Value += amount
+		core.addEarnings(player, amount) -- Cash packs count toward the valuation (IPO)
 		table.insert(gained, "+" .. ShopConfig.formatCash(amount))
 	end
 	if effect.luckMinutes then
