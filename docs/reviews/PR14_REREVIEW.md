@@ -85,8 +85,8 @@ The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M
 ## 4. Anything else new
 
 - **Yields between a check and its use:** the only new yield is R1's. F3 moved the call-off past the save's yield, but everything after `data.ready = true` is synchronous (section 1). F1 adds no yield.
-- **DataStore calls without `pcall`:** none. `GetDataStore` (`:23-25`), `GetAsync` (`:227`, `:243`) and `SetAsync` (`:299`) are all wrapped.
-- **Remotes:** none added. `GoPublic` twice: `ipo.busy` and `data.ready`. `CounterOffer` twice: cleared before anything that could yield (`PoachServer.lua:496`).
+- **DataStore calls without `pcall`:** none. `GetDataStore` (`:23-25`), `GetAsync` (`:230`, `:248`) and `SetAsync` (`:302`) are all wrapped.
+- **Remotes:** none added. `GoPublic` twice: `ipo.busy` and `data.ready`. `CounterOffer` twice: cleared before anything that could yield (`PoachServer.lua:495`).
 - **M4 (IPO reset):** the reset is applied in `commitIpo` before the call-off, and the call-off only refunds the *poacher* and drops V's unsaved Counter-Offer, so the Cash reset can't swallow a refund.
 - **M5 (onboarding):** see section 2 and R5.
 - **M6 (daily claim):** a claim needs `data.ready` (`DailyServer.lua:219`), which is false for the whole IPO save and until the "all modules loaded" gate. F1's sanitizer runs before `DailyServer.setupPlayer` and doesn't touch `daily`. No change.
