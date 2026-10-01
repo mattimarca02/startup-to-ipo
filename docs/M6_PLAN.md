@@ -147,7 +147,7 @@ daily = {                       -- DailyServer.serialize (optional: older saves 
 - **Joins the "all modules loaded" gate (M4 F9).** `DailyServer.setupPlayer` runs inside the same setup `pcall`, after `OnboardingServer.setupPlayer` and before `data.loaded = ok`. It does no DataStore call and nothing that yields, so it can't delay the gate. If it errors, the player is kicked and nothing is saved, so a half-loaded `daily` can never overwrite a good one. `save()` also refuses while `data.daily` is missing.
 - **Section order matters for one thing only:** `DailyServer` must run after `EmployeeServer.setupPlayer`, because a claim calls `EmployeeServer.grantEgg`. Setup itself grants nothing.
 - **Nothing is changed at load.** The "missed a day" case is computed from `lastClaimDay` when the player asks for the state, so loading and rejoining never change the save. Only a successful claim writes to it.
-- **Old code after a rollback** keeps the section (it is in `KNOWN_SECTIONS` only for M6 code, but M4+ code already writes back unknown sections). Code from before the M4 F2 fix would drop it, which is why the publish needs **Shut down all servers**, as for M4 and M5.
+- **After a rollback,** M4 and M5 code doesn't list `daily`, but it already writes unknown sections back unchanged (the M4 F2 fix), so the streak survives. Code from before that fix would drop it, which is why the publish needs **Shut down all servers**, as for M4 and M5.
 
 **What an IPO does to the streak: it keeps it.** Checked in the code:
 
@@ -157,7 +157,7 @@ daily = {                       -- DailyServer.serialize (optional: older saves 
 So the streak, `lastClaimDay` and `best` survive an IPO with no code change, and no entry is needed in `IpoConfig.Resets` (the streak is real time, like shields and cooldowns, not part of the run). What an IPO does change:
 
 - **Cash rewards scale up** after an IPO, because the multiplier raises Income.
-- **A claim made before an IPO** puts the Cash on the run that is about to be reset, and a Day 3/5/7 egg in an incubator is cleared by the IPO (`Resets.Eggs = true`). The Daily window warns once: "Tip: claim after your IPO" is **not** needed for fairness (no exploit: the reward is gone, nothing is gained), but it is a polite line on the IPO confirmation. Open for the UI step, not a rule.
+- **A claim made before an IPO** puts its Cash on the run that is about to be reset, and a Day 3/5/7 egg is cleared with the other incubators (`Resets.Eggs = true`). That is no exploit (the reward is simply gone), but it feels bad. The IPO confirmation screen gets one extra line when a reward is waiting: "You have a daily reward waiting. Claim it after going public." (UI step, build order 3).
 - **Claim during the IPO save** is refused (section 3) so nothing is granted into a state that is about to be replaced.
 
 ## 5. Roblox rules and monetization
@@ -168,7 +168,7 @@ The rules that apply, from CLAUDE.md and ROADMAP.md (CLAUDE.md has the purchase 
 |---|---|
 | Nothing is sold for the daily reward | There is **no Robux button, product or pass in the daily window**: no "restore my streak", no "2x today's reward", no "skip the wait". Every player gets the same calendar for free. |
 | Paid random rewards (loot-box style) need odds shown, and the design rule is "show odds for every egg and boost" | The reward is **fixed and known in advance** (the whole calendar is visible), and nothing is bought with Robux. The eggs on days 3, 5 and 7 are free and their hatch is random, so each egg card shows its odds from the same `CreatureConfig.getOdds` the egg panel uses. |
-| Not tied to a pass in a way that breaks the rules | No pass changes whether, when or what you can claim. One honest side effect: Cash days are minutes of **your current Income**, and a 2x Cash pass already doubles Income, so pass owners see a bigger Cash number. It is the same proportional rule as offline earnings, it is not a paid reward, and the card says "10 min of your income" so it isn't hidden. If you'd rather not have it, the server can compute from Income without passes (open for review, not a question). |
+| Not tied to a pass in a way that breaks the rules | No pass changes whether, when or what you can claim. One honest side effect: Cash days are minutes of **your current Income**, and a 2x Cash pass already doubles Income, so pass owners see a bigger Cash number. It is the same proportional rule as offline earnings, it is not a paid reward, and the card says "10 min of your income" so it isn't hidden. If you'd rather not have it, the server can compute the reward from Income without passes; it's a one-line change in `DailyServer`. |
 | Developer products only in `ProcessReceipt` | M6 adds no purchase. (The "2x offline earnings" product from the ROADMAP is a separate piece, see open question 2; if built, it follows the `ProcessReceipt` rules.) |
 | Never trust the client | Section 3. The client sends only `Claim`. |
 | Under 16 / chat safety | New games first reach 16+ players only (ROADMAP Launch requirements). The daily window has **no free-text input**: only taps (Claim, Close). Nothing links to chat, trading or other players. |
