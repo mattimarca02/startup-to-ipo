@@ -3,9 +3,11 @@
 -- Game passes and developer products live in ShopServer (ServerScriptService) and ShopConfig (ReplicatedStorage).
 -- Eggs and creature employees live in EmployeeServer (ServerScriptService) and CreatureConfig (ReplicatedStorage).
 -- Poaching and the HR Department live in PoachServer (ServerScriptService) and CreatureConfig.Poaching.
+-- Valuation, the IPO rebirth and the IPO shop live in IpoServer (ServerScriptService) and IpoConfig (ReplicatedStorage).
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- GetDataStore errors when the place isn't published, so it's wrapped in pcall too.
 -- If it fails, the game still runs but progress isn't loaded or saved.
@@ -17,7 +19,9 @@ if not storeOk then
 	store = nil
 end
 
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
+local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
 
@@ -33,11 +37,15 @@ local UPGRADES = {
 
 local PLOT_SPACING = 90
 local MAX_PLOTS = 6
-local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings
+local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
 
+-- The parts of the save this version writes. Any other part of a loaded save was written by
+-- newer (or other) code: it's kept and written back unchanged, never deleted.
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true }
+
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, slot, folder, pad, cash, income, shop, team, poach, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -94,11 +102,11 @@ local function totalIncome(data)
 	return sum + EmployeeServer.getIncome(data) -- creature employees earn too
 end
 
--- The Income on the leaderboard already includes game pass bonuses (2x Cash, VIP)
+-- The Income on the leaderboard already includes game pass bonuses (2x Cash, VIP) and the IPO multiplier
 local function updateIncome(player)
 	local data = playerData[player]
 	if not data then return end
-	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player))
+	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player))
 end
 
 local function nextUpgrade(data)
@@ -116,6 +124,7 @@ local function spawnItem(data, i, upg)
 	if upg.name == "Neon Logo" then
 		item.Material = Enum.Material.Neon
 	end
+	data.items[upg.name] = item
 end
 
 -- The green pad always sells the next upgrade in the list.
@@ -137,7 +146,7 @@ local function refreshPad(player)
 
 	local busy = false
 	pad.Touched:Connect(function(hit)
-		if busy then return end
+		if busy or not data.ready then return end -- not ready: loading, or an IPO is being saved
 		if Players:GetPlayerFromCharacter(hit.Parent) ~= player then return end
 		local cash = player.leaderstats.Cash
 		if cash.Value < upg.cost then return end
@@ -179,10 +188,15 @@ local function peekSave(userId)
 	return result, true
 end
 
--- Returns true if the save worked (the shop needs to know before confirming a purchase)
-local function save(player)
+-- Returns true if the save worked (the shop needs to know before confirming a purchase).
+-- transform (IPO only) changes the payload before it's written: see commitIpo.
+local function save(player, transform)
 	local data = playerData[player]
-	if not data or not data.loaded then return false end -- never overwrite data we failed to load
+	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
+	if not (data.shop and data.team and data.poach and data.ipo) then -- a save must have every part
+		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
+		return false
+	end
 
 	-- One save at a time per player, so an older save can never land after a newer one
 	while data.saving do
@@ -201,16 +215,108 @@ local function save(player)
 		shop = ShopServer.serialize(data),
 		team = EmployeeServer.serialize(data),
 		poach = PoachServer.serialize(data),
+		ipo = IpoServer.serialize(data),
 	}
-	local ok, err = pcall(function()
-		store:SetAsync("player_" .. player.UserId, payload)
-	end)
+	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
+		if payload[key] == nil then
+			payload[key] = value
+		end
+	end
+	if transform then
+		transform(payload)
+	end
+	local ok, err
+	if transform and data.debugFailIpoSave then -- Studio Debug tab only: test the IPO failure path
+		data.debugFailIpoSave = nil
+		ok, err = false, "simulated failure (Studio Debug tab)"
+	else
+		ok, err = pcall(function()
+			store:SetAsync("player_" .. player.UserId, payload)
+		end)
+	end
 	data.saving = false
 	if not ok then
 		warn("Save failed for " .. player.Name .. ": " .. tostring(err))
 	end
 	return ok
 end
+
+-- IPO (milestone 4) -----------------------------------------------------
+
+-- Going public: the save is written first with the reset already in it (what IpoConfig.Resets
+-- turns on, and IpoServer's new "ipo" section). Only if that worked does the game change to
+-- match. If it failed, nothing changed. Nothing here waits after the save, so a save that is
+-- waiting behind this one (autosave, leaving) always sees the result.
+local function commitIpo(player, newIpo)
+	local data = playerData[player]
+	if not data then return false end
+	local resets = IpoConfig.Resets
+	local ok = save(player, function(payload)
+		if resets.Cash then
+			payload.cash = IpoConfig.StartingCash
+		end
+		if resets.Upgrades then
+			payload.owned = {}
+		end
+		if resets.Eggs and payload.team then
+			for i in ipairs(payload.team.incubators) do
+				payload.team.incubators[i] = false
+			end
+		end
+		if resets.HRDepartment and payload.poach then
+			payload.poach.hrLevel = 0
+		end
+		payload.ipo = newIpo
+	end)
+	if not ok or playerData[player] ~= data then
+		return ok
+	end
+
+	if resets.Cash then
+		data.cash.Value = IpoConfig.StartingCash
+	end
+	if resets.Upgrades then
+		table.clear(data.owned)
+		for name, item in pairs(data.items) do
+			item:Destroy()
+			data.items[name] = nil
+		end
+	end
+	if resets.Eggs then
+		EmployeeServer.clearIncubators(player)
+	end
+	if resets.HRDepartment then
+		PoachServer.resetHrDepartment(player)
+	end
+	updateIncome(player)
+	refreshPad(player)
+	return true
+end
+
+-- Cash the startup earned (not refunds or gifts): raises the valuation
+local function addEarnings(player, amount)
+	IpoServer.addEarnings(player, amount)
+end
+
+IpoServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+	updateIncome = updateIncome,
+	plotCenter = plotCenter,
+	commitIpo = commitIpo,
+	isPoachBusy = function(player)
+		return PoachServer.isBusy(player)
+	end,
+	countEggs = function(player)
+		return EmployeeServer.countEggs(player)
+	end,
+	onPerksChanged = function(player)
+		EmployeeServer.refreshCapacity(player) -- extra incubators and desks
+		updateIncome(player)
+	end,
+})
 
 -- Shop (milestone 3) -----------------------------------------------------
 
@@ -220,6 +326,7 @@ ShopServer.init({
 	end,
 	save = save,
 	updateIncome = updateIncome,
+	addEarnings = addEarnings,
 })
 
 -- Eggs and employees (milestone 2) --------------------------------------
@@ -286,23 +393,54 @@ Players.PlayerAdded:Connect(function(player)
 	folder.Name = player.Name .. "_Startup"
 	folder.Parent = workspace
 
-	local data = { owned = {}, slot = slot, folder = folder, cash = cash, income = income, loaded = false }
+	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	playerData[player] = data
 
 	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotCenter(slot), Color3.fromRGB(90, 90, 100))
 	addLabel(floor, player.DisplayName .. "'s Startup", 12)
 
+	-- Saving stays off (data.loaded is false) until every module has set up its part of the save.
+	-- Some of them wait for Roblox (pass checks, poaching checks), and leaving or an autosave in
+	-- that time must never write a save with parts missing. If a part can't be set up at all,
+	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
-	data.loaded = ok
-	if saved then
-		cash.Value = saved.cash or 0
-		for _, name in ipairs(saved.owned or {}) do
-			data.owned[name] = true
+	local setupOk, setupError = pcall(function()
+		if saved then
+			cash.Value = saved.cash or 0
+			for _, name in ipairs(saved.owned or {}) do
+				data.owned[name] = true
+			end
+			for key, value in pairs(saved) do
+				if not KNOWN_SECTIONS[key] then
+					data.unknownSections[key] = value
+					warn("Keeping a part of " .. player.Name .. "'s save this version doesn't know: " .. tostring(key))
+				end
+			end
 		end
+		ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
+		-- Saves from before milestone 4 have no valuation: count the upgrades they bought plus their Cash,
+		-- capped at the first IPO-ready valuation (a huge old bank can't buy a pile of Shares on day one)
+		local legacyValuation = 0
+		if saved and saved.ipo == nil then
+			legacyValuation = cash.Value
+			for _, upg in ipairs(UPGRADES) do
+				if data.owned[upg.name] then
+					legacyValuation += upg.cost
+				end
+			end
+			legacyValuation = math.min(legacyValuation, IpoConfig.ipoValuation(0))
+		end
+		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
+		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
+		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+	end)
+	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
+	if not setupOk then
+		warn("Could not set up " .. player.Name .. "'s save, so it won't be saved this session: " .. tostring(setupError))
+		player:Kick("Your startup couldn't load. Please rejoin in a moment: your progress is safe.")
+		return
 	end
-	ShopServer.setupPlayer(player, data, saved and saved.shop) -- passes, boosts and past receipts
-	EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
-	PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+	data.loaded = ok -- from here on, saves are complete
 
 	for i, upg in ipairs(UPGRADES) do
 		if data.owned[upg.name] then
@@ -313,10 +451,12 @@ Players.PlayerAdded:Connect(function(player)
 
 	-- Offline earnings: the startup keeps making money while you're away
 	if saved and saved.lastSeen then
-		local away = math.clamp(os.time() - saved.lastSeen, 0, OFFLINE_CAP_SECONDS)
+		local cap = OFFLINE_CAP_SECONDS + IpoServer.perk(data, "OfflineCap")
+		local away = math.clamp(os.time() - saved.lastSeen, 0, cap)
 		local earned = math.floor(away * income.Value * OFFLINE_RATE)
 		if earned > 0 then
 			cash.Value += earned
+			addEarnings(player, earned)
 			print(player.Name .. " earned $" .. earned .. " while offline")
 		end
 	end
@@ -342,14 +482,15 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 end)
 
--- Passive income every second
+-- Passive income every second (paused while loading, and while an IPO is being saved)
 task.spawn(function()
 	while true do
 		task.wait(1)
-		for player in pairs(playerData) do
+		for player, data in pairs(playerData) do
 			local stats = player:FindFirstChild("leaderstats")
-			if stats then
+			if stats and data.ready then
 				stats.Cash.Value += stats.Income.Value
+				addEarnings(player, stats.Income.Value)
 			end
 		end
 	end

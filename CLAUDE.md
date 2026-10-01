@@ -30,10 +30,11 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 - **Configs** are ModuleScripts in ReplicatedStorage:
   - `ShopConfig`: passes, products, `EggsEnabled`
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes` and `PoachRemotes` in ReplicatedStorage.
+  - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes` and `IpoRemotes` in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
-  - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3. They use the shared responsive layout: a left column, or a top row on short (phone) screens.
+  - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4. They use the shared responsive layout: a column centered on the left, or a top row on short (phone) screens (height under 460).
   - Pop-up messages go at the bottom center.
   - Everything must work on a phone.
 - **Studio-only debug tools** live in the shop's Debug tab. Add buttons with `ShopServer.addDebugAction`. They must stay behind `RunService:IsStudio()` and `ShopConfig.DebugInStudio`, so they never run on live servers.
@@ -72,7 +73,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   },
   team = {                                       -- EmployeeServer.serialize
     employees = { { id = GUID, creature = "CodingCat", hiredAt = os.time() }, ... },
-    incubators = { false or { egg = "Garage", startedAt, hatchAt }, ... }, -- 3 slots, false = empty
+    incubators = { false or { egg = "Garage", startedAt, hatchAt }, ... }, -- 3 slots (+ Extra Incubator perk), false = empty
     pending = nil or { id, creature, hiredAt },
   },
   poach = {                                      -- PoachServer.serialize (optional: older saves have none)
@@ -82,10 +83,18 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lost = { [employeeId] = { to = UserId, at } },          -- who took our employees (last 30 days, max 50)
     refund = nil or number,                      -- Cash of a negotiation the server stopped during
   },
+  ipo = {                                        -- IpoServer.serialize (optional: older saves have none)
+    count = number, shares = number,             -- IPOs done, unspent Shares
+    valuation = number,                          -- Cash earned since the last IPO (decides the stage)
+    lifetime = number, best = number,            -- Cash earned ever; best valuation on any run (leaderboard)
+    lastIpoAt = os.time(),                       -- for the IPO cooldown
+    perks = { [perkKey] = level },               -- IPO shop perks
+  },
 }
 ```
 
-- **Old saves must keep loading.** New fields are optional and get defaults. Unknown keys are skipped with a warning, never an error. Never rename or remove an existing field.
+- **Old saves must keep loading.** New fields are optional and get defaults. Bad or unknown values inside a section are skipped with a warning, never an error. Never rename or remove an existing field.
+- **Never delete what you don't know.** `save()` writes back every top-level section of the loaded save that this version doesn't recognise (`KNOWN_SECTIONS` in TycoonCore), so older code never wipes a newer section. Eggs saved in incubators above the current count are kept the same way (EmployeeServer `parked`). Code that ran *before* this rule (anything older than milestone 4) can't do this: publish with **Shut down all servers** when a new section is added.
 - **Wrap every DataStore call in `pcall`,** including `GetDataStore`.
 - **Protect existing data:**
   - Never save over data that failed to load (the `data.loaded` check).

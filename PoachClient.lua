@@ -186,14 +186,14 @@ fitText(poachButton, 22)
 make("UIStroke", { Thickness = 3, Transparency = 0.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = poachButton })
 local HUD_SLOT = 3
 local function placeHudButton()
-	if gui.AbsoluteSize.Y < 420 then
+	if gui.AbsoluteSize.Y < 460 then
 		poachButton.AnchorPoint = Vector2.new(0, 0)
 		poachButton.Size = UDim2.fromOffset(64, 64)
 		poachButton.Position = UDim2.fromOffset(10 + HUD_SLOT * 72, 6)
 	else
 		poachButton.AnchorPoint = Vector2.new(0, 0.5)
 		poachButton.Size = UDim2.fromOffset(76, 76)
-		poachButton.Position = UDim2.new(0, 12, 0.5, (HUD_SLOT - 1) * 86)
+		poachButton.Position = UDim2.new(0, 12, 0.5, (HUD_SLOT - 2) * 86)
 	end
 end
 placeHudButton()
@@ -875,7 +875,7 @@ local alertPanel = topPanel("PoachAlert", COLORS.danger, true)
 
 -- Below the HUD row on short phone screens; the warning goes under the negotiation if both show
 local function placeTopPanels()
-	local top = gui.AbsoluteSize.Y < 420 and 76 or 12
+	local top = gui.AbsoluteSize.Y < 460 and 76 or 12
 	negotiationPanel.frame.Position = UDim2.new(0.5, 0, 0, top)
 	alertPanel.frame.Position = UDim2.new(0.5, 0, 0, top + (negotiationPanel.frame.Visible and 100 or 0))
 end

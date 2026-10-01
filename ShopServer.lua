@@ -11,6 +11,8 @@
 -- And for poaching (PoachServer):
 --   ShopServer.getPoachBonus(player)               -> extra poach chance from Headhunter (0.1 = +10%)
 --   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
+-- And for the IPO (IpoServer):
+--   ShopServer.getSharesMultiplier(player)         -> 2 with the Shareholder pass, otherwise 1
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -24,6 +26,7 @@ local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local MAX_RECEIPTS = 100 -- PurchaseIds remembered per player, so a repeated receipt never pays twice
 local DATA_WAIT_SECONDS = 30 -- how long a receipt waits for a joining player's save to load
 local PASS_RECHECK_SECONDS = 120 -- re-ask Roblox about passes (catches passes bought on the website mid-game)
+local PASS_CHECK_TIMEOUT = 10 -- loading waits at most this long for the pass check on join
 local LOUNGE_CENTER = Vector3.new(0, 0.5, 70) -- between the spawn and the garage plots
 local LOUNGE_SIZE = Vector3.new(36, 1, 24)
 local LOUNGE_WALL_HEIGHT = 10
@@ -36,7 +39,7 @@ local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 local ShopServer = {}
 
-local core -- { getData, save, updateIncome }, given by TycoonCore
+local core -- { getData, save, updateIncome, addEarnings }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
@@ -210,6 +213,18 @@ function ShopServer.getPoachBonus(player)
 	return bonus
 end
 
+-- Shareholder: multiplies the Shares you get from every IPO
+function ShopServer.getSharesMultiplier(player)
+	local multiplier = 1
+	local shop = getShop(player)
+	if shop then
+		for _, effect in ipairs(ownedEffects(shop)) do
+			multiplier *= effect.sharesMultiplier or 1
+		end
+	end
+	return multiplier
+end
+
 -- Game passes -----------------------------------------------------------
 
 -- Returns true/false, or nil if Roblox couldn't be reached (we'll try again later)
@@ -266,13 +281,14 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		receipts = {}, -- PurchaseIds already granted, oldest first (saved)
 		receiptSet = {}, -- the same PurchaseIds as a quick lookup
 	}
-	if savedShop then
-		local luckLeft = savedShop.luckLeft or 0
+	if typeof(savedShop) == "table" then -- bad values are skipped, never an error
+		local luckLeft = tonumber(savedShop.luckLeft) or 0
 		if luckLeft > 0 then
 			shop.luckUntil = os.time() + luckLeft
 		end
-		shop.instantHatches = savedShop.instantHatches or 0
-		for _, purchaseId in ipairs(savedShop.receipts or {}) do
+		local hatches = tonumber(savedShop.instantHatches) or 0
+		shop.instantHatches = hatches == hatches and math.max(0, math.floor(hatches)) or 0 -- no NaN
+		for _, purchaseId in ipairs(typeof(savedShop.receipts) == "table" and savedShop.receipts or {}) do
 			table.insert(shop.receipts, purchaseId)
 			shop.receiptSet[purchaseId] = true
 		end
@@ -290,7 +306,25 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		onCharacter(player.Character)
 	end
 
-	checkPasses(player, shop)
+	-- Ask Roblox which passes they own, but never let a slow answer hold up loading: after
+	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
+	-- Passes aren't saved, so a save written before the answer is still complete.
+	local state = "checking"
+	task.spawn(function()
+		checkPasses(player, shop)
+		if state == "gaveUp" then
+			publish(player) -- answered after loading went on
+		end
+		state = "done"
+	end)
+	local deadline = os.clock() + PASS_CHECK_TIMEOUT
+	while state == "checking" and os.clock() < deadline do
+		task.wait(0.1)
+	end
+	if state == "checking" then
+		state = "gaveUp"
+		warn("Pass check for " .. player.Name .. " is slow: loading goes on, passes apply when Roblox answers")
+	end
 	publish(player)
 end
 
@@ -332,6 +366,7 @@ local function applyProduct(player, data, product)
 	if effect.incomeMinutes then
 		local amount = ShopConfig.cashPackAmount(product, data.income.Value)
 		data.cash.Value += amount
+		core.addEarnings(player, amount) -- Cash packs count toward the valuation (IPO)
 		table.insert(gained, "+" .. ShopConfig.formatCash(amount))
 	end
 	if effect.luckMinutes then

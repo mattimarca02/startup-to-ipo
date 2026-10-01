@@ -8,7 +8,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE Shop: passes 2x Cash 199, VIP 249, Extra Employee Slots 149, Auto-Hatch 199, Headhunter 149. Products: Pile/Bag/Vault of Cash 29/99/299, Luck Boost 49, Instant Hatch 25, Poach Shield 49. All exist on Roblox.
 - DONE M2: recruiting eggs, creature employees. ShopConfig.EggsEnabled = false and the 4 egg items are off sale until launch.
 - DONE M3: poaching (merged). PR #2 poaching-cleanup merged: 2-player poach, counter-offer and the leave/refund case all passed manual testing.
-- IN PROGRESS M4: IPO rebirth. Branch claude/task-1iff57 has an early start (IpoConfig.lua): review it before continuing.
+- IN REVIEW M4: IPO rebirth built on milestone-4-ipo (PR open): valuation, 5 funding stages, Go Public with two-step confirm, x multiplier + Shares, IPO shop (6 perks), gold IPO pad, in-server leaderboard, Debug tools. Merge after Mattia's playtest. The early start on claude/task-1iff57 was reviewed and replaced (its IpoConfig was rewritten); that branch is no longer needed.
+- NOT SYNCED: game pass "Shareholder" (2x Shares, R$ 199) is in ShopConfig with id = 0 and shows "Coming soon". Run sync_monetization on the PC to create it on Roblox.
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - Economy simulator in tools/economy_sim.py; IPO numbers are placeholders, rerun with the real IpoConfig.lua after M4 merges and retune.
 
