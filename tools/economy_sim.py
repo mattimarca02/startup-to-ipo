@@ -79,6 +79,11 @@ BEHAVIOURS = {
     "casual": [(0, 10)],                       # 1 session of 10 min per day
     "idler":  [(0, 1)],                        # logs in for 1 minute a day: collects offline cash, spends it, leaves
 }
+# Extra behaviours, only used by the "real IPO" report (they are not in the main tables)
+EXTRA_BEHAVIOURS = {
+    "casual30": [(0, 72), (4, 72), (8, 72), (12, 72)],   # ~30% of a 16-hour waking day (4.8 h): 4 sessions of 72 min
+    "binge":    [(0, 120)],                               # one uninterrupted 2-hour session (use days=1)
+}
 
 # --- IPO rebirth. Source: IpoConfig.lua ---
 IPO_ENABLED_IN_MAIN_TABLE = False   # the main tables ignore IPO; the IPO section turns it on
@@ -95,6 +100,14 @@ IPO_THRESHOLD_GROWTH = 2.5          # IpoConfig.StageGrowthPerIpo: next run's st
 IPO_KEEPS_EMPLOYEES = True          # IpoConfig.Resets: employees are never in the Resets table, always kept
 IPO_RESET_UPGRADES = True           # IpoConfig.Resets.Upgrades = true (cash and incubating eggs also reset)
 IPO_RESETS_HR = False               # IpoConfig.Resets.HRDepartment = false: the HR level is kept across an IPO
+IPO_SHARES_PER_IPO = 10             # IpoConfig.SharesPerIpo: Shares = this * (valuation / IPO-ready valuation) ^ exponent
+IPO_SHARES_EXPONENT = 0.5           # IpoConfig.SharesExponent
+SHAREHOLDER_MULT = 2                # ShopConfig Passes.Shareholder: 2x Shares per IPO (199 R$)
+IPO_COOLDOWN_SECONDS = 60           # IpoConfig.CooldownSeconds (not modeled: every gap between IPOs is far longer)
+IPO_PERK_COSTS = {                  # IpoConfig.Perks: Shares for each level, per perk (total = everything in the IPO shop)
+    "FasterEggs": [5, 10, 20, 35, 50], "ExtraIncubator": [15, 40], "ExtraSlot": [10, 25, 50],
+    "OfflineCap": [5, 10, 20, 35], "BaseLuck": [5, 10, 20, 35, 50], "CheaperPoach": [5, 10, 15, 20, 25],
+}
 
 SIM_DAYS = 7
 DAY = 24 * 3600
@@ -125,8 +138,11 @@ def egg_gain(egg_key, roster, slots, luck):
 
 
 class Player:
-    def __init__(self, rng, double_cash=False, vip=False, extra_slots=False, auto_hatch=False, luck_boost=False):
+    def __init__(self, rng, double_cash=False, vip=False, extra_slots=False, auto_hatch=False, luck_boost=False, shareholder=False):
         self.rng = rng
+        self.share_mult = SHAREHOLDER_MULT if shareholder else 1
+        self.shares = 0
+        self.shares_log = []        # Shares earned at each IPO
         self.mult_pass = (DOUBLE_CASH if double_cash else 1) * (VIP_CASH if vip else 1)
         self.slots = BASE_SLOTS + (EXTRA_SLOTS if extra_slots else 0)
         self.auto_hatch = auto_hatch
@@ -279,6 +295,11 @@ class Player:
     def maybe_ipo(self, t):
         if not self.use_ipo or self.stage_index() < len(IPO_STAGES) - 1:
             return False
+        # the sim goes public the moment IPO-ready is reached, so the ratio is ~1 (a player who waits gets more)
+        ratio = max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale))
+        gained = int(IPO_SHARES_PER_IPO * ratio ** IPO_SHARES_EXPONENT * self.share_mult)
+        self.shares += gained
+        self.shares_log.append(gained)
         self.ipos += 1
         self.ipo_times.append(t)
         self.stage_scale *= IPO_THRESHOLD_GROWTH
@@ -301,7 +322,7 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, **passes):
     p.use_ipo = use_ipo
     sessions = []
     for d in range(days):
-        for start_h, minutes in BEHAVIOURS[behaviour]:
+        for start_h, minutes in {**BEHAVIOURS, **EXTRA_BEHAVIOURS}[behaviour]:
             s = d * DAY + start_h * 3600
             sessions.append((s, s + minutes * 60))
     claim_delay = 0 if p.auto_hatch else CLAIM_DELAY_MANUAL
@@ -508,6 +529,86 @@ def report_ipo(n, days=30):
         print(f"| {b} | " + " | ".join(cols) + f" | {median_count:.0f} | x{ipo_mult_at(median_count):.2f} |")
 
 
+SIM_DAYS_IPO = 60
+
+
+def all_behaviours():
+    return {**BEHAVIOURS, **EXTRA_BEHAVIOURS}
+
+
+def active_minutes_at(behaviour, t):
+    """Minutes the player has really been online at wall-clock time t (seconds)."""
+    total = 0.0
+    for d in range(SIM_DAYS_IPO + 1):
+        for start_h, minutes in all_behaviours()[behaviour]:
+            s = d * DAY + start_h * 3600
+            total += max(0.0, min(t, s + minutes * 60) - s) / 60
+    return total
+
+
+def fmt_active(minutes):
+    if minutes is None:
+        return "never"
+    if minutes < 90:
+        return f"{minutes:.0f} min"
+    return f"{minutes / 60:.1f} h"
+
+
+def med(values):
+    values = [v for v in values if v is not None]
+    return statistics.median(values) if values else None
+
+
+def report_real_ipo(n, days=SIM_DAYS_IPO):
+    """Active minutes (time really spent online) per funding stage and per IPO, with and without the Shareholder pass."""
+    total_perks = sum(sum(c) for c in IPO_PERK_COSTS.values())
+    print(f"\n## 6. Real IPO numbers in ACTIVE minutes (time online), {days} days, median of {n} runs")
+    print("Sessions: " + "; ".join(f"{b} {all_behaviours()[b]}" for b in ("active", "casual30", "casual")))
+    print(f"The whole IPO shop costs {total_perks} Shares ({', '.join(f'{k} {sum(v)}' for k, v in IPO_PERK_COSTS.items())}). Perks are NOT modeled.")
+    for b in ("active", "casual30", "casual"):
+        runs = [run(b, seed, days=days, use_ipo=True) for seed in range(n)]
+        pass_runs = [run(b, seed, days=days, use_ipo=True, shareholder=True) for seed in range(n)]
+        print(f"\n**{b}**\n")
+        stage_times = []
+        for name, _ in IPO_STAGES[1:]:
+            key = f"stage {name}"
+            stage_times.append(f"{name} {fmt_active(med([active_minutes_at(b, r.milestones[key]) if key in r.milestones else None for r in runs]))}")
+        print("First run, time online to reach each stage: " + ", ".join(stage_times) + "\n")
+        print("| IPO # | Online time to reach it (total) | Online time of that run | Shares (no pass) | Shares (Shareholder) | Multiplier after |")
+        print("|---|---|---|---|---|---|")
+        for k in (1, 2, 3, 5, 10, 20):
+            if sum(1 for r in runs if len(r.ipo_times) >= k) < len(runs) / 2:
+                print(f"| {k} | not reached in {days} d | | | | |")
+                continue
+            def at(r):
+                return active_minutes_at(b, r.ipo_times[k - 1]) if len(r.ipo_times) >= k else None
+            def gap(r):
+                if len(r.ipo_times) < k:
+                    return None
+                prev = active_minutes_at(b, r.ipo_times[k - 2]) if k > 1 else 0
+                return active_minutes_at(b, r.ipo_times[k - 1]) - prev
+            sh = med([r.shares_log[k - 1] if len(r.shares_log) >= k else None for r in runs])
+            shp = med([r.shares_log[k - 1] if len(r.shares_log) >= k else None for r in pass_runs])
+            print(f"| {k} | {fmt_active(med([at(r) for r in runs]))} | {fmt_active(med([gap(r) for r in runs]))} | {sh:.0f} | {shp:.0f} | x{ipo_mult_at(k):.2f} |")
+        for label, rs in (("no pass", runs), ("Shareholder", pass_runs)):
+            done = []
+            for r in rs:
+                total = 0
+                for i, g in enumerate(r.shares_log):
+                    total += g
+                    if total >= total_perks:
+                        done.append((i + 1, active_minutes_at(b, r.ipo_times[i])))
+                        break
+            if len(done) >= len(rs) / 2:
+                print(f"\nWhole IPO shop ({total_perks} Shares, {label}) bought at IPO #{med([x[0] for x in done]):.0f}, after {fmt_active(med([x[1] for x in done]))} online.")
+            else:
+                print(f"\nWhole IPO shop ({total_perks} Shares, {label}): not finished in {days} days (IPOs done {med([len(r.ipo_times) for r in rs]):.0f}, Shares {med([r.shares for r in rs]):.0f}).")
+    runs = [run("binge", seed, days=1, use_ipo=True) for seed in range(n)]
+    counts = [len(r.ipo_times) for r in runs]
+    when = ", ".join(f"#{i + 1} {fmt_active(med([r.ipo_times[i] / 60 for r in runs if len(r.ipo_times) > i]))}" for i in range(int(med(counts))))
+    print(f"\n**2-hour binge:** median {med(counts):.0f} IPOs (range {min(counts)}-{max(counts)}); IPO at (median online time): {when}")
+
+
 def report_detail(n):
     """Extra figures used for the findings."""
     print("\n## 5. Extra figures for the findings")
@@ -557,6 +658,7 @@ def main():
     report_slots_pass(n)
     report_passes(n)
     report_ipo(max(5, n // 4))
+    report_real_ipo(max(5, n // 2))
     report_detail(n)
 
 

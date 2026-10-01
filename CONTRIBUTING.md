@@ -101,3 +101,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | IpoServer | ServerScriptService | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
+| tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
+| docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
