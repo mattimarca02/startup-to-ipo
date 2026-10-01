@@ -99,7 +99,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| IpoConfig | ReplicatedStorage | free | | |
+| IpoConfig | ReplicatedStorage | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
 | IpoClient | StarterPlayerScripts | free | | |
-| tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
-| docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
+| tools/economy_sim.py | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
+| docs/ECONOMY.md | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |

@@ -32,10 +32,12 @@ IpoConfig.StageGrowthPerIpo = 2.5
 IpoConfig.BonusPerIpo = 0.5
 IpoConfig.BonusExponent = 0.75
 
--- Shares from an IPO: SharesPerIpo * (valuation / IPO-ready valuation) ^ SharesExponent.
--- Going public exactly at IPO-ready gives SharesPerIpo; waiting until 4x gives twice as many.
+-- Shares from an IPO: SharesPerIpo * (1 + SharesGrowthPerIpo * IPOs) * (valuation / IPO-ready valuation) ^ SharesExponent.
+-- IPOs = how many you have already done, so the 1st IPO gives SharesPerIpo (10), the 2nd 13, the 11th 40.
+-- Going public exactly at IPO-ready gives that base; waiting until 4x gives twice as many.
 -- The Shareholder pass multiplies this (see ShopConfig).
 IpoConfig.SharesPerIpo = 10
+IpoConfig.SharesGrowthPerIpo = 0.3
 IpoConfig.SharesExponent = 0.5
 
 IpoConfig.StartingCash = 0 -- Cash after an IPO (the first garage upgrade is free)
@@ -153,7 +155,8 @@ end
 -- Shares for going public now. passMultiplier = 2 with the Shareholder pass.
 function IpoConfig.sharesFor(valuation, ipoCount, passMultiplier)
 	local ratio = math.max(0, valuation / IpoConfig.ipoValuation(ipoCount))
-	return math.floor(IpoConfig.SharesPerIpo * ratio ^ IpoConfig.SharesExponent * (passMultiplier or 1))
+	local growth = 1 + IpoConfig.SharesGrowthPerIpo * math.max(0, ipoCount or 0)
+	return math.floor(IpoConfig.SharesPerIpo * growth * ratio ^ IpoConfig.SharesExponent * (passMultiplier or 1))
 end
 
 -- 1.5 -> "x1.5", 2 -> "x2"

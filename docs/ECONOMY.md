@@ -100,6 +100,26 @@ Players: **active** = 3 x 20 min/day. **casual30** = about 30% of a 16 h waking 
 
 Note on Shares: the simulated player goes public the moment IPO-ready is reached, which gives exactly 10 Shares (20 with the pass). The bigger numbers (39, 62) are players who log in after hours away: the offline Cash is counted as valuation, so they arrive far above the threshold and Shares grow with the square root of that. This is how the real game works too.
 
+### 3c. Shares now grow with the IPO count (`ipo-shares-growth`)
+
+Only `IpoConfig.sharesFor` changed: Shares = `SharesPerIpo * (1 + 0.3 * IPOs done) * ratio ^ 0.5` (the 1st IPO gives 10, the 2nd 13, the 11th 40). `StageGrowthPerIpo` and the ratio (no 4x cap yet) are unchanged. Old saves load as before: the formula only reads the saved IPO count, and a save without one counts as 0 IPOs. `tools/economy_sim.py` now has `IPO_SHARES_GROWTH = 0.3` to match. Re-run with `--runs 40`, section 6, median, 60 days.
+
+**IPOs needed to buy the whole shop (525 Shares)**
+
+| Player | Before (about 10 Shares per IPO) | Now, no pass | Now, Shareholder pass (2x) |
+|---|---|---|---|
+| active (3 x 20 min/day) | 53 IPOs (190 Shares after 13 IPOs) | not in 60 days: 13 IPOs, 472 Shares (about 14-15 IPOs) | IPO #8, after 3.0 h online |
+| casual30 (4 x 72 min/day) | 53 IPOs (138 Shares after 13 IPOs) | not in 60 days: 13 IPOs, 386 Shares (about 16 IPOs) | IPO #11, after 39.6 h online |
+| casual (1 x 10 min/day) | 53 IPOs (240 Shares after 11 IPOs) | not in 60 days: 11 IPOs, 484 Shares (about 12 IPOs) | IPO #6, after 50 min online |
+
+The "about" numbers are my estimate from the Shares per IPO the sim reaches, not a simulated result (the sim stops at 60 days). For comparison, a player who always goes public exactly at IPO-ready (ratio 1, no overshoot) needs 17 IPOs without the pass and 11 with it.
+
+**Do Shares look too generous?** Mostly no, with two warnings.
+- **Without the pass it is about right.** Nobody finishes the shop in 60 days, and the active player is close to it (472 of 525) after 13 IPOs. That is weeks of goals, not a day.
+- **With the Shareholder pass the shop is bought fast:** 8 IPOs and 3 hours online for the active player. That is the pass doing its job (2x), but it is the edge of too generous.
+- **The casual player (10 min a day) with the pass is too generous:** the whole shop after 50 minutes online and 6 IPOs. The cause is not the new formula but the offline overshoot (first IPO gives 62 or 125 Shares because offline Cash counts as valuation). The new growth multiplies that overshoot. This is the "cap the ratio at 4" suggestion in section 5; it is not applied here, it should be the next small change.
+- Late IPOs still give a lot (IPO #10: 37-39 Shares, #20 would be 70+). Re-check once the cap is in.
+
 **3. Running out of things to do.** The base game was finished in about 7 minutes. Now the first run is still 12 minutes, but the run after it is not finished: an active player needs about **1 hour online for 5 IPOs, 6.7 hours online for 10** and still has not bought the whole IPO shop (525 Shares) after 60 days (13 IPOs, 190 Shares; 384 with the pass). So yes, the IPO now carries the mid-game: there is something to do for weeks. The 2-hour binge ends at 4 IPOs (range 4-5), as intended. The honest caveat: the first hour is fast (IPO #1, #2, #3 at 12, 20 and 35 min), and after IPO #5 it slows down sharply.
 
 **4. Casual (30% active):** same first 12 minutes, IPO #5 at 82 min online (about a day), IPO #10 at 19 h online (about 4 days at 4.8 h/day), 13 IPOs in 60 days. A once-a-day 10-minute player gets 11 IPOs in 60 days. Casual players are not locked out.
@@ -108,7 +128,7 @@ Note on Shares: the simulated player goes public the moment IPO-ready is reached
 
 | What | Problem | Suggested fix |
 |---|---|---|
-| Shares per IPO (`SharesPerIpo = 10`, exponent 0.5) | Shares are measured against the threshold, so they stay about 10 per IPO however long the run is. The whole shop (525) needs about 53 IPOs; the sim reaches 190 Shares in 60 days of active play. Perks will feel unreachable after the first 5 or 6. | Make Shares grow with the IPO count, for example `SharesPerIpo * (1 + 0.3 * IPOs)`, or cut perk costs by about 40%. Re-run the sim after. |
+| Shares per IPO | **Done on `ipo-shares-growth`:** `sharesFor` now uses `SharesPerIpo * (1 + 0.3 * IPOs)`, see section 3c. | Before: about 10 per IPO, so the whole shop (525) needed about 53 IPOs. |
 | Late IPOs are gated by logins, not by play time | Active, casual and idler all get 10-13 IPOs in 30-60 days: employees are kept, so offline Cash alone (8 h at 50%) clears the next threshold. Extra play time buys little after IPO #5. | Fine for retention, but if you want playing to matter, raise `StageGrowthPerIpo` a little (2.5 to 3) or lower the offline rate after IPO #5. Try one change at a time. |
 | Offline overshoot pays more Shares | A player who returns after hours can get 4-6x the Shares of one who plays through (39 vs 10, casual 62 vs 10 at IPO #1). | Optional: cap the ratio in `sharesFor` at 4 (max 20 Shares), so that logging in after being away is not a Shares exploit. |
 | Multiplier | x1.50 at IPO #1, x3.81 at #10, x4.22 at #12. Slow and diminishing, not a runaway. | OK as is. |
