@@ -94,6 +94,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   onboarding = {                                 -- OnboardingServer.serialize (optional: older saves have none)
     seenIntro = boolean,                         -- the free egg was given (or wasn't needed): never given twice
     legacy = boolean,                            -- had a save before M5: counts as already onboarded
+    arrowDone = boolean,                         -- the glowing arrow did its job (never comes back)
     goals = { goalKey, ... },                    -- finished goals (stay finished)
   },
 }

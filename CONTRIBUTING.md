@@ -103,5 +103,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | IpoClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
 | OnboardingConfig | ReplicatedStorage | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
 | tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
 | docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
