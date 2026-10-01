@@ -135,6 +135,46 @@ This is older than M4, but M4 adds the most valuable part of the save to what's 
 - **What breaks:** the second server can read the save before the first server's IPO save lands. It then plays on with the state from before the IPO, and its saves overwrite the IPO. Nothing is duplicated (the Shares from the lost IPO are lost too), and the player can go public again.
 - **Fix:** M9 session locking. Nothing to do in M4.
 
+## 4. Reset scope
+
+Checked against the save written during the IPO (`TycoonCore.lua:240-252`) and the in-game reset after it (`TycoonCore.lua:257-266`, `IpoServer.lua:196-203`).
+
+| Item | ROADMAP M4 says | Code does | OK? |
+|---|---|---|---|
+| Cash | reset | set to `IpoConfig.StartingCash` (0) | ✅ |
+| Garage upgrades and their parts | reset | `owned` emptied, parts destroyed | ✅ |
+| Green pad | reset | back to the free Desk | ✅ |
+| Eggs in incubators (incl. Extra Incubator slots) | reset | all set to `false` | ✅ (see F4 for the warning) |
+| Valuation | reset | 0. `lifetime` and `best` are kept | ✅ |
+| **HR Department level** | **kept** | **reset to 0** | ❌ **F1** |
+| Employees, outgoing employees, waiting new hire | kept | not touched | ✅ |
+| Game passes | kept | not saved, checked again on every join | ✅ |
+| Luck Boost time, Instant Hatches, receipts | kept | `shop` section not touched | ✅ |
+| Poach Shield time, poach cooldown, losses, gained/lost notes | kept | `poach` not touched (except HR) | ✅ |
+| Shares, perks, IPO count | kept, plus the reward | `count + 1`, `shares + reward`, perks copied | ✅ |
+| Income multiplier | grows | `updateIncome` runs after the IPO (`IpoServer.lua:203`) | ✅ |
+
+**Result:** IPO wipes exactly what it should, except the HR level (F1). The in-game texts list the same things as the code, so they will need updating when F1 is fixed.
+
+## 5. Interaction with M2 eggs and M3 poaching
+
+### Eggs
+
+- **`EggsEnabled = false`** only hides the Robux egg items. Eggs bought with Cash in the garage still work, and the IPO clears them. That's correct, because they belong to the run that resets.
+- **Instant Hatch** is safe (see the F4 correction). Eggs that are ready but stuck behind a pending new hire are wiped, and that's what F4's warning is for.
+- **IPO perks:** Extra Incubator, Extra Desk, Faster Recruiting and Talent Scouts are all read on the server (`EmployeeServer.lua:53`, `:58`, `:230`, `:297`). IpoServer is set up before EmployeeServer (`TycoonCore.lua:392-393`), so incubators 4 and 5 load with their eggs. Older code drops them, which is part of F2.
+
+### Poaching
+
+| Question | Answer |
+|---|---|
+| Can an in-flight poach cross an IPO? | No. A running negotiation blocks the IPO for both the poacher and the target (`PoachServer.lua:618`), and so does an employee that's still being moved on either team (`PoachServer.lua:619-624`). |
+| Can someone start poaching a player while their IPO is saving? | No. `poachOf` needs `data.ready` (`PoachServer.lua:86`), so the target shows as "Still loading". |
+| Can an IPO duplicate or delete an employee? | No. The IPO never touches the employee list (`TycoonCore.lua:240-252`). |
+| Can a Counter-Offer slip through an IPO? | Yes, with a small Cash loss in a narrow race: **F3**. |
+| Can an unfinished move from a crashed server cross an IPO? | Yes, with a small refund into the new run: **F6**. |
+| Recruiter Network perk | Lowers the poach cost. A refund always returns what was actually paid (`negotiation.cost`). Consistent. |
+
 ## Coverage so far
 
 | Area | Status |
