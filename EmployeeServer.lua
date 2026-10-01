@@ -276,6 +276,15 @@ local function removeEmployee(team, id)
 	return nil
 end
 
+local function findEmployee(team, id)
+	for _, employee in ipairs(team.employees) do
+		if employee.id == id then
+			return employee
+		end
+	end
+	return nil
+end
+
 -- Actions the client can ask for ------------------------------------------------
 
 local function buyEgg(player, eggKey)
@@ -383,10 +392,16 @@ function EmployeeServer.finishRelease(player, id)
 	end
 end
 
--- Puts an employee (same ID) on the team. False if the team is full.
+-- Puts an employee (same ID) on the team. False if the team is full, or if this ID is already on
+-- it (an employee is never on a team twice). If it was on its way out (outgoing), it's back now.
 function EmployeeServer.addEmployee(player, employee)
 	local team, data = getTeam(player)
 	if not team or #team.employees >= maxEmployees(player) then return false end
+	if findEmployee(team, employee.id) or (team.pending and team.pending.id == employee.id) then
+		warn("Not adding employee " .. tostring(employee.id) .. " to " .. player.Name .. ": that ID is already on the team")
+		return false
+	end
+	team.outgoing[employee.id] = nil -- saved once, as a team member, not also as leaving
 	table.insert(team.employees, { id = employee.id, creature = employee.creature, hiredAt = os.time() })
 	placeEmployees(data)
 	core.updateIncome(player)
@@ -491,8 +506,12 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 		team.incubators[i] = false
 	end
 	if typeof(savedTeam) == "table" then
+		local seen = {} -- employee IDs already loaded: a save with the same ID twice keeps only the first
 		for _, e in ipairs(typeof(savedTeam.employees) == "table" and savedTeam.employees or {}) do
-			if typeof(e) == "table" and typeof(e.id) == "string" and CreatureConfig.getCreature(e.creature) then
+			if typeof(e) == "table" and typeof(e.id) == "string" and seen[e.id] then
+				warn("Skipped a duplicate employee in " .. player.Name .. "'s save: " .. e.id)
+			elseif typeof(e) == "table" and typeof(e.id) == "string" and CreatureConfig.getCreature(e.creature) then
+				seen[e.id] = true
 				table.insert(team.employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt or 0 })
 			else
 				warn("Skipped an employee with an unknown creature: " .. tostring(typeof(e) == "table" and e.creature))
@@ -509,7 +528,9 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 			end
 		end
 		local p = savedTeam.pending
-		if typeof(p) == "table" and typeof(p.id) == "string" and CreatureConfig.getCreature(p.creature) then
+		if typeof(p) == "table" and typeof(p.id) == "string" and seen[p.id] then
+			warn("Skipped a waiting employee in " .. player.Name .. "'s save: it's already on the team (" .. p.id .. ")")
+		elseif typeof(p) == "table" and typeof(p.id) == "string" and CreatureConfig.getCreature(p.creature) then
 			team.pending = { id = p.id, creature = p.creature, hiredAt = p.hiredAt or 0 }
 		end
 	end
