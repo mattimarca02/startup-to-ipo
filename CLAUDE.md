@@ -31,7 +31,8 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   - `ShopConfig`: passes, products, `EggsEnabled`
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes` and `IpoRemotes` in ReplicatedStorage.
+  - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes` and `OnboardingRemotes` in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
   - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4. They use the shared responsive layout: a column centered on the left, or a top row on short (phone) screens (height under 460).
@@ -89,6 +90,13 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lifetime = number, best = number,            -- Cash earned ever; best valuation on any run (leaderboard)
     lastIpoAt = os.time(),                       -- for the IPO cooldown
     perks = { [perkKey] = level },               -- IPO shop perks
+  },
+  onboarding = {                                 -- OnboardingServer.serialize (optional: older saves have none)
+    seenIntro = boolean,                         -- the free egg was given (or wasn't needed): never given twice
+    legacy = boolean,                            -- had a save before M5: counts as already onboarded
+    arrowDone = boolean,                         -- the glowing arrow did its job (never comes back)
+    dismissed = boolean,                         -- the player closed the goal tracker with its X
+    goals = { goalKey, ... },                    -- finished goals (stay finished)
   },
 }
 ```

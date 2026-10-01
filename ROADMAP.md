@@ -14,7 +14,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - Tooling: GitHub repo, sync_monetization (PC only, API key in .env.txt), Studio MCP on PC and MAC.
 - DONE: Luck Boost wording fixed (ShopConfig.lua:117 shows "Legendary chance 8.0% -> 9.7% (Unicorn Egg)", not "2x").
 - DONE: IPO retune (branch ipo-retune). economy_sim.py reads the real IpoConfig.lua values; Stages and StageGrowthPerIpo retuned (Seed 1800, growth x2.5) so the first IPO lands at ~10-15 min of active play. See docs/ECONOMY.md section 3.
-- Next steps: M5 (first minute / onboarding).
+- BUILT, REVIEW FIXES APPLIED, NOT YET PLAYTESTED: M5 (2026-10-01). Review (docs/reviews/M5_REVIEW.md): F1 (card now finds the valuation bar in IpoGui, fits narrow screens) and F3 (free egg also gives the 15-minute poach protection) fixed; F2 and the other Lows listed in M9. Still needs Studio paste of OnboardingClient + OnboardingServer. Original notes: on branch milestone-5-onboarding (pushed, no PR yet). Code only: nothing synced to Studio or Roblox. New OnboardingServer (registered in the F9 load gate), OnboardingClient, OnboardingConfig and an optional `onboarding` save section. A brand-new player (no progress at all) gets one free Garage Egg, incubating on spawn, given only by the server. They tap the normal Hatch prompt (no auto-hatch exception). A glowing arrow goes pad, then egg, then pad, and ends after 1 employee + 2 upgrades. A goal tracker under the valuation bar ("Hire 3 employees", "Reach Seed stage") stays until both are done, with an X that is saved. Old saves with progress count as onboarded: no egg, arrow or tracker. No reward, no economy or IPO numbers changed, `EggsEnabled` untouched. Studio Debug: "Restart tutorial", "Act like an old save". Waiting on Mattia's playtest (new player, rejoin mid-tutorial, old save, phone size), then the PR.
+- Next steps: M5 playtest + PR, then M6 (daily rewards).
 
 ## Milestones, in order
 
@@ -60,6 +61,15 @@ Play-through rate is Roblox's #1 discovery signal.
   3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule.
   4. Kept unknown sections are frozen as of join and go stale; re-check them against `team`/`ipo` on load.
   5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
+- From the M5 review (docs/reviews/M5_REVIEW.md), Low findings not fixed:
+  - F2: the goal card overlaps the Negotiation / Poach Alert panels on landscape phones; hide it while a poach panel shows.
+  - F4: with `OnboardingConfig.Enabled = false` the saved section is `seenIntro = false, legacy = false`; treat `not seenIntro and hasProgress(data)` as legacy.
+  - F5: closing the tracker during an IPO save isn't saved; retry the dismiss and say "Your IPO is being filed".
+  - F6: the tracker vanishes if the only employee is lost early; save a `trackerShown` flag.
+  - F7: the free-egg toast is sent during loading; send it after `data.ready`.
+  - F8: server hop before the first save can re-give the egg (needs the session lock above).
+  - F9: warn on bad values in the onboarding section.
+  - F10: the "All goals done!" card ignores open windows for 3 s.
 - F6: poach refund after a crash.
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums (ShopConfig Luck Boost text was still stale in Studio on 2026-10-01 because the Studio write was permission-blocked).
