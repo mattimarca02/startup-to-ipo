@@ -46,7 +46,10 @@ These were found before the review was interrupted. Each one was checked again a
 ### F4 (Low): the confirm screen doesn't say how many eggs will be lost
 
 - **Where:** `IpoClient.lua:594-614` (confirm text), `EmployeeServer.lua:543-553` (`clearIncubators`).
-- **What breaks:** the screen only says "eggs in incubators". Eggs that are ready to hatch are wiped without a specific warning, including eggs made ready with **Instant Hatch** (a Robux product).
+- **What breaks:**
+  - The screen only says "eggs in incubators". Eggs that are ready to hatch are wiped without a specific warning. That includes ready eggs that are waiting because a new hire is still pending (`EmployeeServer.lua:250`).
+  - The Cash amount on the screen is fixed when the screen opens (`IpoClient.lua:605`). If a Cash pack lands during the 15 seconds the screen stays open, the screen shows less Cash than the IPO actually wipes.
+  - *Correction to the first pass:* this does **not** affect Instant Hatch. Instant Hatch hatches the egg straight away (`EmployeeServer.lua:313-314`), so a Robux-paid hatch is never left in an incubator.
 - **Fix:** have the server send the number of incubating and ready eggs for the confirm screen. Show the count, plus a red warning if any are ready.
 
 ### F5 (Low): saves from before M4 get an uncapped starting valuation
@@ -75,6 +78,26 @@ These were found before the review was interrupted. Each one was checked again a
   1. Try `StageGrowthPerIpo = 1.3` and `BonusExponent = 1`.
   2. Point the IPO section of `tools/economy_sim.py` (on `main`) at the real `IpoConfig` values. Its IPO numbers are still placeholders.
   3. Rerun it and put the time to IPO 1, 3, 5 and 10 in `docs/ECONOMY.md`.
+
+## 2. Server authority
+
+**Question:** can a client trigger or fake an IPO, or skip one of its requirements?
+
+**Answer: no way found.** Every check runs on the server:
+
+| What a client could try | What stops it |
+|---|---|
+| Send `GoPublic` without opening the confirm screen | Allowed, but it's the player's own choice. The server still checks everything below. |
+| Go public before IPO-ready | `IpoServer.lua:164-167` compares the server's own valuation. |
+| Go public twice (repeat or old request) | The IPO number must be `count + 1` (`IpoServer.lua:154`), and there's a 60-second cooldown (`IpoServer.lua:159-163`). |
+| Go public during a deal | `core.isPoachBusy` (`IpoServer.lua:168`). See F3 for the Counter-Offer gap. |
+| Go public with a save that failed to load | `data.loaded` (`IpoServer.lua:158`). |
+| Fake the valuation, Shares or perks | They exist only on the server. The `Ipo*` attributes are copies for display, and no server script reads player attributes back. The only server `GetAttribute` is on a creature model (`EmployeeServer.lua:176`). |
+| Buy a perk without Shares, past max level, or an unknown one | `IpoServer.lua:214-223` checks the key type, the perk, the level and the Shares. |
+| Use the Debug tab on a live server | The debug remote only exists in Studio (`ShopServer.lua:578-583`), the handler checks again (`ShopServer.lua:504`), and IpoServer adds its Debug actions only in Studio (`IpoServer.lua:413-415`). |
+| Spam the gold pad | It only opens the window, at most every 3 seconds (`IpoServer.lua:281-286`). |
+
+The only open item here is F7's NaN safety net, which no client can reach today.
 
 ## Coverage so far
 
