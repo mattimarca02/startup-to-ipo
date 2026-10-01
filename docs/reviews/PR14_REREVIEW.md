@@ -25,10 +25,14 @@ Severity scale: the same as `PR14_REVIEW.md` (Critical = cheat or data/Robux los
 **Failed save: memory vs DataStore.** The DataStore keeps the last good save (from before the IPO). Memory is the pre-IPO state too: `commitIpo` returns at `TycoonCore.lua:339-341` before any reset, and `goPublic` returns before the call-off and the `ipo` update. Three things differ from "nothing happened": no income was earned during the save (expected), a deal that finished during the save was refunded instead of rolled (R4), and saves queued behind the lock (autosave, leaving) write the pre-IPO state afterwards (correct). If `SetAsync` errors but the write actually landed (a timeout after commit), the DataStore holds the IPO'd payload until the next autosave overwrites it with the non-IPO state. Both payloads are complete and consistent, so nothing is duplicated whichever survives. That was the same before F3.
 
 ### R3 (Low, new in F3, Studio only): a dummy deal that ends during the IPO save moves the employee, then errors
+**Status: **Skipped** in `fc7937a`: added to the M9 hardening list in ROADMAP.md.**
+
 `PoachServer.lua:376`. A deal started with **Debug → PoachDummyAttack** has `ignoreShields = true`, so `finish` skips `protection()`, which is the only check that sees `data.ready = false`. If its timer ends during V's IPO save, it rolls (forced success), `transfer` releases the employee from V while the IPO payload is already serialized, and then `poached` does `table.insert(victimPoach.losses, now)` with `victimPoach = poachOf(V) = nil` (`:335-336`): an error, after the employee has left V's team. Before F3 the call-off ran before the save and cancelled the dummy deal, so this couldn't happen. Live servers have no dummy.
 **Fix:** in `finish`, check `poachOf(target) == nil` (or `not data.ready`) as its own problem before the `ignoreShields` branch, for example `elseif not poachOf(target) then problem = name .. " is busy"`.
 
 ### R4 (Low): "A failed save leaves every deal as it was" isn't quite true, and the poacher gets the wrong reason
+**Status: **Skipped** in `fc7937a`: added to the M9 hardening list in ROADMAP.md.**
+
 `IpoServer.lua:212-214`, `PoachServer.lua:376-377`, comment at `PoachServer.lua:653-656`. A deal whose timer ends during the save is cancelled even if the save then fails, and the poacher reads "Deal called off: X got protected." X wasn't protected: X was busy filing an IPO (which may have failed). Cash is right either way.
 **Fix:** reword the comment ("a deal whose timer ends during the save is refunded, even if the save then fails"), and in `finish` give the un-ready case its own message (shared with R3's fix): "X is going public".
 
@@ -53,14 +57,20 @@ The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M
 **M5 `hasProgress` (second free egg).** A sanitized value only zeroes Cash or upgrades that were garbage. A second free egg needs all of these at once: no `onboarding` section (a save from before M5), `cash` and `owned` both garbage, and no employees, eggs, IPO, Shares, receipts or poach notes (`OnboardingServer.lua:41-52, 255, 260`). Such a save had no real progress to lose, so the egg is harmless. The one real path to a "new player" is R5.
 
 ### R5 (Low): a save that isn't a table is treated as a brand-new player, and then overwritten
+**Status: **Fixed** in `0adcd2f`.**
+
 `TycoonCore.lua:511-514`. `saved = nil` keeps `ok = true`, so the player gets the new-player poach shield (`:544`, `ok and saved == nil`), the M5 free egg (`savedOnboarding` is nil and `hasProgress` is false), and their first save overwrites the unreadable value. CLAUDE.md says "never delete what you don't know". A non-table value can only come from a tool or a bug outside this code, so it's rare, but whatever was there is gone after one autosave.
 **Fix:** keep the original value: `data.unknownSections.corruptSave = saved` before setting `saved = nil` (it is then written back next to the new save, so it can be recovered by hand), and pass `isNew = false` / count the player as `legacy` so no free egg or new-player shield is handed out on a save that only *looks* empty.
 
 ### R6 (Low): a bad `lastSeen` that is a valid number gives the full offline cap
+**Status: **Skipped** in `fc7937a`: added to the M9 hardening list in ROADMAP.md.**
+
 `TycoonCore.lua:213-218, 564-571`. `lastSeen = 0`, `-1`, or `-1e12` pass the check (finite numbers), so `away` is clamped to the cap: 8 hours (plus the Night Shift perk) of offline income, which also goes through `addEarnings` and raises the IPO valuation. It needs a corrupt save, so it isn't a cheat, but it is a reward for bad data.
 **Fix:** also require `rawSeen > 0` (any real `os.time()` is far above 0), or ignore values more than a year old.
 
 ### R7 (Low): no proof the 22 checks pass
+**Status: **Skipped** in `fc7937a` (M9 list). The tests were run anyway: 69 + 22 + 13 checks, 0 failed (`e5de551`).**
+
 `tools/daily_test.py:243-305`. The test copies the code between the `SANITIZE` markers and stubs `typeof` with `type`, which is fine for these inputs. It couldn't be run here (no `luau`). The checks read correctly, but run `python tools/daily_test.py` once before merging and paste the "N passed, 0 failed" line in the PR.
 
 ## 3. F2: GetDataStore retried at startup, live servers kick without a store
@@ -75,10 +85,14 @@ The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M
 | Can the retry delay or block joins? | Yes: R1. |
 
 ### R1 (Medium, new in F2): players who join during the startup retry are never set up, and never kicked
+**Status: **Fixed** in `596f160`.**
+
 `TycoonCore.lua:22-32` vs `:460`. The retry loop yields (`task.wait(1)`, then `task.wait(2)`) at the top of the script, before the modules are required and before `Players.PlayerAdded:Connect` runs. TycoonCore has no catch-up loop over `Players:GetPlayers()`. Anyone who joins in those ~3 s (on a live server, often the very player whose join started the server; in Studio, the local tester) never gets a plot, `leaderstats` or `playerData`. They aren't kicked either, so it is exactly the silent broken session F2 set out to prevent, and every module's remotes are missing for those ~3 s. It only happens when `GetDataStore` fails, which is rare on live servers, but it is the normal case in an unpublished copy of the place in Studio.
 **Fix:** after `Players.PlayerAdded:Connect(onPlayerAdded)`, add `for _, p in ipairs(Players:GetPlayers()) do task.spawn(onPlayerAdded, p) end` (name the handler first). Or, simpler, move the store lookup into a `getStore()` used by `load()` (see R2), so the top of the script never yields.
 
 ### R2 (Medium): a live server with no store kicks every joiner for its whole life
+**Status: **Fixed** in `596f160`.**
+
 `TycoonCore.lua:22-39, 224, 502`. `store` is decided once at startup and never tried again. If `GetDataStore` failed for a few seconds at start, the server stays up and matchmaking keeps sending players to it (and back to it on rejoin, the message says "rejoin in a moment"), and every one of them is kicked until the server empties. The kick protects the save, so no data is lost, but the server is useless and players see repeated "couldn't load".
 **Fix:** look the store up lazily: `local function getStore() if not store then local ok, s = pcall(DataStoreService.GetDataStore, DataStoreService, "StartupTycoon_v1"); if ok then store = s end end return store end`, called from `load`, `peekSave` and `save`. Keep the startup attempt (no `task.wait` needed). A server whose store comes back then heals on the next join. `GetDataStore` is not a budgeted request, so calling it per join is cheap.
 
@@ -92,6 +106,8 @@ The sanitizer runs inside the setup `pcall` and before any module, so the M5 / M
 - **M6 (daily claim):** a claim needs `data.ready` (`DailyServer.lua:219`), which is false for the whole IPO save and until the "all modules loaded" gate. F1's sanitizer runs before `DailyServer.setupPlayer` and doesn't touch `daily`. No change.
 
 ### R8 (Low, from before #14): the IPO section still accepts infinity
+**Status: **Skipped** in `fc7937a`: added to the M9 hardening list in ROADMAP.md.**
+
 `IpoServer.lua:336-339`. `number()` rejects NaN and negatives but not `math.huge`, so a corrupt `ipo.count = inf` passes: the IPO can never be confirmed again (`ipoNumber ~= ipo.count + 1`), and `shares = inf` buys every perk. Not a kick and not reachable from a client, but it is the same class of bug F1 fixed. **Fix:** add `and value < math.huge` to `number()`.
 
 ## Summary
