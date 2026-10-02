@@ -102,7 +102,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
-| IpoConfig | ReplicatedStorage | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
+| IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
@@ -110,7 +110,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
-| tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
-| docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
-| tools/economy_sim.py | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
-| docs/ECONOMY.md | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
+| tools/economy_sim.py | (repo only) | free | | |
+| docs/ECONOMY.md | (repo only) | free | | |

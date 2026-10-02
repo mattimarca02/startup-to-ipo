@@ -22,7 +22,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - **Before publishing M6:** use **Shut down all servers** (new `daily` save section), and decide `ResetHourUtc` in DailyConfig before launch (review finding F3).
 - **Before publishing M4, M5, M6, #14 and #13:** use **Shut down all servers** (new save sections).
 - PR #13 final numbers (2026-10-02, main merged in): `SharesGrowthPerIpo = 0.8`, `SharesRatioCap = 2`. Sim re-run (40 seeds, 365 days): IPO timing unchanged, Shares per IPO (active, no pass) 10 / 25 / 26 / 59 / 83, whole shop in about 7 days (about 2 with the Shareholder pass). docs/ECONOMY.md section 3d; tools/daily_test.py 104/104. Mattia's Studio check matched: IPO 1 = 10 Shares, IPO 2 = 18, IPO 3 = 26, IPO 4 with the Shareholder pass = 68. Merged 2026-10-02 as PR #13 (merge commit); sync IpoConfig to Studio and publish with **Shut down all servers**.
-- Next steps: M7 weekly events (M5, M6 and the Shares retune are done).
+- Next steps: merge PR #16 (docs: stale claim rows), then M7 weekly events or the M9 pre-publish checks (decision pending).
 
 ## Milestones, in order
 
