@@ -11,7 +11,7 @@ It runs the real DailyServer and DailyConfig code with a fake Roblox (fake clock
 fake incubators) and checks every claim rule: one claim per UTC day, double tap, rejoin, one
 missed day keeps the place, two missed days go back to Day 1, full incubators, bad saves,
 Day 7 Shares not doubled, Studio-only debug, and that calendar Cash never changes the IPO
-valuation. It also runs the marked code of ShopServer (pass checks: purchase confirmation retries,
+valuation. It also checks the egg odds the screens show (the whole CreatureConfig), and runs the marked code of ShopServer (pass checks: purchase confirmation retries,
 parallel join check) and TycoonCore (sanitizer, store, save payload build) with fakes.
 It changes nothing in the game or in Studio.
 """
@@ -649,6 +649,102 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+ODDS_TESTS = r"""-- Tests for the odds the screens show (CreatureConfig.getCreatureOdds, FR-12) -----------------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
+local CreatureConfig = (function()
+__CREATURECONFIG__
+end)()
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local UNITS = CreatureConfig.ODDS_UNITS
+check("the real config loads without warnings", #WARNINGS == 0, WARNINGS[1])
+check("units are hundredths of a percent", UNITS == 10000)
+
+-- Every egg, in every luck state the server can roll with: no boost, Luck Boost (x2), the strongest
+-- Talent Scouts perk (+50%), and both
+local STATES = { { "no boost", 1 }, { "Luck Boost", 2 }, { "Talent Scouts Lv 5", 1.5 }, { "Luck Boost + Talent Scouts Lv 5", 3 } }
+for _, egg in ipairs(CreatureConfig.Eggs) do
+	for _, state in ipairs(STATES) do
+		local label = egg.name .. ", " .. state[1]
+		local luck = state[2]
+		local odds = CreatureConfig.getCreatureOdds(egg, luck)
+		local total, minUnits, worst = 0, math.huge, 0
+		for _, item in ipairs(odds) do
+			total += item.units
+			minUnits = math.min(minUnits, item.units)
+			worst = math.max(worst, math.abs(item.units - item.chance * UNITS))
+		end
+		check(label .. ": shown odds add up to exactly 100.00%", total == UNITS, total)
+		check(label .. ": every possible hire shows at least 0.01%", minUnits >= 1, minUnits)
+		check(label .. ": each shown number is the true chance, rounded (off by < 0.01%)", worst < 1, worst)
+		-- The same numbers the server rolls with: per rarity, the creatures' true chances add up to getOdds
+		local byRarity, expected = {}, 0
+		for _, item in ipairs(odds) do byRarity[item.rarity] = (byRarity[item.rarity] or 0) + item.chance end
+		local same = true
+		for _, entry in ipairs(CreatureConfig.getOdds(egg, luck)) do
+			expected += #CreatureConfig.creaturesOfRarity(entry.rarity)
+			if math.abs((byRarity[entry.rarity] or 0) - entry.chance) > 1e-12 then same = false end
+		end
+		check(label .. ": one entry per possible creature, matching the server's roll", same and #odds == expected, #odds)
+		local rarityTotal = 0
+		for _, entry in ipairs(CreatureConfig.rarityOdds(odds)) do rarityTotal += entry.units end
+		check(label .. ": the per-rarity line also adds up to exactly 100.00%", rarityTotal == UNITS, rarityTotal)
+	end
+end
+
+-- Every Talent Scouts level, with and without Luck Boost
+local allExact = true
+for level = 0, 5 do
+	for _, boost in ipairs({ 1, 2 }) do
+		for _, egg in ipairs(CreatureConfig.Eggs) do
+			local total = 0
+			for _, item in ipairs(CreatureConfig.getCreatureOdds(egg, (1 + 0.1 * level) * boost)) do total += item.units end
+			if total ~= UNITS then allExact = false end
+		end
+	end
+end
+check("every egg x every Talent Scouts level x Luck Boost on/off: exactly 100.00%", allExact)
+
+-- The text shown, added up from the strings themselves
+local shownTotal = 0
+for _, item in ipairs(CreatureConfig.getCreatureOdds(CreatureConfig.Eggs[2], 2)) do
+	local whole, hundredths = string.match(CreatureConfig.formatOdds(item.units), "^(%d+)%.(%d%d)%%$")
+	shownTotal += tonumber(whole) * 100 + tonumber(hundredths)
+end
+check("the formatted strings add up to 100.00", shownTotal == UNITS, shownTotal)
+check("formatOdds", CreatureConfig.formatOdds(10000) == "100.00%" and CreatureConfig.formatOdds(1333) == "13.33%" and CreatureConfig.formatOdds(5) == "0.05%")
+
+-- The Luck Boost example the shop shows (Unicorn Egg Legendary): 8.00% -> 9.70%
+local function legendary(luck)
+	local summary = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(CreatureConfig.getEgg("Unicorn"), luck))
+	return summary[#summary]
+end
+check("Unicorn Legendary without the boost: 8.00%", legendary(1).rarity == "Legendary" and legendary(1).units == 800, legendary(1).units)
+check("Unicorn Legendary with Luck Boost: 9.70%", legendary(2).units == 970, legendary(2).units)
+
+-- Odd weights: rounding still adds up, a tiny chance still shows 0.01%, same input gives the same output
+local tiny = { odds = { Common = 1000000, Legendary = 1 } }
+local odds = CreatureConfig.getCreatureOdds(tiny, 1)
+local total, smallest = 0, math.huge
+for _, item in ipairs(odds) do total += item.units; smallest = math.min(smallest, item.units) end
+check("a one-in-a-million hire still shows 0.01%, total still 100.00%", total == UNITS and smallest == 1, total .. " / " .. smallest)
+local thirds = CreatureConfig.getCreatureOdds({ odds = { Common = 1 } }, 1)
+check("three equal hires: 33.34% + 33.33% + 33.33%", thirds[1].units == 3334 and thirds[2].units == 3333 and thirds[3].units == 3333)
+local again = CreatureConfig.getCreatureOdds(CreatureConfig.Eggs[3], 3)
+local same = true
+for i, item in ipairs(CreatureConfig.getCreatureOdds(CreatureConfig.Eggs[3], 3)) do
+	if item.units ~= again[i].units or item.creature ~= again[i].creature then same = false end
+end
+check("the same egg and luck always show the same numbers", same)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -707,6 +803,12 @@ def main():
     result6 = run_luau(luau, WAIT_TESTS.replace("__PASSWAIT__", marked_source("PASSWAIT", "IpoServer.lua")))
     print("IpoServer pass wait check: " + (result6.stdout.strip() or result6.stderr.strip()))
     if result6.returncode != 0 or " 0 failed" not in result6.stdout:
+        code = 1
+    with open(os.path.join(ROOT, "CreatureConfig.lua"), encoding="utf-8") as f:
+        creature_config = f.read()
+    result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config))
+    print("CreatureConfig odds check: " + (result7.stdout.strip() or result7.stderr.strip()))
+    if result7.returncode != 0 or " 0 failed" not in result7.stdout:
         code = 1
     return code
 

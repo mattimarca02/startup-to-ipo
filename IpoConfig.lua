@@ -89,7 +89,8 @@ IpoConfig.Perks = {
 	},
 	{
 		key = "BaseLuck", name = "Talent Scouts", icon = "🍀",
-		description = "Better odds for Rare, Epic and Legendary hires.", perLevel = 0.1, effect = "luck", -- +10% luck per level
+		-- Paid Random Items policy: an odds modifier says what it does in numbers. Keep "10%" equal to perLevel.
+		description = "Odds weight of Rare, Epic and Legendary hires +10% per level. Exact odds: Eggs tab.", perLevel = 0.1, effect = "luck", -- +10% luck per level
 		costs = { 5, 10, 20, 35, 50 },
 	},
 	{

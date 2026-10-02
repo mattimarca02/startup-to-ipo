@@ -118,7 +118,8 @@ ShopConfig.Products = {
 		key = "LuckBoost",
 		tab = "Boosts",
 		name = "Luck Boost",
-		description = "Legendary chance 8.0% -> 9.7% (Unicorn Egg) for 15 min. Buy again to add time.",
+		-- The shop adds the exact numbers in front of this, from CreatureConfig (ShopClient.luckText)
+		description = "For 15 min. Buy again to add time. Every hire's exact odds are in the Eggs tab.",
 		icon = "🍀",
 		price = 49,
 		id = 3715692114,

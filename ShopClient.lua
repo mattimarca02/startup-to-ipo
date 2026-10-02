@@ -9,7 +9,8 @@ local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
-local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- for the egg Debug buttons
+local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- Luck Boost odds, egg Debug buttons
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the Talent Scouts perk, for Luck Boost's odds
 local remotes = ReplicatedStorage:WaitForChild("ShopRemotes")
 local notifyEvent = remotes:WaitForChild("ShopNotify")
 local debugRemote = RunService:IsStudio() and remotes:FindFirstChild("ShopDebug") or nil -- Studio only
@@ -384,6 +385,31 @@ local function formatTime(seconds)
 	return string.format("%d:%02d", seconds // 60, seconds % 60)
 end
 
+-- Luck Boost's effect in numbers, before buying (Roblox's Paid Random Items policy), from the same
+-- config and luck the server rolls with (Talent Scouts included): the boosted rarities, and the
+-- rarest hire of the last (best) egg without and with the boost.
+local function luckText(effect)
+	local names = {}
+	for _, rarity in ipairs(CreatureConfig.Rarities) do
+		if rarity.luckBoosted then
+			table.insert(names, rarity.key)
+		end
+	end
+	local text = string.format("Odds weight x%s for %s hires.", tostring(effect.luckMultiplier), table.concat(names, ", "))
+	local egg = CreatureConfig.Eggs[#CreatureConfig.Eggs]
+	if egg then
+		local perk = 1 + IpoConfig.perkValue("BaseLuck", player:GetAttribute("IpoPerk_BaseLuck") or 0)
+		local before = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, perk))
+		local after = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, perk * effect.luckMultiplier))
+		local rarest, boosted = before[#before], after[#after]
+		if rarest and boosted then
+			text ..= string.format(" %s %s: %s -> %s.", egg.name, rarest.rarity,
+				CreatureConfig.formatOdds(rarest.units), CreatureConfig.formatOdds(boosted.units))
+		end
+	end
+	return text
+end
+
 -- Description text that changes while you play (cash pack size, boost timer, tokens)
 local function productText(product)
 	local effect = product.effect
@@ -392,6 +418,9 @@ local function productText(product)
 		return "Get " .. ShopConfig.formatCash(ShopConfig.cashPackAmount(product, income)) .. " now. " .. product.description
 	end
 	local text = product.description
+	if effect.luckMultiplier then
+		text = luckText(effect) .. " " .. text
+	end
 	if effect.luckMinutes then
 		local left = (player:GetAttribute("LuckBoostUntil") or 0) - workspace:GetServerTimeNow()
 		if left > 0 then

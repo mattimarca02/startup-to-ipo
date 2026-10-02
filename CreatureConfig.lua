@@ -190,6 +190,84 @@ function CreatureConfig.getOdds(egg, luckMultiplier)
 	return odds
 end
 
+-- What the screens show (Roblox's Paid Random Items policy: every possible hire is shown with its own
+-- odds before buying, the shown numbers add up to exactly 100%, and they change live with luck).
+-- Built from getOdds, the same numbers the server rolls with: the rarity is rolled first, then one
+-- creature of that rarity is picked, all of them equally likely.
+-- Returns a list, common to rare (config order inside a rarity):
+--   { creature = <Creatures entry>, rarity = "Common", chance = 0.1333..., units = 1333 }
+-- units are hundredths of a percent (ODDS_UNITS = 100%). They're rounded with the largest-remainder
+-- method, so they always add up to exactly ODDS_UNITS, and every possible hire shows at least 0.01%.
+CreatureConfig.ODDS_UNITS = 10000
+
+function CreatureConfig.getCreatureOdds(egg, luckMultiplier)
+	local list = {}
+	for _, entry in ipairs(CreatureConfig.getOdds(egg, luckMultiplier)) do
+		local creatures = CreatureConfig.creaturesOfRarity(entry.rarity)
+		for _, creature in ipairs(creatures) do
+			table.insert(list, { creature = creature, rarity = entry.rarity, chance = entry.chance / #creatures })
+		end
+	end
+	if #list == 0 then return list end
+
+	-- Round down, then give the units still missing to the biggest remainders (ties: list order)
+	local total = 0
+	local byRemainder = {}
+	for i, item in ipairs(list) do
+		local exact = item.chance * CreatureConfig.ODDS_UNITS
+		item.units = math.floor(exact)
+		total += item.units
+		table.insert(byRemainder, { item = item, remainder = exact - item.units, order = i })
+	end
+	table.sort(byRemainder, function(a, b)
+		if a.remainder ~= b.remainder then
+			return a.remainder > b.remainder
+		end
+		return a.order < b.order
+	end)
+	local i = 1
+	while total < CreatureConfig.ODDS_UNITS do
+		byRemainder[i].item.units += 1
+		total += 1
+		i = i % #byRemainder + 1
+	end
+	-- A possible hire never shows 0.00%: it gets 0.01%, taken from the most likely one
+	for _, item in ipairs(list) do
+		if item.units == 0 then
+			local largest = list[1]
+			for _, other in ipairs(list) do
+				if other.units > largest.units then
+					largest = other
+				end
+			end
+			largest.units -= 1
+			item.units = 1
+		end
+	end
+	return list
+end
+
+-- The same odds added up per rarity (common to rare): { { rarity = "Common", units = 4000 }, ... }.
+-- They're sums of the rounded per-creature units, so they also add up to exactly 100%.
+function CreatureConfig.rarityOdds(creatureOdds)
+	local summary, byRarity = {}, {}
+	for _, item in ipairs(creatureOdds) do
+		local entry = byRarity[item.rarity]
+		if not entry then
+			entry = { rarity = item.rarity, units = 0 }
+			byRarity[item.rarity] = entry
+			table.insert(summary, entry)
+		end
+		entry.units += item.units
+	end
+	return summary
+end
+
+-- 1333 -> "13.33%", 10000 -> "100.00%"
+function CreatureConfig.formatOdds(units)
+	return string.format("%d.%02d%%", units // 100, units % 100)
+end
+
 -- 75 -> "1:15", 3725 -> "1:02:05"
 function CreatureConfig.formatTime(seconds)
 	seconds = math.max(0, math.ceil(seconds))

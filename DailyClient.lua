@@ -108,15 +108,15 @@ local function luckMultiplier()
 	return luck
 end
 
+-- Same numbers as the Eggs tab (CreatureConfig.getCreatureOdds: the server's weights, rounded to add up
+-- to exactly 100.00%), per rarity; the Eggs tab lists every hire's own odds
 local function oddsText(egg)
 	local parts = {}
-	for _, entry in ipairs(CreatureConfig.getOdds(egg, luckMultiplier())) do
+	for _, entry in ipairs(CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, luckMultiplier()))) do
 		local rarity = CreatureConfig.getRarity(entry.rarity)
-		local percent = entry.chance * 100
-		local shown = percent >= 10 and string.format("%d%%", math.floor(percent + 0.5)) or string.format("%.1f%%", percent)
-		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarity and rarity.color or COLORS.text), entry.rarity, shown))
+		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarity and rarity.color or COLORS.text), entry.rarity, CreatureConfig.formatOdds(entry.units)))
 	end
-	return egg.name .. " odds: " .. table.concat(parts, " · ")
+	return egg.name .. " odds: " .. table.concat(parts, " · ") .. " (each hire's odds: Eggs tab)"
 end
 
 -- "Garage Egg", "$3,000", "Unicorn Egg\n+3 Shares"
