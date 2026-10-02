@@ -88,10 +88,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
-| ShopServer | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| ShopServer | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | EmployeeServer | ServerScriptService | free | | |
-| ShopConfig | ReplicatedStorage | free | | |
+| ShopConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
