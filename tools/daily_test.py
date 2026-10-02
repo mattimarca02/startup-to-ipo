@@ -11,7 +11,9 @@ It runs the real DailyServer and DailyConfig code with a fake Roblox (fake clock
 fake incubators) and checks every claim rule: one claim per UTC day, double tap, rejoin, one
 missed day keeps the place, two missed days go back to Day 1, full incubators, bad saves,
 Day 7 Shares not doubled, Studio-only debug, and that calendar Cash never changes the IPO
-valuation. It changes nothing in the game or in Studio.
+valuation. It also runs the marked code of ShopServer (pass checks: purchase confirmation retries,
+parallel join check) and TycoonCore (sanitizer, store, save payload build) with fakes.
+It changes nothing in the game or in Studio.
 """
 
 import os
@@ -324,6 +326,293 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+PASS_TESTS = r"""-- Tests for ShopServer's pass checks (the code between its PASSCHECK markers) ---------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+
+-- A tiny scheduler: task.spawn starts a thread, task.wait pauses it on a fake clock, so "slow Roblox" can be timed
+local CLOCK = 0
+local os = { clock = function() return CLOCK end, time = function() return 1700000000 end }
+local sleeping = {}
+local depth = 0 -- > 0 while a spawned thread runs (the test script itself is the "main" thread)
+local function resume(co)
+	depth += 1
+	local ok, delay = coroutine.resume(co)
+	depth -= 1
+	if not ok then error(delay) end
+	if coroutine.status(co) == "suspended" then table.insert(sleeping, { co = co, at = CLOCK + delay }) end
+end
+local task = {}
+function task.spawn(f) resume(coroutine.create(f)) end
+function task.wait(n)
+	n = n or 0.03
+	if depth > 0 then coroutine.yield(n) return n end
+	local target = CLOCK + n
+	while true do
+		local best
+		for i, t in ipairs(sleeping) do
+			if t.at <= target and (not best or t.at < sleeping[best].at) then best = i end
+		end
+		if not best then break end
+		local t = table.remove(sleeping, best)
+		CLOCK = math.max(CLOCK, t.at)
+		resume(t.co)
+	end
+	CLOCK = target
+	return n
+end
+
+local ShopConfig = {
+	PassConfirm = { RetrySeconds = 5, GiveUpSeconds = 120 },
+	Passes = {
+		{ key = "DoubleCash", name = "2x Cash", id = 11 },
+		{ key = "VIP", name = "VIP", id = 12 },
+		{ key = "Placeholder", name = "Soon", id = 0 },
+		{ key = "Shareholder", name = "Shareholder", id = 13 },
+	},
+}
+function ShopConfig.getPassById(id)
+	if id == 0 then return nil end
+	for _, p in ipairs(ShopConfig.Passes) do if p.id == id then return p end end
+	return nil
+end
+
+local SHOP, PUBLISHED, NOTES, ASKED = nil, {}, {}, {}
+local ASK = function() return nil end -- (player, id) -> true / false / nil, may task.wait
+local function userOwnsPass(player, id)
+	table.insert(ASKED, id)
+	return ASK(player, id)
+end
+local function getShop(player) return player.shop end
+local function publish(player) table.insert(PUBLISHED, CLOCK) end
+local function notify(player, text) table.insert(NOTES, text) end
+__PASSCHECK__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local function reset(startClock)
+	CLOCK = startClock or 0
+	sleeping = {}
+	PUBLISHED, NOTES, ASKED, WARNINGS = {}, {}, {}, {}
+	ShopConfig.PassConfirm = { RetrySeconds = 5, GiveUpSeconds = 120 }
+	local shop = { passes = {} }
+	return { Name = "P", Parent = {}, shop = shop }, shop
+end
+local function has(list, text)
+	for _, t in ipairs(list) do if string.find(t, text, 1, true) then return true end end
+	return false
+end
+local VIP, CASH = ShopConfig.Passes[2], ShopConfig.Passes[1]
+
+-- Purchase confirmation (item 5) ----------------------------------------------------
+local player, shop = reset()
+ASK = function() return true end
+onPassPromptFinished(player, 12, true)
+check("buy, Roblox answers at once: granted", shop.passes.VIP == true)
+check("... published once and the player told", #PUBLISHED == 1 and has(NOTES, "VIP unlocked!"))
+check("... one ask, no waiting", #ASKED == 1 and CLOCK == 0)
+
+player, shop = reset()
+ASK = function() return false end
+onPassPromptFinished(player, 12, false)
+check("cancelled purchase: nothing asked", #ASKED == 0 and not shop.passes.VIP)
+onPassPromptFinished(player, 999, true)
+check("unknown pass id: nothing asked", #ASKED == 0)
+onPassPromptFinished(player, 0, true)
+check("pass id 0: nothing asked", #ASKED == 0)
+player.shop = nil
+onPassPromptFinished(player, 12, true)
+check("no loaded shop: nothing asked", #ASKED == 0)
+
+player, shop = reset()
+local calls = 0
+ASK = function() calls += 1; if calls < 4 then return nil end return true end
+onPassPromptFinished(player, 12, true)
+check("Roblox unreachable 3 times, then yes: granted", shop.passes.VIP == true and calls == 4)
+check("... retried every 5 s (3 waits = 15 s)", CLOCK == 15, CLOCK)
+check("... player told 'confirming' once, then 'unlocked'", #NOTES == 2 and has(NOTES, "Confirming VIP") and has(NOTES, "VIP unlocked!"), #NOTES)
+check("... published once", #PUBLISHED == 1)
+
+player, shop = reset()
+calls = 0
+ASK = function() calls += 1; if calls < 3 then return false end return true end
+onPassPromptFinished(player, 12, true)
+check("stale 'no' right after buying, then yes: granted", shop.passes.VIP == true and calls == 3)
+
+player, shop = reset()
+ASK = function() return nil end
+onPassPromptFinished(player, 12, true)
+check("Roblox never answers: NOT granted (no yes, no pass)", shop.passes.VIP == nil)
+check("... gave up after about 2 minutes", CLOCK >= 120 and CLOCK < 126, CLOCK)
+check("... about 25 asks, not a flood", #ASKED >= 24 and #ASKED <= 26, #ASKED)
+check("... never published", #PUBLISHED == 0)
+check("... player told Roblox is slow", has(NOTES, "slow to confirm VIP"))
+
+player, shop = reset()
+ASK = function() return false end
+onPassPromptFinished(player, 12, true)
+check("Roblox keeps saying no: never granted", shop.passes.VIP == nil and #PUBLISHED == 0)
+
+player, shop = reset()
+ShopConfig.PassConfirm = { RetrySeconds = 10, GiveUpSeconds = 35 }
+ASK = function() return nil end
+onPassPromptFinished(player, 12, true)
+check("interval and duration come from ShopConfig", #ASKED == 5 and CLOCK >= 35 and CLOCK < 45, #ASKED .. " asks, clock " .. CLOCK)
+
+player, shop = reset()
+calls = 0
+ASK = function() calls += 1; if calls == 2 then player.Parent = nil end return nil end
+onPassPromptFinished(player, 12, true)
+check("player leaves while waiting: stops, nothing granted", shop.passes.VIP == nil and calls == 2)
+
+player, shop = reset()
+calls = 0
+ASK = function()
+	calls += 1
+	if calls == 2 then onPassPromptFinished(player, 12, true) end -- a second event while waiting
+	if calls < 3 then return nil end
+	return true
+end
+onPassPromptFinished(player, 12, true)
+check("a second event while waiting does not start a second loop", calls == 3 and #NOTES == 2, calls .. " asks, " .. #NOTES .. " notes")
+
+player, shop = reset()
+calls = 0
+ASK = function() calls += 1; shop.passes.VIP = true; return nil end -- the 2-minute recheck found it meanwhile
+onPassPromptFinished(player, 12, true)
+check("pass found by another path while waiting: still told, loop ends", has(NOTES, "VIP unlocked!") and calls == 1)
+
+player, shop = reset()
+ASK = function() return nil end
+onPassPromptFinished(player, 12, true) -- gives up after 2 minutes
+ASK = function() return true end
+onPassPromptFinished(player, 12, true) -- the website purchase shows up later: a new confirmation can start
+check("after giving up, a later event can still grant the pass", shop.passes.VIP == true)
+
+-- Join-time check (item 5, second part) --------------------------------------------------
+player, shop = reset()
+ASK = function(_, id) return id == 12 end
+local changed = checkPasses(player, shop)
+check("checkPasses returns true when a pass was found", changed == true and shop.passes.VIP == true)
+check("... only the real passes are asked (id 0 skipped)", #ASKED == 3, #ASKED)
+check("... published once, for the one pass found", #PUBLISHED == 1)
+ASKED = {}
+check("a second check asks only the passes not owned yet", checkPasses(player, shop) == false and #ASKED == 2, #ASKED)
+
+player, shop = reset()
+ASK = function(_, id) task.wait(6) return nil end -- Roblox down: every pass takes 6 s to give up
+check("Roblox down: nothing found", checkPasses(player, shop) == false and next(shop.passes) == nil)
+check("... passes are asked in parallel: 6 s in total, not 18", CLOCK >= 6 and CLOCK < 7, CLOCK)
+
+player, shop = reset()
+ASK = function(_, id)
+	if id == 12 then task.wait(0.5) return true end -- VIP answers fast, the others are stuck
+	task.wait(6)
+	return nil
+end
+checkPasses(player, shop)
+check("a fast VIP answer is published at 0.5 s, not after the slow passes", #PUBLISHED == 1 and PUBLISHED[1] == 0.5, PUBLISHED[1])
+
+player, shop = reset()
+ASK = function(_, id)
+	if id == 11 then task.wait(3) return true end
+	if id == 12 then task.wait(1) return true end
+	return false
+end
+checkPasses(player, shop)
+check("each pass is published when found (VIP at 1 s, 2x Cash at 3 s)", #PUBLISHED == 2 and PUBLISHED[1] == 1 and PUBLISHED[2] == 3, #PUBLISHED)
+
+player, shop = reset()
+ASK = function(_, id) if id == 11 then error("boom") end return id == 12 end
+check("one pass check throwing does not stop the others or hang", checkPasses(player, shop) == true and shop.passes.VIP == true)
+check("... the error is warned", #WARNINGS == 1 and string.find(WARNINGS[1], "boom", 1, true) ~= nil, #WARNINGS)
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+BUILD_TESTS = r"""-- Tests for TycoonCore's buildPayload (the code between its BUILDSAVE markers) ----------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local NOW = 1700000000
+local os = { time = function() return NOW end }
+local FAIL = nil -- name of the module whose serialize throws
+local function module(name, value)
+	return { serialize = function(data)
+		if FAIL == name then error(name .. " exploded") end
+		return value
+	end }
+end
+local ShopServer = module("shop", { luckLeft = 0 })
+local EmployeeServer = module("team", { incubators = { { egg = "Garage" }, false, false }, employees = {} })
+local PoachServer = module("poach", { hrLevel = 2 })
+local IpoServer = module("ipo", { count = 1, shares = 3 })
+local OnboardingServer = module("onboarding", { seenIntro = true })
+local DailyServer = module("daily", { streak = 4 })
+__BUILDSAVE__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local function newData()
+	return { owned = { Desk = true, Laptop = true }, cash = { Value = 250 }, unknownSections = { future = { x = 1 } }, saving = true }
+end
+
+local data = newData()
+local payload = buildPayload(data, nil, "P")
+check("normal build returns the payload", payload ~= nil and payload.cash == 250 and #payload.owned == 2)
+check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily)
+check("... unknown sections are written back", payload.future ~= nil and payload.future.x == 1)
+check("... lastSeen is set", payload.lastSeen == NOW)
+check("... a good build leaves the lock to save() (still saving)", data.saving == true)
+check("... no warning", #WARNINGS == 0)
+
+for _, name in ipairs({ "shop", "team", "poach", "ipo", "onboarding", "daily" }) do
+	data = newData()
+	FAIL = name
+	WARNINGS = {}
+	local p = buildPayload(data, nil, "P")
+	check(name .. ".serialize throws: nothing to write", p == nil)
+	check(name .. ".serialize throws: lock released", data.saving == false)
+	check(name .. ".serialize throws: warned with the player and the error", #WARNINGS == 1 and string.find(WARNINGS[1], "P", 1, true) and string.find(WARNINGS[1], name .. " exploded", 1, true))
+end
+FAIL = nil
+
+-- the IPO transform throws half-way
+data = newData()
+WARNINGS = {}
+local p = buildPayload(data, function(payload)
+	payload.cash = 0
+	payload.owned = {}
+	error("transform exploded")
+end, "P")
+check("transform throws: nothing to write (no half-reset payload)", p == nil)
+check("transform throws: lock released and warned", data.saving == false and #WARNINGS == 1)
+check("transform throws: live data untouched", data.cash.Value == 250 and data.owned.Desk == true)
+
+-- the transform works
+data = newData()
+p = buildPayload(data, function(payload) payload.cash = 5; payload.owned = {} end, "P")
+check("transform runs on the payload", p ~= nil and p.cash == 5 and #p.owned == 0)
+
+-- a later save is not blocked: this is save()'s own wait loop
+data = newData()
+FAIL = "ipo"
+buildPayload(data, nil, "P")
+FAIL = nil
+local waits = 0
+while data.saving and waits < 5 do waits += 1 end
+check("a later save does not wait forever after a failed build", waits == 0 and data.saving == false)
+data.saving = true
+check("... and that later save builds fine", buildPayload(data, nil, "P") ~= nil)
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -332,8 +621,8 @@ def sanitize_source():
     return text[start:end]
 
 
-def marked_source(name):
-    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+def marked_source(name, filename="TycoonCore.lua"):
+    with open(os.path.join(ROOT, filename), encoding="utf-8") as f:
         text = f.read()
     start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
     return text[start:text.index("-- %s-END" % name)]
@@ -370,6 +659,14 @@ def main():
     result3 = run_luau(luau, STORE_TESTS.replace("__GETSTORE__", marked_source("GETSTORE")).replace("__READABLE__", marked_source("READABLE")))
     print("TycoonCore store check: " + (result3.stdout.strip() or result3.stderr.strip()))
     if result3.returncode != 0 or " 0 failed" not in result3.stdout:
+        code = 1
+    result4 = run_luau(luau, PASS_TESTS.replace("__PASSCHECK__", marked_source("PASSCHECK", "ShopServer.lua")))
+    print("ShopServer pass check: " + (result4.stdout.strip() or result4.stderr.strip()))
+    if result4.returncode != 0 or " 0 failed" not in result4.stdout:
+        code = 1
+    result5 = run_luau(luau, BUILD_TESTS.replace("__BUILDSAVE__", marked_source("BUILDSAVE")))
+    print("TycoonCore build check: " + (result5.stdout.strip() or result5.stderr.strip()))
+    if result5.returncode != 0 or " 0 failed" not in result5.stdout:
         code = 1
     return code
 
