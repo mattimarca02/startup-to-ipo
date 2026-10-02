@@ -88,25 +88,25 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
-| ShopServer | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| ShopServer | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | EmployeeServer | ServerScriptService | free | | |
-| ShopConfig | ReplicatedStorage | free | | |
-| CreatureConfig | ReplicatedStorage | free | | |
+| ShopConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| CreatureConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | free | | |
-| EmployeeClient | StarterPlayerScripts | free | | |
+| ShopClient | StarterPlayerScripts | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| EmployeeClient | StarterPlayerScripts | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | free | | |
+| PoachServer | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
-| IpoConfig | ReplicatedStorage | free | | |
+| tools/daily_test.py | (repo only) | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| IpoConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
-| DailyClient | StarterPlayerScripts | free | | |
+| DailyClient | StarterPlayerScripts | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
