@@ -592,4 +592,82 @@ ROADMAP.md:11, :20-23 still list M4, M5, M6, #13 and #14 as "publish with **Shut
 
 **Impact:** with no live players, only the developers' saves. After launch, real players' IPO and daily progress.
 
-**Smallest fix (S, docs):** in docs/PREPUBLISH.md B9: "Hard **Shut down all servers** only; never Migrate. Commit all drafts first. After publishing, join and check the version number in the F9 console matches `V_launch`." Use the same rule for every update that changes the save.
+**Smallest fix (S, docs):** in docs/PREPUBLISH.md B9: "Hard **Shut down all servers** only; never Migrate. Commit all drafts first. After publishing, join and check you are on the new code (for example the daily gift chip shows; old versions have none). `game.PlaceVersion` is the exact check if a one-line `print` is ever added to TycoonCore." Use the same rule for every update that changes the save.
+
+---
+
+## All findings
+
+| # | Severity | Section | Where | In one line | Effort |
+|---|---|---|---|---|---|
+| FR-12 | **High** | 7 | `EmployeeClient.lua:437-446`, `DailyClient.lua:111-120` | Egg odds shown per rarity, not per creature, and don't sum to 100% under luck: Paid Random Items policy | S-M |
+| FR-13 | **High** | 7 | no `PolicyService` call | `ArePaidRandomItemsRestricted` never checked (UK, AU, BR, BE, NL) | M |
+| FR-15 | **High** | 8 | `TycoonCore.lua:62`, `:509-518` | 6 plots, but nothing sets Max Players to 6: the 7th joiner is kicked | S (setting) |
+| FR-18 | **High** | 9 | process | No recorded rollback floor; restoring the live version wipes IPO, Shares and daily | S (docs) |
+| FR-1 | Medium | 1 | `TycoonCore.lua:637-645`, `:352-356` | Failed saves never retried at leave; player never told; whole sessions lost in an outage | S |
+| FR-4 | Medium | 3 | `PoachServer.lua:266-268`, `:452-454` | Poach chain copies an employee (3 accounts, no hop) | S |
+| FR-5 | Medium | 3 | `TycoonCore.lua:241-264`, `:325-357` | No session lock: an overlapping session can wipe a paid purchase; reconnects lose up to 60 s | S interim, M lock |
+| FR-19 | Medium | 9 | process | Soft shutdown or missed shutdown: old servers delete new sections | S (docs) |
+| FR-2 | Low | 1 | `TycoonCore.lua:671-675` | `BindToClose` saves one by one, and twice | S |
+| FR-3 | Low | 2 | `TycoonCore.lua:509-518`, `:637-645` | Plot held during a slow leave save: next joiner kicked as "server full" | S |
+| FR-6 | Low | 3 | `PoachServer.lua:202-217`, `:294-311` | Attacker hop at the roll can destroy the victim's employee | lock |
+| FR-7 | Low | 4 | `ShopServer.lua:483-487` | A product on sale but not in ShopConfig charges and gives nothing until Roblox refunds | S |
+| FR-8 | Low | 4 | `ShopServer.lua:27`, `:413-423` | A receipt that waits > 30 s isn't retried until rejoin; no message | S |
+| FR-9 | Low | 5 | `ShopServer.lua:351-356`, `PoachServer.lua:704-729`, `IpoServer.lua:350-353` | Saved numbers accept infinity (with PR14 R8) | S |
+| FR-10 | Low | 6 | `ShopServer.lua:294-298` | `passConfirming` re-created after leave | S |
+| FR-11 | Low | 6 | `IpoClient.lua:770` | Leaderboard names not escaped in rich text | S |
+| FR-14 | Low | 7 | `PoachClient.lua:924-951` | Timed Robux shield offer during an attack | S |
+| FR-16 | Low | 8 | `EmployeeClient.lua:918-942` | Employees animated every frame on phones | S |
+| FR-17 | Low | 8 | `ShopClient.lua:619` | Shop redraws twice a second while closed | S |
+
+**Counts:** Critical 0 · High 4 · Medium 4 · Low 11.
+
+**What holds up** (checked across all systems, not one diff at a time): the all-modules-loaded save gate; receipt idempotency and grant-after-save in every order of leave/save/retry; the IPO's save-first commit, including shutdown and leave during it; the daily claim's no-yield step; server authority on every remote (no amount, price, time or result comes from a client); Studio-only debug; save size (about 11 KB, 0.3% of the limit); the DataStore budget (> 10x headroom at any server size).
+
+## Top 10 to fix before launch, in order
+
+1. **FR-12** Show every creature's own odds, adding up to exactly 100.00%, and describe Luck Boost and Talent Scouts in numbers. (Clients only.)
+2. **FR-13** `PolicyService` check, and decide the treatment for restricted players (new decision D9; recommended: hide Cash packs, Luck Boost and Instant Hatch for them).
+3. **FR-15** Set Max Players to 6 (and add it to C12 and README).
+4. **FR-18 + FR-19** Write the publish rule down: record `V_old` and `V_launch`, never restore below `V_launch`, hard "Shut down all servers" only, commit Team Create drafts first.
+5. **FR-4** Don't let an employee with an open `gained` note be poached or bought back.
+6. **FR-1** Retry the leave save, and tell the player when saving is failing.
+7. **FR-5 (interim)** Re-read the save after 7 s when it's from a session less than 75 s old. Full lock (section 3) in the first update.
+8. **FR-3** Wait up to 10 s for a free plot before kicking (matters once the server size is 6).
+9. **FR-7 + FR-8** Dry-run `sync_monetization` so every on-sale product is in ShopConfig (C6); wait 90 s for data in `grantProduct` and tell the player when a receipt is postponed.
+10. **FR-9** One finite-number check for every saved number (closes PR14 R8 too).
+
+FR-2, FR-6, FR-10, FR-11, FR-14, FR-16 and FR-17 can go into the first weekly update.
+
+## Items to promote from the M9 list
+
+| M9 item (ROADMAP.md) | Promote? | Why |
+|---|---|---|
+| "Read Roblox's current policy pages on rewards (Paid Random Items ...)" (`:108`) and checklist C8 | **Yes, launch-blocking**, with concrete work | Done in section 7: the game doesn't meet the 2026-05-26 clarification (FR-12, FR-13). |
+| M4 re-review low 3 / checklist A10: rule that new saved data gets its own top-level section (`:76`) | **Yes, before launch** (a docs change) | Rollback is the emergency tool (FR-18), and this rule is what makes a rollback to an older-but-safe version lossless. |
+| F10 session locking (`:67`, D5) | **Partly**: the interim re-read (FR-5) before launch; the full lock in the first update | D5's reasoning holds for the lock itself, but FR-5 adds a "paid and not received" case, and the interim is a few lines. |
+| M5 F8 / M6 F10 (hop gives the egg or the claim twice) | No | Bounded: one reward survives. Closed by the lock. |
+| PR14 R8 (IPO numbers accept infinity) | No (fold into FR-9) | Corrupt saves only; cheap to fix with the others. |
+| PR14 F7 (load retry budget) | No | The current budget formula leaves > 10x headroom. |
+| M4 re-review low 1 (offline Cash without pass multipliers after a slow pass check) | No | Rare, and the IPO part is fixed (`22c22ff`). |
+| Everything else on the M9 list | No change | |
+
+FR-4 is not on the M9 list: it is new, needs no hop, and the session lock does **not** fix it.
+
+## Verdict
+
+**Not launch-ready.** The save system, receipts and server authority are in good shape: no Critical finding, and nothing a client can call duplicates Cash or Shares. What blocks launch is outside the save code:
+
+- **Policy:** FR-12 (odds per creature, summing to 100%) and FR-13 (`ArePaidRandomItemsRestricted`). Eggs are paid random items today because Cash packs are on sale, whatever D4 decides.
+- **Settings:** FR-15 (Max Players 6).
+- **Procedure:** FR-18 (rollback floor) and FR-19 (hard shutdown only).
+- **Cheap code fixes worth doing first:** FR-4 (employee copy) and FR-1 (silent session loss).
+
+After those, and the open checklist blockers (C1-C5, C8, C9, B1-B9), the game is ready to publish.
+
+## Sources
+
+- [Data stores: error codes and limits](https://create.roblox.com/docs/cloud-services/data-stores/error-codes-and-limits) (budgets, per-key limits, 30-request queues, 4 MB)
+- [Paid random items policy guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items)
+- [Clarifying Requirements for Paid Random Items](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622) (2026-05-26)
+- [MarketplaceService.ProcessReceipt](https://create.roblox.com/docs/reference/engine/classes/MarketplaceService#ProcessReceipt) and [DevForum: NotProcessedYet retries](https://devforum.roblox.com/t/developer-product-purchases-returned-as-notprocessedyet-not-being-retried/3502516) (retry on rejoin, ~3-day refund; not in the API docs)
