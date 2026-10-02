@@ -532,3 +532,64 @@ The game supports exactly **6 players per server**: `MAX_PLOTS = 6` (`TycoonCore
 **Impact:** small, constant CPU and garbage on phones.
 
 **Smallest fix (S):** in ShopClient's `refreshAll`, return early when `window.Visible` is false (the open button already calls it when opening).
+
+---
+
+## 9. Publish procedure
+
+### What is live now, and why it matters
+
+ROADMAP.md:11, :20-23 still list M4, M5, M6, #13 and #14 as "publish with **Shut down all servers**", so the version live on Roblox today is older than M4. That code has **no unknown-sections rule** (M4 F2, `2f998a7`): when it saves a player, it deletes every section it doesn't know (`ipo`, `onboarding`, `daily`) and keeps only 3 incubators. Everything below follows from that.
+
+### The safe order (place with no live players)
+
+**Before publishing day**
+1. Finish the blockers (section "Top 10" below) and merge `prepublish-fixes` and the fixes into `main` through a PR. Release every claim in CONTRIBUTING.md.
+2. Make Studio match `main` exactly (checklist A6): compare every script read-only through the Studio MCP. In Team Create, open **View > Drafts** and commit every draft: an uncommitted draft is **not** published. Neither collaborator edits during the publish.
+3. Run `python tools/daily_test.py` and paste the "passed, 0 failed" lines.
+4. In Creator Hub, open the place's **Version History** and write down the live version number. Call it `V_old`. Note in ROADMAP.md that it is **below the rollback floor**.
+5. Settings that can't change later without side effects: **Max Players = 6** (FR-15), `DailyConfig.ResetHourUtc` (D3; moving it earlier later gives everyone an extra claim), `ShopConfig.EggsEnabled` (D4), the private/public state (stays private).
+
+**Publishing day**
+6. Check that no server runs: Creator Hub > the experience > the place's menu > **Shut down all servers** (do it even if you think none is running).
+7. In Studio: **File > Publish to Roblox**.
+8. Right away: **Shut down all servers** again. Use the hard shutdown, **never "Migrate to latest update"** (FR-19).
+9. In Version History, write down the new version number: `V_launch`. This is the **rollback floor** (FR-18). Put it in ROADMAP.md.
+10. Join the private game with a second account. Open the server log (F9 > Server). It must show no "DataStore unavailable", no "Keeping a part of ... save this version doesn't know", no "Could not set up". Rejoin and check that the IPO count, Shares, perks, daily streak and onboarding state are still there (B3, B9).
+11. Real purchases with the second account (B7): one Cash pack, one pass, a Poach Shield; rejoin; nothing doubled, nothing missing.
+12. Reset dev saves (B6) only with `RemoveAsync` on a written list of the dev UserIds, never a loop over unknown keys. Then the store page and the public switch (C10, C12).
+
+### What a rollback looks like
+
+- **Allowed:** Version History > **Restore** a version **at or above `V_launch`**, then **Shut down all servers**. Saves written by newer code keep their unknown top-level sections (F2). They do lose any *new field inside an existing section* (M4 re-review low 3), so the M9 rule A10 (new saved data gets its own top-level section) has to be followed from launch on.
+- **Never:** restore `V_old` or anything older than `V_launch`. Every player who joins that version loses their `ipo` (IPO count, Shares, perks, best valuation), `daily` (streak; Day 1 becomes claimable again) and `onboarding` sections, and the eggs in incubators 4-5. When they come back to the fixed version, the IPO section is rebuilt from the capped legacy guess: Shares and perks are gone for good.
+- **If data was already damaged:** Roblox keeps older versions of each DataStore key for a limited time (about 30 days). A single player's save can be restored by hand from a version (`ListVersionsAsync` / `GetVersionAsync`, or Open Cloud). Slow and manual, so the rollback floor matters more.
+
+### If an old and a new server overlap, even for a minute
+
+| Case | What goes wrong |
+|---|---|
+| A player goes from a **new** server to an **old** (pre-F2) one (a friend join, a reconnect, a soft shutdown) | The old server's first save deletes `ipo`, `onboarding`, `daily` and incubators 4-5. Back on a new server: IPO count 0, no Shares, no perks, the daily calendar back at Day 1 (an extra claim), and the eggs gone. Permanent. |
+| A player goes from **old** to **new** | Fine: new code loads old saves (legacy valuation guess, onboarding counted as done for anyone with progress). |
+| Both servers hold the player at once | The F10 race (section 3), between versions. |
+| Two **new** versions overlap (any later update) | Only safe if the update follows A10: a field added inside an existing section is deleted by the older server. |
+
+### FR-18 (High): there is no recorded rollback floor, and the only older version is one that wipes progress
+
+**Where:** process (ROADMAP.md, docs/PREPUBLISH.md); the behavior is `TycoonCore.lua:68-70`, `:304-308` (only code with these lines keeps unknown sections).
+
+**How it breaks:** launch goes wrong on day 1 (a crash loop, a broken shop). The natural reaction is "Restore the previous version" in Version History, which is `V_old`. Every player who joins in the next minutes loses their IPO progress, Shares, perks and daily streak, permanently.
+
+**Impact:** mass, permanent data loss from a normal emergency action.
+
+**Smallest fix (S, docs):** steps 4 and 9 above, plus one line in ROADMAP.md and CLAUDE.md: "Never restore a place version older than `V_launch` (the first version with KNOWN_SECTIONS). Fix forward instead."
+
+### FR-19 (Medium): a soft shutdown or a missed shutdown leaves old servers running next to new ones
+
+**Where:** process; ROADMAP.md:22-23 says "Shut down all servers" but doesn't forbid "Migrate to latest update" or say to verify.
+
+**How it breaks:** "Migrate to latest update" keeps old servers running until their players are moved, and a missed shutdown keeps them running until they empty. A player who reaches an old server after visiting a new one loses the new sections (table above). Also, publishing with uncommitted Team Create drafts silently publishes the old script.
+
+**Impact:** with no live players, only the developers' saves. After launch, real players' IPO and daily progress.
+
+**Smallest fix (S, docs):** in docs/PREPUBLISH.md B9: "Hard **Shut down all servers** only; never Migrate. Commit all drafts first. After publishing, join and check the version number in the F9 console matches `V_launch`." Use the same rule for every update that changes the save.
