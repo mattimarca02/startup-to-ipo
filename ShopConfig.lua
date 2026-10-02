@@ -18,6 +18,17 @@ ShopConfig.EggsEnabled = false
 -- Studio-only Debug tab for testing without Robux. It never works in live servers.
 ShopConfig.DebugInStudio = true
 
+-- After a game pass purchase, if Roblox is slow to confirm ownership, the server asks again every
+-- RetrySeconds for up to GiveUpSeconds. The pass is granted only once Roblox says the player owns it.
+ShopConfig.PassConfirm = { RetrySeconds = 5, GiveUpSeconds = 120 }
+
+-- Roblox's Paid Random Items policy (review finding FR-13, decision D9 option B). On every join the
+-- server asks PolicyService if paid random items are restricted for the player (ArePaidRandomItemsRestricted).
+-- It runs at the same time as the pass check, and loading waits for it at most TimeoutSeconds (the
+-- same 10 s as the pass check). A failed try is asked again after RetrySeconds, Attempts times in all.
+-- Fail closed: if Roblox errors or answers too late, the player counts as restricted all session.
+ShopConfig.PolicyCheck = { TimeoutSeconds = 10, Attempts = 3, RetrySeconds = 1 }
+
 -- Game passes: bought once, owned forever. Cash multipliers stack (2x Cash + VIP = 3x).
 ShopConfig.Passes = {
 	{
@@ -114,11 +125,13 @@ ShopConfig.Products = {
 		key = "LuckBoost",
 		tab = "Boosts",
 		name = "Luck Boost",
-		description = "Legendary chance 8.0% -> 9.7% (Unicorn Egg) for 15 min. Buy again to add time.",
+		-- The shop adds the exact numbers in front of this, from CreatureConfig (ShopClient.luckText)
+		description = "For 15 min. Buy again to add time. Every hire's exact odds are in the Eggs tab.",
 		icon = "🍀",
 		price = 49,
 		id = 3715692114,
 		needsEggs = true,
+		changesOdds = true, -- never sold to players with paid random items restricted (isForSale)
 		effect = { luckMinutes = 15, luckMultiplier = 2 },
 	},
 	{
@@ -174,9 +187,12 @@ function ShopConfig.getProductById(id)
 	return findBy(ShopConfig.Products, "id", id)
 end
 
--- Can this item be bought right now?
-function ShopConfig.isForSale(item)
+-- Can this item be bought right now? randomRestricted = true for a player for whom paid random items
+-- are restricted (Roblox's PolicyService, review finding FR-13): items marked changesOdds (Luck Boost)
+-- aren't for sale to them, since their hires follow a fixed order and odds don't apply.
+function ShopConfig.isForSale(item, randomRestricted)
 	return item.id ~= 0 and (not item.needsEggs or ShopConfig.EggsEnabled)
+		and not (randomRestricted and item.changesOdds)
 end
 
 -- Cash packs scale with what you earn: X minutes of your current income per second,

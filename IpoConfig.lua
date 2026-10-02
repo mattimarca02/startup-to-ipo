@@ -43,6 +43,9 @@ IpoConfig.SharesRatioCap = 2 -- waiting longer than 2x IPO-ready (e.g. offline C
 
 IpoConfig.StartingCash = 0 -- Cash after an IPO (the first garage upgrade is free)
 IpoConfig.CooldownSeconds = 60 -- wait at least this long between two IPOs
+-- Going public is refused ("one moment") while the join-time game pass check is still running, so the
+-- Shareholder 2x Shares can't be lost. After this many seconds a stuck check no longer blocks the IPO.
+IpoConfig.PassCheckMaxWaitSeconds = 20
 
 -- What going public resets (true) or keeps (false). The IPO screen lists them from here.
 -- Always kept: employees, game passes, boosts, shields, Shares, perks and the IPO count.
@@ -86,7 +89,8 @@ IpoConfig.Perks = {
 	},
 	{
 		key = "BaseLuck", name = "Talent Scouts", icon = "🍀",
-		description = "Better odds for Rare, Epic and Legendary hires.", perLevel = 0.1, effect = "luck", -- +10% luck per level
+		-- Paid Random Items policy: an odds modifier says what it does in numbers. Keep "10%" equal to perLevel.
+		description = "Odds weight of Rare, Epic and Legendary hires +10% per level. Exact odds: Eggs tab.", perLevel = 0.1, effect = "luck", -- +10% luck per level
 		costs = { 5, 10, 20, 35, 50 },
 	},
 	{

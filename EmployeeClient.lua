@@ -35,8 +35,9 @@ local COLORS = {
 	hud = Color3.fromRGB(70, 120, 255),
 }
 
--- The latest team state from the server
-local state = { employees = {}, incubators = {}, pending = false, maxEmployees = CreatureConfig.BaseEmployeeSlots }
+-- The latest team state from the server (nextHires: egg key -> creature key, only for players whose
+-- hires follow a fixed order; false for everyone else)
+local state = { employees = {}, incubators = {}, pending = false, maxEmployees = CreatureConfig.BaseEmployeeSlots, nextHires = false }
 local refreshers = {} -- functions that redraw parts of the window
 local cardParts = {} -- card pieces resized by applyLayout on small screens
 
@@ -434,19 +435,69 @@ end
 local eggsPage = tabPages.Eggs
 local eggsStatus = makeLine(eggsPage, 0)
 
-local function oddsText(egg)
-	local luck = luckMultiplier()
+-- Odds come from CreatureConfig.getCreatureOdds, built from the same weights and luck the server
+-- rolls with. They're rounded so the shown numbers always add up to exactly 100.00%, and they're
+-- redrawn while the window is open, so Luck Boost and Talent Scouts show up live (Roblox's Paid
+-- Random Items policy: every possible hire's own odds, before buying).
+
+-- The card's short line: the odds per rarity (sums of the per-hire odds below)
+local function oddsText(creatureOdds)
 	local parts = {}
-	for _, entry in ipairs(CreatureConfig.getOdds(egg, luck)) do
-		local percent = entry.chance * 100
-		local shown = percent >= 10 and string.format("%d%%", math.floor(percent + 0.5)) or string.format("%.1f%%", percent)
-		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarityColor(entry.rarity)), entry.rarity, shown))
+	for _, entry in ipairs(CreatureConfig.rarityOdds(creatureOdds)) do
+		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarityColor(entry.rarity)), entry.rarity, CreatureConfig.formatOdds(entry.units)))
 	end
 	return (luckLeft() > 0 and "🍀 " or "") .. table.concat(parts, " · ")
 end
 
+-- The full list under each egg: every possible hire and its own odds
+local function creatureOddsText(egg, creatureOdds)
+	local parts = {}
+	for _, entry in ipairs(creatureOdds) do
+		table.insert(parts, string.format('<font color="%s">%s</font> %s', hex(rarityColor(entry.rarity)), entry.creature.name, CreatureConfig.formatOdds(entry.units)))
+	end
+	return string.format("<b>%s odds for each hire</b>%s (rounded, total exactly 100.00%%): %s", egg.name,
+		luckLeft() > 0 and " with 🍀 Luck Boost" or "", table.concat(parts, " · "))
+end
+
+-- Players for whom paid random items are restricted (Roblox's PolicyService, asked by the server on
+-- join; not known yet counts as restricted) get no random roll: each egg hires in a fixed order, and
+-- the server sends the next hire of every egg. They see that hire instead of odds (FR-13, D9 option B).
+local function randomRestricted()
+	return player:GetAttribute("RandomRestricted") ~= false
+end
+
+local function nextHireName(creature)
+	if not creature then
+		return "loading..."
+	end
+	return string.format('<font color="%s">%s %s</font>', hex(rarityColor(creature.rarity)), creature.emoji or "", creature.name)
+end
+
+-- The full line under the egg card (full width, so it stays readable on a phone)
+local function nextHireText(egg, creature)
+	local text = "<b>Next hire from this egg: " .. nextHireName(creature) .. "</b>"
+	if creature then
+		text ..= string.format(" (%s · %s · $%d/s)", creature.rarity, creature.role, creature.income)
+	end
+	return text .. ". Your hires follow a fixed order, not a random roll: the next " .. egg.name .. " that hatches brings this hire."
+end
+
 for i, egg in ipairs(CreatureConfig.Eggs) do
-	local parts = makeCard(eggsPage, i)
+	local parts = makeCard(eggsPage, i * 2 - 1)
+	local oddsLabel = make("TextLabel", {
+		LayoutOrder = i * 2,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y, -- grows to fit the whole list, on any screen width
+		BackgroundTransparency = 1,
+		Font = Enum.Font.Gotham,
+		Text = "",
+		RichText = true,
+		TextSize = 13,
+		TextColor3 = COLORS.subtext,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = eggsPage,
+	})
 	parts.icon.Text = "🥚"
 	parts.icon.BackgroundColor3 = egg.color
 	parts.name.Text = egg.name
@@ -455,7 +506,16 @@ for i, egg in ipairs(CreatureConfig.Eggs) do
 	end)
 	table.insert(refreshers, function()
 		local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - perkValue("FasterEggs")))
-		parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\n" .. oddsText(egg)
+		if randomRestricted() then
+			local nextKey = state.nextHires and state.nextHires[egg.key]
+			local creature = nextKey and CreatureConfig.getCreature(nextKey)
+			parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\nNext hire: " .. nextHireName(creature)
+			oddsLabel.Text = nextHireText(egg, creature)
+		else
+			local creatureOdds = CreatureConfig.getCreatureOdds(egg, luckMultiplier())
+			parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\n" .. oddsText(creatureOdds)
+			oddsLabel.Text = creatureOddsText(egg, creatureOdds)
+		end
 		local freeIncubator = false
 		for index = 1, #state.incubators do
 			if not state.incubators[index] then
@@ -471,13 +531,13 @@ for i, egg in ipairs(CreatureConfig.Eggs) do
 	end)
 end
 
-makeLine(eggsPage, 10, COLORS.gold).Text = "Incubators"
+makeLine(eggsPage, 100, COLORS.gold).Text = "Incubators" -- after the eggs and their odds (orders 1 to 2 x eggs)
 
 -- Cards for the most incubators anyone can have (Extra Incubator IPO perk); unused ones hide
 local extraIncubatorPerk = IpoConfig.getPerk("ExtraIncubator")
 local maxIncubators = CreatureConfig.Incubators + (extraIncubatorPerk and IpoConfig.perkValue("ExtraIncubator", #extraIncubatorPerk.costs) or 0)
 for index = 1, maxIncubators do
-	local parts = makeCard(eggsPage, 10 + index)
+	local parts = makeCard(eggsPage, 100 + index)
 	parts.button.Activated:Connect(function()
 		local slot = state.incubators[index]
 		if not slot or state.pending then return end

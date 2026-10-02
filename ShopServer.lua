@@ -13,6 +13,9 @@
 --   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
 -- And for the IPO (IpoServer):
 --   ShopServer.getSharesMultiplier(player)         -> 2 with the Shareholder pass, otherwise 1
+-- And for Roblox's Paid Random Items policy (FR-13, D9 option B):
+--   ShopServer.isRandomRestricted(player)          -> true if they get no random rolls (fixed hire order)
+-- And for anyone: ShopServer.notify(player, text)  -> a pop-up message (TycoonCore's saving warning)
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -20,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local PhysicsService = game:GetService("PhysicsService")
+local PolicyService = game:GetService("PolicyService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 
@@ -45,6 +49,7 @@ local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug o
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
 local productHandlers = {} -- effect field -> function(player, data, effect), added by other systems
 local doorCooldown = {} -- player -> os.clock() of the last "VIP only" message
+local passCheckPending = {} -- player -> os.clock() when the join-time pass check started, until it has finished
 
 -- Helpers ---------------------------------------------------------------
 
@@ -139,12 +144,18 @@ local function publish(player)
 	player:SetAttribute("ChatTagColor", tagColor)
 	player:SetAttribute("LuckBoostUntil", shop.luckUntil)
 	player:SetAttribute("InstantHatches", shop.instantHatches)
+	player:SetAttribute("RandomRestricted", shop.randomRestricted) -- screens: next hire instead of odds
 
 	refreshCharacter(player)
 	core.updateIncome(player)
 end
 
 -- Effects other systems ask about ---------------------------------------
+
+-- A message in the shop's pop-up, for other systems (TycoonCore: "saving is having trouble")
+function ShopServer.notify(player, text)
+	notify(player, text)
+end
 
 function ShopServer.hasPass(player, key)
 	local shop = getShop(player)
@@ -180,7 +191,7 @@ end
 
 function ShopServer.getLuckMultiplier(player)
 	local shop = getShop(player)
-	if not shop or shop.luckUntil <= os.time() then
+	if not shop or shop.randomRestricted or shop.luckUntil <= os.time() then
 		return 1
 	end
 	for _, product in ipairs(ShopConfig.Products) do
@@ -225,6 +236,24 @@ function ShopServer.getSharesMultiplier(player)
 	return multiplier
 end
 
+-- Paid random items restricted for this player (PolicyService, checked on every join, never saved)?
+-- Fail closed: true while the check runs, if it failed or was too slow, and if there is no data.
+function ShopServer.isRandomRestricted(player)
+	local shop = getShop(player)
+	return shop == nil or shop.randomRestricted ~= false
+end
+
+-- true while the join-time pass check is still running: the player's passes may not be known yet
+function ShopServer.isPassCheckPending(player)
+	return passCheckPending[player] ~= nil
+end
+
+-- Seconds the join-time pass check has been running, or nil when it isn't running
+function ShopServer.passCheckAge(player)
+	local startedAt = passCheckPending[player]
+	return startedAt and os.clock() - startedAt or nil
+end
+
 -- Game passes -----------------------------------------------------------
 
 -- Returns true/false, or nil if Roblox couldn't be reached (we'll try again later)
@@ -242,16 +271,73 @@ local function userOwnsPass(player, passId)
 	return nil
 end
 
--- Asks Roblox about every pass the player doesn't have yet. Returns true if something changed.
+-- PASSCHECK-START
+-- (tools/daily_test.py runs the code between the PASSCHECK markers, so keep it free of Roblox calls except those it fakes.)
+
+-- Asks Roblox about every pass the player doesn't have yet, all at once, and publishes each pass
+-- as soon as it is found (a slow pass never holds back the others). Returns true if something changed.
 local function checkPasses(player, shop)
 	local changed = false
+	local waiting = 0
 	for _, pass in ipairs(ShopConfig.Passes) do
-		if pass.id ~= 0 and not shop.passes[pass.key] and userOwnsPass(player, pass.id) then
-			shop.passes[pass.key] = true
-			changed = true
+		if pass.id ~= 0 and not shop.passes[pass.key] then
+			waiting += 1
+			task.spawn(function()
+				local ok, err = pcall(function()
+					if userOwnsPass(player, pass.id) then
+						shop.passes[pass.key] = true
+						changed = true
+						publish(player)
+					end
+				end)
+				if not ok then
+					warn("Pass check for " .. pass.key .. " failed: " .. tostring(err))
+				end
+				waiting -= 1
+			end)
 		end
 	end
+	while waiting > 0 do
+		task.wait(0.1)
+	end
 	return changed
+end
+
+local passConfirming = {} -- player -> { [passKey] = true } while a purchase is being confirmed
+
+-- After a purchase: keep asking Roblox until it confirms the pass, for up to ShopConfig.PassConfirm.GiveUpSeconds.
+-- Only a "yes" from Roblox grants the pass, so a client can never talk its way into one.
+local function confirmPurchasedPass(player, pass, shop)
+	local confirming = passConfirming[player]
+	if not confirming then
+		confirming = {}
+		passConfirming[player] = confirming
+	end
+	if confirming[pass.key] then return end -- already waiting for this one
+	confirming[pass.key] = true
+
+	local settings = ShopConfig.PassConfirm
+	local deadline = os.clock() + settings.GiveUpSeconds
+	local told = false
+	while true do
+		if shop.passes[pass.key] or userOwnsPass(player, pass.id) then
+			shop.passes[pass.key] = true
+			publish(player)
+			notify(player, pass.name .. " unlocked!")
+			break
+		end
+		if not player.Parent or getShop(player) ~= shop then break end -- they left
+		if os.clock() >= deadline then
+			notify(player, "Roblox is slow to confirm " .. pass.name .. ". It will unlock by itself when Roblox answers (or when you rejoin).")
+			break
+		end
+		if not told then
+			told = true
+			notify(player, "Confirming " .. pass.name .. " with Roblox...")
+		end
+		task.wait(settings.RetrySeconds)
+	end
+	confirming[pass.key] = nil
 end
 
 -- Fires on the server when a pass prompt closes (bought, cancelled or failed)
@@ -262,12 +348,85 @@ local function onPassPromptFinished(player, passId, wasPurchased)
 	if not pass or not shop then return end
 
 	-- Don't trust the event alone: ask Roblox (its ownership cache refreshes when this event fires)
-	if userOwnsPass(player, passId) then
-		shop.passes[pass.key] = true
-		publish(player)
-		notify(player, pass.name .. " unlocked!")
+	confirmPurchasedPass(player, pass, shop)
+end
+-- PASSCHECK-END
+
+-- Paid random items (Roblox policy, review finding FR-13, decision D9 option B) ------------
+
+-- POLICY-START
+-- (tools/daily_test.py runs the code between the POLICY markers, so keep it free of Roblox calls except those it fakes.)
+
+-- Asks Roblox if paid random items are restricted for this player. Returns true or false, or nil
+-- if Roblox couldn't answer after every try (ShopConfig.PolicyCheck).
+local function askRandomPolicy(player)
+	local settings = ShopConfig.PolicyCheck
+	for attempt = 1, settings.Attempts do
+		local ok, result = pcall(function()
+			return PolicyService:GetPolicyInfoForPlayerAsync(player)
+		end)
+		if ok and typeof(result) == "table" and typeof(result.ArePaidRandomItemsRestricted) == "boolean" then
+			return result.ArePaidRandomItemsRestricted
+		end
+		warn("Policy check failed (attempt " .. attempt .. "): " .. (ok and "no ArePaidRandomItemsRestricted in the answer" or tostring(result)))
+		if attempt < settings.Attempts then
+			task.wait(settings.RetrySeconds)
+		end
+	end
+	return nil
+end
+
+-- Starts the policy check for a joining player, at the same time as the pass check. Fail closed: the
+-- player is restricted from the start, and only a clear "not restricted" that comes in time lifts it.
+-- Returns the check: state is "checking", then "done", or "late" once loading stopped waiting for it
+-- (then the player stays restricted for the whole session, whatever Roblox answers afterwards).
+local function startPolicyCheck(player, shop)
+	shop.randomRestricted = true
+	local check = { state = "checking", startedAt = os.clock() }
+	task.spawn(function()
+		local ok, restricted = pcall(askRandomPolicy, player)
+		if not ok then
+			warn("Policy check for " .. player.Name .. " failed: " .. tostring(restricted))
+		end
+		if check.state ~= "checking" then
+			warn("Policy check for " .. player.Name .. " answered after loading went on: restricted for this session")
+			return
+		end
+		check.state = "done"
+		shop.randomRestricted = not (ok and restricted == false)
+	end)
+	return check
+end
+
+-- true while loading should still wait for the policy answer (at most ShopConfig.PolicyCheck.TimeoutSeconds)
+local function policyCheckWaiting(check)
+	return check.state == "checking" and os.clock() - check.startedAt < ShopConfig.PolicyCheck.TimeoutSeconds
+end
+
+-- Luck Boost only runs while paid random items are allowed. For a restricted player it would change
+-- nothing (their hires follow a fixed order), so its time is kept aside in luckPaused, not counting
+-- down, until a session where they aren't restricted. Call it whenever randomRestricted is decided.
+local function syncLuckPause(shop)
+	local now = os.time()
+	if shop.randomRestricted then
+		if shop.luckUntil > now then
+			shop.luckPaused += shop.luckUntil - now
+		end
+		shop.luckUntil = 0
+	elseif shop.luckPaused > 0 then
+		shop.luckUntil = math.max(shop.luckUntil, now) + shop.luckPaused
+		shop.luckPaused = 0
 	end
 end
+
+-- Loading goes on: a check that hasn't answered yet is too late from now on (restricted all session)
+local function stopPolicyWait(player, check)
+	if check.state == "checking" then
+		check.state = "late"
+		warn("Policy check for " .. player.Name .. " is slow: paid random items stay restricted this session")
+	end
+end
+-- POLICY-END
 
 -- Saving (TycoonCore calls these) ---------------------------------------
 
@@ -277,14 +436,16 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		passes = {}, -- key -> true when Roblox says you own it (checked on every join, not saved)
 		debugPasses = {}, -- key -> true when simulated with the Studio Debug tab (not saved)
 		luckUntil = 0, -- os.time() when Luck Boost runs out
+		luckPaused = 0, -- seconds of Luck Boost kept aside while paid random items are restricted (saved in luckLeft)
 		instantHatches = 0, -- unused Instant Hatch tokens
 		receipts = {}, -- PurchaseIds already granted, oldest first (saved)
 		receiptSet = {}, -- the same PurchaseIds as a quick lookup
+		randomRestricted = true, -- paid random items restricted (PolicyService, checked on every join, not saved)
 	}
 	if typeof(savedShop) == "table" then -- bad values are skipped, never an error
 		local luckLeft = tonumber(savedShop.luckLeft) or 0
 		if luckLeft > 0 then
-			shop.luckUntil = os.time() + luckLeft
+			shop.luckPaused = luckLeft -- kept aside until the policy check is done (syncLuckPause)
 		end
 		local hatches = tonumber(savedShop.instantHatches) or 0
 		shop.instantHatches = hatches == hatches and math.max(0, math.floor(hatches)) or 0 -- no NaN
@@ -309,22 +470,31 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	-- Ask Roblox which passes they own, but never let a slow answer hold up loading: after
 	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
 	-- Passes aren't saved, so a save written before the answer is still complete.
+	-- The paid random items check runs at the same time, under its own cap (the same 10 s): the join
+	-- waits for whichever answer comes last, and never more than 10 s, as before. Waiting for it
+	-- means the restriction is final before the player can do anything (it never flips mid-game).
+	-- It isn't saved either: it's asked again on every join.
+	local policyCheck = startPolicyCheck(player, shop)
 	local state = "checking"
+	passCheckPending[player] = os.clock() -- the VIP lounge and the door wait for the answer
 	task.spawn(function()
-		checkPasses(player, shop)
-		if state == "gaveUp" then
-			publish(player) -- answered after loading went on
+		local ok, err = pcall(checkPasses, player, shop) -- each pass is published as soon as it is found
+		if not ok then
+			warn("Pass check for " .. player.Name .. " failed: " .. tostring(err))
 		end
+		passCheckPending[player] = nil
 		state = "done"
 	end)
 	local deadline = os.clock() + PASS_CHECK_TIMEOUT
-	while state == "checking" and os.clock() < deadline do
+	while (state == "checking" and os.clock() < deadline) or policyCheckWaiting(policyCheck) do
 		task.wait(0.1)
 	end
 	if state == "checking" then
 		state = "gaveUp"
 		warn("Pass check for " .. player.Name .. " is slow: loading goes on, passes apply when Roblox answers")
 	end
+	stopPolicyWait(player, policyCheck) -- no answer yet: restricted for this session (fail closed)
+	syncLuckPause(shop) -- Luck Boost runs again, or stays aside while restricted
 	publish(player)
 end
 
@@ -333,8 +503,8 @@ function ShopServer.serialize(data)
 	local shop = data.shop
 	if not shop then return nil end
 	return {
-		-- Saved as time left, so Luck Boost only counts down while you're playing
-		luckLeft = math.max(0, shop.luckUntil - os.time()),
+		-- Saved as time left, so Luck Boost only counts down while you're playing (and not restricted)
+		luckLeft = math.max(0, shop.luckUntil - os.time()) + shop.luckPaused,
 		instantHatches = shop.instantHatches,
 		receipts = shop.receipts,
 	}
@@ -369,7 +539,12 @@ local function applyProduct(player, data, product)
 		core.addEarnings(player, amount) -- Cash packs count toward the valuation (IPO)
 		table.insert(gained, "+" .. ShopConfig.formatCash(amount))
 	end
-	if effect.luckMinutes then
+	if effect.luckMinutes and shop.randomRestricted then
+		-- Not for sale to them (hidden, and the server never prompts it), but a client can still open
+		-- Roblox's prompt by itself. The time is kept for a session where they aren't restricted.
+		shop.luckPaused += effect.luckMinutes * 60
+		table.insert(gained, "+" .. effect.luckMinutes .. " min of Luck Boost, kept for later (your hires follow a fixed order)")
+	elseif effect.luckMinutes then
 		shop.luckUntil = math.max(shop.luckUntil, os.time()) + effect.luckMinutes * 60
 		table.insert(gained, "+" .. effect.luckMinutes .. " min of Luck Boost")
 	end
@@ -506,11 +681,11 @@ local function buildVipLounge()
 	-- Touching the door: VIPs walk through; everyone else gets offered the VIP pass
 	door.Touched:Connect(function(hit)
 		local player = Players:GetPlayerFromCharacter(hit.Parent)
-		if not player or hasEffect(player, "vipLounge") then return end
+		if not player or hasEffect(player, "vipLounge") or passCheckPending[player] then return end -- still asking Roblox about their passes
 		if doorCooldown[player] and os.clock() - doorCooldown[player] < 10 then return end
 		doorCooldown[player] = os.clock()
 		local vipPass = findVipPass()
-		if vipPass and ShopConfig.isForSale(vipPass) then
+		if vipPass and ShopConfig.isForSale(vipPass, ShopServer.isRandomRestricted(player)) then
 			MarketplaceService:PromptGamePassPurchase(player, vipPass.id)
 		else
 			notify(player, "The VIP Lounge is for VIP pass holders only.")
@@ -545,6 +720,16 @@ local function handleDebug(player, action, key)
 		data.shop.debugPasses[key] = not data.shop.debugPasses[key]
 		publish(player)
 		return pass.name .. " is now " .. (owns(data.shop, key) and "ON" or "OFF") .. " (simulated, not saved)"
+
+	elseif action == "ToggleRandomRestricted" then
+		-- Pretends PolicyService answered the other way, to test both sides and a switch between them
+		-- (not saved: a rejoin asks Roblox again). Luck Boost is put aside or comes back, like on a join.
+		local shop = data.shop
+		shop.randomRestricted = not shop.randomRestricted
+		syncLuckPause(shop)
+		publish(player)
+		return shop.randomRestricted and "Paid random items restricted: fixed hire order, no Luck Boost (simulated, not saved)"
+			or "Paid random items allowed: random hires and odds (simulated, not saved)"
 
 	elseif action == "GrantProduct" then
 		local product = ShopConfig.getProduct(key)
@@ -612,6 +797,8 @@ function ShopServer.init(coreApi)
 	Players.PlayerRemoving:Connect(function(player)
 		lastDebugReceipt[player] = nil
 		doorCooldown[player] = nil
+		passCheckPending[player] = nil
+		passConfirming[player] = nil
 	end)
 
 	-- Anyone who gets into the lounge without VIP (glitch or exploit) is put back outside
@@ -620,7 +807,7 @@ function ShopServer.init(coreApi)
 			task.wait(0.5)
 			for _, player in ipairs(Players:GetPlayers()) do
 				local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if root and isInsideLounge(root.Position) and not hasEffect(player, "vipLounge") then
+				if root and isInsideLounge(root.Position) and not hasEffect(player, "vipLounge") and not passCheckPending[player] then
 					root.CFrame = CFrame.new(LOUNGE_CENTER + Vector3.new(0, 4, LOUNGE_SIZE.Z / 2 + 6))
 					notify(player, "The VIP Lounge is for VIP pass holders only.")
 				end
@@ -634,8 +821,8 @@ function ShopServer.init(coreApi)
 			task.wait(PASS_RECHECK_SECONDS)
 			for _, player in ipairs(Players:GetPlayers()) do
 				local data = core.getData(player)
-				if data and data.ready and checkPasses(player, data.shop) then
-					publish(player)
+				if data and data.ready then
+					checkPasses(player, data.shop) -- publishes each pass it finds
 				end
 			end
 		end

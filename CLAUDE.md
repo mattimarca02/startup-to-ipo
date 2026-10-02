@@ -29,7 +29,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   New server features follow this pattern. Never add a second DataStore, save loop or PlayerAdded data owner.
   Current ones: `ShopServer`, `EmployeeServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `DailyServer` (the daily calendar; its client is `DailyClient`). `DailyServer.setupPlayer` runs last, inside the all-modules-loaded gate, after `EmployeeServer` (a claim can grant an egg). A claim never yields between the "today is free" check and writing `lastClaimDay`.
 - **Configs** are ModuleScripts in ReplicatedStorage:
-  - `ShopConfig`: passes, products, `EggsEnabled`
+  - `ShopConfig`: passes, products, `EggsEnabled`, `PolicyCheck` (the paid random items check on join)
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
   - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
@@ -47,6 +47,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 
 - Game logic, prices, timers, random rolls, slots and income all run on the server.
 - A client only asks, for example `TeamAction("BuyEgg", 2)`. The server checks everything: argument types, ranges, cash, ownership, and `data.ready`. It refuses anything invalid.
+- **Paid random items (FR-13, D9 option B):** `ShopServer.isRandomRestricted(player)` comes from PolicyService on every join and fails closed (error or timeout = restricted for the session). Restricted players never get a random roll (`EmployeeServer.rollCreature` uses the egg's fixed order, `CreatureConfig.fixedHire`) and can't buy items marked `changesOdds` (Luck Boost). A new random reward must follow the same rule.
 - **Never trust the client for purchases:**
   - **Game passes:** re-check ownership with `UserOwnsGamePassAsync`.
   - **Developer products:** grant them only in `ProcessReceipt`. This must stay idempotent, using the saved PurchaseId list, and return `PurchaseGranted` only after the save succeeded.
@@ -94,6 +95,9 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lastIpoAt = os.time(),                       -- for the IPO cooldown
     perks = { [perkKey] = level },               -- IPO shop perks
   },
+  fixedHires = {                                 -- EmployeeServer.serializeFixedHires (optional: written only once used)
+    counts = { [eggKey] = number },              -- hires made from each egg's fixed order (restricted players, FR-13)
+  },
   daily = {                                      -- DailyServer.serialize (optional: older saves have none)
     lastClaimDay = number,                       -- UTC day number of the last claim (0 = never)
     streak = number, best = number,              -- claims in a row (one missed day keeps the place), longest ever
@@ -111,6 +115,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 
 - **Old saves must keep loading.** New fields are optional and get defaults. Bad or unknown values inside a section are skipped with a warning, never an error. Never rename or remove an existing field.
 - **Never delete what you don't know.** `save()` writes back every top-level section of the loaded save that this version doesn't recognise (`KNOWN_SECTIONS` in TycoonCore), so older code never wipes a newer section. Eggs saved in incubators above the current count are kept the same way (EmployeeServer `parked`). Code that ran *before* this rule (anything older than milestone 4) can't do this: publish with **Shut down all servers** when a new section is added.
+- **New saved data gets its own top-level section (rule A10).** Older code keeps unknown *top-level* sections, but it drops unknown *fields inside* a section it knows (`team`, `poach`, `ipo`, ...). So a new feature never adds a field to an existing section: it adds a new section (with its own `serialize`, an entry in `KNOWN_SECTIONS`, optional on load). Otherwise a rollback to an older version, or an old server still running, deletes that data. A new section that depends on per-run state (for example the IPO count, or employee IDs) stores what it depends on and checks it against `ipo`/`team` on load, because older code keeps it frozen as it was. Publish rules and the rollback floor: docs/PUBLISH_RULES.md.
 - **Wrap every DataStore call in `pcall`,** including `GetDataStore`.
 - **Protect existing data:**
   - Never save over data that failed to load (the `data.loaded` check).

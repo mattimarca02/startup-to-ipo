@@ -67,10 +67,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -263,6 +263,22 @@ local function load(player)
 	return nil, false
 end
 
+-- REREAD-START
+-- (tools/daily_test.py runs the code between the REREAD markers.)
+-- There's no session lock yet (F10). A save written in the last REREAD_RECENT_SECONDS may come from a
+-- session that is still closing on another server (a second device, a quick rejoin): its leave save
+-- usually lands within a few seconds. Joining reads such a save again after REREAD_WAIT_SECONDS, so the
+-- other server's last minute (and a purchase made there) isn't overwritten. A clean join after a
+-- longer break doesn't wait. lastSeen within a few seconds in the future (another server's clock) counts.
+local REREAD_RECENT_SECONDS = 75 -- autosave is every 60 s, so a live session's save is never older
+local REREAD_WAIT_SECONDS = 7
+local function shouldReread(saved, now)
+	if typeof(saved) ~= "table" then return false end
+	local seen = tonumber(saved.lastSeen)
+	return seen ~= nil and seen == seen and math.abs(now - seen) < REREAD_RECENT_SECONDS
+end
+-- REREAD-END
+
 -- Reads someone else's save without loading it. Poaching uses it to check that an employee
 -- moving between two players was saved on both sides. Returns (save or nil, worked).
 local function peekSave(userId)
@@ -277,6 +293,72 @@ local function peekSave(userId)
 	end
 	return result, true
 end
+
+-- BUILDSAVE-START
+-- (tools/daily_test.py runs the code between the BUILDSAVE markers, so keep it free of Roblox calls except warn.)
+-- Builds the payload save() writes, inside a pcall. If a module's serialize or the IPO transform throws,
+-- nothing is written (the payload only exists as a whole, never half-built), the one-save-at-a-time lock
+-- is released so a later save (autosave, the one on leave) isn't stuck behind it forever, and this
+-- returns nil. The caller must have set data.saving = true.
+local function buildPayload(data, transform, playerName)
+	local built, result = pcall(function()
+		local owned = {}
+		for name in pairs(data.owned) do
+			table.insert(owned, name)
+		end
+		local payload = {
+			cash = data.cash.Value,
+			owned = owned,
+			lastSeen = os.time(),
+			shop = ShopServer.serialize(data),
+			team = EmployeeServer.serialize(data),
+			poach = PoachServer.serialize(data),
+			ipo = IpoServer.serialize(data),
+			onboarding = OnboardingServer.serialize(data),
+			daily = DailyServer.serialize(data),
+			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
+		}
+		for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
+			if payload[key] == nil then
+				payload[key] = value
+			end
+		end
+		if transform then
+			transform(payload)
+		end
+		return payload
+	end)
+	if built then
+		return result
+	end
+	data.saving = false
+	warn("Save skipped for " .. playerName .. ": building it failed, so nothing was written: " .. tostring(result))
+	return nil
+end
+-- BUILDSAVE-END
+
+-- SAVENOTE-START
+-- (tools/daily_test.py runs the code between the SAVENOTE markers.)
+-- Tells the player when saving keeps failing, and again once it works: otherwise only the server log
+-- knows, and they keep playing a session that may never be saved (review finding FR-1).
+local SAVE_TROUBLE_AFTER = 2 -- failed saves in a row (about 2 minutes of autosaves) before the player is told
+local SAVE_TROUBLE_TEXT = "Saving is having trouble right now. Keep playing: your progress is saved as soon as it works again."
+local SAVE_BACK_TEXT = "Saving works again: your progress is safe."
+local function noteSaveResult(player, data, ok)
+	local failed = data.failedSaves or 0
+	if ok then
+		if failed >= SAVE_TROUBLE_AFTER then
+			ShopServer.notify(player, SAVE_BACK_TEXT)
+		end
+		data.failedSaves = 0
+	else
+		data.failedSaves = failed + 1
+		if data.failedSaves == SAVE_TROUBLE_AFTER then
+			ShopServer.notify(player, SAVE_TROUBLE_TEXT)
+		end
+	end
+end
+-- SAVENOTE-END
 
 -- Returns true if the save worked (the shop needs to know before confirming a purchase).
 -- transform (IPO only) changes the payload before it's written: see commitIpo.
@@ -294,28 +376,10 @@ local function save(player, transform)
 	end
 	data.saving = true
 
-	local owned = {}
-	for name in pairs(data.owned) do
-		table.insert(owned, name)
-	end
-	local payload = {
-		cash = data.cash.Value,
-		owned = owned,
-		lastSeen = os.time(),
-		shop = ShopServer.serialize(data),
-		team = EmployeeServer.serialize(data),
-		poach = PoachServer.serialize(data),
-		ipo = IpoServer.serialize(data),
-		onboarding = OnboardingServer.serialize(data),
-		daily = DailyServer.serialize(data),
-	}
-	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
-		if payload[key] == nil then
-			payload[key] = value
-		end
-	end
-	if transform then
-		transform(payload)
+	local payload = buildPayload(data, transform, player.Name)
+	if not payload then
+		noteSaveResult(player, data, false)
+		return false
 	end
 	local ok, err
 	if transform and data.debugFailIpoSave then -- Studio Debug tab only: test the IPO failure path
@@ -332,8 +396,31 @@ local function save(player, transform)
 	if not ok then
 		warn("Save failed for " .. player.Name .. ": " .. tostring(err))
 	end
+	noteSaveResult(player, data, ok)
 	return ok
 end
+
+-- LEAVESAVE-START
+-- (tools/daily_test.py runs the code between the LEAVESAVE markers, with a fake save.)
+-- The save when a player leaves is the last chance to keep their session, so a failed one is tried
+-- again (FR-1): up to LEAVE_SAVE_TRIES in all, waiting 2 s, then 4 s (well inside BindToClose's time).
+-- It stops at once when there is nothing that may be saved (gone, or never finished loading).
+local LEAVE_SAVE_TRIES = 3
+local function saveOnLeave(player)
+	for attempt = 1, LEAVE_SAVE_TRIES do
+		if save(player) then
+			return true
+		end
+		local data = playerData[player]
+		if not data or not data.loaded or attempt == LEAVE_SAVE_TRIES then
+			break
+		end
+		warn(string.format("Leave save for %s failed (try %d of %d), trying again", player.Name, attempt, LEAVE_SAVE_TRIES))
+		task.wait(attempt * 2)
+	end
+	return false
+end
+-- LEAVESAVE-END
 
 -- IPO (milestone 4) -----------------------------------------------------
 
@@ -533,6 +620,17 @@ local function onPlayerAdded(player)
 		player:Kick(LOAD_FAILED_MESSAGE)
 		return
 	end
+	-- A save this fresh may still be written by another server: wait, then read again (see REREAD).
+	-- Nothing can be saved yet (data.loaded is false). If the second read fails, the first one is used.
+	if ok and shouldReread(saved, os.time()) then
+		task.wait(REREAD_WAIT_SECONDS)
+		if playerData[player] ~= data then return end -- they left while waiting: nothing was saved
+		local again, againOk = load(player)
+		if playerData[player] ~= data then return end
+		if againOk and typeof(again) == "table" then
+			saved = again
+		end
+	end
 	local lastSeen = nil
 	local setupOk, setupError = pcall(function()
 		if saved then
@@ -563,6 +661,7 @@ local function onPlayerAdded(player)
 			legacyValuation = math.min(legacyValuation, IpoConfig.ipoValuation(0))
 		end
 		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
+		EmployeeServer.setupFixedHires(player, data, saved and saved.fixedHires) -- fixed hire order counters (before eggs can hatch)
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
 		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
@@ -614,7 +713,7 @@ for _, existing in ipairs(Players:GetPlayers()) do
 end
 
 Players.PlayerRemoving:Connect(function(player)
-	save(player)
+	saveOnLeave(player)
 	local data = playerData[player]
 	if data then
 		data.folder:Destroy()

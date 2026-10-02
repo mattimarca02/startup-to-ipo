@@ -726,11 +726,19 @@ for i, perk in ipairs(IpoConfig.Perks) do
 		local maxLevel = #perk.costs
 		parts.name.Text = string.format("%s  <font color=\"#B9BECD\">Lv %d/%d</font>", perk.name, level, maxLevel)
 		local now = level > 0 and ("Now " .. perkEffectText(perk, level)) or "Not bought yet"
+		-- Paid Random Items policy (FR-13): a player whose hires follow a fixed order gets no odds text
+		-- (not known yet counts as restricted, like the Eggs tab); the perk's level is still kept
+		local description = perk.description
+		local hideOdds = perk.effect == "luck" and player:GetAttribute("RandomRestricted") ~= false
+		if hideOdds then
+			description = "Your hires follow a fixed order, so this perk changes nothing for your eggs."
+			now = level > 0 and ("Level " .. level .. " is kept") or "Not bought yet"
+		end
 		if level >= maxLevel then
-			parts.desc.Text = perk.description .. "\n" .. now .. " (max)"
+			parts.desc.Text = description .. "\n" .. now .. " (max)"
 			setButton(parts.button, "MAX", COLORS.disabled, false)
 		else
-			parts.desc.Text = perk.description .. "\n" .. now .. " · next level: " .. perkEffectText(perk, level + 1)
+			parts.desc.Text = description .. "\n" .. now .. (hideOdds and "" or (" · next level: " .. perkEffectText(perk, level + 1)))
 			local cost = perk.costs[level + 1]
 			setButton(parts.button, "📜 " .. cost, attr("IpoShares") >= cost and COLORS.buy or COLORS.disabled, true)
 		end

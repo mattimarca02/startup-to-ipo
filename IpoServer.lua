@@ -162,6 +162,17 @@ local function preview(player, ipo)
 	}
 end
 
+-- PASSWAIT-START
+-- The Shareholder pass doubles the Shares, so an IPO must not be computed while the join-time pass
+-- check is still running. Returns true to refuse for now. A stuck check stops blocking after
+-- IpoConfig.PassCheckMaxWaitSeconds. Players who own no pass are only held for the few seconds the check takes.
+local function passCheckBlocksIpo(player)
+	if not ShopServer.isPassCheckPending(player) then return false end
+	local age = ShopServer.passCheckAge(player)
+	return age ~= nil and age < IpoConfig.PassCheckMaxWaitSeconds
+end
+-- PASSWAIT-END
+
 -- One safe step: check everything, write the new state to the save, and only change the game
 -- once that save worked. If the save fails, nothing changes. ipoNumber is the IPO the player
 -- confirmed (count + 1), so a repeated or old request can never go public twice.
@@ -176,6 +187,9 @@ local function goPublic(player, ipoNumber)
 	local readyAt = ipo.lastIpoAt + IpoConfig.CooldownSeconds
 	if now < readyAt then
 		return false, "The market needs a moment: try again in " .. (readyAt - now) .. "s"
+	end
+	if passCheckBlocksIpo(player) then
+		return false, "One moment: still checking your game passes with Roblox. Try again in a few seconds"
 	end
 	local needed = IpoConfig.ipoValuation(ipo.count)
 	if ipo.valuation < needed then

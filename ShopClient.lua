@@ -9,7 +9,8 @@ local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
-local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- for the egg Debug buttons
+local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- Luck Boost odds, egg Debug buttons
+local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the Talent Scouts perk, for Luck Boost's odds
 local remotes = ReplicatedStorage:WaitForChild("ShopRemotes")
 local notifyEvent = remotes:WaitForChild("ShopNotify")
 local debugRemote = RunService:IsStudio() and remotes:FindFirstChild("ShopDebug") or nil -- Studio only
@@ -343,11 +344,17 @@ local function showToast(text)
 	end)
 end
 
+-- Paid random items restricted for this player (the server asks Roblox's PolicyService on join)?
+-- Not known yet counts as restricted, like on the server: Luck Boost stays hidden until it's known.
+local function randomRestricted()
+	return player:GetAttribute("RandomRestricted") ~= false
+end
+
 -- Opens Roblox's purchase prompt. Nothing is granted here: the server does that
 -- after Roblox confirms the purchase.
 local promptToken = 0
 local function promptPurchase(item, isPass)
-	if pending[item.key] or not ShopConfig.isForSale(item) then return end
+	if pending[item.key] or not ShopConfig.isForSale(item, randomRestricted()) then return end
 	if isPass and player:GetAttribute("Pass_" .. item.key) then return end
 
 	promptToken += 1
@@ -384,6 +391,31 @@ local function formatTime(seconds)
 	return string.format("%d:%02d", seconds // 60, seconds % 60)
 end
 
+-- Luck Boost's effect in numbers, before buying (Roblox's Paid Random Items policy), from the same
+-- config and luck the server rolls with (Talent Scouts included): the boosted rarities, and the
+-- rarest hire of the last (best) egg without and with the boost.
+local function luckText(effect)
+	local names = {}
+	for _, rarity in ipairs(CreatureConfig.Rarities) do
+		if rarity.luckBoosted then
+			table.insert(names, rarity.key)
+		end
+	end
+	local text = string.format("Odds weight x%s for %s hires.", tostring(effect.luckMultiplier), table.concat(names, ", "))
+	local egg = CreatureConfig.Eggs[#CreatureConfig.Eggs]
+	if egg then
+		local perk = 1 + IpoConfig.perkValue("BaseLuck", player:GetAttribute("IpoPerk_BaseLuck") or 0)
+		local before = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, perk))
+		local after = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, perk * effect.luckMultiplier))
+		local rarest, boosted = before[#before], after[#after]
+		if rarest and boosted then
+			text ..= string.format(" %s %s: %s -> %s.", egg.name, rarest.rarity,
+				CreatureConfig.formatOdds(rarest.units), CreatureConfig.formatOdds(boosted.units))
+		end
+	end
+	return text
+end
+
 -- Description text that changes while you play (cash pack size, boost timer, tokens)
 local function productText(product)
 	local effect = product.effect
@@ -392,6 +424,9 @@ local function productText(product)
 		return "Get " .. ShopConfig.formatCash(ShopConfig.cashPackAmount(product, income)) .. " now. " .. product.description
 	end
 	local text = product.description
+	if effect.luckMultiplier then
+		text = luckText(effect) .. " " .. text
+	end
 	if effect.luckMinutes then
 		local left = (player:GetAttribute("LuckBoostUntil") or 0) - workspace:GetServerTimeNow()
 		if left > 0 then
@@ -439,6 +474,9 @@ for i, product in ipairs(ShopConfig.Products) do
 			promptPurchase(product, false)
 		end)
 		table.insert(cards, function()
+			-- Luck Boost (changesOdds) is hidden where paid random items are restricted: their hires follow
+			-- a fixed order, so it would do nothing. Everything else stays on sale.
+			desc.Parent.Visible = not (product.changesOdds and randomRestricted())
 			desc.Text = productText(product)
 			if pending[product.key] then
 				setButton(button, "...", COLORS.disabled, false)
@@ -537,6 +575,7 @@ if debugRemote then
 		debugRow("🎲", "Next hatch: " .. rarity.key, "The next egg you hatch will be " .. rarity.key .. ".", "Set", "ForceRarity", rarity.key)
 	end
 	debugRow("⏩", "Skip egg timers", "Every egg in your incubators becomes ready now.", "Skip", "SkipEggTimers")
+	debugRow("🌍", "Paid random items: restricted on/off", "Pretends Roblox's policy check said the other thing: fixed hire order and no Luck Boost, or back to random hires. Not saved: a rejoin asks Roblox again.", "Switch", "ToggleRandomRestricted")
 
 	-- Poaching (milestone 3 poaching)
 	debugRow("🤖", "Spawn dummy target", "Adds a fake player with 6 employees to the Poach window, to test alone.", "Spawn", "PoachSpawnDummy")
