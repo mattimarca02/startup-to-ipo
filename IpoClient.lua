@@ -727,12 +727,14 @@ for i, perk in ipairs(IpoConfig.Perks) do
 		parts.name.Text = string.format("%s  <font color=\"#B9BECD\">Lv %d/%d</font>", perk.name, level, maxLevel)
 		local now = level > 0 and ("Now " .. perkEffectText(perk, level)) or "Not bought yet"
 		-- Paid Random Items policy (FR-13): a player whose hires follow a fixed order gets no odds text
-		-- (not known yet counts as restricted, like the Eggs tab); the perk's level is still kept
+		-- (not known yet counts as restricted, like the Eggs tab). The perk still counts for them: the
+		-- server builds each egg's fixed order with it (EmployeeServer nextFixedHire), so Rare, Epic and
+		-- Legendary hires take more of the order. No numbers here: nothing is rolled for them.
 		local description = perk.description
 		local hideOdds = perk.effect == "luck" and player:GetAttribute("RandomRestricted") ~= false
 		if hideOdds then
-			description = "Your hires follow a fixed order, so this perk changes nothing for your eggs."
-			now = level > 0 and ("Level " .. level .. " is kept") or "Not bought yet"
+			description = "Your hires follow a fixed order. This perk puts more Rare, Epic and Legendary hires in it over time."
+			now = level > 0 and ("Level " .. level .. " is in use") or "Not bought yet"
 		end
 		if level >= maxLevel then
 			parts.desc.Text = description .. "\n" .. now .. " (max)"
