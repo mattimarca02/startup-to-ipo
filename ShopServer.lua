@@ -13,6 +13,7 @@
 --   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
 -- And for the IPO (IpoServer):
 --   ShopServer.getSharesMultiplier(player)         -> 2 with the Shareholder pass, otherwise 1
+-- And for anyone: ShopServer.notify(player, text)  -> a pop-up message (TycoonCore's saving warning)
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -146,6 +147,11 @@ local function publish(player)
 end
 
 -- Effects other systems ask about ---------------------------------------
+
+-- A message in the shop's pop-up, for other systems (TycoonCore: "saving is having trouble")
+function ShopServer.notify(player, text)
+	notify(player, text)
+end
 
 function ShopServer.hasPass(player, key)
 	local shop = getShop(player)

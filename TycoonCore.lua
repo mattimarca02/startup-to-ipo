@@ -320,6 +320,29 @@ local function buildPayload(data, transform, playerName)
 end
 -- BUILDSAVE-END
 
+-- SAVENOTE-START
+-- (tools/daily_test.py runs the code between the SAVENOTE markers.)
+-- Tells the player when saving keeps failing, and again once it works: otherwise only the server log
+-- knows, and they keep playing a session that may never be saved (review finding FR-1).
+local SAVE_TROUBLE_AFTER = 2 -- failed saves in a row (about 2 minutes of autosaves) before the player is told
+local SAVE_TROUBLE_TEXT = "Saving is having trouble right now. Keep playing: your progress is saved as soon as it works again."
+local SAVE_BACK_TEXT = "Saving works again: your progress is safe."
+local function noteSaveResult(player, data, ok)
+	local failed = data.failedSaves or 0
+	if ok then
+		if failed >= SAVE_TROUBLE_AFTER then
+			ShopServer.notify(player, SAVE_BACK_TEXT)
+		end
+		data.failedSaves = 0
+	else
+		data.failedSaves = failed + 1
+		if data.failedSaves == SAVE_TROUBLE_AFTER then
+			ShopServer.notify(player, SAVE_TROUBLE_TEXT)
+		end
+	end
+end
+-- SAVENOTE-END
+
 -- Returns true if the save worked (the shop needs to know before confirming a purchase).
 -- transform (IPO only) changes the payload before it's written: see commitIpo.
 local function save(player, transform)
@@ -337,7 +360,10 @@ local function save(player, transform)
 	data.saving = true
 
 	local payload = buildPayload(data, transform, player.Name)
-	if not payload then return false end
+	if not payload then
+		noteSaveResult(player, data, false)
+		return false
+	end
 	local ok, err
 	if transform and data.debugFailIpoSave then -- Studio Debug tab only: test the IPO failure path
 		data.debugFailIpoSave = nil
@@ -353,8 +379,31 @@ local function save(player, transform)
 	if not ok then
 		warn("Save failed for " .. player.Name .. ": " .. tostring(err))
 	end
+	noteSaveResult(player, data, ok)
 	return ok
 end
+
+-- LEAVESAVE-START
+-- (tools/daily_test.py runs the code between the LEAVESAVE markers, with a fake save.)
+-- The save when a player leaves is the last chance to keep their session, so a failed one is tried
+-- again (FR-1): up to LEAVE_SAVE_TRIES in all, waiting 2 s, then 4 s (well inside BindToClose's time).
+-- It stops at once when there is nothing that may be saved (gone, or never finished loading).
+local LEAVE_SAVE_TRIES = 3
+local function saveOnLeave(player)
+	for attempt = 1, LEAVE_SAVE_TRIES do
+		if save(player) then
+			return true
+		end
+		local data = playerData[player]
+		if not data or not data.loaded or attempt == LEAVE_SAVE_TRIES then
+			break
+		end
+		warn(string.format("Leave save for %s failed (try %d of %d), trying again", player.Name, attempt, LEAVE_SAVE_TRIES))
+		task.wait(attempt * 2)
+	end
+	return false
+end
+-- LEAVESAVE-END
 
 -- IPO (milestone 4) -----------------------------------------------------
 
@@ -635,7 +684,7 @@ for _, existing in ipairs(Players:GetPlayers()) do
 end
 
 Players.PlayerRemoving:Connect(function(player)
-	save(player)
+	saveOnLeave(player)
 	local data = playerData[player]
 	if data then
 		data.folder:Destroy()

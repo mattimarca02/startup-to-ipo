@@ -806,6 +806,66 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+SAVE_TESTS = r"""-- Tests for TycoonCore's failed-save notice and leave-save retry (SAVENOTE and LEAVESAVE markers, FR-1) ----
+local print_real = print
+local WARNINGS, NOTES = {}, {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local ShopServer = { notify = function(player, text) table.insert(NOTES, text) end }
+__SAVENOTE__
+local playerData = {}
+local RESULTS = {} -- what each fake save returns, in order (empty = false)
+local SAVES, WAITED = 0, 0
+local function save(player) SAVES += 1; return table.remove(RESULTS, 1) or false end
+local task = { wait = function(n) WAITED += n end }
+__LEAVESAVE__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local P = { Name = "P" }
+
+-- The notice
+local data = {}
+noteSaveResult(P, data, true)
+check("a working save says nothing", #NOTES == 0 and data.failedSaves == 0)
+noteSaveResult(P, data, false)
+check("one failed save: not told yet (one blip is normal)", #NOTES == 0 and data.failedSaves == 1)
+noteSaveResult(P, data, false)
+check("two in a row: the player is told saving has trouble", #NOTES == 1 and string.find(NOTES[1], "having trouble", 1, true) ~= nil)
+noteSaveResult(P, data, false)
+noteSaveResult(P, data, false)
+check("more failures: told only once", #NOTES == 1 and data.failedSaves == 4)
+noteSaveResult(P, data, true)
+check("then a save works: told it's safe again, count reset", #NOTES == 2 and string.find(NOTES[2], "works again", 1, true) ~= nil and data.failedSaves == 0)
+noteSaveResult(P, data, true)
+check("later good saves say nothing", #NOTES == 2)
+NOTES = {}
+data = {}
+noteSaveResult(P, data, false)
+noteSaveResult(P, data, true)
+check("one failure then a success: no message at all", #NOTES == 0 and data.failedSaves == 0)
+
+-- The leave save
+playerData[P] = { loaded = true }
+RESULTS = { true }
+check("leave save works first time: one save, no wait", saveOnLeave(P) == true and SAVES == 1 and WAITED == 0)
+SAVES, WAITED = 0, 0
+RESULTS = { false, false, true }
+check("fails twice, then works: three saves, waited 2 s + 4 s", saveOnLeave(P) == true and SAVES == 3 and WAITED == 6, SAVES .. " / " .. WAITED)
+SAVES, WAITED, WARNINGS = 0, 0, {}
+RESULTS = {}
+check("always fails: stops after 3 tries, no endless loop", saveOnLeave(P) == false and SAVES == 3 and WAITED == 6, SAVES)
+check("... each retry is warned", #WARNINGS == 2, #WARNINGS)
+SAVES, WAITED = 0, 0
+playerData[P] = { loaded = false }
+check("save never loaded: one call, no retries (nothing may be saved)", saveOnLeave(P) == false and SAVES == 1 and WAITED == 0)
+SAVES, WAITED = 0, 0
+playerData[P] = nil
+check("data already gone: one call, no retries", saveOnLeave(P) == false and SAVES == 1 and WAITED == 0)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -874,6 +934,10 @@ def main():
     result8 = run_luau(luau, MOVE_TESTS.replace("__MOVENOTES__", marked_source("MOVENOTES", "PoachServer.lua")))
     print("PoachServer move check: " + (result8.stdout.strip() or result8.stderr.strip()))
     if result8.returncode != 0 or " 0 failed" not in result8.stdout:
+        code = 1
+    result9 = run_luau(luau, SAVE_TESTS.replace("__SAVENOTE__", marked_source("SAVENOTE")).replace("__LEAVESAVE__", marked_source("LEAVESAVE")))
+    print("TycoonCore leave save check: " + (result9.stdout.strip() or result9.stderr.strip()))
+    if result9.returncode != 0 or " 0 failed" not in result9.stdout:
         code = 1
     return code
 
