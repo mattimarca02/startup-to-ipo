@@ -13,6 +13,7 @@ local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig")) -- money format, Luck Boost
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the luck perk, for the odds
 local remotes = ReplicatedStorage:WaitForChild("DailyRemotes")
+local teamRemotes = ReplicatedStorage:WaitForChild("EmployeeRemotes") -- the egg card's server data (nextHires)
 local dailyAction = remotes:WaitForChild("DailyAction")
 
 local player = Players.LocalPlayer
@@ -108,9 +109,45 @@ local function luckMultiplier()
 	return luck
 end
 
+-- Players for whom paid random items are restricted see no odds, only the next hire (FR-13, D9 option B).
+-- Same rule as the Eggs tab: "RandomRestricted" is set by the server from PolicyService, and not known
+-- yet (nil) counts as restricted. nextHires is the server's EmployeeRemotes snapshot (egg key -> creature key).
+-- NEXTHIRE-START
+-- (tools/daily_test.py runs the code between the NEXTHIRE markers, so keep it free of Roblox calls.)
+local function isRestricted(flag)
+	return flag ~= false
+end
+
+-- The egg card's wording: "Next hire: Name", then the fixed-order note (kept short for a phone)
+local function nextHireLine(egg, creature, colorHex)
+	local name = "loading..."
+	if creature then
+		name = string.format('<font color="%s">%s %s</font>', colorHex, creature.emoji or "", creature.name)
+	end
+	return egg.name .. " next hire: " .. name .. ". Your hires follow a fixed order, not a random roll."
+end
+
+local function eggNote(restricted)
+	return restricted and "tap for next hire" or "tap for odds"
+end
+-- NEXTHIRE-END
+
+local shownEgg = nil -- the egg card whose line is showing, redrawn when the restriction or next hire changes
+local nextHires = false -- latest nextHires from the server (false = none yet)
+
+local function restrictedNow()
+	return isRestricted(player:GetAttribute("RandomRestricted"))
+end
+
 -- Same numbers as the Eggs tab (CreatureConfig.getCreatureOdds: the server's weights, rounded to add up
 -- to exactly 100.00%), per rarity; the Eggs tab lists every hire's own odds
 local function oddsText(egg)
+	if restrictedNow() then
+		local nextKey = nextHires and nextHires[egg.key]
+		local creature = nextKey and CreatureConfig.getCreature(nextKey)
+		local rarity = creature and CreatureConfig.getRarity(creature.rarity)
+		return nextHireLine(egg, creature, hex(rarity and rarity.color or COLORS.text))
+	end
 	local parts = {}
 	for _, entry in ipairs(CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, luckMultiplier()))) do
 		local rarity = CreatureConfig.getRarity(entry.rarity)
@@ -359,6 +396,7 @@ for i, day in ipairs(DAYS) do
 	-- Tapping a card explains it: an egg's odds (design rule: show odds), or what the Cash is
 	card.Activated:Connect(function()
 		local egg = day.egg and CreatureConfig.getEgg(day.egg)
+		shownEgg = egg
 		if egg then
 			infoLine.Text = oddsText(egg)
 		elseif day.cashMinutes then
@@ -429,7 +467,9 @@ local function refreshWindow()
 	else
 		noticeLine.Text = ""
 	end
-	if infoLine.Text == "" then
+	if shownEgg then
+		infoLine.Text = oddsText(shownEgg)
+	elseif infoLine.Text == "" then
 		infoLine.Text = TEXTS.Rules
 	end
 
@@ -439,7 +479,7 @@ local function refreshWindow()
 		parts.dayLabel.Text = (done and "✅ " or "") .. (today and isReady and "Today" or ("Day " .. i))
 		parts.dayLabel.TextColor3 = today and COLORS.gold or COLORS.subtext
 		parts.reward.Text = rewardText(DAYS[i])
-		parts.note.Text = DAYS[i].egg and "tap for odds" or (DAYS[i].cashMinutes and (math.min(DAYS[i].cashMinutes, DailyConfig.CashMaxMinutes) .. " min of income")) or ""
+		parts.note.Text = DAYS[i].egg and eggNote(restrictedNow()) or (DAYS[i].cashMinutes and (math.min(DAYS[i].cashMinutes, DailyConfig.CashMaxMinutes) .. " min of income")) or ""
 		parts.card.BackgroundColor3 = done and COLORS.cardDone or COLORS.card
 		parts.card.BackgroundTransparency = (not done and not today) and 0.35 or 0 -- future days are dimmed
 		parts.stroke.Transparency = today and 0 or 1
@@ -493,6 +533,7 @@ local function setOpen(open)
 	if open then
 		playerGui:SetAttribute("OpenPanel", PANEL_NAME)
 		infoLine.Text = ""
+		shownEgg = nil
 	elseif playerGui:GetAttribute("OpenPanel") == PANEL_NAME then
 		playerGui:SetAttribute("OpenPanel", nil)
 	end
@@ -579,9 +620,21 @@ refreshAll()
 -- Keeping it up to date -------------------------------------------------
 
 player.AttributeChanged:Connect(function(name)
-	if string.sub(name, 1, 5) == "Daily" then
+	if string.sub(name, 1, 5) == "Daily" or name == "RandomRestricted" then
 		refreshAll()
 	end
+end)
+
+-- The next hires come from the same server snapshot as the egg card; ask once in case it was sent
+-- before this script started
+teamRemotes:WaitForChild("TeamUpdate").OnClientEvent:Connect(function(snapshot)
+	nextHires = type(snapshot) == "table" and snapshot.nextHires or false
+	refreshAll()
+end)
+task.spawn(function()
+	pcall(function()
+		teamRemotes:WaitForChild("TeamAction"):InvokeServer("Sync")
+	end)
 end)
 
 -- Opens by itself once per join when a reward is waiting: a few seconds in, only after the M5

@@ -1337,6 +1337,32 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+NEXTHIRE_TESTS = r"""-- Tests for DailyClient's egg-day line for restricted players (the code between its NEXTHIRE markers, FR-13) ----
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+__NEXTHIRE__
+check("restriction unknown (nil) counts as restricted", isRestricted(nil) == true)
+check("restricted flag true is restricted", isRestricted(true) == true)
+check("only an explicit false is unrestricted", isRestricted(false) == false)
+local egg = { name = "Garage Egg" }
+local line = nextHireLine(egg, { name = "Coding Cat", emoji = "🐱" }, "#ffffff")
+check("line names the egg and says next hire", line:find("Garage Egg next hire: ", 1, true) ~= nil, line)
+check("line names the creature", line:find("Coding Cat", 1, true) ~= nil, line)
+check("line says fixed order, not random", line:find("fixed order, not a random roll", 1, true) ~= nil, line)
+check("line has no odds or percent", line:find("odds", 1, true) == nil and line:find("%", 1, true) == nil, line)
+check("line has no empty font colour", line:find('<font color="#ffffff">', 1, true) ~= nil, line)
+local loading = nextHireLine(egg, nil, "#ffffff")
+check("no server data yet shows loading, never odds", loading:find("loading...", 1, true) ~= nil and loading:find("odds", 1, true) == nil, loading)
+check("creature without emoji still renders", nextHireLine(egg, { name = "Bug Bear" }, "#fff"):find("Bug Bear", 1, true) ~= nil)
+check("card note for restricted says next hire", eggNote(true) == "tap for next hire")
+check("card note for others says odds", eggNote(false) == "tap for odds")
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -1437,6 +1463,10 @@ def main():
     result13 = run_luau(luau, POLICY_TESTS.replace("__SHOPCONFIG__", shop_config).replace("__POLICY__", marked_source("POLICY", "ShopServer.lua")))
     print("ShopServer policy check: " + (result13.stdout.strip() or result13.stderr.strip()))
     if result13.returncode != 0 or " 0 failed" not in result13.stdout:
+        code = 1
+    result14 = run_luau(luau, NEXTHIRE_TESTS.replace("__NEXTHIRE__", marked_source("NEXTHIRE", "DailyClient.lua")))
+    print("DailyClient next hire check: " + (result14.stdout.strip() or result14.stderr.strip()))
+    if result14.returncode != 0 or " 0 failed" not in result14.stdout:
         code = 1
     return code
 
