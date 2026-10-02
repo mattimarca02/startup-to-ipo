@@ -294,3 +294,52 @@ All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`
 **Impact:** a paying player waits until they rejoin (or loses the purchase to Roblox's ~3-day refund if they never come back). Rare: needs a slow join or a slow IPO save.
 
 **Smallest fix (S):** raise `DATA_WAIT_SECONDS` to 90, and when answering `NotProcessedYet` while the player is still in the server, `notify` them: "Your purchase will arrive when your game finishes loading. If it doesn't, rejoin."
+
+---
+
+## 5. End-to-end economy exploits
+
+### Where Cash, valuation and Shares come from
+
+| Value | Sources | Raises the valuation? |
+|---|---|---|
+| Cash | income tick (`TycoonCore.lua:648-659`), offline (`:608-617`), Cash packs (`ShopServer.lua:434-439`), daily Cash days (`DailyServer.lua:177-180`), poach refund (`PoachServer.lua:325`, `:727`, `:305`), Counter-Offer payment to the poacher (`:276-278`) | Only income, offline and Cash packs (`addEarnings`). Gifts, refunds and payments add to Cash directly. Correct. |
+| Shares | IPO (`IpoServer.lua:202-205`), Day 7 (+3, `DailyServer.lua:183-187`, never doubled) | n/a |
+| Spends | green pad, eggs, poach fee, Counter-Offer, HR pad, perks | Every spend checks the balance first, on the server (`TycoonCore.lua:177`, `EmployeeServer.lua:316`, `PoachServer.lua:461`, `:492`, `:622`, `IpoServer.lua:257`). No remote carries an amount. |
+
+### Combinations checked
+
+| Combination | Result |
+|---|---|
+| IPO + poach | A deal against you is called off and refunded once, after the IPO save (PR #14). Your own deal or an employee in transit blocks the IPO. Nothing is created. |
+| IPO + Counter-Offer | The victim's open offer is dropped on IPO; a Counter-Offer against a player whose IPO is saving waits (`PoachServer.lua:486-488`). |
+| IPO + daily | Claims are refused during the IPO save; Day 7 Shares claimed before an IPO are part of the IPO's base, not added twice (`IpoServer.lua:205`). Daily Cash claimed right before an IPO is reset with the rest (the confirm screen says so). |
+| IPO + onboarding egg | `seenIntro` survives the IPO; a post-IPO save also has `ipo.count > 0`, so `hasProgress` is true anyway. No second egg. |
+| IPO + offline income | Offline Cash raises the valuation, so a player can return and go public at once. Shares are capped at 2x IPO-ready (`IpoConfig.lua:42`, `:161`), so long absences buy nothing extra. Intended. |
+| IPO + Cash packs | Robux raises the valuation and so the Shares, up to the same 2x cap. Intended (`ShopServer.lua:437`). |
+| IPO + Instant Hatch / Poach Shield / Luck Boost | All kept through the IPO (`shop` and `poach` aren't reset). A token is used only when it skips a real timer (`EmployeeServer.lua:339-345`). |
+| IPO + perks | Perks are bought with no yield between the check and the spend (`IpoServer.lua:249-265`); two quick buys each see the new balance. |
+| Poach + Counter-Offer between alts | The Counter-Offer price is 50% of the fee and goes to the poacher; the fee itself is a sink. Moving Cash between alts this way always loses Cash. |
+| Poach chain | **FR-4** (copies an employee). |
+| Offline income + rejoin loops | Online pays 100%, offline 50%, capped at 8 h (+2 h per Night Shift level). `lastSeen` is written on every save, so each join pays only for the time since the last save. A rejoin loop earns less than staying. |
+| Free egg / daily / new-player shield + rejoin | Each is gated by saved state (`seenIntro`, `lastClaimDay`, `saved == nil`), so rejoining gives nothing. Hops: section 3. |
+| Alt accounts as farms | An alt can collect the free egg and 7 days of daily eggs and let a main poach the result (after the 15-minute new-player shield; Legendaries can't be poached). This is the cost of player-to-player moves, not a bug. Worth watching in analytics. |
+| Clock changes | Only the server's `os.time()` is used (eggs, shields, cooldowns, daily, offline). The client sends no time. Servers differ by seconds; the M6 review showed the midnight case nets zero. |
+
+### Overflow and precision (2^53)
+
+- Cash and Income are `IntValue`s (64-bit integers). A maxed player earns about (183 from upgrades + 11 x 175 from Legendaries) x 3 (2x Cash and VIP) x 5.7 (the multiplier at IPO 20) = about 36,000 Cash/s. A year of non-stop play is about 1.1e12, 8,000 times below 2^53 (9.0e15).
+- The IPO threshold `81,000 x 2.5^n` passes 2^53 at IPO 28. Reaching IPO 20 alone needs a 7.4e12 valuation, about 6.5 years of non-stop play at the rate above. Not reachable.
+- Shares are small whole numbers. `formatCash` would print `$1e+15` above 1e15: cosmetic and unreachable.
+
+**No duplication or inflation of Cash, Shares or valuation was found** apart from FR-4 (an employee) and the bounded hops in section 3.
+
+### FR-9 (Low): several saved numbers still accept infinity, which turns into permanent Luck Boost, tokens, shields or Cash
+
+**Where:** `ShopServer.lua:351-356` (`luckLeft`, `instantHatches`: NaN is checked, infinity isn't), `PoachServer.lua:704-705` (`shieldLeft`, `cooldownUntil`), `:721` and `:725-729` (`gained` refund, `refund`), `IpoServer.lua:350-353` (PR14 R8).
+
+**How it breaks:** a save with `luckLeft = inf` gives Luck Boost forever; `instantHatches = inf` gives endless Instant Hatches; `shieldLeft = inf` makes a player unpoachable forever; a huge `refund` becomes Cash; `ipo.count = inf` blocks every IPO (R8). Only the server writes saves and DataStore JSON can't carry infinity, so this needs a save edited by a tool or a future bug.
+
+**Impact:** none today; it's the same class as PR14 R8, which was left Low. Listed so all of them are fixed together rather than one at a time.
+
+**Smallest fix (S):** one rule everywhere a saved number is read: `tonumber`, then reject NaN, `math.huge`, `-math.huge` and negatives, then clamp to a sane maximum (for example 1e15 for Cash amounts, 30 days for timers), with a `warn`. Each module can carry a 5-line `finiteNumber(value, max)` helper.
