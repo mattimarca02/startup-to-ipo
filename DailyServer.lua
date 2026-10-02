@@ -73,7 +73,7 @@ end
 --   kept         -> missed some days, but within GraceDays: the place in the calendar is kept
 --   lostDay      -> missed too many: the calendar day the old streak had reached (0 = none)
 -- A last claim on a later day than today (another server's clock was a few seconds ahead at
--- midnight) counts as claimed today: it never grants, and setupPlayer clamps far-off values.
+-- the 08:00 UTC reset) counts as claimed today: it never grants, and setupPlayer clamps far-off values.
 local function status(daily, now)
 	local last = daily.lastClaimDay
 	if last > 0 and now <= last then
@@ -353,7 +353,7 @@ function DailyServer.init(coreApi)
 		addDebugActions()
 	end
 
-	-- Every second: the day can change (UTC midnight) and incubators fill up and empty
+	-- Every second: the day can change (the 08:00 UTC reset, DailyConfig.ResetHourUtc) and incubators fill up and empty
 	task.spawn(function()
 		while true do
 			task.wait(1)

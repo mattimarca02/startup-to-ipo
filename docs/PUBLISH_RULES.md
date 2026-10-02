@@ -23,6 +23,7 @@ M4 has never been published, so **the version live today is older than M4, and s
   - `V_launch` (the floor): ______
 - A rollback to an allowed version is still lossless only if every update follows CLAUDE.md's rule that new saved data gets its own top-level section (A10).
 - The newest section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
+- **Perk levels 6 and up (D1, the 1,770-Share shop):** a rollback to a version with the shorter shop caps every perk level 6+ back to 5, and the Shares spent on those levels are lost (not refunded). It is a one-way change, forward only. Same as docs/D1_SHOP_OPTIONS.md (Rollback row).
 - If saves were already damaged: Roblox keeps older versions of each DataStore key for a limited time (about 30 days); one player's save can be restored by hand from a version. Slow and manual.
 
 ## 3. Old and new servers must never run at the same time (FR-19)

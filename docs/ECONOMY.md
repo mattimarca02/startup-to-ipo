@@ -150,7 +150,7 @@ Days = online time divided by the player's daily play time (active 1 h/day, casu
 
 `IpoConfig.Perks` now costs **1,770 Shares** in total (was 525). Only new levels were added, at the end of three perks: Faster Recruiting 6-7 (90, 140; hatch time up to -70%), Talent Scouts 6-8 (80, 120, 175; luck up to +80%) and Recruiter Network 6-10 (50, 75, 110, 165, 240; poach cost up to -50%). Extra Incubator, Extra Desk and Night Shift were **not** extended (more incubators, desks or offline hours would speed up every IPO), and every old level cost and effect is unchanged. `IPO_PERK_COSTS` in `tools/economy_sim.py` matches. Details, options and checks: docs/D1_SHOP_OPTIONS.md.
 
-IPO timing is unchanged (the shop only decides how fast Shares are spent): `python tools/economy_sim.py --ipo --runs 40 --days 365` still gives the first IPO at 12 min online and IPO 10 at 6.6 h for active, and the rows of section 3d are identical. Only the "whole shop" lines changed. Days are real days (wall clock), median of 40 seeds:
+The stage numbers and the Shares formula are unchanged: `python tools/economy_sim.py --ipo --runs 40 --days 365` still gives the first IPO at 12 min online and IPO 10 at 6.6 h for active, and the rows of section 3d are identical. That is only because the sim does not model perks (`IPO_PERK_COSTS` is used for the shop total and nothing else). In the real game the new levels, Faster Recruiting 6-7 (hatch time, up to -70%) and Talent Scouts 6-8 (luck, up to +80%), speed up later runs for players who buy them, so later runs can be faster than the sim shows; by how much is not measured. Only the "whole shop" lines changed. Days are real days (wall clock), median of 40 seeds:
 
 | Player | No pass | Shareholder pass |
 |---|---|---|
