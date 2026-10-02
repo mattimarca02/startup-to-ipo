@@ -19,6 +19,7 @@ ShopServer's PolicyService check (fail closed, the 10 s cap) and what stays on s
 It changes nothing in the game or in Studio.
 """
 
+import ast
 import os
 import shutil
 import subprocess
@@ -238,9 +239,86 @@ IS_STUDIO = true
 check("cash min for income 0", DailyConfig.cashFor({ cashMinutes = 5 }, 0) == 300)
 check("cash cap 60 min", DailyConfig.cashFor({ cashMinutes = 1000 }, 1) == 3600)
 check("no cash day", DailyConfig.cashFor({ egg = "Garage" }, 100) == 0)
--- UTC boundary
-check("day changes at UTC midnight", DailyConfig.dayNumber(20001 * 86400 - 1) == 20000 and DailyConfig.dayNumber(20001 * 86400) == 20001)
+-- UTC boundary: the day changes at ResetHourUtc = 8 (D3), not at midnight
+check("reset hour is 8 UTC (D3)", DailyConfig.ResetHourUtc == 8)
+local RESET = 8 * 3600
+check("day changes at 08:00 UTC", DailyConfig.dayNumber(20001 * 86400 + RESET - 1) == 20000 and DailyConfig.dayNumber(20001 * 86400 + RESET) == 20001)
+check("midnight UTC is not a new day", DailyConfig.dayNumber(20001 * 86400) == 20000 and DailyConfig.dayNumber(20001 * 86400 + 1) == 20000)
+check("dayStart is 08:00 UTC", DailyConfig.dayStart(20001) == 20001 * 86400 + RESET)
+check("dayNumber(dayStart(n)) == n", DailyConfig.dayNumber(DailyConfig.dayStart(20001)) == 20001 and DailyConfig.dayNumber(DailyConfig.dayStart(20001) - 1) == 20000)
 check("formatWait", DailyConfig.formatWait(18720) == "5h 12m" and DailyConfig.formatWait(750) == "12m 30s" and DailyConfig.formatWait(42) == "42s")
+
+-- 13. The 08:00 UTC reset in a real flow (D3). Times are given as day D at hour H UTC.
+local function at(day, hour, minute) return day * 86400 + hour * 3600 + (minute or 0) * 60 end
+local savedNow = NOW
+-- claim at 07:59, claim again at 08:00 (a new day), refused at 08:01
+NOW = at(20000, 7, 59)
+p, d = newPlayer(nil)
+check("07:59: ready", p.attrs.DailyReady == true)
+check("07:59: claim ok", tap(p) == true)
+check("07:59: the countdown points at 08:00 UTC", p.attrs.DailyNextAt == at(20000, 8) and p.attrs.DailyReady == false)
+NOW = at(20000, 8)
+DailyServer.setupPlayer(p, d, DailyServer.serialize(d))
+check("08:00: next day is ready", p.attrs.DailyReady == true and p.attrs.DailyDay == 2)
+check("08:00: claim Day 2 ok", tap(p) == true)
+NOW = at(20000, 8, 1)
+check("08:01: same day, refused", tap(p) == false)
+NOW = at(20001, 7, 59)
+check("next 07:59: still claimed", tap(p) == false)
+NOW = at(20001, 8)
+check("next 08:00: Day 3 claimable", tap(p) == true and d.daily.streak == 3)
+-- midnight does nothing: claimed at 23:00, still claimed at 00:30 the next calendar day
+NOW = at(20010, 23)
+p, d = newPlayer(nil)
+check("23:00: claim ok", tap(p) == true)
+NOW = at(20011, 0, 30)
+check("00:30 next calendar day: still claimed", tap(p) == false)
+NOW = at(20011, 8)
+check("08:00 next calendar day: claimable", tap(p) == true)
+-- a save made under the old hour 0 (lastClaimDay = floor(t / 86400)), joining under hour 8
+-- (a) claimed at 10:00 on day 20000 (same number under both rules): next claim 08:00 on 20001
+NOW = at(20000, 12)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+check("old save, claimed 10:00: not ready", p.attrs.DailyReady == false and not tap(p))
+check("old save, claimed 10:00: next at 08:00 UTC", p.attrs.DailyNextAt == at(20001, 8))
+NOW = at(20001, 0, 10)
+check("old save, claimed 10:00: still refused after midnight", not tap(p))
+NOW = at(20001, 8)
+check("old save, claimed 10:00: ready at 08:00", tap(p) == true and d.daily.streak == 3)
+-- (b) claimed at 03:00 on day 20000 under hour 0, joins at 05:00 the same day (new day number is 19999):
+--     counted as claimed today, no warning, and the player waits until 08:00 on 20001 (up to 8 h longer, never an extra claim)
+WARNINGS = {}
+NOW = at(20000, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+check("old save, claimed 03:00, join 05:00: claimed, not clamped", p.attrs.DailyReady == false and d.daily.lastClaimDay == 20000 and #WARNINGS == 0)
+NOW = at(20001, 1)
+check("old save, claimed 03:00: 01:00 next day is still waiting", not tap(p))
+NOW = at(20001, 8)
+check("old save, claimed 03:00: ready at 08:00 next day", tap(p) == true and d.daily.streak == 3)
+-- (c) the grace edge only gets kinder: last claim day 20000, back at 05:00 on 20003 (old rules: 2 missed, Day 1; new: 1 missed, place kept; from 08:00 on both rules agree)
+NOW = at(20003, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, back at 05:00 after 2 days: place kept", p.attrs.DailyKept == true and p.attrs.DailyDay == 4 and p.attrs.DailyMissed == 1)
+NOW = at(20003, 9)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, back at 09:00 after 2 days: back to Day 1 (same as the old rule)", p.attrs.DailyDay == 1 and p.attrs.DailyLostDay == 3)
+NOW = at(20004, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, 3 missed days: back to Day 1", p.attrs.DailyDay == 1 and p.attrs.DailyLostDay == 3)
+-- (d) no extra claim: for an old save claimed on day 20000 (any hour), whenever the new rule says "ready",
+--     the old rule (day = floor(t / 86400)) says "ready" too, checked hour by hour for 4 days
+local extra, firstReady = 0, nil
+for hour = 0, 4 * 24 do
+	NOW = at(20000, hour)
+	local pp = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+	local newReady = pp.attrs.DailyReady == true
+	local oldReady = math.floor(NOW / 86400) > 20000
+	if newReady and not oldReady then extra += 1 end
+	if newReady and not firstReady then firstReady = hour end
+end
+check("old save: the new reset never allows a claim the old one didn't", extra == 0, extra)
+check("old save: first ready at 08:00 on day 20001 (hour 32 from the start of day 20000)", firstReady == 32, firstReady)
+NOW = savedNow
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
@@ -677,17 +755,26 @@ local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
 local CreatureConfig = (function()
 __CREATURECONFIG__
 end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+-- Talent Scouts luck comes from IpoConfig (1 + perkValue), never from a number typed in here
+local TOP_LEVEL = #IpoConfig.getPerk("BaseLuck").costs
+local function luckAt(level) return 1 + IpoConfig.perkValue("BaseLuck", level) end
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
 end
 local UNITS = CreatureConfig.ODDS_UNITS
+check("Talent Scouts: level 0 has no luck, the top level has the most", luckAt(0) == 1 and luckAt(TOP_LEVEL) > luckAt(TOP_LEVEL - 1) and luckAt(TOP_LEVEL + 5) == luckAt(TOP_LEVEL))
 check("the real config loads without warnings", #WARNINGS == 0, WARNINGS[1])
 check("units are hundredths of a percent", UNITS == 10000)
 
 -- Every egg, in every luck state the server can roll with: no boost, Luck Boost (x2), the strongest
--- Talent Scouts perk (+50%), and both
-local STATES = { { "no boost", 1 }, { "Luck Boost", 2 }, { "Talent Scouts Lv 5", 1.5 }, { "Luck Boost + Talent Scouts Lv 5", 3 } }
+-- Talent Scouts perk (level 5 = the old top, the top level after D1), and both. The perk's luck is read
+-- from IpoConfig; Luck Boost's x2 is the ShopConfig product's luckMultiplier.
+local STATES = { { "no boost", 1 }, { "Luck Boost", 2 }, { "Talent Scouts Lv 5", luckAt(5) }, { "Luck Boost + Talent Scouts Lv 5", 2 * luckAt(5) },
+	{ "Talent Scouts Lv " .. TOP_LEVEL .. " (top)", luckAt(TOP_LEVEL) }, { "Luck Boost + Talent Scouts Lv " .. TOP_LEVEL, 2 * luckAt(TOP_LEVEL) } }
 for _, egg in ipairs(CreatureConfig.Eggs) do
 	for _, state in ipairs(STATES) do
 		local label = egg.name .. ", " .. state[1]
@@ -719,16 +806,72 @@ end
 
 -- Every Talent Scouts level, with and without Luck Boost
 local allExact = true
-for level = 0, 5 do
+for level = 0, TOP_LEVEL do
 	for _, boost in ipairs({ 1, 2 }) do
 		for _, egg in ipairs(CreatureConfig.Eggs) do
 			local total = 0
-			for _, item in ipairs(CreatureConfig.getCreatureOdds(egg, (1 + 0.1 * level) * boost)) do total += item.units end
+			for _, item in ipairs(CreatureConfig.getCreatureOdds(egg, luckAt(level) * boost)) do total += item.units end
 			if total ~= UNITS then allExact = false end
 		end
 	end
 end
 check("every egg x every Talent Scouts level x Luck Boost on/off: exactly 100.00%", allExact)
+
+-- Per rarity (FR-12 follow-up, review finding b): the rounding is done inside each rarity, so the rarity
+-- line shows the rounded true chance and adds up to exactly 100.00 at every level, with and without Luck Boost
+local rarityExact, rarityNear, rarityStrings, perRarityCreatures, rarityCount = true, true, true, true, 0
+local worstRarity = 0
+for level = 0, TOP_LEVEL do
+	for _, boost in ipairs({ 1, 2 }) do
+		for _, egg in ipairs(CreatureConfig.Eggs) do
+			local luck = luckAt(level) * boost
+			local odds = CreatureConfig.getCreatureOdds(egg, luck)
+			local summary = CreatureConfig.rarityOdds(odds)
+			local total, shown = 0, 0
+			for _, entry in ipairs(summary) do
+				total += entry.units
+				local whole, hundredths = string.match(CreatureConfig.formatOdds(entry.units), "^(%d+)%.(%d%d)%%$")
+				shown += tonumber(whole) * 100 + tonumber(hundredths)
+				local exact
+				for _, real in ipairs(CreatureConfig.getOdds(egg, luck)) do
+					if real.rarity == entry.rarity then exact = real.chance * UNITS end
+				end
+				if not exact or math.abs(entry.units - exact) >= 1 then rarityNear = false end
+				worstRarity = math.max(worstRarity, exact and math.abs(entry.units - exact) or math.huge)
+				-- the creatures of this rarity differ by at most 0.01% from each other
+				local lo, hi = math.huge, -math.huge
+				for _, item in ipairs(odds) do
+					if item.rarity == entry.rarity then lo = math.min(lo, item.units); hi = math.max(hi, item.units) end
+				end
+				if hi - lo > 1 then perRarityCreatures = false end
+			end
+			rarityCount += 1
+			if total ~= UNITS then rarityExact = false end
+			if shown ~= UNITS then rarityStrings = false end
+		end
+	end
+end
+check("every egg x Talent Scouts 0-8 x Luck Boost on/off: the per-rarity units add up to exactly 100.00%", rarityExact)
+check("... and so do the per-rarity strings the screens show, added up", rarityStrings)
+check("each shown rarity is its true chance, rounded (off by < 0.01%)", rarityNear, worstRarity)
+check("the creatures of one rarity differ by at most 0.01% from each other", perRarityCreatures)
+check("that loop covered every level x 2 states x every egg", rarityCount == (TOP_LEVEL + 1) * 2 * #CreatureConfig.Eggs, rarityCount)
+local function rarityLine(egg, luck)
+	local parts = {}
+	for _, entry in ipairs(CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, luck))) do
+		table.insert(parts, entry.rarity .. " " .. CreatureConfig.formatOdds(entry.units))
+	end
+	return table.concat(parts, " / ")
+end
+check("Garage Egg at level 0 shows 70.00 / 25.00 / 5.00 (was 69.99 / 25.01 / 5.00)",
+	rarityLine(CreatureConfig.getEgg("Garage"), 1) == "Common 70.00% / Uncommon 25.00% / Rare 5.00%", rarityLine(CreatureConfig.getEgg("Garage"), 1))
+-- The real odds are not touched: getOdds is the same function, the server's weights
+local realTotal = 0
+for _, entry in ipairs(CreatureConfig.getOdds(CreatureConfig.getEgg("Garage"), 1)) do realTotal += entry.chance end
+check("the server's own odds (getOdds) still add up to 1", math.abs(realTotal - 1) < 1e-12)
+-- Largest remainder at the rarity level, with awkward numbers
+local awkward = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds({ odds = { Common = 1, Rare = 1, Epic = 1 } }, 1))
+check("three equal rarities: 33.34 / 33.33 / 33.33, total exactly 100.00", #awkward == 3 and awkward[1].units == 3334 and awkward[2].units == 3333 and awkward[3].units == 3333)
 
 -- The text shown, added up from the strings themselves
 local shownTotal = 0
@@ -920,6 +1063,12 @@ local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
 local CreatureConfig = (function()
 __CREATURECONFIG__
 end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+-- Talent Scouts luck comes from IpoConfig (1 + perkValue), never from a number typed in here
+local TOP_LEVEL = #IpoConfig.getPerk("BaseLuck").costs
+local function luckAt(level) return 1 + IpoConfig.perkValue("BaseLuck", level) end
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
@@ -936,8 +1085,8 @@ end
 
 -- Every egg, without luck and at every Talent Scouts level (Luck Boost never applies to a fixed order)
 for _, egg in ipairs(CreatureConfig.Eggs) do
-	for level = 0, 5 do
-		local luck = 1 + 0.1 * level
+	for level = 0, TOP_LEVEL do
+		local luck = luckAt(level)
 		local label = egg.name .. ", Talent Scouts Lv " .. level
 		local odds = CreatureConfig.getOdds(egg, luck)
 		local byRarity, total = {}, 0
@@ -1337,6 +1486,251 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+IPOSHOP_TESTS = r"""-- Tests for the IPO shop (IpoConfig.perks, the real IpoServer.lua with fakes) and D1: the 1,770-Share shop ----
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function typeof(v) return type(v) end
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+
+-- A fake Roblox: any property that isn't set answers with a harmless "ghost"; real values are kept
+local ghost
+ghost = setmetatable({}, { __index = function() return ghost end, __call = function() return ghost end,
+	__add = function() return ghost end, __sub = function() return ghost end, __mul = function() return ghost end,
+	__newindex = function() end })
+local CREATED = {}
+local Instance = { new = function(class)
+	local i = setmetatable({ ClassName = class }, { __index = function() return ghost end })
+	table.insert(CREATED, i)
+	return i
+end }
+local Vector3, Color3, UDim2, Enum = ghost, ghost, ghost, ghost
+local task = { spawn = function(f, ...) f(...) end, delay = function() end, wait = function() end }
+local os = { time = function() return 1700000000 end, clock = function() return 0 end }
+local function token(name) return { Name = name, WaitForChild = function(_, n) return token(n) end } end
+local MODULES = {}
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local SERVICES = {
+	ReplicatedStorage = token("ReplicatedStorage"),
+	RunService = { IsStudio = function() return false end },
+	Players = { GetPlayerFromCharacter = function() return nil end },
+}
+local game = { GetService = function(_, n) return SERVICES[n] end }
+local script = { Parent = token("ServerScriptService") }
+
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.ShopConfig = (function()
+__SHOPCONFIG__
+end)()
+MODULES.ShopServer = { addDebugAction = function() end, getSharesMultiplier = function() return 1 end,
+	isPassCheckPending = function() return false end, passCheckAge = function() return 0 end }
+local IpoConfig = MODULES.IpoConfig
+local IpoServer = (function()
+__IPOSERVER__
+end)()
+check("the real IpoConfig loads without warnings", #WARNINGS == 0, WARNINGS[1])
+
+-- 1. The shop: size, frozen shipped levels, the new levels
+local function total(costs) local n = 0 for _, c in ipairs(costs) do n += c end return n end
+local shop, perPerk = 0, {}
+for _, perk in ipairs(IpoConfig.Perks) do
+	perPerk[perk.key] = total(perk.costs)
+	shop += perPerk[perk.key]
+end
+check("the whole shop costs exactly 1770 Shares", shop == 1770, shop)
+check("per perk: Faster Recruiting 350, Extra Incubator 55, Extra Desk 85, Night Shift 70, Talent Scouts 495, Recruiter Network 715",
+	perPerk.FasterEggs == 350 and perPerk.ExtraIncubator == 55 and perPerk.ExtraSlot == 85 and perPerk.OfflineCap == 70
+	and perPerk.BaseLuck == 495 and perPerk.CheaperPoach == 715)
+check("the shop before D1 was 525: the shipped levels still add up to 525", (function()
+	local n = 0
+	for _, perk in ipairs(IpoConfig.Perks) do
+		local old = { FasterEggs = 5, ExtraIncubator = 2, ExtraSlot = 3, OfflineCap = 4, BaseLuck = 5, CheaperPoach = 5 }
+		for level = 1, old[perk.key] do n += perk.costs[level] end
+	end
+	return n
+end)() == 525)
+
+-- What shipped before D1, never to change (saves and players keep these levels): key, name, effect, perLevel, costs
+local SHIPPED = {
+	{ "FasterEggs", "Faster Recruiting", "hatchTime", 0.1, { 5, 10, 20, 35, 50 } },
+	{ "ExtraIncubator", "Extra Incubator", "incubators", 1, { 15, 40 } },
+	{ "ExtraSlot", "Extra Desk", "employeeSlots", 1, { 10, 25, 50 } },
+	{ "OfflineCap", "Night Shift", "offlineSeconds", 7200, { 5, 10, 20, 35 } },
+	{ "BaseLuck", "Talent Scouts", "luck", 0.1, { 5, 10, 20, 35, 50 } },
+	{ "CheaperPoach", "Recruiter Network", "poachDiscount", 0.05, { 5, 10, 15, 20, 25 } },
+}
+check("the same 6 perks in the same order", #IpoConfig.Perks == 6)
+for i, old in ipairs(SHIPPED) do
+	local perk = IpoConfig.Perks[i]
+	local label = old[2]
+	check(label .. ": key, name, effect and perLevel are unchanged", perk.key == old[1] and perk.name == old[2] and perk.effect == old[3] and perk.perLevel == old[4])
+	local same = #perk.costs >= #old[5]
+	for level, cost in ipairs(old[5]) do
+		if perk.costs[level] ~= cost then same = false end
+	end
+	check(label .. ": every old level cost is unchanged (levels 1-" .. #old[5] .. ")", same)
+	local rising = true
+	for level = 2, #perk.costs do
+		if perk.costs[level] <= perk.costs[level - 1] then rising = false end
+	end
+	check(label .. ": costs rise with every level", rising)
+	check(label .. ": " .. (#perk.costs - #old[5]) .. " new levels", #perk.costs - #old[5] == ({ 2, 0, 0, 0, 3, 5 })[i])
+end
+check("the new Faster Recruiting levels cost 90, 140", IpoConfig.Perks[1].costs[6] == 90 and IpoConfig.Perks[1].costs[7] == 140)
+check("the new Talent Scouts levels cost 80, 120, 175", IpoConfig.Perks[5].costs[6] == 80 and IpoConfig.Perks[5].costs[7] == 120 and IpoConfig.Perks[5].costs[8] == 175)
+check("the new Recruiter Network levels cost 50, 75, 110, 165, 240", (function()
+	local c = IpoConfig.Perks[6].costs
+	return c[6] == 50 and c[7] == 75 and c[8] == 110 and c[9] == 165 and c[10] == 240
+end)())
+-- The caps from the D1 plan: more incubators, desks or offline hours would speed up every IPO
+check("Extra Incubator, Extra Desk and Night Shift were not extended", #IpoConfig.Perks[2].costs == 2 and #IpoConfig.Perks[3].costs == 3 and #IpoConfig.Perks[4].costs == 4)
+check("top Faster Recruiting is -70% (Instant Hatch keeps its value)", math.abs(IpoConfig.perkValue("FasterEggs", 99) - 0.7) < 1e-9)
+check("top Recruiter Network is -50%", math.abs(IpoConfig.perkValue("CheaperPoach", 99) - 0.5) < 1e-9)
+check("top Talent Scouts is +80%", math.abs(IpoConfig.perkValue("BaseLuck", 99) - 0.8) < 1e-9)
+check("max-level clamp: perkValue past the max = the max, below 0 = 0", IpoConfig.perkValue("ExtraIncubator", 5) == 2 and IpoConfig.perkValue("ExtraIncubator", -3) == 0
+	and IpoConfig.perkValue("FasterEggs", 7) == IpoConfig.perkValue("FasterEggs", 100))
+
+-- 2. Nothing else moved: the pass, the Shares formula and the IPO numbers
+local passEffect
+for _, pass in ipairs(MODULES.ShopConfig.Passes) do if pass.key == "Shareholder" then passEffect = pass.effect end end
+check("the Shareholder pass is still 2x Shares", passEffect and passEffect.sharesMultiplier == 2)
+check("Shares formula numbers: 10, growth 0.8, exponent 0.5, cap 2", IpoConfig.SharesPerIpo == 10 and IpoConfig.SharesGrowthPerIpo == 0.8
+	and IpoConfig.SharesExponent == 0.5 and IpoConfig.SharesRatioCap == 2)
+check("IPO 1 gives 10 Shares, 20 with the pass", IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 1) == 10 and IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 2) == 20)
+check("IPO 2 gives 18, IPO 3 gives 26, IPO 4 with the pass gives 68", IpoConfig.sharesFor(IpoConfig.ipoValuation(1), 1, 1) == 18
+	and IpoConfig.sharesFor(IpoConfig.ipoValuation(2), 2, 1) == 26 and IpoConfig.sharesFor(IpoConfig.ipoValuation(3), 3, 2) == 68)
+check("waiting past 2x IPO-ready gives no more Shares (cap 2)", IpoConfig.sharesFor(10 * IpoConfig.ipoValuation(0), 0, 1) == IpoConfig.sharesFor(2 * IpoConfig.ipoValuation(0), 0, 1)
+	and IpoConfig.sharesFor(2 * IpoConfig.ipoValuation(0), 0, 1) == 14)
+check("stages 0 / 1800 / 6300 / 23400 / 81000, growth x2.5 per IPO", IpoConfig.stageValuation(2, 0) == 1800 and IpoConfig.stageValuation(3, 0) == 6300
+	and IpoConfig.stageValuation(4, 0) == 23400 and IpoConfig.ipoValuation(0) == 81000 and IpoConfig.StageGrowthPerIpo == 2.5 and IpoConfig.ipoValuation(1) == 202500)
+check("multiplier and cooldown unchanged", IpoConfig.BonusPerIpo == 0.5 and IpoConfig.BonusExponent == 0.75 and IpoConfig.CooldownSeconds == 60)
+
+-- IPO_PERK_COSTS in tools/economy_sim.py (the sim's copy, read by the Python side) must equal the real costs
+local SIM_COSTS = __SIMCOSTS__
+local sameCosts, simKeys = true, 0
+for key, costs in pairs(SIM_COSTS) do
+	simKeys += 1
+	local perk = IpoConfig.getPerk(key)
+	if not perk or #perk.costs ~= #costs then sameCosts = false else
+		for i, cost in ipairs(costs) do if perk.costs[i] ~= cost then sameCosts = false end end
+	end
+end
+check("economy_sim.py IPO_PERK_COSTS has the same perks as IpoConfig", simKeys == #IpoConfig.Perks, simKeys)
+check("economy_sim.py IPO_PERK_COSTS equals the IpoConfig costs, level by level", sameCosts)
+
+-- 3. Saves: old saves with perks load and behave exactly as before; the new levels can be bought
+local saves = 0
+local CORE = {
+	getData = function(p) return p.data end,
+	save = function() saves += 1; return true end,
+	onPerksChanged = function() end, updateIncome = function() end,
+	plotCenter = function() return ghost end,
+}
+IpoServer.init(CORE)
+local onAction
+for _, inst in ipairs(CREATED) do if inst.Name == "IpoAction" then onAction = inst.OnServerInvoke end end
+check("the IPO remote exists", onAction ~= nil)
+
+local function join(savedIpo)
+	local player = { Name = "P", attrs = {} }
+	function player:SetAttribute(k, v) self.attrs[k] = v end
+	function player:GetAttribute(k) return self.attrs[k] end
+	function player:FindFirstChild() return nil end
+	local data = { ready = true, loaded = true, slot = 1 }
+	player.data = data
+	IpoServer.setupPlayer(player, data, savedIpo, 0)
+	return player, data
+end
+local function buy(p, key) return onAction(p, "BuyPerk", key) end
+
+local OLD_MAX = { FasterEggs = 5, ExtraIncubator = 2, ExtraSlot = 3, OfflineCap = 4, BaseLuck = 5, CheaperPoach = 5 }
+local p, d = join({ count = 6, shares = 40, valuation = 1234, lifetime = 99999, best = 5000, lastIpoAt = 1699999000, perks = OLD_MAX })
+local levelsKept = true
+for key, level in pairs(OLD_MAX) do
+	if d.ipo.perks[key] ~= level or p.attrs["IpoPerk_" .. key] ~= level then levelsKept = false end
+end
+check("old save with every old perk maxed: levels load as saved", levelsKept)
+check("... and their effects are what they always were", math.abs(IpoServer.perk(d, "FasterEggs") - 0.5) < 1e-9 and math.abs(IpoServer.perk(d, "BaseLuck") - 0.5) < 1e-9
+	and math.abs(IpoServer.perk(d, "CheaperPoach") - 0.25) < 1e-9 and IpoServer.perk(d, "ExtraIncubator") == 2 and IpoServer.perk(d, "ExtraSlot") == 3
+	and IpoServer.perk(d, "OfflineCap") == 28800)
+check("... and Shares, count and valuation are untouched", d.ipo.shares == 40 and d.ipo.count == 6 and d.ipo.valuation == 1234 and d.ipo.lifetime == 99999 and d.ipo.best == 5000)
+local saved = IpoServer.serialize(d)
+local sameSave = saved.shares == 40 and saved.count == 6
+for key, level in pairs(OLD_MAX) do if saved.perks[key] ~= level then sameSave = false end end
+check("... and saves back exactly the same perk levels", sameSave)
+check("no warnings loading an old save", #WARNINGS == 0, WARNINGS[1])
+
+-- 40 Shares: Faster Recruiting 6 costs 90 and is refused, nothing is spent; the maxed old perks refuse too
+local ok, msg = buy(p, "FasterEggs")
+check("40 Shares can't buy the 90-Share level 6", ok == false and d.ipo.perks.FasterEggs == 5 and d.ipo.shares == 40, msg)
+check("... and the message says what it costs", type(msg) == "string" and msg:find("90") ~= nil, msg)
+ok, msg = buy(p, "ExtraIncubator")
+check("a perk that was not extended is still at its max", ok == false and d.ipo.perks.ExtraIncubator == 2 and msg:find("max level") ~= nil, msg)
+-- With enough Shares the new levels can be bought one by one
+d.ipo.shares = 1245
+local expectLevel = { FasterEggs = 5, BaseLuck = 5, CheaperPoach = 5 }
+local order = { "FasterEggs", "FasterEggs", "BaseLuck", "BaseLuck", "BaseLuck", "CheaperPoach", "CheaperPoach", "CheaperPoach", "CheaperPoach", "CheaperPoach" }
+local costs = { 90, 140, 80, 120, 175, 50, 75, 110, 165, 240 }
+local allBought, spent = true, 0
+for i, key in ipairs(order) do
+	ok = buy(p, key)
+	expectLevel[key] += 1
+	spent += costs[i]
+	if not ok or d.ipo.perks[key] ~= expectLevel[key] or p.attrs["IpoPerk_" .. key] ~= expectLevel[key] or d.ipo.shares ~= 1245 - spent then allBought = false end
+end
+check("an old save with maxed old perks buys every new level, paying exactly 1,245 Shares in all", allBought and d.ipo.shares == 0, d.ipo.shares)
+check("... the new top effects work (-70% hatch, +80% luck, -50% poach)", math.abs(IpoServer.perk(d, "FasterEggs") - 0.7) < 1e-9
+	and math.abs(IpoServer.perk(d, "BaseLuck") - 0.8) < 1e-9 and math.abs(IpoServer.perk(d, "CheaperPoach") - 0.5) < 1e-9)
+d.ipo.shares = 500
+for _, key in ipairs({ "FasterEggs", "BaseLuck", "CheaperPoach" }) do
+	ok, msg = buy(p, key)
+	check(key .. ": no level past the new max, nothing spent", ok == false and d.ipo.shares == 500 and msg:find("max level") ~= nil, msg)
+end
+check("every purchase was saved", saves == #order)
+saved = IpoServer.serialize(d)
+check("the new levels are saved", saved.perks.FasterEggs == 7 and saved.perks.BaseLuck == 8 and saved.perks.CheaperPoach == 10 and saved.perks.OfflineCap == 4)
+local p2, d2 = join(saved)
+check("... and load again", d2.ipo.perks.FasterEggs == 7 and d2.ipo.perks.BaseLuck == 8 and d2.ipo.perks.CheaperPoach == 10 and d2.ipo.shares == 500)
+check("buying a perk needs the Shares (no negative Shares)", (function()
+	d2.ipo.shares = 0
+	local bought = buy(p2, "ExtraSlot")
+	return bought == false and d2.ipo.shares == 0 and d2.ipo.perks.ExtraSlot == 3 -- already max: refused either way
+end)())
+
+-- An old save with some low levels: the level costs are what they were
+local p3, d3 = join({ count = 2, shares = 15, perks = { FasterEggs = 2, BaseLuck = 1, CheaperPoach = 4 } })
+check("a save with low levels keeps them", d3.ipo.perks.FasterEggs == 2 and d3.ipo.perks.BaseLuck == 1 and d3.ipo.perks.CheaperPoach == 4 and d3.ipo.perks.ExtraSlot == nil)
+ok = buy(p3, "FasterEggs")
+check("level 3 of Faster Recruiting still costs 20 (15 Shares: refused)", ok == false and d3.ipo.shares == 15)
+d3.ipo.shares = 20
+ok = buy(p3, "FasterEggs")
+check("... and 20 Shares buy it", ok == true and d3.ipo.perks.FasterEggs == 3 and d3.ipo.shares == 0)
+
+-- 4. Clamp on load: bad or too-high saved levels never exceed the max (or go below 0)
+WARNINGS = {}
+local p4, d4 = join({ perks = { FasterEggs = 99, BaseLuck = 9, CheaperPoach = 11, ExtraIncubator = 3, ExtraSlot = -4, OfflineCap = 0 / 0, Nonsense = 2 } })
+check("clamp: Faster Recruiting 99 -> 7, Talent Scouts 9 -> 8, Recruiter Network 11 -> 10", d4.ipo.perks.FasterEggs == 7 and d4.ipo.perks.BaseLuck == 8 and d4.ipo.perks.CheaperPoach == 10)
+check("clamp: levels past the old max of a perk that was not extended (Extra Incubator 3 -> 2)", d4.ipo.perks.ExtraIncubator == 2)
+check("clamp: negative and NaN levels become 0", d4.ipo.perks.ExtraSlot == 0 and d4.ipo.perks.OfflineCap == 0)
+check("an unknown perk in a save is skipped with a warning", d4.ipo.perks.Nonsense == nil and #WARNINGS == 1, #WARNINGS)
+check("a level that is not a number loads as 0", (function()
+	local _, d5 = join({ perks = { FasterEggs = "lots" } })
+	return d5.ipo.perks.FasterEggs == 0
+end)())
+check("a save with no IPO section loads with no perks", (function()
+	local _, d6 = join(nil)
+	return next(d6.ipo.perks) == nil and d6.ipo.shares == 0
+end)())
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 NEXTHIRE_TESTS = r"""-- Tests for DailyClient's egg-day line for restricted players (the code between its NEXTHIRE markers, FR-13) ----
 local print_real = print
 local passed, failed = 0, 0
@@ -1386,6 +1780,17 @@ def known_sections_line():
     raise ValueError("KNOWN_SECTIONS not found in TycoonCore.lua")
 
 
+def sim_perk_costs_lua():
+    """IPO_PERK_COSTS from tools/economy_sim.py as a Luau table (read with ast, the sim is not run)."""
+    with open(os.path.join(ROOT, "tools", "economy_sim.py"), encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "IPO_PERK_COSTS" for t in node.targets):
+            costs = ast.literal_eval(node.value)
+            return "{ " + ", ".join(f'{key} = {{ {", ".join(str(c) for c in levels)} }}' for key, levels in costs.items()) + " }"
+    raise SystemExit("IPO_PERK_COSTS not found in tools/economy_sim.py")
+
+
 def run_luau(luau, source):
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
@@ -1432,7 +1837,9 @@ def main():
         code = 1
     with open(os.path.join(ROOT, "CreatureConfig.lua"), encoding="utf-8") as f:
         creature_config = f.read()
-    result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config))
+    with open(os.path.join(ROOT, "IpoConfig.lua"), encoding="utf-8") as f:
+        ipo_config = f.read()
+    result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config).replace("__IPOCONFIG__", ipo_config))
     print("CreatureConfig odds check: " + (result7.stdout.strip() or result7.stderr.strip()))
     if result7.returncode != 0 or " 0 failed" not in result7.stdout:
         code = 1
@@ -1448,7 +1855,7 @@ def main():
     print("TycoonCore join re-read check: " + (result10.stdout.strip() or result10.stderr.strip()))
     if result10.returncode != 0 or " 0 failed" not in result10.stdout:
         code = 1
-    result11 = run_luau(luau, FIXED_TESTS.replace("__CREATURECONFIG__", creature_config))
+    result11 = run_luau(luau, FIXED_TESTS.replace("__CREATURECONFIG__", creature_config).replace("__IPOCONFIG__", ipo_config))
     print("CreatureConfig fixed order check: " + (result11.stdout.strip() or result11.stderr.strip()))
     if result11.returncode != 0 or " 0 failed" not in result11.stdout:
         code = 1
@@ -1467,6 +1874,13 @@ def main():
     result14 = run_luau(luau, NEXTHIRE_TESTS.replace("__NEXTHIRE__", marked_source("NEXTHIRE", "DailyClient.lua")))
     print("DailyClient next hire check: " + (result14.stdout.strip() or result14.stderr.strip()))
     if result14.returncode != 0 or " 0 failed" not in result14.stdout:
+        code = 1
+    with open(os.path.join(ROOT, "IpoServer.lua"), encoding="utf-8") as f:
+        ipo_server = f.read()
+    result15 = run_luau(luau, IPOSHOP_TESTS.replace("__IPOCONFIG__", ipo_config).replace("__SHOPCONFIG__", shop_config).replace("__IPOSERVER__", ipo_server)
+                        .replace("__SIMCOSTS__", sim_perk_costs_lua()))
+    print("IPO shop check (D1, 1,770 Shares): " + (result15.stdout.strip() or result15.stderr.strip()))
+    if result15.returncode != 0 or " 0 failed" not in result15.stdout:
         code = 1
     return code
 

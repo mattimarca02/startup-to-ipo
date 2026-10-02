@@ -197,39 +197,57 @@ end
 -- Returns a list, common to rare (config order inside a rarity):
 --   { creature = <Creatures entry>, rarity = "Common", chance = 0.1333..., units = 1333 }
 -- units are hundredths of a percent (ODDS_UNITS = 100%). They're rounded with the largest-remainder
--- method, so they always add up to exactly ODDS_UNITS, and every possible hire shows at least 0.01%.
+-- method inside each rarity (rarities first, then the creatures of a rarity), so the rarities add up to
+-- exactly ODDS_UNITS, each rarity's creatures add up to that rarity's number, and every possible hire
+-- shows at least 0.01%.
 CreatureConfig.ODDS_UNITS = 10000
 
-function CreatureConfig.getCreatureOdds(egg, luckMultiplier)
-	local list = {}
-	for _, entry in ipairs(CreatureConfig.getOdds(egg, luckMultiplier)) do
-		local creatures = CreatureConfig.creaturesOfRarity(entry.rarity)
-		for _, creature in ipairs(creatures) do
-			table.insert(list, { creature = creature, rarity = entry.rarity, chance = entry.chance / #creatures })
-		end
-	end
-	if #list == 0 then return list end
-
-	-- Round down, then give the units still missing to the biggest remainders (ties: list order)
-	local total = 0
-	local byRemainder = {}
-	for i, item in ipairs(list) do
-		local exact = item.chance * CreatureConfig.ODDS_UNITS
-		item.units = math.floor(exact)
-		total += item.units
-		table.insert(byRemainder, { item = item, remainder = exact - item.units, order = i })
+-- Largest-remainder rounding: whole numbers (never negative) that add up to exactly `total`, each one the
+-- floor or the floor + 1 of its exact value. Ties go to the earlier entry. `exact` is a list of numbers.
+local function largestRemainder(exact, total)
+	local result, used, byRemainder = {}, 0, {}
+	for i, value in ipairs(exact) do
+		result[i] = math.floor(value)
+		used += result[i]
+		table.insert(byRemainder, { index = i, remainder = value - result[i] })
 	end
 	table.sort(byRemainder, function(a, b)
 		if a.remainder ~= b.remainder then
 			return a.remainder > b.remainder
 		end
-		return a.order < b.order
+		return a.index < b.index
 	end)
 	local i = 1
-	while total < CreatureConfig.ODDS_UNITS do
-		byRemainder[i].item.units += 1
-		total += 1
+	while used < total and #byRemainder > 0 do
+		result[byRemainder[i].index] += 1
+		used += 1
 		i = i % #byRemainder + 1
+	end
+	return result
+end
+
+function CreatureConfig.getCreatureOdds(egg, luckMultiplier)
+	-- Rounding is done inside each rarity: first the rarities (largest remainder, so a 70% rarity shows
+	-- 70.00%, not 69.99%), then the creatures of that rarity share their rarity's units. Display only:
+	-- the server rolls with getOdds, never with these units.
+	local rarities = CreatureConfig.getOdds(egg, luckMultiplier)
+	local exactRarity = {}
+	for i, entry in ipairs(rarities) do
+		exactRarity[i] = entry.chance * CreatureConfig.ODDS_UNITS
+	end
+	local rarityUnits = largestRemainder(exactRarity, CreatureConfig.ODDS_UNITS)
+
+	local list = {}
+	for r, entry in ipairs(rarities) do
+		local creatures = CreatureConfig.creaturesOfRarity(entry.rarity)
+		local exactCreature = {}
+		for c = 1, #creatures do
+			exactCreature[c] = rarityUnits[r] / #creatures
+		end
+		local creatureUnits = largestRemainder(exactCreature, rarityUnits[r])
+		for c, creature in ipairs(creatures) do
+			table.insert(list, { creature = creature, rarity = entry.rarity, chance = entry.chance / #creatures, units = creatureUnits[c] })
+		end
 	end
 	-- A possible hire never shows 0.00%: it gets 0.01%, taken from the most likely one
 	for _, item in ipairs(list) do
@@ -248,7 +266,8 @@ function CreatureConfig.getCreatureOdds(egg, luckMultiplier)
 end
 
 -- The same odds added up per rarity (common to rare): { { rarity = "Common", units = 4000 }, ... }.
--- They're sums of the rounded per-creature units, so they also add up to exactly 100%.
+-- They're sums of the rounded per-creature units, which are rounded inside each rarity, so they are the
+-- rounded rarity chances and add up to exactly 100%.
 function CreatureConfig.rarityOdds(creatureOdds)
 	local summary, byRarity = {}, {}
 	for _, item in ipairs(creatureOdds) do

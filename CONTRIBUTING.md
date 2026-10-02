@@ -112,3 +112,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |

@@ -66,11 +66,18 @@ IpoConfig.ResetNames = {
 
 -- IPO shop: permanent perks bought with Shares. Each level adds perLevel (see "effect" for
 -- what that number means). costs[n] = Shares for level n, so #costs is the max level.
+-- The whole shop costs 1,770 Shares (D1, docs/D1_SHOP_OPTIONS.md): 525 in the original levels,
+-- +1,245 in the "tier 2" levels (6 and up) at the end of Faster Recruiting, Talent Scouts and
+-- Recruiter Network. Shipped level costs never change (saves
+-- keep their levels); to enlarge the shop add levels at the end. Only these three perks can grow:
+-- more incubators, desks or offline hours would speed up every IPO. Keep Faster Recruiting at -70%
+-- or less (Instant Hatch) and Recruiter Network at -50% or less. The Shop total is checked by
+-- tools/daily_test.py.
 IpoConfig.Perks = {
 	{
 		key = "FasterEggs", name = "Faster Recruiting", icon = "⏱️",
 		description = "Eggs hatch faster.", perLevel = 0.1, effect = "hatchTime", -- -10% hatch time per level
-		costs = { 5, 10, 20, 35, 50 },
+		costs = { 5, 10, 20, 35, 50, 90, 140 }, -- levels 6-7: -60%, -70%
 	},
 	{
 		key = "ExtraIncubator", name = "Extra Incubator", icon = "🥚",
@@ -91,12 +98,12 @@ IpoConfig.Perks = {
 		key = "BaseLuck", name = "Talent Scouts", icon = "🍀",
 		-- Paid Random Items policy: an odds modifier says what it does in numbers. Keep "10%" equal to perLevel.
 		description = "Odds weight of Rare, Epic and Legendary hires +10% per level. Exact odds: Eggs tab.", perLevel = 0.1, effect = "luck", -- +10% luck per level
-		costs = { 5, 10, 20, 35, 50 },
+		costs = { 5, 10, 20, 35, 50, 80, 120, 175 }, -- levels 6-8: +60%, +70%, +80%
 	},
 	{
 		key = "CheaperPoach", name = "Recruiter Network", icon = "🤝",
 		description = "Poaching costs less.", perLevel = 0.05, effect = "poachDiscount", -- -5% poach cost per level
-		costs = { 5, 10, 15, 20, 25 },
+		costs = { 5, 10, 15, 20, 25, 50, 75, 110, 165, 240 }, -- levels 6-10: -30% ... -50%
 	},
 }
 

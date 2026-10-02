@@ -114,8 +114,8 @@ IPO_SHARES_EXPONENT = 0.5           # IpoConfig.SharesExponent
 SHAREHOLDER_MULT = 2                # ShopConfig Passes.Shareholder: 2x Shares per IPO (199 R$)
 IPO_COOLDOWN_SECONDS = 60           # IpoConfig.CooldownSeconds (not modeled: every gap between IPOs is far longer)
 IPO_PERK_COSTS = {                  # IpoConfig.Perks: Shares for each level, per perk (total = everything in the IPO shop)
-    "FasterEggs": [5, 10, 20, 35, 50], "ExtraIncubator": [15, 40], "ExtraSlot": [10, 25, 50],
-    "OfflineCap": [5, 10, 20, 35], "BaseLuck": [5, 10, 20, 35, 50], "CheaperPoach": [5, 10, 15, 20, 25],
+    "FasterEggs": [5, 10, 20, 35, 50, 90, 140], "ExtraIncubator": [15, 40], "ExtraSlot": [10, 25, 50],
+    "OfflineCap": [5, 10, 20, 35], "BaseLuck": [5, 10, 20, 35, 50, 80, 120, 175], "CheaperPoach": [5, 10, 15, 20, 25, 50, 75, 110, 165, 240],
 }
 
 # --- Daily login calendar (milestone 6). Source: DailyConfig.lua ---
