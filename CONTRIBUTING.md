@@ -88,10 +88,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
-| ShopServer | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| TycoonCore | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
-| ShopConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
