@@ -22,6 +22,13 @@ ShopConfig.DebugInStudio = true
 -- RetrySeconds for up to GiveUpSeconds. The pass is granted only once Roblox says the player owns it.
 ShopConfig.PassConfirm = { RetrySeconds = 5, GiveUpSeconds = 120 }
 
+-- Roblox's Paid Random Items policy (review finding FR-13, decision D9 option B). On every join the
+-- server asks PolicyService if paid random items are restricted for the player (ArePaidRandomItemsRestricted).
+-- It runs at the same time as the pass check, and loading waits for it at most TimeoutSeconds (the
+-- same 10 s as the pass check). A failed try is asked again after RetrySeconds, Attempts times in all.
+-- Fail closed: if Roblox errors or answers too late, the player counts as restricted all session.
+ShopConfig.PolicyCheck = { TimeoutSeconds = 10, Attempts = 3, RetrySeconds = 1 }
+
 -- Game passes: bought once, owned forever. Cash multipliers stack (2x Cash + VIP = 3x).
 ShopConfig.Passes = {
 	{

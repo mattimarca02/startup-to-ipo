@@ -13,6 +13,8 @@
 --   ShopServer.addProductHandler(field, handler)   -> grants product effects that live in another system
 -- And for the IPO (IpoServer):
 --   ShopServer.getSharesMultiplier(player)         -> 2 with the Shareholder pass, otherwise 1
+-- And for Roblox's Paid Random Items policy (FR-13, D9 option B):
+--   ShopServer.isRandomRestricted(player)          -> true if they get no random rolls (fixed hire order)
 -- And for anyone: ShopServer.notify(player, text)  -> a pop-up message (TycoonCore's saving warning)
 
 local Players = game:GetService("Players")
@@ -21,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local PhysicsService = game:GetService("PhysicsService")
+local PolicyService = game:GetService("PolicyService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 
@@ -141,6 +144,7 @@ local function publish(player)
 	player:SetAttribute("ChatTagColor", tagColor)
 	player:SetAttribute("LuckBoostUntil", shop.luckUntil)
 	player:SetAttribute("InstantHatches", shop.instantHatches)
+	player:SetAttribute("RandomRestricted", shop.randomRestricted) -- screens: next hire instead of odds
 
 	refreshCharacter(player)
 	core.updateIncome(player)
@@ -230,6 +234,13 @@ function ShopServer.getSharesMultiplier(player)
 		end
 	end
 	return multiplier
+end
+
+-- Paid random items restricted for this player (PolicyService, checked on every join, never saved)?
+-- Fail closed: true while the check runs, if it failed or was too slow, and if there is no data.
+function ShopServer.isRandomRestricted(player)
+	local shop = getShop(player)
+	return shop == nil or shop.randomRestricted ~= false
 end
 
 -- true while the join-time pass check is still running: the player's passes may not be known yet
@@ -341,6 +352,66 @@ local function onPassPromptFinished(player, passId, wasPurchased)
 end
 -- PASSCHECK-END
 
+-- Paid random items (Roblox policy, review finding FR-13, decision D9 option B) ------------
+
+-- POLICY-START
+-- (tools/daily_test.py runs the code between the POLICY markers, so keep it free of Roblox calls except those it fakes.)
+
+-- Asks Roblox if paid random items are restricted for this player. Returns true or false, or nil
+-- if Roblox couldn't answer after every try (ShopConfig.PolicyCheck).
+local function askRandomPolicy(player)
+	local settings = ShopConfig.PolicyCheck
+	for attempt = 1, settings.Attempts do
+		local ok, result = pcall(function()
+			return PolicyService:GetPolicyInfoForPlayerAsync(player)
+		end)
+		if ok and typeof(result) == "table" and typeof(result.ArePaidRandomItemsRestricted) == "boolean" then
+			return result.ArePaidRandomItemsRestricted
+		end
+		warn("Policy check failed (attempt " .. attempt .. "): " .. (ok and "no ArePaidRandomItemsRestricted in the answer" or tostring(result)))
+		if attempt < settings.Attempts then
+			task.wait(settings.RetrySeconds)
+		end
+	end
+	return nil
+end
+
+-- Starts the policy check for a joining player, at the same time as the pass check. Fail closed: the
+-- player is restricted from the start, and only a clear "not restricted" that comes in time lifts it.
+-- Returns the check: state is "checking", then "done", or "late" once loading stopped waiting for it
+-- (then the player stays restricted for the whole session, whatever Roblox answers afterwards).
+local function startPolicyCheck(player, shop)
+	shop.randomRestricted = true
+	local check = { state = "checking", startedAt = os.clock() }
+	task.spawn(function()
+		local ok, restricted = pcall(askRandomPolicy, player)
+		if not ok then
+			warn("Policy check for " .. player.Name .. " failed: " .. tostring(restricted))
+		end
+		if check.state ~= "checking" then
+			warn("Policy check for " .. player.Name .. " answered after loading went on: restricted for this session")
+			return
+		end
+		check.state = "done"
+		shop.randomRestricted = not (ok and restricted == false)
+	end)
+	return check
+end
+
+-- true while loading should still wait for the policy answer (at most ShopConfig.PolicyCheck.TimeoutSeconds)
+local function policyCheckWaiting(check)
+	return check.state == "checking" and os.clock() - check.startedAt < ShopConfig.PolicyCheck.TimeoutSeconds
+end
+
+-- Loading goes on: a check that hasn't answered yet is too late from now on (restricted all session)
+local function stopPolicyWait(player, check)
+	if check.state == "checking" then
+		check.state = "late"
+		warn("Policy check for " .. player.Name .. " is slow: paid random items stay restricted this session")
+	end
+end
+-- POLICY-END
+
 -- Saving (TycoonCore calls these) ---------------------------------------
 
 -- Called right after the player's save loads. savedShop is the "shop" part of the save, or nil.
@@ -352,6 +423,7 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		instantHatches = 0, -- unused Instant Hatch tokens
 		receipts = {}, -- PurchaseIds already granted, oldest first (saved)
 		receiptSet = {}, -- the same PurchaseIds as a quick lookup
+		randomRestricted = true, -- paid random items restricted (PolicyService, checked on every join, not saved)
 	}
 	if typeof(savedShop) == "table" then -- bad values are skipped, never an error
 		local luckLeft = tonumber(savedShop.luckLeft) or 0
@@ -381,6 +453,9 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	-- Ask Roblox which passes they own, but never let a slow answer hold up loading: after
 	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
 	-- Passes aren't saved, so a save written before the answer is still complete.
+	-- The paid random items check runs at the same time, under its own cap (the same 10 s), so the
+	-- join never waits longer than before. It isn't saved either: it's asked again on every join.
+	local policyCheck = startPolicyCheck(player, shop)
 	local state = "checking"
 	passCheckPending[player] = os.clock() -- the VIP lounge and the door wait for the answer
 	task.spawn(function()
@@ -392,13 +467,14 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		state = "done"
 	end)
 	local deadline = os.clock() + PASS_CHECK_TIMEOUT
-	while state == "checking" and os.clock() < deadline do
+	while (state == "checking" and os.clock() < deadline) or policyCheckWaiting(policyCheck) do
 		task.wait(0.1)
 	end
 	if state == "checking" then
 		state = "gaveUp"
 		warn("Pass check for " .. player.Name .. " is slow: loading goes on, passes apply when Roblox answers")
 	end
+	stopPolicyWait(player, policyCheck) -- no answer yet: restricted for this session (fail closed)
 	publish(player)
 end
 
