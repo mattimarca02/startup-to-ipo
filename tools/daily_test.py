@@ -19,6 +19,7 @@ ShopServer's PolicyService check (fail closed, the 10 s cap) and what stays on s
 It changes nothing in the game or in Studio.
 """
 
+import ast
 import os
 import shutil
 import subprocess
@@ -754,18 +755,26 @@ local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
 local CreatureConfig = (function()
 __CREATURECONFIG__
 end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+-- Talent Scouts luck comes from IpoConfig (1 + perkValue), never from a number typed in here
+local TOP_LEVEL = #IpoConfig.getPerk("BaseLuck").costs
+local function luckAt(level) return 1 + IpoConfig.perkValue("BaseLuck", level) end
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
 end
 local UNITS = CreatureConfig.ODDS_UNITS
+check("Talent Scouts: level 0 has no luck, the top level has the most", luckAt(0) == 1 and luckAt(TOP_LEVEL) > luckAt(TOP_LEVEL - 1) and luckAt(TOP_LEVEL + 5) == luckAt(TOP_LEVEL))
 check("the real config loads without warnings", #WARNINGS == 0, WARNINGS[1])
 check("units are hundredths of a percent", UNITS == 10000)
 
 -- Every egg, in every luck state the server can roll with: no boost, Luck Boost (x2), the strongest
--- Talent Scouts perk (+50%, or +80% at the top level after D1), and both
-local STATES = { { "no boost", 1 }, { "Luck Boost", 2 }, { "Talent Scouts Lv 5", 1.5 }, { "Luck Boost + Talent Scouts Lv 5", 3 },
-	{ "Talent Scouts Lv 8 (D1 tier 2)", 1.8 }, { "Luck Boost + Talent Scouts Lv 8", 3.6 } }
+-- Talent Scouts perk (level 5 = the old top, the top level after D1), and both. The perk's luck is read
+-- from IpoConfig; Luck Boost's x2 is the ShopConfig product's luckMultiplier.
+local STATES = { { "no boost", 1 }, { "Luck Boost", 2 }, { "Talent Scouts Lv 5", luckAt(5) }, { "Luck Boost + Talent Scouts Lv 5", 2 * luckAt(5) },
+	{ "Talent Scouts Lv " .. TOP_LEVEL .. " (top)", luckAt(TOP_LEVEL) }, { "Luck Boost + Talent Scouts Lv " .. TOP_LEVEL, 2 * luckAt(TOP_LEVEL) } }
 for _, egg in ipairs(CreatureConfig.Eggs) do
 	for _, state in ipairs(STATES) do
 		local label = egg.name .. ", " .. state[1]
@@ -797,11 +806,11 @@ end
 
 -- Every Talent Scouts level, with and without Luck Boost
 local allExact = true
-for level = 0, 8 do -- 8 = the top Talent Scouts level (IpoConfig, D1)
+for level = 0, TOP_LEVEL do
 	for _, boost in ipairs({ 1, 2 }) do
 		for _, egg in ipairs(CreatureConfig.Eggs) do
 			local total = 0
-			for _, item in ipairs(CreatureConfig.getCreatureOdds(egg, (1 + 0.1 * level) * boost)) do total += item.units end
+			for _, item in ipairs(CreatureConfig.getCreatureOdds(egg, luckAt(level) * boost)) do total += item.units end
 			if total ~= UNITS then allExact = false end
 		end
 	end
@@ -810,10 +819,9 @@ check("every egg x every Talent Scouts level x Luck Boost on/off: exactly 100.00
 
 -- Per rarity (FR-12 follow-up, review finding b): the rounding is done inside each rarity, so the rarity
 -- line shows the rounded true chance and adds up to exactly 100.00 at every level, with and without Luck Boost
-local function luckAt(level) return 1 + 0.1 * level end
 local rarityExact, rarityNear, rarityStrings, perRarityCreatures, rarityCount = true, true, true, true, 0
 local worstRarity = 0
-for level = 0, 8 do
+for level = 0, TOP_LEVEL do
 	for _, boost in ipairs({ 1, 2 }) do
 		for _, egg in ipairs(CreatureConfig.Eggs) do
 			local luck = luckAt(level) * boost
@@ -847,7 +855,7 @@ check("every egg x Talent Scouts 0-8 x Luck Boost on/off: the per-rarity units a
 check("... and so do the per-rarity strings the screens show, added up", rarityStrings)
 check("each shown rarity is its true chance, rounded (off by < 0.01%)", rarityNear, worstRarity)
 check("the creatures of one rarity differ by at most 0.01% from each other", perRarityCreatures)
-check("that loop covered 9 levels x 2 states x every egg", rarityCount == 9 * 2 * #CreatureConfig.Eggs, rarityCount)
+check("that loop covered every level x 2 states x every egg", rarityCount == (TOP_LEVEL + 1) * 2 * #CreatureConfig.Eggs, rarityCount)
 local function rarityLine(egg, luck)
 	local parts = {}
 	for _, entry in ipairs(CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, luck))) do
@@ -1055,6 +1063,12 @@ local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
 local CreatureConfig = (function()
 __CREATURECONFIG__
 end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+-- Talent Scouts luck comes from IpoConfig (1 + perkValue), never from a number typed in here
+local TOP_LEVEL = #IpoConfig.getPerk("BaseLuck").costs
+local function luckAt(level) return 1 + IpoConfig.perkValue("BaseLuck", level) end
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
@@ -1071,8 +1085,8 @@ end
 
 -- Every egg, without luck and at every Talent Scouts level (Luck Boost never applies to a fixed order)
 for _, egg in ipairs(CreatureConfig.Eggs) do
-	for level = 0, 8 do -- 8 = the top Talent Scouts level (IpoConfig, D1)
-		local luck = 1 + 0.1 * level
+	for level = 0, TOP_LEVEL do
+		local luck = luckAt(level)
 		local label = egg.name .. ", Talent Scouts Lv " .. level
 		local odds = CreatureConfig.getOdds(egg, luck)
 		local byRarity, total = {}, 0
@@ -1596,6 +1610,19 @@ check("stages 0 / 1800 / 6300 / 23400 / 81000, growth x2.5 per IPO", IpoConfig.s
 	and IpoConfig.stageValuation(4, 0) == 23400 and IpoConfig.ipoValuation(0) == 81000 and IpoConfig.StageGrowthPerIpo == 2.5 and IpoConfig.ipoValuation(1) == 202500)
 check("multiplier and cooldown unchanged", IpoConfig.BonusPerIpo == 0.5 and IpoConfig.BonusExponent == 0.75 and IpoConfig.CooldownSeconds == 60)
 
+-- IPO_PERK_COSTS in tools/economy_sim.py (the sim's copy, read by the Python side) must equal the real costs
+local SIM_COSTS = __SIMCOSTS__
+local sameCosts, simKeys = true, 0
+for key, costs in pairs(SIM_COSTS) do
+	simKeys += 1
+	local perk = IpoConfig.getPerk(key)
+	if not perk or #perk.costs ~= #costs then sameCosts = false else
+		for i, cost in ipairs(costs) do if perk.costs[i] ~= cost then sameCosts = false end end
+	end
+end
+check("economy_sim.py IPO_PERK_COSTS has the same perks as IpoConfig", simKeys == #IpoConfig.Perks, simKeys)
+check("economy_sim.py IPO_PERK_COSTS equals the IpoConfig costs, level by level", sameCosts)
+
 -- 3. Saves: old saves with perks load and behave exactly as before; the new levels can be bought
 local saves = 0
 local CORE = {
@@ -1753,6 +1780,17 @@ def known_sections_line():
     raise ValueError("KNOWN_SECTIONS not found in TycoonCore.lua")
 
 
+def sim_perk_costs_lua():
+    """IPO_PERK_COSTS from tools/economy_sim.py as a Luau table (read with ast, the sim is not run)."""
+    with open(os.path.join(ROOT, "tools", "economy_sim.py"), encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "IPO_PERK_COSTS" for t in node.targets):
+            costs = ast.literal_eval(node.value)
+            return "{ " + ", ".join(f'{key} = {{ {", ".join(str(c) for c in levels)} }}' for key, levels in costs.items()) + " }"
+    raise SystemExit("IPO_PERK_COSTS not found in tools/economy_sim.py")
+
+
 def run_luau(luau, source):
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
@@ -1799,7 +1837,9 @@ def main():
         code = 1
     with open(os.path.join(ROOT, "CreatureConfig.lua"), encoding="utf-8") as f:
         creature_config = f.read()
-    result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config))
+    with open(os.path.join(ROOT, "IpoConfig.lua"), encoding="utf-8") as f:
+        ipo_config = f.read()
+    result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config).replace("__IPOCONFIG__", ipo_config))
     print("CreatureConfig odds check: " + (result7.stdout.strip() or result7.stderr.strip()))
     if result7.returncode != 0 or " 0 failed" not in result7.stdout:
         code = 1
@@ -1815,7 +1855,7 @@ def main():
     print("TycoonCore join re-read check: " + (result10.stdout.strip() or result10.stderr.strip()))
     if result10.returncode != 0 or " 0 failed" not in result10.stdout:
         code = 1
-    result11 = run_luau(luau, FIXED_TESTS.replace("__CREATURECONFIG__", creature_config))
+    result11 = run_luau(luau, FIXED_TESTS.replace("__CREATURECONFIG__", creature_config).replace("__IPOCONFIG__", ipo_config))
     print("CreatureConfig fixed order check: " + (result11.stdout.strip() or result11.stderr.strip()))
     if result11.returncode != 0 or " 0 failed" not in result11.stdout:
         code = 1
@@ -1835,11 +1875,10 @@ def main():
     print("DailyClient next hire check: " + (result14.stdout.strip() or result14.stderr.strip()))
     if result14.returncode != 0 or " 0 failed" not in result14.stdout:
         code = 1
-    with open(os.path.join(ROOT, "IpoConfig.lua"), encoding="utf-8") as f:
-        ipo_config = f.read()
     with open(os.path.join(ROOT, "IpoServer.lua"), encoding="utf-8") as f:
         ipo_server = f.read()
-    result15 = run_luau(luau, IPOSHOP_TESTS.replace("__IPOCONFIG__", ipo_config).replace("__SHOPCONFIG__", shop_config).replace("__IPOSERVER__", ipo_server))
+    result15 = run_luau(luau, IPOSHOP_TESTS.replace("__IPOCONFIG__", ipo_config).replace("__SHOPCONFIG__", shop_config).replace("__IPOSERVER__", ipo_server)
+                        .replace("__SIMCOSTS__", sim_perk_costs_lua()))
     print("IPO shop check (D1, 1,770 Shares): " + (result15.stdout.strip() or result15.stderr.strip()))
     if result15.returncode != 0 or " 0 failed" not in result15.stdout:
         code = 1
