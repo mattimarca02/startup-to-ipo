@@ -473,3 +473,62 @@ Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.r
 | Daily calendar | Free, fixed, shown in advance, no Robux in its window, odds on tap for the egg days. Fits the policy (no paid random item). |
 | ShopConfig descriptions | Factual and accurate except the Luck Boost example (FR-12). "Shares", "IPO" and "stock options" are startup satire; Shares can't be traded or cashed out. Keep it that way: no wording that suggests real investing or real money. |
 | Prices shown vs charged | The shop shows `ShopConfig.price`; Roblox charges the Creator Hub price. The checklist's C5 mismatch (180 / 135 / 225 on the store page) is still open. |
+
+---
+
+## 8. Performance and scale
+
+### Server loops
+
+| Loop | Interval | Work per run | Cost at 6 players |
+|---|---|---|---|
+| Income (`TycoonCore.lua:648-659`) | 1 s | 2 IntValue writes and 2 attribute writes per player | trivial |
+| Autosave (`:662-669`) | 60 s | one save per player, one after another | 6 `SetAsync` |
+| Incubators and Auto-Hatch (`EmployeeServer.lua:711-729`) | 1 s | per incubator: label text (only when it changes) and 3 property sets; `hasAutoHatch` builds a small table each time | ~30 incubators |
+| Onboarding (`OnboardingServer.lua:341-355`) | 1 s | arrow target and goals, attributes only when changed | trivial |
+| Daily (`DailyServer.lua:357-371`) | 1 s | `status` and ~11 attribute checks, written only when changed | trivial |
+| Counter-Offer expiry (`PoachServer.lua:902-914`) | 1 s | one check per player | trivial |
+| VIP lounge sweep (`ShopServer.lua:688-699`) | 0.5 s | one position check per player | trivial |
+| Pass recheck (`ShopServer.lua:702-712`) | 120 s | asks Roblox about passes not owned yet, **one player at a time** (each waits for all its answers) | up to 6 x 5 web calls; slow only when Roblox is slow |
+
+Each loop is a single thread for the whole server, not one per player. No loop yields inside its player loop except autosave and the pass recheck, and both are fine at 6 players.
+
+### Instances and memory per player
+
+About 370 instances per player: the plot (floor, sign, 6 upgrades, green pad), up to 5 incubators (7 instances each), the IPO and HR pads, and up to 11 employees (about 28 instances each: parts, sphere meshes and a name tag). A full server holds about 2,200. Server-side data per player is a few KB of tables. No per-player thread, connection or table outlives the player (section 6), except FR-10's empty table.
+
+### A full server
+
+The game supports exactly **6 players per server**: `MAX_PLOTS = 6` (`TycoonCore.lua:62`), and the 7th joiner is kicked (`:509-518`).
+
+### FR-15 (High): nothing sets the Roblox server size to 6, but the game kicks the 7th player
+
+**Where:** `TycoonCore.lua:62`, `:509-518`. Not mentioned in README.md, CONTRIBUTING.md, ROADMAP.md or docs/PREPUBLISH.md (C12 says "max players" without a number).
+
+**How it breaks:**
+1. The place's **Max Players** (Creator Hub > experience > Places > the place > Max Players, or Studio Game Settings > Places) is bigger than 6. New places don't default to 6. I couldn't confirm today's default from the docs, so check the real value.
+2. Roblox fills servers up to that number. Every player after the 6th gets "This server is full, please join another one" seconds after loading. Friends who "Join" each other into a full server are bounced every time.
+
+**Impact:** at launch, a large share of joins in busy servers fail. Failed joins and short sessions also hurt Roblox's discovery signals (ROADMAP.md:38, :62).
+
+**Smallest fix (S):** set Max Players to **6** before publishing and add it to C12 with the number. Optional code safety net: at startup, `warn` if `Players.MaxPlayers > MAX_PLOTS`. FR-3 then matters more (a slow leave save on a full server).
+
+### FR-16 (Low): every phone animates every nearby employee every frame
+
+**Where:** `EmployeeClient.lua:918-942`.
+
+**How it breaks:** on every `Heartbeat`, each client moves every employee model within 160 studs of its camera with `PivotTo`. Plots are 90 studs apart, so a player usually sees 3-4 plots: up to ~44 models of ~15 parts, about 40,000 part moves per second at 60 fps. Fine on a PC; on low-end phones it costs frame rate for decoration.
+
+**Impact:** lower FPS on cheap phones, where most Roblox players are. No gameplay effect.
+
+**Smallest fix (S):** update walkers at about 20 Hz (accumulate `dt`), only within 80 studs, and skip models the camera can't see.
+
+### FR-17 (Low): the shop redraws every card twice a second even when it's closed
+
+**Where:** `ShopClient.lua:619` (`player.AttributeChanged:Connect(refreshAll)`), `:327-331`, `:421-454`; the server changes `IpoValuation` and `IpoBest` every second (`IpoServer.lua:134-135`).
+
+**How it breaks:** every income tick changes two attributes, so ShopClient rebuilds the text of all 12 cards (with string formatting) twice per second for the whole session, window open or not. EmployeeClient and PoachClient already skip the work while their window is closed.
+
+**Impact:** small, constant CPU and garbage on phones.
+
+**Smallest fix (S):** in ShopClient's `refreshAll`, return early when `window.Visible` is false (the open button already calls it when opening).
