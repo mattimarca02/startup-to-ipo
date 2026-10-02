@@ -29,7 +29,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   New server features follow this pattern. Never add a second DataStore, save loop or PlayerAdded data owner.
   Current ones: `ShopServer`, `EmployeeServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `DailyServer` (the daily calendar; its client is `DailyClient`). `DailyServer.setupPlayer` runs last, inside the all-modules-loaded gate, after `EmployeeServer` (a claim can grant an egg). A claim never yields between the "today is free" check and writing `lastClaimDay`.
 - **Configs** are ModuleScripts in ReplicatedStorage:
-  - `ShopConfig`: passes, products, `EggsEnabled`
+  - `ShopConfig`: passes, products, `EggsEnabled`, `PolicyCheck` (the paid random items check on join)
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
   - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
@@ -47,6 +47,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 
 - Game logic, prices, timers, random rolls, slots and income all run on the server.
 - A client only asks, for example `TeamAction("BuyEgg", 2)`. The server checks everything: argument types, ranges, cash, ownership, and `data.ready`. It refuses anything invalid.
+- **Paid random items (FR-13, D9 option B):** `ShopServer.isRandomRestricted(player)` comes from PolicyService on every join and fails closed (error or timeout = restricted for the session). Restricted players never get a random roll (`EmployeeServer.rollCreature` uses the egg's fixed order, `CreatureConfig.fixedHire`) and can't buy items marked `changesOdds` (Luck Boost). A new random reward must follow the same rule.
 - **Never trust the client for purchases:**
   - **Game passes:** re-check ownership with `UserOwnsGamePassAsync`.
   - **Developer products:** grant them only in `ProcessReceipt`. This must stay idempotent, using the saved PurchaseId list, and return `PurchaseGranted` only after the save succeeded.
@@ -93,6 +94,9 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lifetime = number, best = number,            -- Cash earned ever; best valuation on any run (leaderboard)
     lastIpoAt = os.time(),                       -- for the IPO cooldown
     perks = { [perkKey] = level },               -- IPO shop perks
+  },
+  fixedHires = {                                 -- EmployeeServer.serializeFixedHires (optional: written only once used)
+    counts = { [eggKey] = number },              -- hires made from each egg's fixed order (restricted players, FR-13)
   },
   daily = {                                      -- DailyServer.serialize (optional: older saves have none)
     lastClaimDay = number,                       -- UTC day number of the last claim (0 = never)

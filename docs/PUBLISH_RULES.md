@@ -22,6 +22,7 @@ M4 has never been published, so **the version live today is older than M4, and s
   - `V_old` (live before launch, below the floor): ______
   - `V_launch` (the floor): ______
 - A rollback to an allowed version is still lossless only if every update follows CLAUDE.md's rule that new saved data gets its own top-level section (A10).
+- The newest section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
 - If saves were already damaged: Roblox keeps older versions of each DataStore key for a limited time (about 30 days); one player's save can be restored by hand from a version. Slow and manual.
 
 ## 3. Old and new servers must never run at the same time (FR-19)
@@ -31,6 +32,13 @@ M4 has never been published, so **the version live today is older than M4, and s
 - Nobody edits scripts during the publish.
 - After publishing, join and check you're on the new code (for a release that changes the UI, the change is visible; for example the daily gift chip doesn't exist in old versions).
 
+## 3b. Paid random items check (FR-13, D9 option B)
+
+- Every join asks Roblox's `PolicyService` whether paid random items are restricted for the player (UK, Australia, Brazil, Belgium, the Netherlands at the time of writing). Restricted players get a fixed hire order instead of a random roll and no Luck Boost; everything else stays on sale.
+- The check is **fail closed**: if Roblox errors, gives a bad answer or doesn't answer within 10 s (`ShopConfig.PolicyCheck`), the player is treated as restricted for that session. A normal player then gets one session of fixed-order hires (same odds) and their Luck Boost is kept aside, not lost.
+- Not saved: it is asked again on every join, so a region change shows up on the next join.
+- In the server log (F9 > Server), "Policy check ... failed" or "... is slow" now and then is normal; many of them mean Roblox's policy service is having trouble (players get fixed hires until it recovers).
+
 ## 4. Publish order (place with no live players: the launch)
 
 **Before publishing day**
@@ -39,18 +47,19 @@ M4 has never been published, so **the version live today is older than M4, and s
 3. `python3 tools/daily_test.py` passes ("N passed, 0 failed" on every line).
 4. In Creator Hub, open the place's **Version History** and write down the live version as `V_old` (section 2).
 5. Settings that can't change later without side effects: **Max Players = 6**; `DailyConfig.ResetHourUtc` (moving it earlier later gives everyone an extra claim); `ShopConfig.EggsEnabled`; the experience stays private.
+6. Re-read Roblox's current Paid Random Items policy page (https://create.roblox.com/docs/production/monetization/paid-random-items) and the DevForum clarification linked in docs/D9_POLICY_OPTIONS.md. Write down the date you read it and the list of restricted regions it names: ______ (date), ______ (regions). If the rules changed (a new treatment required, Cash multiplier passes counted as paid, odds rules), stop and update D9 before publishing.
 
 **Publishing day**
-6. Creator Hub > the experience > the place's menu > **Shut down all servers** (even if you think none is running).
-7. Studio: **File > Publish to Roblox**.
-8. Right away: **Shut down all servers** again. Never Migrate.
-9. Version History: write down the new version as `V_launch` (section 2). It's the rollback floor.
-10. Join the private game with a second account. Server log (F9 > Server): no "DataStore unavailable", no "Keeping a part of ... save this version doesn't know", no "Could not set up". Rejoin: IPO count, Shares, perks, daily streak and onboarding state are still there.
-11. Real purchases with the second account: one Cash pack, one pass, a Poach Shield; rejoin; nothing doubled, nothing missing.
-12. Reset dev saves only with `RemoveAsync` on a written list of the dev UserIds, never a loop over unknown keys. Then the store page and the public switch.
+7. Creator Hub > the experience > the place's menu > **Shut down all servers** (even if you think none is running).
+8. Studio: **File > Publish to Roblox**.
+9. Right away: **Shut down all servers** again. Never Migrate.
+10. Version History: write down the new version as `V_launch` (section 2). It's the rollback floor.
+11. Join the private game with a second account. Server log (F9 > Server): no "DataStore unavailable", no "Keeping a part of ... save this version doesn't know", no "Could not set up", no "Policy check ... failed". Rejoin: IPO count, Shares, perks, daily streak and onboarding state are still there. Outside the restricted regions the Eggs tab shows each hire's odds and the shop shows Luck Boost (with `EggsEnabled` on); "Next hire from this egg" there means the policy check failed (section 3b).
+12. Real purchases with the second account: one Cash pack, one pass, a Poach Shield; rejoin; nothing doubled, nothing missing.
+13. Reset dev saves only with `RemoveAsync` on a written list of the dev UserIds, never a loop over unknown keys. Then the store page and the public switch.
 
 ## 5. Every later update
 
-- If it changes the save: same order as above (steps 2-3, 6-10), hard shutdown only.
+- If it changes the save: same order as above (steps 2-3, 7-11), hard shutdown only.
 - If it doesn't: a hard shutdown is still the safe default; Migrate only for an update that touches no saved data and no remote, and never for one that adds a save section.
 - Never restore below `V_launch`.

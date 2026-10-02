@@ -18,7 +18,7 @@ Branch `prepublish-fixes`, code at `778a28e`. All `file:line` references point a
 | FR-4 poach-chain copy | Fixed | `e813ca7` |
 | FR-1 failed saves retried and shown | Fixed | `9605320` |
 | FR-5 no session lock | Partly fixed (join re-read); full lock not built | `762b471` |
-| FR-13 PolicyService | Needs decision (D9) | `7f55d13` (docs/D9_POLICY_OPTIONS.md) |
+| FR-13 PolicyService | Fixed (D9 decided: option B, fixed hire order) | `3e42a1b` check, `1afca54` fixed order, `dfe412c` Luck Boost, `ccce737` Eggs tab, `d850a55` restriction changes, `94e30cf` tests (options: `7f55d13`) |
 | FR-15 Max Players 6 | Documented; set it by hand | `ef8edfa` (docs/PUBLISH_RULES.md) |
 | FR-18 rollback floor | Fixed (docs) | `ef8edfa`, A10 rule `387b3d0` |
 | FR-19 hard shutdown only | Fixed (docs) | `ef8edfa` |
@@ -27,6 +27,8 @@ Branch `prepublish-fixes`, code at `778a28e`. All `file:line` references point a
 `tools/daily_test.py` after the fixes: 287 passed, 0 failed (the 175 earlier checks plus 112 new: odds 70, poach move 16, leave save 13, join re-read 13).
 
 Studio scripts to sync: TycoonCore, ShopServer, PoachServer (ServerScriptService); CreatureConfig, ShopConfig, IpoConfig (ReplicatedStorage); EmployeeClient, DailyClient, ShopClient (StarterPlayerScripts).
+
+Round 2 (FR-13, option B): `tools/daily_test.py` 462 passed, 0 failed (the 287 above plus 175 new: fixed order 103, fixed hires and save section 36, policy check 29, save payload 7). Studio scripts to sync: TycoonCore, ShopServer, EmployeeServer (ServerScriptService); CreatureConfig, ShopConfig (ReplicatedStorage); ShopClient, EmployeeClient (StarterPlayerScripts). New save section `fixedHires`: publish with **Shut down all servers**.
 
 ## Severity scale
 
@@ -481,7 +483,7 @@ Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.r
 
 ### FR-13 (High): `ArePaidRandomItemsRestricted` is never checked
 
-> **Status:** **Needs decision** (D9): options in docs/D9_POLICY_OPTIONS.md (`7f55d13`), not built. Recommended: B (fixed hire order for restricted players) plus the PolicyService check.
+> **Status:** **Fixed** with option B (D9 decided 2026-10-02; options in docs/D9_POLICY_OPTIONS.md, `7f55d13`). `3e42a1b`: `ShopServer.setupPlayer` asks `PolicyService:GetPolicyInfoForPlayerAsync` next to the pass check, same 10 s cap, fail closed (an error, a bad or a late answer = restricted for the session), not saved, `RandomRestricted` attribute. `1afca54`: for restricted players `EmployeeServer.rollCreature` makes no random roll; each egg hires from a fixed 100-step order built from the server's weights (`CreatureConfig.fixedHire`), counted per egg in the new top-level save section `fixedHires`. `dfe412c`: Luck Boost hidden and not sold to them (its time is kept aside, never applied while restricted); Cash packs and everything else stay on sale. `ccce737`: the Eggs tab shows "Next hire from this egg" instead of odds for them. `d850a55`: restriction changes between sessions (counter never restarts, no egg lost). `94e30cf`: 175 new checks, 462/462.
 
 **Where:** no `PolicyService` call anywhere (checked with grep over all `.lua` files). Relevant code: `ShopServer.lua:341-397` (join), `EmployeeServer.lua:310-321` (egg purchase), `ShopClient.lua:349-380` (prompts).
 

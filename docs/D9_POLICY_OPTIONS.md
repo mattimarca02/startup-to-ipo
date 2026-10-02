@@ -1,6 +1,8 @@
 # D9: what players in restricted regions see (Paid Random Items)
 
-Decision for Mattia. Nothing here is built yet. Source: review finding FR-13 in docs/reviews/FULL_REVIEW.md, Roblox's [Paid Random Items guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items) and the [2026-05-26 clarification](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622).
+> **Decision (Mattia, 2026-10-02): option B**, the fixed hire order for restricted players, plus the shared PolicyService check, failing closed (if the check errors or times out, the player is restricted for that session). Built on `prepublish-fixes`: `3e42a1b` (check), `1afca54` (fixed order and the `fixedHires` save section), `dfe412c` (Luck Boost), `ccce737` (Eggs tab), `d850a55` (restriction changes, last section below), `94e30cf` (tests). The rest of this page is the comparison the decision was made from.
+
+Source: review finding FR-13 in docs/reviews/FULL_REVIEW.md, Roblox's [Paid Random Items guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items) and the [2026-05-26 clarification](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622).
 
 ## The rule
 
@@ -33,13 +35,23 @@ In `ShopServer.setupPlayer`, next to the pass check and with the same 10 s cap: 
 
 **Size of the regions (estimate, to check after launch):** together the five are roughly a tenth of Roblox's players, and the UK and Australia spend more per player than average. Roblox's Analytics (Audience > Country) will give the real share in the first week.
 
-## Recommendation
+## Recommendation (chosen: B)
 
 **B, plus the shared PolicyService check.** It is the only option that is enforced entirely on the server (the roll), it doesn't depend on how Roblox reads the Cash multiplier passes, it keeps almost all revenue in those markets, and failing closed (treating a player as restricted when the check errors) only gives a normal player one session of fixed-order eggs.
 
 If launch can't wait for B (M effort), ship **A** as a stop-gap only after asking Roblox (Creator Support or the DevForum thread) whether a Cash multiplier pass makes earned Cash "purchased with Robux". If the answer is yes, A isn't enough and B is required.
 
 Either way, answer "Yes, paid random items" in the experience questionnaire (checklist C9), and keep the per-hire odds from FR-12 visible to everyone else.
+
+## How B was built
+
+- **Check:** `ShopServer.setupPlayer`, at the same time as the pass check, loading waits for it at most 10 s (`ShopConfig.PolicyCheck`: 10 s cap, 3 tries 1 s apart). The player starts restricted; only a clear "not restricted" that arrives in time lifts it. `ShopServer.isRandomRestricted(player)`, attribute `RandomRestricted`. Not saved.
+- **Fixed order:** `CreatureConfig.fixedOrder` / `fixedHire`. Rounds of 100 hires: each rarity gets its share of the 100 from `getOdds` (the weights the server rolls with; largest remainder, so exactly 100 and within one hire of the odds), spread evenly (smooth weighted round-robin), most common first. Inside a rarity the creatures take turns, so over 6 rounds (600 hires) every creature comes up exactly as often as its own odds. Talent Scouts changes it like it changes the odds; Luck Boost never applies.
+- **Server only:** `EmployeeServer.rollCreature` takes the next fixed hire and moves the egg's counter, with no yield in between. Every creature comes from `hatch()`: bought eggs, the onboarding and daily free eggs, Instant Hatch, Auto-Hatch and the incubator prompt all use it. Poaching only moves existing employees (and refunds Cash). The client only gets the next hire per egg to show it; no remote takes a creature or an order.
+- **Save:** new top-level section `fixedHires = { counts = { [eggKey] = number } }` (rule A10), optional, set up in the all-modules-loaded gate, written only once used.
+- **Shop:** Luck Boost (`changesOdds`) hidden and not sold to restricted players; a Luck Boost they buy anyway (a client can open Roblox's prompt itself) is kept aside, like the Luck Boost they already had. Cash packs, Instant Hatch, Poach Shield and all passes stay on sale.
+- **Screen:** the Eggs tab shows "Next hire from this egg: <creature>" instead of the odds; everyone else keeps the per-creature odds (FR-12).
+- **Studio:** Debug tab "Paid random items: restricted on/off" (not saved) tests both sides.
 
 ## When a player's restriction changes between sessions (decided while building B)
 
