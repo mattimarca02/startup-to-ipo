@@ -113,4 +113,3 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
-| ROADMAP.md | (repo only) | @mattimarca02 | launch-decisions | 2026-10-02 |
