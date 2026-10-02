@@ -101,12 +101,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | free | | |
+| IpoClient | StarterPlayerScripts | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
-| DailyClient | StarterPlayerScripts | free | | |
+| DailyClient | StarterPlayerScripts | @mattimarca02 | prepublish-fixes | 2026-10-02 |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
