@@ -131,6 +131,7 @@ ShopConfig.Products = {
 		price = 49,
 		id = 3715692114,
 		needsEggs = true,
+		changesOdds = true, -- never sold to players with paid random items restricted (isForSale)
 		effect = { luckMinutes = 15, luckMultiplier = 2 },
 	},
 	{
@@ -186,9 +187,12 @@ function ShopConfig.getProductById(id)
 	return findBy(ShopConfig.Products, "id", id)
 end
 
--- Can this item be bought right now?
-function ShopConfig.isForSale(item)
+-- Can this item be bought right now? randomRestricted = true for a player for whom paid random items
+-- are restricted (Roblox's PolicyService, review finding FR-13): items marked changesOdds (Luck Boost)
+-- aren't for sale to them, since their hires follow a fixed order and odds don't apply.
+function ShopConfig.isForSale(item, randomRestricted)
 	return item.id ~= 0 and (not item.needsEggs or ShopConfig.EggsEnabled)
+		and not (randomRestricted and item.changesOdds)
 end
 
 -- Cash packs scale with what you earn: X minutes of your current income per second,

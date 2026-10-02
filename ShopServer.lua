@@ -191,7 +191,7 @@ end
 
 function ShopServer.getLuckMultiplier(player)
 	local shop = getShop(player)
-	if not shop or shop.luckUntil <= os.time() then
+	if not shop or shop.randomRestricted or shop.luckUntil <= os.time() then
 		return 1
 	end
 	for _, product in ipairs(ShopConfig.Products) do
@@ -403,6 +403,22 @@ local function policyCheckWaiting(check)
 	return check.state == "checking" and os.clock() - check.startedAt < ShopConfig.PolicyCheck.TimeoutSeconds
 end
 
+-- Luck Boost only runs while paid random items are allowed. For a restricted player it would change
+-- nothing (their hires follow a fixed order), so its time is kept aside in luckPaused, not counting
+-- down, until a session where they aren't restricted. Call it whenever randomRestricted is decided.
+local function syncLuckPause(shop)
+	local now = os.time()
+	if shop.randomRestricted then
+		if shop.luckUntil > now then
+			shop.luckPaused += shop.luckUntil - now
+		end
+		shop.luckUntil = 0
+	elseif shop.luckPaused > 0 then
+		shop.luckUntil = math.max(shop.luckUntil, now) + shop.luckPaused
+		shop.luckPaused = 0
+	end
+end
+
 -- Loading goes on: a check that hasn't answered yet is too late from now on (restricted all session)
 local function stopPolicyWait(player, check)
 	if check.state == "checking" then
@@ -420,6 +436,7 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		passes = {}, -- key -> true when Roblox says you own it (checked on every join, not saved)
 		debugPasses = {}, -- key -> true when simulated with the Studio Debug tab (not saved)
 		luckUntil = 0, -- os.time() when Luck Boost runs out
+		luckPaused = 0, -- seconds of Luck Boost kept aside while paid random items are restricted (saved in luckLeft)
 		instantHatches = 0, -- unused Instant Hatch tokens
 		receipts = {}, -- PurchaseIds already granted, oldest first (saved)
 		receiptSet = {}, -- the same PurchaseIds as a quick lookup
@@ -428,7 +445,7 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	if typeof(savedShop) == "table" then -- bad values are skipped, never an error
 		local luckLeft = tonumber(savedShop.luckLeft) or 0
 		if luckLeft > 0 then
-			shop.luckUntil = os.time() + luckLeft
+			shop.luckPaused = luckLeft -- kept aside until the policy check is done (syncLuckPause)
 		end
 		local hatches = tonumber(savedShop.instantHatches) or 0
 		shop.instantHatches = hatches == hatches and math.max(0, math.floor(hatches)) or 0 -- no NaN
@@ -475,6 +492,7 @@ function ShopServer.setupPlayer(player, data, savedShop)
 		warn("Pass check for " .. player.Name .. " is slow: loading goes on, passes apply when Roblox answers")
 	end
 	stopPolicyWait(player, policyCheck) -- no answer yet: restricted for this session (fail closed)
+	syncLuckPause(shop) -- Luck Boost runs again, or stays aside while restricted
 	publish(player)
 end
 
@@ -483,8 +501,8 @@ function ShopServer.serialize(data)
 	local shop = data.shop
 	if not shop then return nil end
 	return {
-		-- Saved as time left, so Luck Boost only counts down while you're playing
-		luckLeft = math.max(0, shop.luckUntil - os.time()),
+		-- Saved as time left, so Luck Boost only counts down while you're playing (and not restricted)
+		luckLeft = math.max(0, shop.luckUntil - os.time()) + shop.luckPaused,
 		instantHatches = shop.instantHatches,
 		receipts = shop.receipts,
 	}
@@ -519,7 +537,12 @@ local function applyProduct(player, data, product)
 		core.addEarnings(player, amount) -- Cash packs count toward the valuation (IPO)
 		table.insert(gained, "+" .. ShopConfig.formatCash(amount))
 	end
-	if effect.luckMinutes then
+	if effect.luckMinutes and shop.randomRestricted then
+		-- Not for sale to them (hidden, and the server never prompts it), but a client can still open
+		-- Roblox's prompt by itself. The time is kept for a session where they aren't restricted.
+		shop.luckPaused += effect.luckMinutes * 60
+		table.insert(gained, "+" .. effect.luckMinutes .. " min of Luck Boost, kept for later (your hires follow a fixed order)")
+	elseif effect.luckMinutes then
 		shop.luckUntil = math.max(shop.luckUntil, os.time()) + effect.luckMinutes * 60
 		table.insert(gained, "+" .. effect.luckMinutes .. " min of Luck Boost")
 	end
@@ -660,7 +683,7 @@ local function buildVipLounge()
 		if doorCooldown[player] and os.clock() - doorCooldown[player] < 10 then return end
 		doorCooldown[player] = os.clock()
 		local vipPass = findVipPass()
-		if vipPass and ShopConfig.isForSale(vipPass) then
+		if vipPass and ShopConfig.isForSale(vipPass, ShopServer.isRandomRestricted(player)) then
 			MarketplaceService:PromptGamePassPurchase(player, vipPass.id)
 		else
 			notify(player, "The VIP Lounge is for VIP pass holders only.")

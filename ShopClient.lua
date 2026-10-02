@@ -344,11 +344,17 @@ local function showToast(text)
 	end)
 end
 
+-- Paid random items restricted for this player (the server asks Roblox's PolicyService on join)?
+-- Not known yet counts as restricted, like on the server: Luck Boost stays hidden until it's known.
+local function randomRestricted()
+	return player:GetAttribute("RandomRestricted") ~= false
+end
+
 -- Opens Roblox's purchase prompt. Nothing is granted here: the server does that
 -- after Roblox confirms the purchase.
 local promptToken = 0
 local function promptPurchase(item, isPass)
-	if pending[item.key] or not ShopConfig.isForSale(item) then return end
+	if pending[item.key] or not ShopConfig.isForSale(item, randomRestricted()) then return end
 	if isPass and player:GetAttribute("Pass_" .. item.key) then return end
 
 	promptToken += 1
@@ -468,6 +474,9 @@ for i, product in ipairs(ShopConfig.Products) do
 			promptPurchase(product, false)
 		end)
 		table.insert(cards, function()
+			-- Luck Boost (changesOdds) is hidden where paid random items are restricted: their hires follow
+			-- a fixed order, so it would do nothing. Everything else stays on sale.
+			desc.Parent.Visible = not (product.changesOdds and randomRestricted())
 			desc.Text = productText(product)
 			if pending[product.key] then
 				setButton(button, "...", COLORS.disabled, false)
