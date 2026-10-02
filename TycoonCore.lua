@@ -263,6 +263,22 @@ local function load(player)
 	return nil, false
 end
 
+-- REREAD-START
+-- (tools/daily_test.py runs the code between the REREAD markers.)
+-- There's no session lock yet (F10). A save written in the last REREAD_RECENT_SECONDS may come from a
+-- session that is still closing on another server (a second device, a quick rejoin): its leave save
+-- usually lands within a few seconds. Joining reads such a save again after REREAD_WAIT_SECONDS, so the
+-- other server's last minute (and a purchase made there) isn't overwritten. A clean join after a
+-- longer break doesn't wait. lastSeen within a few seconds in the future (another server's clock) counts.
+local REREAD_RECENT_SECONDS = 75 -- autosave is every 60 s, so a live session's save is never older
+local REREAD_WAIT_SECONDS = 7
+local function shouldReread(saved, now)
+	if typeof(saved) ~= "table" then return false end
+	local seen = tonumber(saved.lastSeen)
+	return seen ~= nil and seen == seen and math.abs(now - seen) < REREAD_RECENT_SECONDS
+end
+-- REREAD-END
+
 -- Reads someone else's save without loading it. Poaching uses it to check that an employee
 -- moving between two players was saved on both sides. Returns (save or nil, worked).
 local function peekSave(userId)
@@ -602,6 +618,17 @@ local function onPlayerAdded(player)
 		warn("Kicking " .. player.Name .. ": their save couldn't be read, so this session could never save")
 		player:Kick(LOAD_FAILED_MESSAGE)
 		return
+	end
+	-- A save this fresh may still be written by another server: wait, then read again (see REREAD).
+	-- Nothing can be saved yet (data.loaded is false). If the second read fails, the first one is used.
+	if ok and shouldReread(saved, os.time()) then
+		task.wait(REREAD_WAIT_SECONDS)
+		if playerData[player] ~= data then return end -- they left while waiting: nothing was saved
+		local again, againOk = load(player)
+		if playerData[player] ~= data then return end
+		if againOk and typeof(again) == "table" then
+			saved = again
+		end
 	end
 	local lastSeen = nil
 	local setupOk, setupError = pcall(function()

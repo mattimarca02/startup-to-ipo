@@ -866,6 +866,32 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+REREAD_TESTS = r"""-- Tests for TycoonCore's join re-read decision (the code between its REREAD markers, F10 minimum) ----
+local print_real = print
+local function typeof(v) return type(v) end
+__REREAD__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local NOW = 1700000000
+check("new player (no save): no wait", shouldReread(nil, NOW) == false)
+check("unreadable save: no wait", shouldReread("junk", NOW) == false)
+check("save without lastSeen: no wait", shouldReread({ cash = 5 }, NOW) == false)
+check("save from yesterday: no wait", shouldReread({ lastSeen = NOW - 86400 }, NOW) == false)
+check("save from 2 minutes ago: no wait", shouldReread({ lastSeen = NOW - 120 }, NOW) == false)
+check("save from an autosave 60 s ago (session may be live): wait", shouldReread({ lastSeen = NOW - 60 }, NOW) == true)
+check("save from 5 s ago (quick rejoin, second device): wait", shouldReread({ lastSeen = NOW - 5 }, NOW) == true)
+check("exactly 75 s: no wait", shouldReread({ lastSeen = NOW - REREAD_RECENT_SECONDS }, NOW) == false)
+check("written 3 s in the future (another server's clock): wait", shouldReread({ lastSeen = NOW + 3 }, NOW) == true)
+check("far in the future (bad data): no wait", shouldReread({ lastSeen = NOW + 86400 }, NOW) == false)
+check("NaN lastSeen: no wait", shouldReread({ lastSeen = 0 / 0 }, NOW) == false)
+check("text lastSeen that is a number: read as one", shouldReread({ lastSeen = tostring(NOW - 10) }, NOW) == true)
+check("the wait is short (under 10 s)", REREAD_WAIT_SECONDS > 0 and REREAD_WAIT_SECONDS < 10)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -938,6 +964,10 @@ def main():
     result9 = run_luau(luau, SAVE_TESTS.replace("__SAVENOTE__", marked_source("SAVENOTE")).replace("__LEAVESAVE__", marked_source("LEAVESAVE")))
     print("TycoonCore leave save check: " + (result9.stdout.strip() or result9.stderr.strip()))
     if result9.returncode != 0 or " 0 failed" not in result9.stdout:
+        code = 1
+    result10 = run_luau(luau, REREAD_TESTS.replace("__REREAD__", marked_source("REREAD")))
+    print("TycoonCore join re-read check: " + (result10.stdout.strip() or result10.stderr.strip()))
+    if result10.returncode != 0 or " 0 failed" not in result10.stdout:
         code = 1
     return code
 
