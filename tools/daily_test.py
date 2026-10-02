@@ -240,6 +240,115 @@ check("formatWait", DailyConfig.formatWait(18720) == "5h 12m" and DailyConfig.fo
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
+SANITIZE_TESTS = r"""-- Tests for TycoonCore's sanitizeSave (the code between its SANITIZE markers) ---------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function typeof(v) return type(v) end
+__SANITIZE__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local nan = 0 / 0
+local c, o, s = sanitizeSave({ cash = 150, owned = { "Desk", "Laptop" }, lastSeen = 1700000000 }, "P")
+check("good save: cash", c == 150, c)
+check("good save: owned", #o == 2 and o[1] == "Desk" and o[2] == "Laptop")
+check("good save: lastSeen", s == 1700000000)
+check("good save: no warnings", #WARNINGS == 0)
+check("empty save: defaults", select(1, sanitizeSave({}, "P")) == 0 and #select(2, sanitizeSave({}, "P")) == 0 and select(3, sanitizeSave({}, "P")) == nil)
+check("empty save: no warnings", #WARNINGS == 0)
+check("cash as a numeric string", select(1, sanitizeSave({ cash = "42" }, "P")) == 42)
+check("cash is a word", select(1, sanitizeSave({ cash = "lots" }, "P")) == 0)
+check("cash is a table", select(1, sanitizeSave({ cash = {} }, "P")) == 0)
+check("cash is a boolean", select(1, sanitizeSave({ cash = true }, "P")) == 0)
+check("cash is NaN", select(1, sanitizeSave({ cash = nan }, "P")) == 0)
+check("cash is inf", select(1, sanitizeSave({ cash = math.huge }, "P")) == 0)
+check("cash is -inf", select(1, sanitizeSave({ cash = -math.huge }, "P")) == 0)
+check("cash is negative", select(1, sanitizeSave({ cash = -5 }, "P")) == 0)
+check("cash is huge but finite", select(1, sanitizeSave({ cash = 1e300 }, "P")) == 2 ^ 53)
+check("cash fraction floors", select(1, sanitizeSave({ cash = 10.9 }, "P")) == 10)
+check("bad cash warns", #WARNINGS >= 7)
+WARNINGS = {}
+local _, o2 = sanitizeSave({ owned = "Desk" }, "P")
+check("owned is a string: empty list", #o2 == 0)
+local _, o3 = sanitizeSave({ owned = 7 }, "P")
+check("owned is a number: empty list", #o3 == 0)
+local _, o4 = sanitizeSave({ owned = { "Desk", 5, {}, "Laptop", false } }, "P")
+check("owned with junk: keeps the names", #o4 == 2 and o4[1] == "Desk" and o4[2] == "Laptop", #o4)
+check("bad owned warns", #WARNINGS >= 4)
+local _, _, s1 = sanitizeSave({ lastSeen = "yesterday" }, "P")
+local _, _, s2 = sanitizeSave({ lastSeen = nan }, "P")
+local _, _, s3 = sanitizeSave({ lastSeen = math.huge }, "P")
+local _, _, s4 = sanitizeSave({ lastSeen = {} }, "P")
+check("bad lastSeen is dropped", s1 == nil and s2 == nil and s3 == nil and s4 == nil)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+STORE_TESTS = r"""-- Tests for TycoonCore's getStore (lazy retry) and readableSave (R5) ----------------
+local print_real = print
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function typeof(v) return type(v) end
+local FAILS = 2 -- GetDataStore errors this many times, then works
+local CALLS = 0
+local DataStoreService = {}
+function DataStoreService:GetDataStore(name)
+	CALLS += 1
+	if FAILS > 0 then FAILS -= 1; error("503 unavailable") end
+	return { name = name }
+end
+__GETSTORE__
+__READABLE__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+check("getStore fails while unavailable (1)", getStore() == nil)
+check("getStore fails while unavailable (2)", getStore() == nil)
+check("every call retried", CALLS == 2, CALLS)
+local st = getStore()
+check("getStore succeeds on the 3rd try", st ~= nil and st.name == "StartupTycoon_v1")
+check("store is cached afterwards", getStore() == st and CALLS == 3, CALLS)
+check("failures warned", #WARNINGS == 2, #WARNINGS)
+WARNINGS = {}
+check("table save is readable", readableSave({ cash = 1 }, true, "P") == true)
+check("missing save (nil) is a new player, not a failure", readableSave(nil, true, "P") == true)
+check("string save is a load failure", readableSave("junk", true, "P") == false)
+check("number save is a load failure", readableSave(5, true, "P") == false)
+check("boolean save is a load failure", readableSave(false, true, "P") == false)
+check("non-table save warns", #WARNINGS == 3, #WARNINGS)
+check("a failed read stays failed", readableSave(nil, false, "P") == false)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def sanitize_source():
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    start = text.index("-- SANITIZE-BEGIN") + len("-- SANITIZE-BEGIN")
+    end = text.index("-- SANITIZE-END")
+    return text[start:end]
+
+
+def marked_source(name):
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
+    return text[start:text.index("-- %s-END" % name)]
+
+
+def run_luau(luau, source):
+    with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
+        f.write(source)
+        path = f.name
+    try:
+        result = subprocess.run([luau, path], capture_output=True, text=True)
+    finally:
+        os.remove(path)
+    return result
+
 
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
@@ -251,15 +360,18 @@ def main():
         with open(os.path.join(ROOT, name + ".lua"), encoding="utf-8") as f:
             source += "\nMODULES.%s = (function()\n%s\nend)()\n" % (name, f.read())
     source += TESTS
-    with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
-        f.write(source)
-        path = f.name
-    try:
-        result = subprocess.run([luau, path], capture_output=True, text=True)
-    finally:
-        os.remove(path)
+    result = run_luau(luau, source)
     print(result.stdout.strip() or result.stderr.strip())
-    return 0 if result.returncode == 0 and " 0 failed" in result.stdout else 1
+    code = 0 if result.returncode == 0 and " 0 failed" in result.stdout else 1
+    result2 = run_luau(luau, SANITIZE_TESTS.replace("__SANITIZE__", sanitize_source()))
+    print("TycoonCore save check: " + (result2.stdout.strip() or result2.stderr.strip()))
+    if result2.returncode != 0 or " 0 failed" not in result2.stdout:
+        code = 1
+    result3 = run_luau(luau, STORE_TESTS.replace("__GETSTORE__", marked_source("GETSTORE")).replace("__READABLE__", marked_source("READABLE")))
+    print("TycoonCore store check: " + (result3.stdout.strip() or result3.stderr.strip()))
+    if result3.returncode != 0 or " 0 failed" not in result3.stdout:
+        code = 1
+    return code
 
 
 if __name__ == "__main__":

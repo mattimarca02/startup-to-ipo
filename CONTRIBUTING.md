@@ -38,6 +38,8 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
 
 4. **Work and test.** Change the scripts, playtest in Studio (F5) and check the Output window for red errors. Keep Studio and the `.lua` files matching (see [the sync rule](#keeping-studio-and-the-repo-in-sync)).
 
+   Studio playtests need **Enable Studio Access to API Services** turned ON (Game Settings > Security). With it off, saves can't load and the 6 s load retry kicks you out of the playtest.
+
 5. **Commit small.** Commit each time something works:
    ```
    git status
@@ -86,9 +88,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
+| TycoonCore | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | TycoonCore | ServerScriptService | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | free | | |
+| EmployeeServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
@@ -96,9 +99,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
-| PoachServer | ServerScriptService | free | | |
+| PoachServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
 | PoachClient | StarterPlayerScripts | free | | |
+| IpoServer | ServerScriptService | @mattimarca02 | fix-security-review | 2026-10-01 |
+| tools/daily_test.py | (repo only) | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | IpoServer | ServerScriptService | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | @mattimarca02 | milestone-6-daily-rewards | 2026-10-01 |
