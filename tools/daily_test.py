@@ -613,6 +613,42 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+WAIT_TESTS = r"""-- Tests for IpoServer's passCheckBlocksIpo (the code between its PASSWAIT markers) ----------
+local print_real = print
+local IpoConfig = { PassCheckMaxWaitSeconds = 20 }
+local AGE = nil -- seconds the player's pass check has run (nil = not running)
+local ShopServer = {
+	isPassCheckPending = function(player) return AGE ~= nil end,
+	passCheckAge = function(player) return AGE end,
+}
+__PASSWAIT__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local P = {}
+-- Same path for a pass owner and a player with no pass: the check doesn't know yet which one they are
+AGE = 0
+check("check just started: IPO refused (owner or not)", passCheckBlocksIpo(P) == true)
+AGE = 5.9
+check("check still running at 6 s: refused", passCheckBlocksIpo(P) == true)
+AGE = 19.9
+check("check running just under the limit: refused", passCheckBlocksIpo(P) == true)
+AGE = 20
+check("check stuck for the full limit: IPO allowed (timed out)", passCheckBlocksIpo(P) == false)
+AGE = 300
+check("check stuck for minutes: IPO allowed", passCheckBlocksIpo(P) == false)
+AGE = nil
+check("check finished (owner or not): IPO allowed, no delay", passCheckBlocksIpo(P) == false)
+IpoConfig.PassCheckMaxWaitSeconds = 5
+AGE = 6
+check("limit comes from IpoConfig", passCheckBlocksIpo(P) == false)
+AGE = 4
+check("... a shorter limit still refuses before it", passCheckBlocksIpo(P) == true)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -667,6 +703,10 @@ def main():
     result5 = run_luau(luau, BUILD_TESTS.replace("__BUILDSAVE__", marked_source("BUILDSAVE")))
     print("TycoonCore build check: " + (result5.stdout.strip() or result5.stderr.strip()))
     if result5.returncode != 0 or " 0 failed" not in result5.stdout:
+        code = 1
+    result6 = run_luau(luau, WAIT_TESTS.replace("__PASSWAIT__", marked_source("PASSWAIT", "IpoServer.lua")))
+    print("IpoServer pass wait check: " + (result6.stdout.strip() or result6.stderr.strip()))
+    if result6.returncode != 0 or " 0 failed" not in result6.stdout:
         code = 1
     return code
 

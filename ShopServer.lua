@@ -45,7 +45,7 @@ local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug o
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
 local productHandlers = {} -- effect field -> function(player, data, effect), added by other systems
 local doorCooldown = {} -- player -> os.clock() of the last "VIP only" message
-local passCheckPending = {} -- player -> true until the join-time pass check has finished (true = passes may still be missing)
+local passCheckPending = {} -- player -> os.clock() when the join-time pass check started, until it has finished
 
 -- Helpers ---------------------------------------------------------------
 
@@ -228,7 +228,13 @@ end
 
 -- true while the join-time pass check is still running: the player's passes may not be known yet
 function ShopServer.isPassCheckPending(player)
-	return passCheckPending[player] == true
+	return passCheckPending[player] ~= nil
+end
+
+-- Seconds the join-time pass check has been running, or nil when it isn't running
+function ShopServer.passCheckAge(player)
+	local startedAt = passCheckPending[player]
+	return startedAt and os.clock() - startedAt or nil
 end
 
 -- Game passes -----------------------------------------------------------
@@ -370,7 +376,7 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
 	-- Passes aren't saved, so a save written before the answer is still complete.
 	local state = "checking"
-	passCheckPending[player] = true -- the VIP lounge and the door wait for the answer
+	passCheckPending[player] = os.clock() -- the VIP lounge and the door wait for the answer
 	task.spawn(function()
 		local ok, err = pcall(checkPasses, player, shop) -- each pass is published as soon as it is found
 		if not ok then
