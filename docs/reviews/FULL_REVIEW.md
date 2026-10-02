@@ -85,3 +85,76 @@ Purchases are safe (a failed save returns `NotProcessedYet`, so Roblox retries t
 **Impact:** at most the last minute of a player's progress, only at shutdown while the DataStore is slow. Grows with players per server (see section 2).
 
 **Smallest fix (S):** in `BindToClose`, start every save with `task.spawn` and wait until all are done (a counter, like `checkPasses` does), and skip players whose leave save already finished. Combine with FR-1's retry.
+
+---
+
+## 2. DataStore budget and throttling
+
+### The limits (Roblox docs, checked 2026-10-02)
+
+- Server budget per minute, standard DataStores: **reads 60 + 40 x players, writes 60 + 40 x players**. (Older docs said 10 x players; the earlier reviews' numbers are out of date and too pessimistic.)
+- Per key: 25 MB read and 4 MB written per minute. There is no documented fixed cooldown between two writes to the same key any more; a key that is written too fast gets `KeyThrottled`.
+- Each request type has a throttle queue of 30 requests. When it's full, requests fail with errors 301-306.
+- One value: 4,194,304 characters.
+
+### Every DataStore call in the game
+
+There are only three: `GetAsync` in `load` (`TycoonCore.lua:250`) and `peekSave` (`:272`), and `SetAsync` in `save` (`:349`). No `UpdateAsync`, no OrderedDataStore, no MemoryStore, no MessagingService. Every call is in a `pcall`. Nothing checks `GetRequestBudgetForRequestType` (PR14 F7, still open).
+
+| Caller | Request | How often |
+|---|---|---|
+| Join (`load`) | 1 read, up to 3 on failure | once per join |
+| `reconcile` on join (`PoachServer.lua:294-311`) | 1 read per open `gained` note | almost always 0 |
+| Autosave | 1 write per player | every 60 s |
+| Leave | 1 write | once |
+| `BindToClose` | 1 write per player still loaded | at shutdown (doubles the leave write, FR-2) |
+| Receipt (`ShopServer.lua:476`) | 1 write | per purchase, and per retry |
+| Perk bought (`IpoServer.lua:263`) | 1 write | at most 24 ever (all perk levels) |
+| HR level (`PoachServer.lua:630`) | 1 write | at most 5 ever |
+| Poach: failed roll (`:405`) | 1 write | at most once per 30 s cooldown |
+| Poach: move (`confirmSave`, `:202-217`) | 2 writes (attacker, then victim); a read instead of a write for a player who left; up to 5 tries each | per successful poach or Counter-Offer |
+| Daily claim (`DailyServer.lua:207`) | 1 write | once per day |
+| IPO (`commitIpo`) | 1 write | at most once per 60 s cooldown |
+
+### Load at 6, 20, 50 and 100 players per server
+
+| Players | Budget (reads / writes per min) | Steady use | Busy peak (everyone buying, poaching, joining) | Margin |
+|---|---|---|---|---|
+| 6 (the real maximum: 6 plots) | 300 / 300 | about 6 writes, ~1 read | ~25 writes, ~10 reads | > 10x |
+| 20 | 860 / 860 | 20 writes | ~80 writes | > 10x |
+| 50 | 2,060 / 2,060 | 50 writes | ~200 writes | > 10x |
+| 100 | 4,060 / 4,060 | 100 writes | ~400 writes | > 10x |
+
+Use grows at the same rate as the budget, so the budget is never the bottleneck. A client cannot make the server save without paying for it: every save path above needs Cash, Shares, Robux, a cooldown or a once-a-day check.
+
+The game can't actually have more than 6 loaded players (`MAX_PLOTS = 6`, `TycoonCore.lua:62`); the 7th is kicked. The 20/50/100 rows only matter if the plot count is raised later. Then the real limits are not the budget but the one-by-one loops: autosave (`:665-667`) and `BindToClose` (FR-2). At 100 players, 100 saves of about 0.3 s each take 30 s, which is the whole `BindToClose` window. Server size vs plots is **FR-15** (section 8).
+
+### During a DataStore outage or a full throttle queue
+
+| Path | What happens | OK? |
+|---|---|---|
+| Join | 3 reads, waiting 2 s then 4 s, then a kick with "please rejoin" (`TycoonCore.lua:241-264`, `:550-556`). Nothing is saved. | Yes |
+| Leave, autosave, `BindToClose` | A warning; the progress is lost (FR-1). | No: FR-1 |
+| Receipt | `NotProcessedYet`; Roblox retries on the next join or purchase. The reward stays in memory with its PurchaseId, so the retry can't pay twice. | Yes |
+| IPO | "The IPO couldn't be saved. Nothing changed." | Yes |
+| Daily claim | Granted in memory, answer says `saved = false`; the next save writes both. If no save works, both are lost together. | Yes |
+| Poach move | `confirmSave` retries 5 times over ~30 s, keeping the employee `inTransit` (it blocks that player's IPO meanwhile). On failure the `gained` note stays for the next join. | Yes |
+| `reconcile` | A failed read keeps the note for next time (`PoachServer.lua:297-298`). | Yes |
+
+### Can a DataStore call block a join or a leave?
+
+- **A join waits for:** `load` (up to 3 reads plus 6 s of waits; each read can itself sit in the throttle queue), the pass check (at most 10 s, `ShopServer.lua:388-395`), and one `peekSave` per open `gained` note (no time limit). Each join runs in its own thread, so one slow join never holds up another player's join. The player stands on an empty plot meanwhile, and every window answers "Still loading".
+- **A leave waits for:** the leave save, which waits for any save already running (`TycoonCore.lua:334-336`, no time limit). The player is already gone, but their **plot stays taken** until the save returns. That is **FR-3**.
+
+### FR-3 (Low): a slow leave save keeps the plot taken, so the next player is kicked with "This server is full"
+
+**Where:** `TycoonCore.lua:637-645` (the plot is freed only after `save` returns), `:509-518` (no free plot = kick right away).
+
+**How it breaks:**
+1. A 6-player server is full. Player A leaves. Roblox sees 5 players and sends a new player B at once.
+2. A's leave save is still running (slow DataStore, or it is waiting behind A's own receipt or poach save). `plotOwners[A's slot]` is still set.
+3. B's `onPlayerAdded` finds no free plot and kicks B: "This server is full, please join another one."
+
+**Impact:** a joiner is bounced. More likely once the server size is set to exactly 6 (FR-15), and during DataStore trouble. No data is lost.
+
+**Smallest fix (S):** in `onPlayerAdded`, when no slot is free, wait up to 10 s (checking every 0.5 s while the player is still in the game) before kicking.
