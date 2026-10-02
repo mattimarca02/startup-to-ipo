@@ -35,8 +35,9 @@ local COLORS = {
 	hud = Color3.fromRGB(70, 120, 255),
 }
 
--- The latest team state from the server
-local state = { employees = {}, incubators = {}, pending = false, maxEmployees = CreatureConfig.BaseEmployeeSlots }
+-- The latest team state from the server (nextHires: egg key -> creature key, only for players whose
+-- hires follow a fixed order; false for everyone else)
+local state = { employees = {}, incubators = {}, pending = false, maxEmployees = CreatureConfig.BaseEmployeeSlots, nextHires = false }
 local refreshers = {} -- functions that redraw parts of the window
 local cardParts = {} -- card pieces resized by applyLayout on small screens
 
@@ -458,6 +459,29 @@ local function creatureOddsText(egg, creatureOdds)
 		luckLeft() > 0 and " with 🍀 Luck Boost" or "", table.concat(parts, " · "))
 end
 
+-- Players for whom paid random items are restricted (Roblox's PolicyService, asked by the server on
+-- join; not known yet counts as restricted) get no random roll: each egg hires in a fixed order, and
+-- the server sends the next hire of every egg. They see that hire instead of odds (FR-13, D9 option B).
+local function randomRestricted()
+	return player:GetAttribute("RandomRestricted") ~= false
+end
+
+local function nextHireName(creature)
+	if not creature then
+		return "loading..."
+	end
+	return string.format('<font color="%s">%s %s</font>', hex(rarityColor(creature.rarity)), creature.emoji or "", creature.name)
+end
+
+-- The full line under the egg card (full width, so it stays readable on a phone)
+local function nextHireText(egg, creature)
+	local text = "<b>Next hire from this egg: " .. nextHireName(creature) .. "</b>"
+	if creature then
+		text ..= string.format(" (%s · %s · $%d/s)", creature.rarity, creature.role, creature.income)
+	end
+	return text .. ". Your hires follow a fixed order, not a random roll: the next " .. egg.name .. " that hatches brings this hire."
+end
+
 for i, egg in ipairs(CreatureConfig.Eggs) do
 	local parts = makeCard(eggsPage, i * 2 - 1)
 	local oddsLabel = make("TextLabel", {
@@ -482,9 +506,16 @@ for i, egg in ipairs(CreatureConfig.Eggs) do
 	end)
 	table.insert(refreshers, function()
 		local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - perkValue("FasterEggs")))
-		local creatureOdds = CreatureConfig.getCreatureOdds(egg, luckMultiplier())
-		parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\n" .. oddsText(creatureOdds)
-		oddsLabel.Text = creatureOddsText(egg, creatureOdds)
+		if randomRestricted() then
+			local nextKey = state.nextHires and state.nextHires[egg.key]
+			local creature = nextKey and CreatureConfig.getCreature(nextKey)
+			parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\nNext hire: " .. nextHireName(creature)
+			oddsLabel.Text = nextHireText(egg, creature)
+		else
+			local creatureOdds = CreatureConfig.getCreatureOdds(egg, luckMultiplier())
+			parts.desc.Text = "Hatches in " .. CreatureConfig.formatTime(seconds) .. "\n" .. oddsText(creatureOdds)
+			oddsLabel.Text = creatureOddsText(egg, creatureOdds)
+		end
 		local freeIncubator = false
 		for index = 1, #state.incubators do
 			if not state.incubators[index] then
