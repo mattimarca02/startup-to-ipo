@@ -600,6 +600,12 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 	end
 
 	placeEmployees(data)
+
+	-- The restriction is decided once on join (ShopServer), before this runs; only the Studio Debug
+	-- tab switches it mid-game. Then the screen gets the next hires (or the odds) right away.
+	player:GetAttributeChangedSignal("RandomRestricted"):Connect(function()
+		push(player)
+	end)
 end
 
 -- The part of the save file that belongs to eggs and employees

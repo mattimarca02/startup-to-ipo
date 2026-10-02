@@ -575,6 +575,7 @@ if debugRemote then
 		debugRow("🎲", "Next hatch: " .. rarity.key, "The next egg you hatch will be " .. rarity.key .. ".", "Set", "ForceRarity", rarity.key)
 	end
 	debugRow("⏩", "Skip egg timers", "Every egg in your incubators becomes ready now.", "Skip", "SkipEggTimers")
+	debugRow("🌍", "Paid random items: restricted on/off", "Pretends Roblox's policy check said the other thing: fixed hire order and no Luck Boost, or back to random hires. Not saved: a rejoin asks Roblox again.", "Switch", "ToggleRandomRestricted")
 
 	-- Poaching (milestone 3 poaching)
 	debugRow("🤖", "Spawn dummy target", "Adds a fake player with 6 employees to the Poach window, to test alone.", "Spawn", "PoachSpawnDummy")

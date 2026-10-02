@@ -40,3 +40,15 @@ In `ShopServer.setupPlayer`, next to the pass check and with the same 10 s cap: 
 If launch can't wait for B (M effort), ship **A** as a stop-gap only after asking Roblox (Creator Support or the DevForum thread) whether a Cash multiplier pass makes earned Cash "purchased with Robux". If the answer is yes, A isn't enough and B is required.
 
 Either way, answer "Yes, paid random items" in the experience questionnaire (checklist C9), and keep the per-hire odds from FR-12 visible to everyone else.
+
+## When a player's restriction changes between sessions (decided while building B)
+
+A player can be restricted in one session and not in the next, or the reverse: they travel, Roblox changes the region list, or the check failed once (fail closed). What happens:
+
+1. **Decided once per session.** The check runs on join (next to the pass check, same 10 s cap) and the answer holds until they leave. Never saved, never changed mid-game (only the Studio Debug toggle "Paid random items: restricted on/off" switches it, for tests).
+2. **The counter keeps going, it never restarts.** Each egg's counter in `fixedHires` moves only when a restricted player hatches that egg. In an unrestricted session it stays as it was and is saved unchanged. Back in a restricted session the order continues where it stopped, so nobody gets the start of an order twice. An IPO doesn't touch it, and older code keeps the section unchanged (rule A10).
+3. **No egg is lost, refunded or doubled.** Eggs in incubators stay. The creature is decided when the egg hatches, by the session it hatches in: restricted, the egg's next fixed hire; not restricted, a random roll with the odds on screen. The fixed order follows the same odds, so neither side is worth more. An egg bought while "Next hire: X" was shown that hatches in an unrestricted session rolls randomly; X stays next in the order for a later restricted session.
+4. **Luck Boost is never wasted.** While restricted it is put aside and doesn't count down (it would do nothing: there is no roll). It runs again in an unrestricted session. A Luck Boost bought anyway while restricted (a client can open Roblox's prompt by itself) goes into that kept time.
+5. **Nothing else changes:** Instant Hatch tokens, passes, a hire waiting for a desk, the daily streak. Talent Scouts counts on both sides: it changes the fixed order the same way it changes the odds.
+6. **No way to game it:** switching can't reset the counter, and a random hatch never moves it, so an unwanted next hire stays next until a restricted hatch takes it.
+7. **A failed check** gives a normal player one session of fixed-order hires (same odds) with Luck Boost put aside. Nothing is lost; the next join asks again.

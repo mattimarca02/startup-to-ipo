@@ -719,6 +719,16 @@ local function handleDebug(player, action, key)
 		publish(player)
 		return pass.name .. " is now " .. (owns(data.shop, key) and "ON" or "OFF") .. " (simulated, not saved)"
 
+	elseif action == "ToggleRandomRestricted" then
+		-- Pretends PolicyService answered the other way, to test both sides and a switch between them
+		-- (not saved: a rejoin asks Roblox again). Luck Boost is put aside or comes back, like on a join.
+		local shop = data.shop
+		shop.randomRestricted = not shop.randomRestricted
+		syncLuckPause(shop)
+		publish(player)
+		return shop.randomRestricted and "Paid random items restricted: fixed hire order, no Luck Boost (simulated, not saved)"
+			or "Paid random items allowed: random hires and odds (simulated, not saved)"
+
 	elseif action == "GrantProduct" then
 		local product = ShopConfig.getProduct(key)
 		if not product then return "Unknown product" end
