@@ -4,19 +4,40 @@
 -- Eggs and creature employees live in EmployeeServer (ServerScriptService) and CreatureConfig (ReplicatedStorage).
 -- Poaching and the HR Department live in PoachServer (ServerScriptService) and CreatureConfig.Poaching.
 -- Valuation, the IPO rebirth and the IPO shop live in IpoServer (ServerScriptService) and IpoConfig (ReplicatedStorage).
+-- The first minute for new players (free egg, arrow, goals) lives in OnboardingServer (ServerScriptService) and OnboardingConfig (ReplicatedStorage).
+-- The 7-day login calendar lives in DailyServer (ServerScriptService) and DailyConfig (ReplicatedStorage).
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
--- GetDataStore errors when the place isn't published, so it's wrapped in pcall too.
--- If it fails, the game still runs but progress isn't loaded or saved.
-local storeOk, store = pcall(function()
-	return DataStoreService:GetDataStore("StartupTycoon_v1")
-end)
-if not storeOk then
-	warn("DataStore unavailable, progress will not be saved: " .. tostring(store))
-	store = nil
+-- GetDataStore errors when the place isn't published, or when Roblox is briefly unavailable, so
+-- it's wrapped in pcall and looked up lazily: every call tries again until one works, so a
+-- server whose store comes back heals by itself. load, peekSave and save all go through it.
+-- Without a store, Studio plays without saving; a live server waits a little for it in load()
+-- and then kicks the joining player, so nobody plays a session that can never be saved.
+-- GETSTORE-START
+local store
+local function getStore()
+	if store then return store end
+	local storeOk, result = pcall(function()
+		return DataStoreService:GetDataStore("StartupTycoon_v1")
+	end)
+	if storeOk then
+		store = result
+	else
+		warn("DataStore unavailable: " .. tostring(result))
+	end
+	return store
+end
+-- GETSTORE-END
+if not getStore() then
+	if RunService:IsStudio() then
+		warn("No DataStore: this Studio session will play WITHOUT saving. Publish the place and turn on Game Settings > Security > Enable Studio Access to API Services to test saving.")
+	else
+		warn("No DataStore yet on a live server: joining players wait for it, then are kicked if it never comes.")
+	end
 end
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
@@ -24,6 +45,8 @@ local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
+local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
+local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
 -- Upgrades are bought in this order. cost = Cash, income = Cash per second.
 local UPGRADES = {
@@ -39,13 +62,15 @@ local PLOT_SPACING = 90
 local MAX_PLOTS = 6
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
+local LOAD_TRIES = 3 -- reads of a joining player's save before giving up and kicking them
+local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a moment: your progress is safe."
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -162,24 +187,89 @@ end
 
 -- Saving and loading ----------------------------------------------------
 
-local function load(player)
-	if not store then return nil, false end -- no DataStore: play fresh, never save
-	local ok, result = pcall(function()
-		return store:GetAsync("player_" .. player.UserId)
-	end)
-	if not ok then
-		warn("Could not load data. In Studio, turn on API access. Error: " .. tostring(result))
-		return nil, false
+-- Reads the basic fields of a loaded save, skipping bad values with a warning instead of erroring.
+-- A corrupt field must never lock a player out: it gets a safe default (0 Cash, no upgrades, no offline time).
+-- Returns cash (a whole number >= 0), a list of upgrade names, and lastSeen (a number or nil).
+-- (tools/daily_test.py runs the code between the two SANITIZE markers, so keep it free of Roblox calls except warn.)
+-- SANITIZE-BEGIN
+local MAX_CASH = 2 ^ 53 -- Cash is a whole number; far above anything the game can earn
+local function sanitizeSave(saved, playerName)
+	local cash, owned, lastSeen = 0, {}, nil
+	local rawCash = tonumber(saved.cash)
+	if rawCash ~= nil and rawCash == rawCash and rawCash >= 0 and rawCash ~= math.huge then -- not NaN, not negative, not inf
+		cash = math.floor(math.min(rawCash, MAX_CASH))
+	elseif saved.cash ~= nil then
+		warn("Ignoring a bad Cash value in " .. playerName .. "'s save: " .. tostring(saved.cash))
 	end
-	return result, true
+	if typeof(saved.owned) == "table" then
+		for _, name in ipairs(saved.owned) do
+			if typeof(name) == "string" then
+				table.insert(owned, name)
+			else
+				warn("Skipping a bad upgrade name in " .. playerName .. "'s save: " .. tostring(name))
+			end
+		end
+	elseif saved.owned ~= nil then
+		warn("Ignoring a bad upgrade list in " .. playerName .. "'s save: " .. tostring(saved.owned))
+	end
+	local rawSeen = tonumber(saved.lastSeen)
+	if rawSeen ~= nil and rawSeen == rawSeen and rawSeen ~= math.huge and rawSeen ~= -math.huge then
+		lastSeen = rawSeen
+	elseif saved.lastSeen ~= nil then
+		warn("Ignoring a bad lastSeen value in " .. playerName .. "'s save: " .. tostring(saved.lastSeen))
+	end
+	return cash, owned, lastSeen
+end
+-- SANITIZE-END
+
+-- A save that exists but isn't a table is unreadable, not "a new player": it counts as a failed
+-- load (no free egg, no shield, and data.loaded stays false so nothing overwrites it). A missing
+-- save (nil) stays a genuine new player.
+-- READABLE-START
+local function readableSave(saved, ok, name)
+	if ok and saved ~= nil and typeof(saved) ~= "table" then
+		warn("Not using " .. name .. "'s save: it isn't a table (" .. typeof(saved) .. ")")
+		return false
+	end
+	return ok
+end
+-- READABLE-END
+
+-- Returns (save or nil, worked). A failed read is tried again (LOAD_TRIES in all, waiting a bit
+-- longer each time). If it still fails, the player is kicked (see PlayerAdded), never left
+-- playing a session that can't save.
+local function load(player)
+	for attempt = 1, LOAD_TRIES do
+		local currentStore = getStore()
+		if not currentStore and RunService:IsStudio() then
+			return nil, false -- Studio without a DataStore plays unsaved (PlayerAdded allows it)
+		end
+		local ok, result
+		if currentStore then
+			ok, result = pcall(function()
+				return currentStore:GetAsync("player_" .. player.UserId)
+			end)
+			if ok then
+				return result, true
+			end
+		else
+			result = "no DataStore yet"
+		end
+		warn(string.format("Could not load %s's data (try %d of %d). In Studio, turn on API access. Error: %s",
+			player.Name, attempt, LOAD_TRIES, tostring(result)))
+		if attempt == LOAD_TRIES or not player.Parent then break end
+		task.wait(attempt * 2) -- 2s, then 4s
+	end
+	return nil, false
 end
 
 -- Reads someone else's save without loading it. Poaching uses it to check that an employee
 -- moving between two players was saved on both sides. Returns (save or nil, worked).
 local function peekSave(userId)
-	if not store then return nil, false end
+	local currentStore = getStore()
+	if not currentStore then return nil, false end
 	local ok, result = pcall(function()
-		return store:GetAsync("player_" .. userId)
+		return currentStore:GetAsync("player_" .. userId)
 	end)
 	if not ok then
 		warn("Could not read a save for a poaching check: " .. tostring(result))
@@ -193,7 +283,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -216,6 +306,8 @@ local function save(player, transform)
 		team = EmployeeServer.serialize(data),
 		poach = PoachServer.serialize(data),
 		ipo = IpoServer.serialize(data),
+		onboarding = OnboardingServer.serialize(data),
+		daily = DailyServer.serialize(data),
 	}
 	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
 		if payload[key] == nil then
@@ -231,7 +323,9 @@ local function save(player, transform)
 		ok, err = false, "simulated failure (Studio Debug tab)"
 	else
 		ok, err = pcall(function()
-			store:SetAsync("player_" .. player.UserId, payload)
+			local currentStore = getStore()
+			if not currentStore then error("no DataStore") end
+			currentStore:SetAsync("player_" .. player.UserId, payload)
 		end)
 	end
 	data.saving = false
@@ -309,6 +403,9 @@ IpoServer.init({
 	isPoachBusy = function(player)
 		return PoachServer.isBusy(player)
 	end,
+	callOffPoachDeals = function(player)
+		PoachServer.callOffForIpo(player)
+	end,
 	countEggs = function(player)
 		return EmployeeServer.countEggs(player)
 	end,
@@ -352,6 +449,29 @@ PoachServer.init({
 	peekSave = peekSave,
 })
 
+-- First minute for new players (milestone 5) -----------------------------
+
+OnboardingServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+	updateIncome = updateIncome,
+	nextUpgradeCost = function(data) -- what the green pad sells now, or nil when everything is bought
+		local _, upg = nextUpgrade(data)
+		return upg and upg.cost
+	end,
+})
+
+-- Daily login calendar (milestone 6) -------------------------------------
+
+DailyServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+})
+
 -- Players joining and leaving -------------------------------------------
 
 local function teleportToPlot(character, slot)
@@ -363,7 +483,7 @@ local function teleportToPlot(character, slot)
 	root.CFrame = CFrame.lookAt(spawnPos, padPos)
 end
 
-Players.PlayerAdded:Connect(function(player)
+local function onPlayerAdded(player)
 	local slot
 	for s = 1, MAX_PLOTS do
 		if not plotOwners[s] then
@@ -404,10 +524,22 @@ Players.PlayerAdded:Connect(function(player)
 	-- that time must never write a save with parts missing. If a part can't be set up at all,
 	-- this session never saves, so the save on the DataStore stays as it was.
 	local saved, ok = load(player)
+	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
+	ok = readableSave(saved, ok, player.Name)
+	if not ok and (getStore() or not RunService:IsStudio()) then
+		-- The DataStore didn't answer after every try (or there is none on a live server): playing on
+		-- could never save, so send them back. Only Studio without a DataStore plays unsaved.
+		warn("Kicking " .. player.Name .. ": their save couldn't be read, so this session could never save")
+		player:Kick(LOAD_FAILED_MESSAGE)
+		return
+	end
+	local lastSeen = nil
 	local setupOk, setupError = pcall(function()
 		if saved then
-			cash.Value = saved.cash or 0
-			for _, name in ipairs(saved.owned or {}) do
+			local savedCash, savedOwned
+			savedCash, savedOwned, lastSeen = sanitizeSave(saved, player.Name)
+			cash.Value = savedCash
+			for _, name in ipairs(savedOwned) do
 				data.owned[name] = true
 			end
 			for key, value in pairs(saved) do
@@ -433,11 +565,13 @@ Players.PlayerAdded:Connect(function(player)
 		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
+		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
+		DailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg
 	end)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
 	if not setupOk then
 		warn("Could not set up " .. player.Name .. "'s save, so it won't be saved this session: " .. tostring(setupError))
-		player:Kick("Your startup couldn't load. Please rejoin in a moment: your progress is safe.")
+		player:Kick(LOAD_FAILED_MESSAGE)
 		return
 	end
 	data.loaded = ok -- from here on, saves are complete
@@ -450,9 +584,9 @@ Players.PlayerAdded:Connect(function(player)
 	updateIncome(player)
 
 	-- Offline earnings: the startup keeps making money while you're away
-	if saved and saved.lastSeen then
+	if lastSeen then
 		local cap = OFFLINE_CAP_SECONDS + IpoServer.perk(data, "OfflineCap")
-		local away = math.clamp(os.time() - saved.lastSeen, 0, cap)
+		local away = math.clamp(os.time() - lastSeen, 0, cap)
 		local earned = math.floor(away * income.Value * OFFLINE_RATE)
 		if earned > 0 then
 			cash.Value += earned
@@ -470,7 +604,14 @@ Players.PlayerAdded:Connect(function(player)
 	if player.Character then
 		task.spawn(teleportToPlot, player.Character, slot)
 	end
-end)
+end
+Players.PlayerAdded:Connect(onPlayerAdded)
+-- Players already in the server (they joined while this script was still starting) are set up too
+for _, existing in ipairs(Players:GetPlayers()) do
+	if not playerData[existing] then
+		task.spawn(onPlayerAdded, existing)
+	end
+end
 
 Players.PlayerRemoving:Connect(function(player)
 	save(player)

@@ -4,10 +4,17 @@
 Run:   python tools/economy_sim.py            (prints all tables, takes ~1 minute)
        python tools/economy_sim.py --runs 10  (faster, noisier)
        python tools/economy_sim.py --markdown (prints the tables as Markdown for docs/ECONOMY.md)
+       python tools/economy_sim.py --daily    (only section 7, the daily calendar table)
 
 It reads NOTHING from the game: every number is copied by hand into the CONFIG block below.
 If you change a .lua config, update this block too. It never changes any game number.
 The model is event-driven (no fixed time step), so a 7-day run takes a few milliseconds.
+
+The 7-day login calendar (DailyConfig.lua, milestone 6) IS modeled: see the DAILY_* block and
+section 7. A simulated player claims at the first login of every day (they never miss one, the
+worst case for the economy). Calendar Cash is a gift: it goes to Cash only, never to the
+valuation, exactly like DailyServer; claim_daily asserts it. Sections 1-6 run without the
+calendar (DAILY_IN_ALL_TABLES = False) so they stay comparable with docs/ECONOMY.md.
 """
 
 import argparse
@@ -73,7 +80,7 @@ RICH_FACTOR = 3             # "plenty of Cash" = the egg costs at most a third o
 WAIT_SECONDS = 120          # a player waits for a better item if it is affordable within this many seconds
 
 # Behaviours: sessions = list of (start offset inside the day in hours, length in minutes).
-# The game has no daily reward yet (milestone 6), so a missed day is just a missed day.
+# Every behaviour logs in every day, so with the calendar on it never misses a daily reward.
 BEHAVIOURS = {
     "active": [(0, 20), (5, 20), (11, 20)],   # 3 sessions of 20 min per day
     "casual": [(0, 10)],                       # 1 session of 10 min per day
@@ -111,6 +118,26 @@ IPO_PERK_COSTS = {                  # IpoConfig.Perks: Shares for each level, pe
     "OfflineCap": [5, 10, 20, 35], "BaseLuck": [5, 10, 20, 35, 50], "CheaperPoach": [5, 10, 15, 20, 25],
 }
 
+# --- Daily login calendar (milestone 6). Source: DailyConfig.lua ---
+DAILY_IN_ALL_TABLES = False         # True: sections 1-6 also claim the calendar every day
+DAILY_DAYS = [                      # DailyConfig.Days, in order: cashMinutes / egg / shares
+    {"cash_minutes": 5},
+    {"cash_minutes": 10},
+    {"egg": "Garage"},
+    {"cash_minutes": 20},
+    {"egg": "Startup"},
+    {"cash_minutes": 30},
+    {"egg": "Unicorn", "shares": 3},
+]
+DAILY_CASH_MAX_MINUTES = 60         # DailyConfig.CashMaxMinutes
+DAILY_MIN_CASH = 300                # DailyConfig.MinCash (a Cash day never gives less)
+DAILY_GRACE_DAYS = 1                # DailyConfig.GraceDays (not exercised: simulated players never miss a day)
+# Section 7 compares these calendars (the "too generous" one is only a what-if, not in the game)
+DAILY_TOO_GENEROUS = [
+    {"cash_minutes": 5}, {"cash_minutes": 10}, {"egg": "Startup"}, {"cash_minutes": 20},
+    {"egg": "Startup"}, {"cash_minutes": 30}, {"egg": "Unicorn", "shares": 10},
+]
+
 SIM_DAYS = 7
 DAY = 24 * 3600
 
@@ -140,8 +167,13 @@ def egg_gain(egg_key, roster, slots, luck):
 
 
 class Player:
-    def __init__(self, rng, double_cash=False, vip=False, extra_slots=False, auto_hatch=False, luck_boost=False, shareholder=False):
+    def __init__(self, rng, double_cash=False, vip=False, extra_slots=False, auto_hatch=False, luck_boost=False, shareholder=False,
+                 daily=None, daily_cash_counts=False):
         self.rng = rng
+        self.daily = daily                  # the calendar (list of days) or None
+        self.daily_cash_counts = daily_cash_counts   # what-if only: calendar Cash raises the valuation
+        self.daily_claims = 0
+        self.daily_claimed_day = -1         # day number of the last claim
         self.share_mult = SHAREHOLDER_MULT if shareholder else 1
         self.shares = 0
         self.shares_log = []        # Shares earned at each IPO
@@ -217,6 +249,31 @@ class Player:
                     if n >= k and self.slots >= k:
                         self.mark(f"{k} slots", t)
         return did
+
+    def claim_daily(self, t, day_number):
+        """Claim today's calendar reward, like DailyServer. False if already claimed today, or an egg
+        day with every incubator busy (then nothing changes and the day isn't used up)."""
+        if not self.daily or self.daily_claimed_day == day_number:
+            return False
+        reward = self.daily[self.daily_claims % len(self.daily)]   # never misses a day: the streak is the claim count
+        egg = reward.get("egg")
+        if egg:
+            if len(self.incubators) >= INCUBATORS:
+                return False
+            self.incubators.append((t + EGGS[egg]["hatch"], egg))
+        minutes = min(reward.get("cash_minutes", 0), DAILY_CASH_MAX_MINUTES)
+        if minutes > 0:
+            cash = max(DAILY_MIN_CASH, int(self.income() * 60 * minutes))
+            if self.daily_cash_counts:
+                self.earn(cash)                 # what-if row only: NOT how the game works
+            else:
+                before = (self.earned_run, self.earned_total)
+                self.cash += cash               # a gift: Cash only
+                assert (self.earned_run, self.earned_total) == before, "calendar Cash must not count toward the IPO valuation"
+        self.shares += reward.get("shares", 0)  # as they are: the Shareholder pass doesn't double them
+        self.daily_claims += 1
+        self.daily_claimed_day = day_number
+        return True
 
     def options(self, t):
         """Things the player could buy: (ratio gain/cost, cost, kind, extra)."""
@@ -318,9 +375,11 @@ class Player:
     use_ipo = False
 
 
-def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, **passes):
+def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, daily=None, daily_cash_counts=False, **passes):
     rng = random.Random(seed)
-    p = Player(rng, **passes)
+    if daily is None and DAILY_IN_ALL_TABLES:
+        daily = DAILY_DAYS
+    p = Player(rng, daily=daily or None, daily_cash_counts=daily_cash_counts, **passes)
     p.use_ipo = use_ipo
     sessions = []
     for d in range(days):
@@ -354,6 +413,9 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, **passes):
             p.luck_until = t + LUCK_MINUTES * 60
         # claim eggs that hatched while away
         p.claim_ready(t)
+        # daily calendar: claimed at the first login of the day (after hatching, so an incubator is free)
+        day_number = int(s_start // DAY)
+        p.claim_daily(t, day_number)
         while t < s_end:
             wait = p.buy_all_possible(t)
             if p.maybe_ipo(t):
@@ -376,6 +438,7 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, **passes):
             p.earn(income * dt)
             t = nxt
             p.claim_ready(t)
+            p.claim_daily(t, day_number)   # only does something if an egg day waited for a free incubator
             p.check_stages(t)
             if p.upgrades >= len(UPGRADES):
                 p.mark("all upgrades", t)
@@ -644,10 +707,40 @@ def report_detail(n):
     print("- Prices in Robux: " + ", ".join(f"{k} {v}" for k, v in PASS_PRICE_ROBUX.items()))
 
 
+def report_daily(n, days=30):
+    """The M6 plan's table: does the daily calendar move the first IPO, the IPO count or the Shares?"""
+    print(f"\n## 7. Daily login calendar (DailyConfig.lua), IPO on, no passes, no perks, {days} days, median of {n} runs")
+    print("Every simulated player claims every day (worst case). Calendar Cash is a gift: Cash only, not valuation.\n")
+    print("| Behaviour | Calendar | 1st IPO, minutes online (wall clock) | IPOs by day 7 | IPOs by day 30 | Shares at day 30 |")
+    print("|---|---|---|---|---|---|")
+    variants = [
+        ("none", {}),
+        ("proposed (DailyConfig)", {"daily": DAILY_DAYS}),
+        ("proposed, but Cash counts as valuation", {"daily": DAILY_DAYS, "daily_cash_counts": True}),
+        ("too generous (Startup d3/d5, Unicorn d7 + 10 Shares)", {"daily": DAILY_TOO_GENEROUS}),
+    ]
+    for b in BEHAVIOURS:
+        base_shares = None
+        for name, kw in variants:
+            runs = [run(b, seed, days=days, use_ipo=True, **kw) for seed in range(n)]
+            first = med([active_minutes_at(b, r.ipo_times[0]) if r.ipo_times else None for r in runs])
+            first_wall = med([r.ipo_times[0] for r in runs if r.ipo_times])
+            by7 = med([sum(1 for x in r.ipo_times if x <= 7 * DAY) for r in runs])   # includes the login at the 7-day mark, like the M6 plan
+            by30 = med([len(r.ipo_times) for r in runs])
+            shares = med([r.shares for r in runs])
+            if base_shares is None:
+                base_shares = shares
+            change = f" ({(shares / base_shares - 1) * 100:+.0f}%)" if base_shares and name != "none" else ""
+            wall = f"hour {first_wall / 3600:.0f}" if first_wall is not None else "never"
+            first_text = f"{first:.1f} ({wall})" if first is not None else "never"
+            print(f"| {b} | {name} | {first_text} | {by7:.0f} | {by30:.0f} | {shares:.0f}{change} |")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=40, help="random runs per scenario (more = less noise)")
     ap.add_argument("--markdown", action="store_true", help="(output is Markdown already; flag kept for clarity)")
+    ap.add_argument("--daily", action="store_true", help="only section 7: the daily calendar table")
     args = ap.parse_args()
     n = args.runs
     print("# Economy simulator output")
@@ -656,12 +749,18 @@ def main():
     print("IPO perk effects (FasterEggs, ExtraIncubator, ExtraSlot, OfflineCap, BaseLuck, CheaperPoach) are "
           "NOT modeled: every IPO figure below assumes no perks bought. A perk-buying player is estimated "
           "to be roughly 15-25% faster per IPO cycle than these numbers show.")
+    print(f"Daily login calendar (DailyConfig.lua, M6) IS modeled: claimed at the first login of every day, Cash as a gift "
+          f"(not valuation). In sections 1-6: {'ON' if DAILY_IN_ALL_TABLES else 'OFF'} (DAILY_IN_ALL_TABLES); section 7 compares calendars.")
+    if args.daily:
+        report_daily(n)
+        return
     report_main(n)
     report_slots_pass(n)
     report_passes(n)
     report_ipo(max(5, n // 4))
     report_real_ipo(max(5, n // 2))
     report_detail(n)
+    report_daily(max(5, n * 3 // 4))
 
 
 if __name__ == "__main__":

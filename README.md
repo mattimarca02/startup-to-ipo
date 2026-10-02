@@ -11,6 +11,8 @@ Each player gets a garage plot and buys upgrades from a green pad to earn Cash e
 | 3 | Shop: 4 game passes, 5 developer products | Done |
 | 3 (poaching) | Poach employees from other players, HR Department pad, Counter-Offer, Headhunter pass, Poach Shield product | Done. Headhunter and Poach Shield have their IDs and are on sale |
 | 4 | IPO rebirth: valuation, funding stages, Go Public, Shares, IPO shop perks, in-server leaderboard, Shareholder pass | Done (PR open). The Shareholder pass shows "Coming soon" until the owner runs the sync (`id = 0`) |
+| 5 | First minute: free egg for new players, glowing arrow, goal tracker | Done |
+| 6 | Daily rewards: 7-day login calendar (UTC days, one missed day allowed), gift chip next to the valuation bar | Built, waiting for the Studio playtest (branch `milestone-6-daily-rewards`) |
 
 ## Folder structure
 
@@ -23,14 +25,20 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `EmployeeServer.lua` | ServerScriptService | ModuleScript | Eggs, incubators, hatch rolls, team slots, employees in the garage |
 | `PoachServer.lua` | ServerScriptService | ModuleScript | Poaching negotiations, protection and shields, Counter-Offers, the purple HR Department pad |
 | `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the gold IPO pad |
+| `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
+| `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
 | `IpoConfig.lua` | ReplicatedStorage | ModuleScript | IPO rules: stage thresholds, multiplier and Shares formulas, cooldown, IPO shop perks |
+| `OnboardingConfig.lua` | ReplicatedStorage | ModuleScript | First-minute settings: the free egg, the goals, when the arrow and tracker end, an on/off switch |
+| `DailyConfig.lua` | ReplicatedStorage | ModuleScript | Daily calendar: the 7 rewards, grace days, Cash caps, reset hour (UTC), texts, an on/off switch |
 | `ShopClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | SHOP button, shop window, pop-up messages, Debug tab |
 | `EmployeeClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | EGGS and TEAM buttons, Recruiting window, hatch reveal, employees walking |
 | `PoachClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | POACH button, Poach window, negotiation mini-screen, "you're being poached" alerts, Counter-Offer card |
 | `IpoClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | IPO button, valuation bar, IPO window (Go Public with a two-step confirm, Shares Shop, Leaderboard) |
+| `OnboardingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | New players only: the glowing arrow and the goal tracker card under the valuation bar |
+| `DailyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Gift chip next to the valuation bar, Daily Rewards window (7-day calendar, Claim button) |
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 
 Other files:
@@ -39,6 +47,8 @@ Other files:
 |---|---|
 | `sync_monetization.py`, `sync_monetization.bat` | Create and update the passes and products on Roblox from `ShopConfig` |
 | `icons/` | Pass icons that `sync_monetization` uploads |
+| `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |
+| `tools/daily_test.py` | Logic tests for the daily calendar: runs `DailyServer.lua` with a fake Roblox. Needs the free `luau` tool (instructions inside) |
 | `CONTRIBUTING.md` | How we work together, plus the **Ownership** table (who is editing which script) |
 | `CLAUDE.md` | Rules Claude Code follows in this project |
 | `.env` | Your Roblox API key. You create it yourself, and it is never committed. |

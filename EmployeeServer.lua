@@ -7,6 +7,7 @@
 -- finishRelease / addEmployee (see "Poaching" below).
 -- IPO perks (IpoServer) add incubators and desks, speed up eggs and improve luck; an IPO empties
 -- the incubators (clearIncubators) and buying a perk calls refreshCapacity.
+-- OnboardingServer gives a brand-new player one free egg with grantEgg (server only, no remote).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -276,29 +277,59 @@ local function removeEmployee(team, id)
 	return nil
 end
 
--- Actions the client can ask for ------------------------------------------------
-
-local function buyEgg(player, eggKey)
-	local team, data = getTeam(player)
-	local egg = typeof(eggKey) == "string" and CreatureConfig.getEgg(eggKey)
-	if not egg then return false, "Unknown egg" end
-	local index
-	for i = 1, incubatorCount(data) do
-		if not team.incubators[i] then
-			index = i
-			break
+local function findEmployee(team, id)
+	for _, employee in ipairs(team.employees) do
+		if employee.id == id then
+			return employee
 		end
 	end
-	if not index then return false, "All incubators are busy" end
-	if data.cash.Value < egg.price then return false, "Not enough Cash" end
+	return nil
+end
 
-	data.cash.Value -= egg.price
+-- Actions the client can ask for ------------------------------------------------
+
+-- The first empty incubator, or nil if they're all busy
+local function freeIncubator(team, data)
+	for i = 1, incubatorCount(data) do
+		if not team.incubators[i] then
+			return i
+		end
+	end
+	return nil
+end
+
+-- Starts an egg's timer in an empty incubator (buying it and the free onboarding egg both use this)
+local function startEgg(player, team, data, egg, index)
 	local now = os.time()
 	local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - IpoServer.perk(data, "FasterEggs")))
 	team.incubators[index] = { egg = egg.key, startedAt = now, hatchAt = now + seconds }
 	refreshIncubator(data, index, now)
 	push(player)
+end
+
+local function buyEgg(player, eggKey)
+	local team, data = getTeam(player)
+	local egg = typeof(eggKey) == "string" and CreatureConfig.getEgg(eggKey)
+	if not egg then return false, "Unknown egg" end
+	local index = freeIncubator(team, data)
+	if not index then return false, "All incubators are busy" end
+	if data.cash.Value < egg.price then return false, "Not enough Cash" end
+
+	data.cash.Value -= egg.price
+	startEgg(player, team, data, egg, index)
 	return true, egg.name .. " is incubating"
+end
+
+-- Server only (OnboardingServer): puts a free egg in the first empty incubator, timer running.
+-- No remote can call this. Returns the incubator number, or nil if there's no egg or no room.
+function EmployeeServer.grantEgg(player, eggKey)
+	local team, data = getTeam(player)
+	local egg = team and CreatureConfig.getEgg(eggKey)
+	if not egg then return nil end
+	local index = freeIncubator(team, data)
+	if not index then return nil end
+	startEgg(player, team, data, egg, index)
+	return index
 end
 
 local function instantHatch(player, index)
@@ -383,10 +414,16 @@ function EmployeeServer.finishRelease(player, id)
 	end
 end
 
--- Puts an employee (same ID) on the team. False if the team is full.
+-- Puts an employee (same ID) on the team. False if the team is full, or if this ID is already on
+-- it (an employee is never on a team twice). If it was on its way out (outgoing), it's back now.
 function EmployeeServer.addEmployee(player, employee)
 	local team, data = getTeam(player)
 	if not team or #team.employees >= maxEmployees(player) then return false end
+	if findEmployee(team, employee.id) or (team.pending and team.pending.id == employee.id) then
+		warn("Not adding employee " .. tostring(employee.id) .. " to " .. player.Name .. ": that ID is already on the team")
+		return false
+	end
+	team.outgoing[employee.id] = nil -- saved once, as a team member, not also as leaving
 	table.insert(team.employees, { id = employee.id, creature = employee.creature, hiredAt = os.time() })
 	placeEmployees(data)
 	core.updateIncome(player)
@@ -491,8 +528,12 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 		team.incubators[i] = false
 	end
 	if typeof(savedTeam) == "table" then
+		local seen = {} -- employee IDs already loaded: a save with the same ID twice keeps only the first
 		for _, e in ipairs(typeof(savedTeam.employees) == "table" and savedTeam.employees or {}) do
-			if typeof(e) == "table" and typeof(e.id) == "string" and CreatureConfig.getCreature(e.creature) then
+			if typeof(e) == "table" and typeof(e.id) == "string" and seen[e.id] then
+				warn("Skipped a duplicate employee in " .. player.Name .. "'s save: " .. e.id)
+			elseif typeof(e) == "table" and typeof(e.id) == "string" and CreatureConfig.getCreature(e.creature) then
+				seen[e.id] = true
 				table.insert(team.employees, { id = e.id, creature = e.creature, hiredAt = e.hiredAt or 0 })
 			else
 				warn("Skipped an employee with an unknown creature: " .. tostring(typeof(e) == "table" and e.creature))
@@ -509,7 +550,9 @@ function EmployeeServer.setupPlayer(player, data, savedTeam)
 			end
 		end
 		local p = savedTeam.pending
-		if typeof(p) == "table" and typeof(p.id) == "string" and CreatureConfig.getCreature(p.creature) then
+		if typeof(p) == "table" and typeof(p.id) == "string" and seen[p.id] then
+			warn("Skipped a waiting employee in " .. player.Name .. "'s save: it's already on the team (" .. p.id .. ")")
+		elseif typeof(p) == "table" and typeof(p.id) == "string" and CreatureConfig.getCreature(p.creature) then
 			team.pending = { id = p.id, creature = p.creature, hiredAt = p.hiredAt or 0 }
 		end
 	end

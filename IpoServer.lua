@@ -9,6 +9,7 @@
 --   IpoServer.perk(data, key)         -> what a perk adds right now (see IpoConfig.Perks)
 --   IpoServer.addEarnings(player, n)  -> Cash the startup earned (raises the valuation)
 --   IpoServer.isBusy(data)            -> true while an IPO is being saved
+--   IpoServer.grantShares(player, n)  -> server only (DailyServer): n Shares as a gift
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,7 +27,7 @@ local MAX_DEBUG_AMOUNT = 1e12
 
 local IpoServer = {}
 
-local core -- { getData, save, updateIncome, plotCenter, commitIpo, isPoachBusy, countEggs, onPerksChanged }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotCenter, commitIpo, isPoachBusy, callOffPoachDeals, countEggs, onPerksChanged }, given by TycoonCore
 local remotes = {}
 
 -- Helpers ---------------------------------------------------------------
@@ -135,6 +136,19 @@ function IpoServer.addEarnings(player, amount)
 	refreshPad(ipo)
 end
 
+-- Server only (DailyServer's Day 7): adds Shares as a gift. No remote can call this.
+-- The Shareholder pass is NOT applied: it doubles the Shares an IPO pays (see preview), nothing else.
+-- Returns true if they were added (false while loading, during an IPO save, or for a bad amount).
+function IpoServer.grantShares(player, amount)
+	local ipo = getIpo(player)
+	if not ipo or ipo.busy or typeof(amount) ~= "number" or amount ~= amount or amount % 1 ~= 0 or amount < 1 or amount > MAX_DEBUG_AMOUNT then
+		return false
+	end
+	ipo.shares += amount
+	publish(player)
+	return true
+end
+
 -- Going public -----------------------------------------------------------
 
 -- Everything an IPO would give right now (the IPO window shows the same numbers)
@@ -168,7 +182,7 @@ local function goPublic(player, ipoNumber)
 		return false, "You need a valuation of " .. ShopConfig.formatCash(needed) .. " to go public"
 	end
 	if core.isPoachBusy(player) then
-		return false, "Finish your poaching deal or Counter-Offer first (or wait until nobody is poaching you)"
+		return false, "Finish your poaching deal first (or wait a moment: an employee move is still being saved)"
 	end
 
 	local reward = preview(player, ipo)
@@ -194,6 +208,11 @@ local function goPublic(player, ipoNumber)
 	if not ok then
 		return false, "The IPO couldn't be saved. Nothing changed: try again in a moment."
 	end
+
+	-- Only now that the IPO is saved: deals against you end (poachers get their Cash back) and your
+	-- Counter-Offer is off. A failed save leaves every deal as it was. Nothing is needed before the
+	-- save: data.ready is false, so no new deal can start, and one that finishes meanwhile is refunded.
+	core.callOffPoachDeals(player)
 
 	ipo.count = after.count
 	ipo.shares = after.shares

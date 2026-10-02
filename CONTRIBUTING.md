@@ -38,6 +38,8 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
 
 4. **Work and test.** Change the scripts, playtest in Studio (F5) and check the Output window for red errors. Keep Studio and the `.lua` files matching (see [the sync rule](#keeping-studio-and-the-repo-in-sync)).
 
+   Studio playtests need **Enable Studio Access to API Services** turned ON (Game Settings > Security). With it off, saves can't load and the 6 s load retry kicks you out of the playtest.
+
 5. **Commit small.** Commit each time something works:
    ```
    git status
@@ -99,7 +101,16 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
 | IpoClient | StarterPlayerScripts | free | | |
+| DailyServer | ServerScriptService | free | | |
+| DailyConfig | ReplicatedStorage | free | | |
+| DailyClient | StarterPlayerScripts | free | | |
+| OnboardingServer | ServerScriptService | free | | |
+| OnboardingConfig | ReplicatedStorage | free | | |
+| OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| tools/economy_sim.py | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
+| docs/ECONOMY.md | (repo only) | @mattimarca02 | economy-sim-real-ipo | 2026-10-01 |
 | tools/economy_sim.py | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |
 | docs/ECONOMY.md | (repo only) | @mattimarca02 | claude/ipo-shares-growth-s8kx62 | 2026-10-01 |

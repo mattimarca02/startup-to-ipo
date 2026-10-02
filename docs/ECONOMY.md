@@ -26,7 +26,7 @@ All game numbers are copied by hand into the CONFIG block at the top of the scri
 
 The idler needs that one minute: nothing can be bought or hatched while away. "Offline gains only" with zero logins would earn nothing at all.
 
-**Not modelled:** poaching, Instant Hatch, Cash packs, the IPO shop, daily rewards (M6), events (M7). The simulated player is a perfect, never-distracted optimiser, so real players will be slower. Results are the median of 40 random runs (days 1, 3 and 7 are days of the player's own clock, starting at their first login).
+**Not modelled:** poaching, Instant Hatch, Cash packs, the IPO shop, events (M7). Daily rewards (M6) are modelled in section 7 only. The simulated player is a perfect, never-distracted optimiser, so real players will be slower. Results are the median of 40 random runs (days 1, 3 and 7 are days of the player's own clock, starting at their first login).
 
 ## 1. Summary table: base game, no passes
 
@@ -168,3 +168,29 @@ Without the pass nobody finishes the shop in 60 days. The sim stops at 60 days, 
 - **Boring:** the wall after the first 5 hours (findings 2 and 3), and the first stage of the IPO being instant.
 - **Possibly unfair:** Luck Boost (misleading text), Auto-Hatch (does nothing for income). Neither is a pay-to-win problem, since the others are all fair and nothing is locked behind a pass.
 - **Fair:** 2x Cash and VIP (pure speed), and the 10x gap between active and idler players matches the 60x gap in playtime.
+
+## 7. Daily login calendar (milestone 6)
+
+`DailyConfig.lua`: Day 1 = 5 min of income, Day 2 = 10 min, Day 3 = Garage Egg, Day 4 = 20 min, Day 5 = Startup Egg, Day 6 = 30 min, Day 7 = Unicorn Egg + 3 Shares. A Cash day gives at least $300 (`MinCash`). Missing one day keeps your place; two or more go back to Day 1 (`GraceDays = 1`).
+
+Rerun with `python3 tools/economy_sim.py --daily --runs 30`. Every simulated player claims at the first login of every day (the worst case). IPO on, no passes, no perks, 30 days, median of 30 runs.
+
+| Behaviour | Calendar | 1st IPO, minutes online (wall clock) | IPOs by day 7 | IPOs by day 30 | Shares at day 30 |
+|---|---|---|---|---|---|
+| active | none | 11.7 (hour 0) | 10 | 12 | 179 |
+| active | **DailyConfig** | **11.7 (hour 0)** | **10** | **12** | **192 (+8%)** |
+| active | DailyConfig, but Cash counts as valuation | 11.3 (hour 0) | 10 | 12 | 190 (+6%) |
+| active | too generous (Startup d3/d5, Unicorn d7 + 10 Shares) | 11.7 (hour 0) | 10 | 12 | 220 (+23%) |
+| casual | none | 10.0 (hour 24) | 7 | 10 | 229 |
+| casual | **DailyConfig** | **10.0 (hour 24)** | **7** | **10** | **246 (+7%)** |
+| casual | DailyConfig, but Cash counts as valuation | 10.0 (hour 24) | 7 | 10 | 254 (+11%) |
+| casual | too generous | 10.0 (hour 24) | 7 | 10 | 274 (+20%) |
+| idler | none | 2.0 (hour 48) | 6 | 10 | 210 |
+| idler | **DailyConfig** | **1.0 (hour 24)** | **6** | **10** | **174 (-17%)** |
+| idler | DailyConfig, but Cash counts as valuation | 1.0 (hour 24) | 6 | 10 | 180 (-14%) |
+| idler | too generous | 1.0 (hour 24) | 6 | 10 | 206 (-2%) |
+
+- **The first IPO and the IPO counts don't move** for active and casual players. The only lever is Shares: about +7% over 30 days.
+- **Calendar Cash is a gift and stays out of the valuation** (`DailyServer` adds it to Cash only; the simulator asserts it). Correction to `docs/M6_PLAN.md` section 2: the plan says counting it would bring the first IPO 25% sooner (8.7 min). The real hook doesn't reproduce that: before the first IPO the only calendar Cash is Day 1 (about $300, 0.4% of the IPO-ready valuation), so the first IPO moves from 11.7 to 11.3 min (-3%). The rule is still right: later Cash days (20-30 min of income) would add real valuation to every run.
+- **The idler's first IPO moves from hour 48 to hour 24**, and their Shares fall. Both come from the simulator going public the moment it can (an earlier IPO pays the base 10 Shares instead of a bigger offline overshoot; see section 3b). It is not a real loss for players.
+

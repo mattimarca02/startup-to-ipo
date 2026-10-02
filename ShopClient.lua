@@ -552,6 +552,14 @@ if debugRemote then
 	debugRow("📜", "Give 50 Shares", "Shares to try the IPO shop.", "Give", "IpoGrantShares", "50")
 	debugRow("💥", "Next IPO save fails", "The next IPO pretends its save failed. Nothing should change, and you're told.", "Set", "IpoFailNextSave")
 	debugRow("♻️", "Reset IPO progress", "0 IPOs, 0 Shares, no perks, valuation 0. Eggs in extra incubators are removed.", "Reset", "IpoReset")
+
+	-- First minute (milestone 5)
+	debugRow("🐣", "Restart tutorial", "Gives the free egg again and brings back the arrow and goal tracker, on any save.", "Restart", "OnboardingRestart")
+	debugRow("👴", "Act like an old save", "Counts you as a player from before milestone 5: no arrow, no tracker.", "Set", "OnboardingMarkOld")
+
+	-- Daily rewards (milestone 6)
+	debugRow("📅", "Daily: next day (fake)", "Pretends one UTC day passed for you. After a claim: once = next day, twice = 1 missed day (place kept), 3 times = 2 missed days (back to Day 1).", "+1 day", "DailyNextDay")
+	debugRow("🗓️", "Daily: reset calendar", "Like a save from before milestone 6: next claim is Day 1, no streak.", "Reset", "DailyReset")
 end
 
 -- Tabs, opening and closing ---------------------------------------------
