@@ -4,10 +4,10 @@ Run on 2026-10-02 from branch `claude/prepublish-results` (cut from `claude/prep
 
 | # | Item | Result |
 |---|---|---|
-| 1 | `tools/daily_test.py` | **PASS** |
+| 1 | `tools/daily_test.py` | **PASS** (now 287 / 287 after the full-review fixes, see the end) |
 | 2 | Debug tools can't run on a live server | **PASS** |
 | 3 | Real IDs for every pass and product | **PASS (format) / NOT VERIFIED against Roblox** |
-| 4 | Egg odds in UI and text match config | **PASS** |
+| 4 | Egg odds in UI and text match config | **PASS**, then **changed** for the Paid Random Items policy (FR-12, `8c1f892`): every hire's own odds, exactly 100.00% |
 | 5 | Paid-pass check when Roblox is slow | **Fixed** in `6b3abb2` (was FAIL); Shares follow-up fixed in `22c22ff` |
 | 6 | `data.saving` can stick | **Fixed** in `ebe59cd` (was FAIL) |
 | 7 | Remote exploit sweep, code side | **PASS**, with 2 minor notes |
@@ -56,7 +56,7 @@ Read from [ShopConfig.lua](../ShopConfig.lua) only (no API call, as instructed):
 - None is `0` or a placeholder; all 12 are different (the file's own duplicate check would `warn` otherwise). Product ...115 is skipped; harmless, but it may be a deleted product.
 - I **could not confirm each ID matches what Roblox has**: that needs the API (or `sync_monetization.py` with no changes), which this run was told not to use. To close it: run `sync_monetization.py --dry-run` (or compare by hand in Creator Hub) and check the 4 `needsEggs` items are **off sale** while `EggsEnabled = false`.
 
-## 4. Egg odds: PASS
+## 4. Egg odds: PASS (superseded by FR-12, see the end)
 
 All three eggs' weights add up to exactly 100, so the UI percentages equal the config numbers. The UI (`EmployeeClient.oddsText`) computes from `CreatureConfig.getOdds`, the same function the server rolls with (`rollCreature`), so shown odds and real odds cannot drift. Luck Boost (x2 on Rare/Epic/Legendary) recomputed:
 
@@ -130,3 +130,35 @@ Notes, not blockers:
 3. **Item 3, not a code fix:** confirm the 12 IDs and sale state against Roblox (`sync_monetization.py --dry-run` or Creator Hub) before publishing.
 
 Both code fixes need the owner's claim in CONTRIBUTING.md and a Studio sync. Items 1, 2, 4 and 7 need no change.
+
+---
+
+## After the full pre-publish review (2026-10-02)
+
+docs/reviews/FULL_REVIEW.md found that item 4's PASS was not enough for Roblox's Paid Random Items policy (clarified 2026-05-26): eggs bought with Cash are paid random items because Cash packs are sold for Robux, and the policy wants **each possible hire's own odds, adding up to exactly 100%**. The old screens showed odds per rarity, rounded so that with Luck Boost they added up to 100.5% / 100.2% / 99.8%. Fixed on `prepublish-fixes`:
+
+| Finding | Status | Commit |
+|---|---|---|
+| FR-12 every hire's own odds, exactly 100.00% in every luck state; Luck Boost and Talent Scouts in numbers | Fixed | `8c1f892` |
+| FR-4 no employee copy through a poach chain | Fixed | `e813ca7` |
+| FR-1 failed leave saves retried; players told when saving fails | Fixed | `9605320` |
+| FR-5 join re-reads a fresh save after 7 s (interim, no lock) | Partly fixed | `762b471` |
+| FR-13 PolicyService `ArePaidRandomItemsRestricted` | **Needs decision D9** (docs/D9_POLICY_OPTIONS.md) | `7f55d13` |
+| FR-15, FR-18, FR-19 Max Players 6, rollback floor, hard shutdown | docs/PUBLISH_RULES.md; Max Players still to set by hand | `ef8edfa` |
+
+`tools/daily_test.py` (luau release binary in a scratch folder):
+
+```
+69 passed, 0 failed
+TycoonCore save check: 22 passed, 0 failed
+TycoonCore store check: 13 passed, 0 failed
+ShopServer pass check: 33 passed, 0 failed
+TycoonCore build check: 30 passed, 0 failed
+IpoServer pass wait check: 8 passed, 0 failed
+CreatureConfig odds check: 70 passed, 0 failed
+PoachServer move check: 16 passed, 0 failed
+TycoonCore leave save check: 13 passed, 0 failed
+TycoonCore join re-read check: 13 passed, 0 failed
+```
+
+287 / 287 (the 175 earlier checks plus 112 new). Studio sync needed: TycoonCore, ShopServer, PoachServer, CreatureConfig, ShopConfig, IpoConfig, EmployeeClient, DailyClient, ShopClient.

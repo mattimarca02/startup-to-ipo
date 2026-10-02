@@ -23,6 +23,8 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - **Before publishing M4, M5, M6, #14 and #13:** use **Shut down all servers** (new save sections).
 - PR #13 final numbers (2026-10-02, main merged in): `SharesGrowthPerIpo = 0.8`, `SharesRatioCap = 2`. Sim re-run (40 seeds, 365 days): IPO timing unchanged, Shares per IPO (active, no pass) 10 / 25 / 26 / 59 / 83, whole shop in about 7 days (about 2 with the Shareholder pass). docs/ECONOMY.md section 3d; tools/daily_test.py 104/104. Mattia's Studio check matched: IPO 1 = 10 Shares, IPO 2 = 18, IPO 3 = 26, IPO 4 with the Shareholder pass = 68. Merged 2026-10-02 as PR #13 (merge commit); sync IpoConfig to Studio and publish with **Shut down all servers**.
 - Next steps: merge PR #16 (docs: stale claim rows), then M7 weekly events or the M9 pre-publish checks (decision pending).
+- DONE (2026-10-02, branch prepublish-fixes, not merged yet): full pre-publish review (docs/reviews/FULL_REVIEW.md: 0 Critical, 4 High, 4 Medium, 11 Low) and its first fix round. Fixed: FR-12 every hire's own odds, exactly 100.00% with or without Luck Boost (`8c1f892`), FR-4 no employee copy through a poach chain (`e813ca7`), FR-1 failed leave saves retried and players told when saving fails (`9605320`), FR-5 interim: a fresh save is read again after 7 s on join (`762b471`). Docs: docs/PUBLISH_RULES.md (FR-15 Max Players 6, FR-18 rollback floor, FR-19 hard shutdown only, the publish order), CLAUDE.md rule A10. tools/daily_test.py 287/287. Sync to Studio: TycoonCore, ShopServer, PoachServer, CreatureConfig, ShopConfig, IpoConfig, EmployeeClient, DailyClient, ShopClient.
+- **Before publishing:** decide D9 (FR-13, players in restricted regions: docs/D9_POLICY_OPTIONS.md, recommended option B), set Max Players to 6 by hand, and follow docs/PUBLISH_RULES.md.
 
 ## Milestones, in order
 
@@ -64,7 +66,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - Done when: assets uploaded and a few variants ready for Roblox's thumbnail testing.
 
 ### M9: Pre-launch hardening
-- DataStore session locking (prevent the two-server edge case), request budgets, retry logic. (F10)
+- DataStore session locking (prevent the two-server edge case), request budgets, retry logic. (F10) The interim join re-read is done (762b471); the full lock design is in docs/reviews/FULL_REVIEW.md section 3 (first update after launch).
 - Full exploit review of every RemoteEvent. Mobile pass on every screen.
 - Analytics: onboarding funnel, economy events and purchase events via AnalyticsService.
 - Before launch: decide Shareholder pass strength vs shop size (pass finishes the 525-Share shop in about 2 days; sim doesn't model perks).
@@ -73,7 +75,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - From the M4 re-review (docs/reviews/M4_REREVIEW.md), 5 Low findings:
   1. If the pass check times out, loading continues without passes; pay the missing offline difference when it answers, and refuse `GoPublic` until it answers.
   2. Type-check `saved.cash`/`saved.owned` inside the load `pcall` instead of kicking the player on a bad value. (Done in PR #14 F1, c564c96.)
-  3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule.
+  3. A new field inside an existing saved section (not a new top-level section) is still deleted by older code after a rollback; carry over unknown keys per-section, or add a CLAUDE.md rule. (Done: CLAUDE.md rule A10, 387b3d0.)
   4. Kept unknown sections are frozen as of join and go stale; re-check them against `team`/`ipo` on load.
   5. If `serialize` or the IPO transform errors mid-save, `data.saving` can stay true forever, blocking all later saves; build the payload inside the `pcall` and always clear `data.saving`.
 - From the PR #14 re-review (docs/reviews/PR14_REREVIEW.md), Low findings not fixed:
@@ -108,6 +110,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - Before launch: read Roblox's current policy pages on rewards (Paid Random Items, monetization, and anything on daily or login rewards) in the Creator Hub and confirm the M6 calendar still fits (no Robux in the daily window, fixed and visible rewards, odds shown for the eggs).
 - F8: IPO balance retune.
 - Before launch: sync ALL scripts to Studio and verify checksums.
+- From the full pre-publish review (docs/reviews/FULL_REVIEW.md), Low findings not fixed yet (first update): FR-2 BindToClose saves one by one; FR-3 a slow leave save keeps the plot taken, so a joiner is kicked as "server full"; FR-6 an attacker's hop at the roll can destroy the victim's employee (closed by the lock); FR-7 a product on sale but not in ShopConfig (run sync_monetization --dry-run, C6); FR-8 a receipt that waits over 30 s isn't retried until rejoin; FR-9 saved numbers accept infinity (with PR14 R8); FR-10 passConfirming re-created after leave; FR-11 leaderboard names not escaped; FR-14 timed Robux shield offer during an attack (C8); FR-16 phones animate every employee every frame; FR-17 the shop redraws while closed.
 
 ### Launch requirements (start now, they take time)
 - New games first reach age-checked players 16+ only. Under-16s unlock after 250 plays by "highly engaged" players within 60 days.

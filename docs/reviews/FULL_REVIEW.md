@@ -10,6 +10,24 @@ Branch `prepublish-fixes`, code at `778a28e`. All `file:line` references point a
 
 `tools/daily_test.py` was not run (no `luau` binary in this session).
 
+## Fix status (round 1, branch `prepublish-fixes`)
+
+| Finding | Status | Commit |
+|---|---|---|
+| FR-12 odds per creature, exactly 100% | Fixed | `8c1f892` |
+| FR-4 poach-chain copy | Fixed | `e813ca7` |
+| FR-1 failed saves retried and shown | Fixed | `9605320` |
+| FR-5 no session lock | Partly fixed (join re-read); full lock not built | `762b471` |
+| FR-13 PolicyService | Needs decision (D9) | `7f55d13` (docs/D9_POLICY_OPTIONS.md) |
+| FR-15 Max Players 6 | Documented; set it by hand | `ef8edfa` (docs/PUBLISH_RULES.md) |
+| FR-18 rollback floor | Fixed (docs) | `ef8edfa`, A10 rule `387b3d0` |
+| FR-19 hard shutdown only | Fixed (docs) | `ef8edfa` |
+| FR-2, FR-3, FR-6, FR-7, FR-8, FR-9, FR-10, FR-11, FR-14, FR-16, FR-17 | Skipped (Low, first update or C6/C8) | |
+
+`tools/daily_test.py` after the fixes: 287 passed, 0 failed (the 175 earlier checks plus 112 new: odds 70, poach move 16, leave save 13, join re-read 13).
+
+Studio scripts to sync: TycoonCore, ShopServer, PoachServer (ServerScriptService); CreatureConfig, ShopConfig, IpoConfig (ReplicatedStorage); EmployeeClient, DailyClient, ShopClient (StarterPlayerScripts).
+
 ## Severity scale
 
 The same scale as the earlier reviews.
@@ -60,6 +78,8 @@ Nothing a client does makes the save grow without a cap: receipts and lost notes
 
 ### FR-1 (Medium): a save that fails is never retried, and the player is never told
 
+> **Status:** **Fixed** in `9605320`: the leave save is retried (3 tries, 2 s then 4 s), and after 2 failed saves in a row the player is told, then told again when saving works. The BindToClose part is FR-2 (skipped).
+
 **Where:** `TycoonCore.lua:637-645` (leave), `:662-669` (autosave), `:671-675` (`BindToClose`), `:352-356` (a failed save only `warn`s).
 
 **How it breaks:**
@@ -77,6 +97,8 @@ Purchases are safe (a failed save returns `NotProcessedYet`, so Roblox retries t
 - Count failed saves in `data.failedSaves` (reset on success). After 2 failed autosaves in a row, send a toast through `ShopNotify`: "Saving is having trouble. Your progress will be saved when it's back." Tell them again when a save works.
 
 ### FR-2 (Low): `BindToClose` saves players one at a time, and saves each one twice
+
+> **Status:** **Skipped** (Low, first update).
 
 **Where:** `TycoonCore.lua:671-675`, `:637-645`.
 
@@ -148,6 +170,8 @@ The game can't actually have more than 6 loaded players (`MAX_PLOTS = 6`, `Tycoo
 
 ### FR-3 (Low): a slow leave save keeps the plot taken, so the next player is kicked with "This server is full"
 
+> **Status:** **Skipped** (Low, first update). Matters more now that Max Players must be 6.
+
 **Where:** `TycoonCore.lua:637-645` (the plot is freed only after `save` returns), `:509-518` (no free plot = kick right away).
 
 **How it breaks:**
@@ -186,6 +210,8 @@ A copy needs a value that lives **outside** the player's own save. In this game 
 
 ### FR-4 (Medium): an employee can be copied through a poach chain, no server hop needed
 
+> **Status:** **Fixed** in `e813ca7`: `movable()` refuses to move an employee whose holder has an open `gained` note, except back to where the note says it came from (the owner's Counter-Offer). Used in `start`, `finish`, `counterOffer` and the Poach window; 16 checks.
+
 **Where:** `PoachServer.lua:266-268` (a new move erases the old holder's `gained` note), `:270-287` (when the victim's save can't be confirmed, the attacker keeps the note but the employee becomes poachable again), `:452-454` and `:489-490` (only `inTransit` blocks a move).
 
 **How it's exploited** (3 accounts in one server: V, A and C; V owns an Epic employee X; V has HR level 0 and no shield):
@@ -201,6 +227,8 @@ A copy needs a value that lives **outside** the player's own save. In this game 
 
 ### FR-5 (Medium): no session lock: an overlapping session can wipe a paid purchase, and a fast reconnect loses up to a minute
 
+> **Status:** **Partly fixed** in `762b471` (the interim): a save less than 75 s old is read again after 7 s before setup. The full session lock is **not built** (by request).
+
 **Where:** `TycoonCore.lua:241-264` (load reads without any lock), `:325-357` (blind `SetAsync`), `ShopServer.lua:461-480`.
 
 **How it breaks (purchase):**
@@ -215,6 +243,8 @@ A copy needs a value that lives **outside** the player's own save. In this game 
 **Smallest fix:** the lock below (M). If it can't make launch, an interim (S): on join, if `os.time() - saved.lastSeen < 75` (the save may come from a session that is still running), wait 7 s and read again before setting up. It costs every quick rejoin 7 s of loading but removes most reconnect losses. It does not stop the two-device purchase case.
 
 ### FR-6 (Low): an attacker who hops at the exact moment of a poach can destroy the victim's employee
+
+> **Status:** **Skipped** (Low; closed by the full lock).
 
 **Where:** `PoachServer.lua:202-217`, `:294-311`, `TycoonCore.lua:241-264`.
 
@@ -277,6 +307,8 @@ All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`
 
 ### FR-7 (Low): a developer product that is on sale but missing from ShopConfig charges the player and gives nothing for up to 3 days
 
+> **Status:** **Skipped** (Low): run `sync_monetization.py --dry-run` before launch (checklist C6).
+
 **Where:** `ShopServer.lua:483-487`, `ShopConfig.lua:176-179`.
 
 **How it breaks:** any product on sale in the universe whose ID isn't in `ShopConfig.Products` (an old test product, the skipped `3715692115` if it still exists and is on sale, a product created in Creator Hub but not synced) answers `NotProcessedYet` forever with only a server warning. Roblox keeps retrying and refunds the Robux after about 3 days (DevForum; the API docs don't state it). Players reach such a product only through a prompt the game doesn't show, so today this needs a stray prompt (another game's or a Roblox page linking it).
@@ -286,6 +318,8 @@ All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`
 **Smallest fix (S):** before launch, run `sync_monetization.py --dry-run` (checklist C6) and take every product that isn't in ShopConfig off sale. Optional: in `processReceipt`, `notify` the player "This item isn't sold here anymore; Roblox will refund it" for an unknown product.
 
 ### FR-8 (Low): a receipt that waits more than 30 s is not retried until the player rejoins, and nobody tells them
+
+> **Status:** **Skipped** (Low, first update).
 
 **Where:** `ShopServer.lua:27` (`DATA_WAIT_SECONDS = 30`), `:413-423`, `:462-465`.
 
@@ -336,6 +370,8 @@ All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`
 
 ### FR-9 (Low): several saved numbers still accept infinity, which turns into permanent Luck Boost, tokens, shields or Cash
 
+> **Status:** **Skipped** (Low, first update, together with PR14 R8).
+
 **Where:** `ShopServer.lua:351-356` (`luckLeft`, `instantHatches`: NaN is checked, infinity isn't), `PoachServer.lua:704-705` (`shieldLeft`, `cooldownUntil`), `:721` and `:725-729` (`gained` refund, `refund`), `IpoServer.lua:350-353` (PR14 R8).
 
 **How it breaks:** a save with `luckLeft = inf` gives Luck Boost forever; `instantHatches = inf` gives endless Instant Hatches; `shieldLeft = inf` makes a player unpoachable forever; a huge `refund` becomes Cash; `ipo.count = inf` blocks every IPO (R8). Only the server writes saves and DataStore JSON can't carry infinity, so this needs a save edited by a tool or a future bug.
@@ -382,6 +418,8 @@ A player who leaves **during** setup (while `ShopServer.setupPlayer` waits for t
 
 ### FR-10 (Low): `passConfirming` is re-created for a player who already left, and never removed
 
+> **Status:** **Skipped** (Low).
+
 **Where:** `ShopServer.lua:289`, `:294-298`, `:680-685`.
 
 **How it breaks:** `PromptGamePassPurchaseFinished` arrives while the player is leaving: ShopServer's `PlayerRemoving` already cleared `passConfirming[player]`, but TycoonCore hasn't removed their data yet (its leave save is still running), so `getShop` still works and `confirmPurchasedPass` creates `passConfirming[player] = {}` again. The loop ends at once (`player.Parent` is nil), leaving an empty table that holds the Player object forever.
@@ -391,6 +429,8 @@ A player who leaves **during** setup (while `ShopServer.setupPlayer` waits for t
 **Smallest fix (S):** at the end of `confirmPurchasedPass`, `if next(confirming) == nil then passConfirming[player] = nil end`.
 
 ### FR-11 (Low): the in-server leaderboard puts display names into rich text without escaping them
+
+> **Status:** **Skipped** (Low).
 
 **Where:** `IpoClient.lua:770` (the row label has `RichText = true`, `:394`); compare `PoachClient.lua:89-91`, which escapes names.
 
@@ -418,6 +458,8 @@ Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.r
 
 ### FR-12 (High): the egg odds are shown per rarity, not per creature, and don't add up to 100% while a luck effect is on
 
+> **Status:** **Fixed** in `8c1f892`: every hire is shown with its own odds (largest-remainder rounding, exactly 100.00% in every luck state, from the server's weights), the per-rarity line is their sum, Luck Boost and Talent Scouts are described in numbers; 70 checks.
+
 **Where:** `EmployeeClient.lua:437-446` (Eggs tab), `DailyClient.lua:111-120` (daily window), both built on `CreatureConfig.getOdds` (`CreatureConfig.lua:175-191`). The server then picks a creature of the rolled rarity uniformly (`EmployeeServer.lua:240-241`).
 
 **How it breaks the policy:**
@@ -439,6 +481,8 @@ Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.r
 
 ### FR-13 (High): `ArePaidRandomItemsRestricted` is never checked
 
+> **Status:** **Needs decision** (D9): options in docs/D9_POLICY_OPTIONS.md (`7f55d13`), not built. Recommended: B (fixed hire order for restricted players) plus the PolicyService check.
+
 **Where:** no `PolicyService` call anywhere (checked with grep over all `.lua` files). Relevant code: `ShopServer.lua:341-397` (join), `EmployeeServer.lua:310-321` (egg purchase), `ShopClient.lua:349-380` (prompts).
 
 **How it breaks:** a player in a restricted market can buy Cash for Robux and spend it on eggs, and can buy Luck Boost once `EggsEnabled` is on. The policy says such a user "cannot interact with paid random item generators, either via in-experience currency bought with Robux or Robux directly".
@@ -455,6 +499,8 @@ Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.r
 3. Add it to the age and content questionnaire answers (C9): the game has paid random items.
 
 ### FR-14 (Low): a Robux Poach Shield is offered on a countdown while the player is being poached
+
+> **Status:** **Skipped** (Low; decide with C8).
 
 **Where:** `PoachClient.lua:924-951` (the red alert with a progress bar and "🛡 Shield R$ 49" during the 8-10 s negotiation).
 
@@ -503,6 +549,8 @@ The game supports exactly **6 players per server**: `MAX_PLOTS = 6` (`TycoonCore
 
 ### FR-15 (High): nothing sets the Roblox server size to 6, but the game kicks the 7th player
 
+> **Status:** **Documented** in docs/PUBLISH_RULES.md (`ef8edfa`). **Manual step still to do:** set Max Players to 6 in Creator Hub.
+
 **Where:** `TycoonCore.lua:62`, `:509-518`. Not mentioned in README.md, CONTRIBUTING.md, ROADMAP.md or docs/PREPUBLISH.md (C12 says "max players" without a number).
 
 **How it breaks:**
@@ -515,6 +563,8 @@ The game supports exactly **6 players per server**: `MAX_PLOTS = 6` (`TycoonCore
 
 ### FR-16 (Low): every phone animates every nearby employee every frame
 
+> **Status:** **Skipped** (Low, first update).
+
 **Where:** `EmployeeClient.lua:918-942`.
 
 **How it breaks:** on every `Heartbeat`, each client moves every employee model within 160 studs of its camera with `PivotTo`. Plots are 90 studs apart, so a player usually sees 3-4 plots: up to ~44 models of ~15 parts, about 40,000 part moves per second at 60 fps. Fine on a PC; on low-end phones it costs frame rate for decoration.
@@ -524,6 +574,8 @@ The game supports exactly **6 players per server**: `MAX_PLOTS = 6` (`TycoonCore
 **Smallest fix (S):** update walkers at about 20 Hz (accumulate `dt`), only within 80 studs, and skip models the camera can't see.
 
 ### FR-17 (Low): the shop redraws every card twice a second even when it's closed
+
+> **Status:** **Skipped** (Low, first update).
 
 **Where:** `ShopClient.lua:619` (`player.AttributeChanged:Connect(refreshAll)`), `:327-331`, `:421-454`; the server changes `IpoValuation` and `IpoBest` every second (`IpoServer.lua:134-135`).
 
@@ -576,6 +628,8 @@ ROADMAP.md:11, :20-23 still list M4, M5, M6, #13 and #14 as "publish with **Shut
 
 ### FR-18 (High): there is no recorded rollback floor, and the only older version is one that wipes progress
 
+> **Status:** **Fixed (docs)** in `ef8edfa`: docs/PUBLISH_RULES.md section 2 (rollback floor = the launch version, never older than M4); the A10 rule is in CLAUDE.md (`387b3d0`). Write `V_old` and `V_launch` on publishing day.
+
 **Where:** process (ROADMAP.md, docs/PREPUBLISH.md); the behavior is `TycoonCore.lua:68-70`, `:304-308` (only code with these lines keeps unknown sections).
 
 **How it breaks:** launch goes wrong on day 1 (a crash loop, a broken shop). The natural reaction is "Restore the previous version" in Version History, which is `V_old`. Every player who joins in the next minutes loses their IPO progress, Shares, perks and daily streak, permanently.
@@ -585,6 +639,8 @@ ROADMAP.md:11, :20-23 still list M4, M5, M6, #13 and #14 as "publish with **Shut
 **Smallest fix (S, docs):** steps 4 and 9 above, plus one line in ROADMAP.md and CLAUDE.md: "Never restore a place version older than `V_launch` (the first version with KNOWN_SECTIONS). Fix forward instead."
 
 ### FR-19 (Medium): a soft shutdown or a missed shutdown leaves old servers running next to new ones
+
+> **Status:** **Fixed (docs)** in `ef8edfa`: docs/PUBLISH_RULES.md section 3 (hard shutdown only, commit drafts, check the new code is live).
 
 **Where:** process; ROADMAP.md:22-23 says "Shut down all servers" but doesn't forbid "Migrate to latest update" or say to verify.
 
