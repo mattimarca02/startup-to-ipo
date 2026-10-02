@@ -8,8 +8,8 @@ Run on 2026-10-02 from branch `claude/prepublish-results` (cut from `claude/prep
 | 2 | Debug tools can't run on a live server | **PASS** |
 | 3 | Real IDs for every pass and product | **PASS (format) / NOT VERIFIED against Roblox** |
 | 4 | Egg odds in UI and text match config | **PASS** |
-| 5 | Paid-pass check when Roblox is slow | **FAIL (needs a small fix)** |
-| 6 | `data.saving` can stick | **FAIL (needs a small fix)** |
+| 5 | Paid-pass check when Roblox is slow | **Fixed** in `6b3abb2` (was FAIL); one follow-up in IpoServer, see below |
+| 6 | `data.saving` can stick | **Fixed** in `ebe59cd` (was FAIL) |
 | 7 | Remote exploit sweep, code side | **PASS**, with 2 minor notes |
 
 ---
@@ -68,7 +68,14 @@ All three eggs' weights add up to exactly 100, so the UI percentages equal the c
 
 The only hard-coded numbers in text are in the Luck Boost description ("Legendary chance 8.0% -> 9.7% (Unicorn Egg)", [ShopConfig.lua:97](../ShopConfig.lua#L97)): both correct. They would go stale if Unicorn odds or `luckMultiplier` change. Note: the Talent Scouts IPO perk (`BaseLuck`) stacks on top, in both the UI and the server, so a player with that perk sees and gets more than 9.7%. The text doesn't mention it; fine.
 
-## 5. Paid-pass check timeout: FAIL (small fix needed)
+## 5. Paid-pass check timeout: Fixed in `6b3abb2` (was FAIL)
+
+**Fix (branch `prepublish-fixes`, ShopServer + ShopConfig):**
+- After a purchase, `confirmPurchasedPass` asks Roblox every `ShopConfig.PassConfirm.RetrySeconds` (5) for up to `GiveUpSeconds` (120). The pass is granted only when Roblox answers yes (a "no" or an error just means ask again), so server authority is unchanged. The player sees "Confirming ... with Roblox...", then "... unlocked!", or after 2 minutes "Roblox is slow to confirm ...", and the 120 s recheck loop or a rejoin still picks the pass up. One confirmation runs per player and pass.
+- `checkPasses` now asks all passes at the same time and calls `publish` as each one is found. With Roblox down the join check takes about 6 s instead of 36 s, so it finishes inside the 10 s join timeout.
+- **Join-time findings:** (a) *VIP lounge:* the collision group already blocks a player whose pass isn't known yet, so a VIP owner can't walk in and be thrown out; but the door would offer to *sell* the pass to an owner, and the lounge sweep could move out someone inside. Both now wait while `ShopServer.isPassCheckPending(player)` is true. (b) *Shareholder 2x Shares:* with the parallel check the window is a few seconds, but it still exists (a player who joins ready to go public and presses it at once gets 1x, permanently). Closing it needs 3 lines in `IpoServer.goPublic` (refuse with "Still checking your passes, try again in a moment" while `ShopServer.isPassCheckPending(player)`). IpoServer was not part of this task's claim, so **this is not done yet**.
+
+Original finding, kept for the record:
 
 What the code does ([ShopServer.lua:231-330](../ShopServer.lua#L231)):
 
@@ -84,7 +91,11 @@ What the code does ([ShopServer.lua:231-330](../ShopServer.lua#L231)):
 1. In `onPassPromptFinished`, when `wasPurchased` is true and `userOwnsPass` returns `nil`, retry in a loop (for example every 5 s for up to 2 minutes, `task.spawn`) and grant + `notify` when it says true. Keep the ownership re-check, as CLAUDE.md requires.
 2. In `checkPasses`, call `publish(player)` as soon as each pass is found (or move the `gaveUp` publish into the loop), so one slow pass doesn't hold back the others. Optional if (1) is done.
 
-## 6. `data.saving`: FAIL (small fix needed)
+## 6. `data.saving`: Fixed in `ebe59cd` (was FAIL)
+
+**Fix (TycoonCore):** the payload build and the IPO `transform` moved into `buildPayload`, which runs them in a `pcall`. On an error it warns, sets `data.saving = false` and `save()` returns false. The payload is a local that only exists whole, and the serializers return fresh tables, so a failed build writes nothing and leaves the live data untouched. The bounded wait on `data.saving` was not added.
+
+Original finding, kept for the record:
 
 [TycoonCore.lua:292-331](../TycoonCore.lua#L292): `save()` sets `data.saving = true`, then builds the payload by calling `ShopServer.serialize`, `EmployeeServer.serialize`, `PoachServer.serialize`, `IpoServer.serialize`, `OnboardingServer.serialize`, `DailyServer.serialize` and the IPO `transform` **outside any `pcall`**; only `SetAsync` is protected. If any of those throws (a bad value in a section, a nil field), the thread dies with `data.saving` still `true`. Every later `save()` for that player then runs `while data.saving do task.wait() end` **forever**: autosave, "save now" after spending Shares, the IPO commit (the player is stuck with `data.ready = false`), the save when leaving, and `BindToClose` would hang until Roblox cuts the server at 30 s. Nothing is written for the rest of the session, with no message beyond the original error.
 
@@ -112,7 +123,7 @@ Notes, not blockers:
 
 ---
 
-## Needs a code fix before publish
+## Needs a code fix before publish (items 1 and 2 are now fixed on `prepublish-fixes`; sync ShopServer, ShopConfig and TycoonCore to Studio)
 
 1. **Item 5, paid pass (ShopServer):** retry the ownership check after a purchase event when Roblox didn't answer, then grant + notify; optionally publish per pass. Customers pay and see nothing for 2+ minutes today.
 2. **Item 6, `data.saving` (TycoonCore):** wrap the payload building and `transform` in `pcall`, reset `saving` and return false on error (optional bounded wait).
