@@ -92,7 +92,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
-| CreatureConfig | ReplicatedStorage | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
+| CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
@@ -101,15 +101,15 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
-| DailyServer | ServerScriptService | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
+| IpoClient | StarterPlayerScripts | free | | |
+| DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
-| docs/ECONOMY.md | (repo only) | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
-| docs/PUBLISH_RULES.md | (repo only) | @mattimarca02 (via Claude Code) | launch-decisions | 2026-10-02 |
+| docs/ECONOMY.md | (repo only) | free | | |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
