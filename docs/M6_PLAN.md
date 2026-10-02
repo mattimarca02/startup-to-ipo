@@ -84,7 +84,7 @@ DailyConfig.Days = {   -- the calendar; a cycle is #Days long. Never reuse or re
   { key = "Day7", egg = "Unicorn", shares = 3 },
 }
 DailyConfig.CashMaxMinutes = 60       -- hard cap on any cashMinutes, so a bad config can't print money
-DailyConfig.ResetHourUtc = 0          -- the day changes at this UTC hour (see section 3)
+DailyConfig.ResetHourUtc = 8          -- the day changes at this UTC hour: 08:00 UTC (ResetHourUtc = 8, decided in D3; see section 3)
 DailyConfig.ClaimDebounce = 1         -- seconds between two Claim requests from one player
 ```
 
@@ -98,7 +98,7 @@ A config check at the bottom (like `IpoConfig`) warns about a missing egg key, a
 dayNumber = math.floor((os.time() - DailyConfig.ResetHourUtc * 3600) / 86400)
 ```
 
-- **UTC calendar days.** The day changes for every player at the same moment (UTC midnight by default), and a "Next reward in 5h 12m" countdown is the same on every phone. The cost: for players far from UTC the reset lands at an odd local hour, and someone can claim at 23:59 and again at 00:01 UTC. That doesn't cheat the calendar (still one claim per day, 7 claims need 7 different days), it only means two claims can be 2 minutes apart.
+- **UTC calendar days.** The day changes for every player at the same moment (08:00 UTC, ResetHourUtc = 8; it was 00:00 UTC in this plan), and a "Next reward in 5h 12m" countdown is the same on every phone. The cost: for players far from UTC the reset lands at an odd local hour, and someone can claim at 07:59 and again at 08:01 UTC. That doesn't cheat the calendar (still one claim per day, 7 claims need 7 different days), it only means two claims can be 2 minutes apart.
 - The alternative, a rolling 24 hours from the last claim, drifts later each day and needs a second "grace" rule. I don't recommend it; it is open question 3 if you want it.
 - The countdown on the client uses `workspace:GetServerTimeNow()` plus a server-sent reset time. Display only: the client's own clock is never used for anything.
 
@@ -229,7 +229,7 @@ The rules that apply, from CLAUDE.md and ROADMAP.md (CLAUDE.md has the purchase 
 **Risks to watch:**
 
 - **Two servers at once** can't be closed until M9's session lock (section 3). Small reward, honest in the review.
-- **Egg day with every incubator busy** blocks the claim for that moment, and a player who never frees one before UTC midnight loses the streak for a reason they could fix. Mitigation: the card says why, and Garage eggs hatch in 60 s. If it shows up in testing, the fix is an `EmployeeServer` change (a pending daily egg, like `team.pending`), which would need claiming that script.
+- **Egg day with every incubator busy** blocks the claim for that moment, and a player who never frees one before the 08:00 UTC reset (ResetHourUtc = 8) loses the streak for a reason they could fix. Mitigation: the card says why, and Garage eggs hatch in 60 s. If it shows up in testing, the fix is an `EmployeeServer` change (a pending daily egg, like `team.pending`), which would need claiming that script.
 - **Publishing needs Shut down all servers** (new save section).
 - **UTC reset time** is odd for some players (open question 3).
 
@@ -237,6 +237,6 @@ The rules that apply, from CLAUDE.md and ROADMAP.md (CLAUDE.md has the purchase 
 
 1. **Missed day: back to Day 1, or gentler?** ROADMAP says reset, and this plan does that with a clear message. A gentler version would drop you back by only a few days. A harsh reset can make a returning player feel it isn't worth restarting. My pick: Day 1, as ROADMAP says; we can soften it later from config without a save change.
 2. **Is the "While you were away" screen and the 2x offline earnings product part of this milestone?** ROADMAP M6 lists both, but you asked for the daily loop. The away screen needs TycoonCore to tell the client the offline amount (a display change), and the 2x product needs a new product ID from `sync_monetization.py`, plus a rule for how a purchase doubles an amount that was already paid at load. My pick: build the calendar first as M6 (this plan), and do the away screen and product as a second branch right after.
-3. **UTC calendar day or a rolling 24 hours?** UTC is simple, shows the same countdown for everyone, and a day is "7 different days". Rolling 24 h is personal but drifts later each day. My pick: UTC, reset at 00:00 UTC (config).
+3. **UTC calendar day or a rolling 24 hours?** UTC is simple, shows the same countdown for everyone, and a day is "7 different days". Rolling 24 h is personal but drifts later each day. My pick: UTC, reset at 08:00 UTC (ResetHourUtc = 8, decided in D3; the plan first said 00:00 UTC).
 4. **Gift chip next to the valuation bar, or a sixth HUD slot?** The chip leaves the five-slot layout alone. A sixth slot looks consistent but means re-centering the buttons in four clients and re-testing every phone size. My pick: the chip.
 5. **Is the Day 7 prize right: a Unicorn Egg plus 3 Shares?** It is the weekly "wow" and the only Shares source outside an IPO (about +7% Shares per month in the sim). If you'd rather keep Shares purely for IPOs, set `shares = nil` in config and Day 7 is just the Unicorn Egg.
