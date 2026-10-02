@@ -107,7 +107,9 @@ IPO_THRESHOLD_GROWTH = 2.5          # IpoConfig.StageGrowthPerIpo: next run's st
 IPO_KEEPS_EMPLOYEES = True          # IpoConfig.Resets: employees are never in the Resets table, always kept
 IPO_RESET_UPGRADES = True           # IpoConfig.Resets.Upgrades = true (cash and incubating eggs also reset)
 IPO_RESETS_HR = False               # IpoConfig.Resets.HRDepartment = false: the HR level is kept across an IPO
-IPO_SHARES_PER_IPO = 10             # IpoConfig.SharesPerIpo: Shares = this * (valuation / IPO-ready valuation) ^ exponent
+IPO_SHARES_PER_IPO = 10             # IpoConfig.SharesPerIpo: Shares = this * (1 + growth * IPOs done) * (valuation / IPO-ready valuation) ^ exponent
+IPO_SHARES_GROWTH = 0.8             # IpoConfig.SharesGrowthPerIpo
+IPO_SHARES_RATIO_CAP = 2            # IpoConfig.SharesRatioCap
 IPO_SHARES_EXPONENT = 0.5           # IpoConfig.SharesExponent
 SHAREHOLDER_MULT = 2                # ShopConfig Passes.Shareholder: 2x Shares per IPO (199 R$)
 IPO_COOLDOWN_SECONDS = 60           # IpoConfig.CooldownSeconds (not modeled: every gap between IPOs is far longer)
@@ -353,8 +355,8 @@ class Player:
         if not self.use_ipo or self.stage_index() < len(IPO_STAGES) - 1:
             return False
         # the sim goes public the moment IPO-ready is reached, so the ratio is ~1 (a player who waits gets more)
-        ratio = max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale))
-        gained = int(IPO_SHARES_PER_IPO * ratio ** IPO_SHARES_EXPONENT * self.share_mult)
+        ratio = min(IPO_SHARES_RATIO_CAP, max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale)))
+        gained = int(IPO_SHARES_PER_IPO * (1 + IPO_SHARES_GROWTH * self.ipos) * ratio ** IPO_SHARES_EXPONENT * self.share_mult)
         self.shares += gained
         self.shares_log.append(gained)
         self.ipos += 1
@@ -735,12 +737,16 @@ def report_daily(n, days=30):
 
 
 def main():
+    global SIM_DAYS_IPO
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=40, help="random runs per scenario (more = less noise)")
     ap.add_argument("--markdown", action="store_true", help="(output is Markdown already; flag kept for clarity)")
     ap.add_argument("--daily", action="store_true", help="only section 7: the daily calendar table")
+    ap.add_argument("--ipo", action="store_true", help="only section 6: real IPO numbers in active minutes (all --runs, not half)")
+    ap.add_argument("--days", type=int, default=60, help="days simulated in section 6 (default 60)")
     args = ap.parse_args()
     n = args.runs
+    SIM_DAYS_IPO = args.days
     print("# Economy simulator output")
     print(f"Assumptions: claim delay without Auto-Hatch {CLAIM_DELAY_MANUAL}s; wait up to {WAIT_SECONDS}s for a better buy; "
           f"sessions {BEHAVIOURS}")
@@ -751,6 +757,9 @@ def main():
           f"(not valuation). In sections 1-6: {'ON' if DAILY_IN_ALL_TABLES else 'OFF'} (DAILY_IN_ALL_TABLES); section 7 compares calendars.")
     if args.daily:
         report_daily(n)
+        return
+    if args.ipo:
+        report_real_ipo(n, args.days)
         return
     report_main(n)
     report_slots_pass(n)
