@@ -399,3 +399,77 @@ A player who leaves **during** setup (while `ShopServer.setupPlayer` waits for t
 **Impact:** cosmetic; rich text can't run code. Display names are already filtered by Roblox.
 
 **Smallest fix (S):** copy PoachClient's `escape` into IpoClient and use `escape(other.DisplayName)`.
+
+---
+
+## 7. Platform policy and player safety
+
+### The Paid Random Items policy applies to this game today
+
+Roblox clarified the policy on **2026-05-26** ([announcement](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622), [guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items)). The parts that matter here:
+
+- A paid random item is one bought "directly with Robux, or indirectly via in-game currencies purchased with Robux, that yield a random outcome". Luck boosts are covered as probability modifiers.
+- "Odds disclosures must be shown for each possible item prior to purchase. If there are many outcomes within a category, each individual outcome must still have its odds shown."
+- "The probability percentages of all final outcomes must sum to exactly 100%."
+- Odds modifiers "must have their effects numerically disclosed, and displayed odds must update dynamically when such items are active."
+- Games with paid random items must use `PolicyService` `ArePaidRandomItemsRestricted` and keep restricted users away from them (named markets: Australia, Belgium, Netherlands, United Kingdom, Brazil).
+
+**Why it applies:** recruiting eggs roll a random creature (`EmployeeServer.lua:226-242`) and are bought with Cash (`:310-321`). Cash is sold for Robux: Pile, Bag and Vault of Cash are **on sale now**, because `EggsEnabled = false` only hides items marked `needsEggs` (`ShopConfig.lua:16`, `:87-116`, `:182-184`). Luck Boost (Robux) is an odds modifier. So eggs are paid random items at launch whatever is decided for D4. (The free eggs from onboarding and the daily calendar are not paid.)
+
+### FR-12 (High): the egg odds are shown per rarity, not per creature, and don't add up to 100% while a luck effect is on
+
+**Where:** `EmployeeClient.lua:437-446` (Eggs tab), `DailyClient.lua:111-120` (daily window), both built on `CreatureConfig.getOdds` (`CreatureConfig.lua:175-191`). The server then picks a creature of the rolled rarity uniformly (`EmployeeServer.lua:240-241`).
+
+**How it breaks the policy:**
+1. **No per-creature odds.** The card shows "Common 40% · Uncommon 35% · Rare 18% · Epic 6.0% · Legendary 1.0%" for the Startup Egg. The final outcomes are the 12 creatures: each Common is 13.33%, each Uncommon 11.67%, each Rare 9%, each Epic 3%, and Unicorn CEO and Venture Dragon 0.5% each. None of these numbers is shown anywhere.
+2. **Rounded numbers don't sum to 100%.** Values of 10% or more are rounded to whole numbers. With Luck Boost on:
+   - Garage Egg shows 67% + 24% + 9.5% = **100.5%**
+   - Startup Egg shows 32% + 28% + 29% + 9.6% + 1.6% = **100.2%**
+   - Unicorn Egg shows 6.1% + 15% + 42% + 27% + 9.7% = **99.8%**
+   The Talent Scouts perk (`BaseLuck`) produces other uneven sums.
+3. **The modifiers are only partly described.** Luck Boost's description gives one example ("Legendary chance 8.0% -> 9.7% (Unicorn Egg)", `ShopConfig.lua:121`), true only without Talent Scouts. The Eggs tab does update live (good). Talent Scouts says "+10%" (`IpoClient.lua:139-140`), a weight change, not a probability.
+
+**Impact:** a policy violation on the core loop. The game can be moderated or have monetization restricted; one report from a player is enough to trigger a review.
+
+**Smallest fix (S-M, clients only):**
+- Show every creature with its own odds: for each rarity, `chance / #creaturesOfRarity` per creature, e.g. "Common 40% (each 13.33%: Coffee Capybara, Coding Cat, Pixel Pigeon)". The policy allows one "odds for each item listed below" line per group.
+- Show two decimals, and round with the largest-remainder method so the shown numbers always add up to exactly 100.00%.
+- Luck Boost and Talent Scouts: describe the effect as numbers ("x2 weight on Rare, Epic and Legendary") and point to the live table in the Eggs tab. Keep the live update.
+- Recheck with B8 on a phone.
+
+### FR-13 (High): `ArePaidRandomItemsRestricted` is never checked
+
+**Where:** no `PolicyService` call anywhere (checked with grep over all `.lua` files). Relevant code: `ShopServer.lua:341-397` (join), `EmployeeServer.lua:310-321` (egg purchase), `ShopClient.lua:349-380` (prompts).
+
+**How it breaks:** a player in a restricted market can buy Cash for Robux and spend it on eggs, and can buy Luck Boost once `EggsEnabled` is on. The policy says such a user "cannot interact with paid random item generators, either via in-experience currency bought with Robux or Robux directly".
+
+**Impact:** a policy violation for the UK, Australia, Brazil, Belgium and the Netherlands, all large markets.
+
+**Smallest fix (M):**
+1. On join, call `PolicyService:GetPolicyInfoForPlayerAsync(player)` in a `pcall` (in `ShopServer.setupPlayer`, next to the pass check, with the same 10 s cap). If it fails, treat the player as restricted. Store `shop.randomRestricted` and publish it as an attribute.
+2. Pick one of the treatments the policy lists, **as a decision for Mattia (new D9):**
+   - (a) **No paid route to eggs:** for restricted players, hide Cash packs, Luck Boost and Instant Hatch in the shop and the Poach window, so their Cash is only earned. Cheapest (S), but ask Roblox or read the policy carefully on whether the 2x Cash and VIP passes make their Cash count as "bought with Robux".
+   - (b) **Predetermined sequence:** restricted players' eggs hatch from a fixed, shown order instead of a random roll (M, in `rollCreature`).
+   - (c) **Block:** refuse `BuyEgg` for restricted players; they get eggs only free (daily, onboarding). Simple, but it removes the core loop for the UK.
+   My recommendation: (a) now, plus (b) if the passes count as paid.
+3. Add it to the age and content questionnaire answers (C9): the game has paid random items.
+
+### FR-14 (Low): a Robux Poach Shield is offered on a countdown while the player is being poached
+
+**Where:** `PoachClient.lua:924-951` (the red alert with a progress bar and "🛡 Shield R$ 49" during the 8-10 s negotiation).
+
+**How it breaks:** the offer is timed and comes at a moment of loss. It is not against a rule found in this review, but it is the kind of pressure selling platform reviews and parents notice, and it matters more once under-16s unlock (ROADMAP.md:113-115).
+
+**Smallest fix (S):** keep the shield in the Defense tab and in the "POACHED!" card afterwards, and drop the button (or the bar) from the live alert. Decide as part of C8.
+
+### Other checks
+
+| Check | Result |
+|---|---|
+| Player-written text | None. There is no `TextBox` in any client, no custom chat and no naming of startups or employees. Nothing needs `TextService` filtering. |
+| Names shown | Only `DisplayName` (already filtered by Roblox) on plot signs (`TycoonCore.lua:541`), the leaderboard (FR-11) and poach messages (escaped in PoachClient). |
+| Chat | Roblox's `TextChatService`; `ChatTags.lua` only adds the `[VIP]` prefix from a server attribute set from config. No chat bypass. |
+| Under-16 and chat rules | CLAUDE.md has none; ROADMAP.md:113-115 says the game first reaches 16+ players. Nothing in the code depends on age. |
+| Daily calendar | Free, fixed, shown in advance, no Robux in its window, odds on tap for the egg days. Fits the policy (no paid random item). |
+| ShopConfig descriptions | Factual and accurate except the Luck Boost example (FR-12). "Shares", "IPO" and "stock options" are startup satire; Shares can't be traded or cashed out. Keep it that way: no wording that suggests real investing or real money. |
+| Prices shown vs charged | The shop shows `ShopConfig.price`; Roblox charges the Creator Hub price. The checklist's C5 mismatch (180 / 135 / 225 on the store page) is still open. |
