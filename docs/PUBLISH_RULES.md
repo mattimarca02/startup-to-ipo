@@ -39,6 +39,14 @@ M4 has never been published, so **the version live today is older than M4, and s
 - Not saved: it is asked again on every join, so a region change shows up on the next join.
 - In the server log (F9 > Server), "Policy check ... failed" or "... is slow" now and then is normal; many of them mean Roblox's policy service is having trouble (players get fixed hires until it recovers).
 
+## 3c. Daily reset hour (D3): 8 UTC, never change it
+
+`DailyConfig.ResetHourUtc` must be decided before launch: **decided 8 UTC, never change it after launch because it gives every player an extra claim.** The day number is `floor((os.time() - ResetHourUtc * 3600) / 86400)` and `lastClaimDay` is saved as that number, so every save is tied to the hour it was made under.
+
+- **Later hour (for example 8 to 12):** a player who claimed this morning waits a few hours longer. No extra claim.
+- **Earlier hour (for example 8 to 0):** the hours between the two resets count as a new day, so everyone who already claimed can claim again. Each player gets one extra reward, once.
+- Checked for the switch from 0 to 8 (no live players, so no migration needed): an old save with `lastClaimDay` made under hour 0 loads clean, is never clamped or warned about, and never gets an extra claim. At worst it waits until 08:00 UTC instead of 00:00. Test data claimed between 00:00 and 08:00 UTC just waits for the next 08:00 UTC; a player coming back between 00:00 and 08:00 UTC counts one missed day less, so the grace is slightly kinder, never harsher. Nothing breaks, so dev saves need no reset for this.
+
 ## 4. Publish order (place with no live players: the launch)
 
 **Before publishing day**
@@ -46,7 +54,7 @@ M4 has never been published, so **the version live today is older than M4, and s
 2. Studio matches `main` exactly: compare every script (read only, Studio MCP or by hand). Commit all drafts.
 3. `python3 tools/daily_test.py` passes ("N passed, 0 failed" on every line).
 4. In Creator Hub, open the place's **Version History** and write down the live version as `V_old` (section 2).
-5. Settings that can't change later without side effects: **Max Players = 6**; `DailyConfig.ResetHourUtc` (moving it earlier later gives everyone an extra claim); `ShopConfig.EggsEnabled`; the experience stays private.
+5. Settings that can't change later without side effects: **Max Players = 6**; `DailyConfig.ResetHourUtc` (must be decided before launch: decided 8 UTC, never change it after launch because it gives every player an extra claim; see section 3c); `ShopConfig.EggsEnabled`; the experience stays private.
 6. Re-read Roblox's current Paid Random Items policy page (https://create.roblox.com/docs/production/monetization/paid-random-items) and the DevForum clarification linked in docs/D9_POLICY_OPTIONS.md. Write down the date you read it and the list of restricted regions it names: ______ (date), ______ (regions). If the rules changed (a new treatment required, Cash multiplier passes counted as paid, odds rules), stop and update D9 before publishing.
 
 **Publishing day**

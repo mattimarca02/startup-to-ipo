@@ -238,9 +238,86 @@ IS_STUDIO = true
 check("cash min for income 0", DailyConfig.cashFor({ cashMinutes = 5 }, 0) == 300)
 check("cash cap 60 min", DailyConfig.cashFor({ cashMinutes = 1000 }, 1) == 3600)
 check("no cash day", DailyConfig.cashFor({ egg = "Garage" }, 100) == 0)
--- UTC boundary
-check("day changes at UTC midnight", DailyConfig.dayNumber(20001 * 86400 - 1) == 20000 and DailyConfig.dayNumber(20001 * 86400) == 20001)
+-- UTC boundary: the day changes at ResetHourUtc = 8 (D3), not at midnight
+check("reset hour is 8 UTC (D3)", DailyConfig.ResetHourUtc == 8)
+local RESET = 8 * 3600
+check("day changes at 08:00 UTC", DailyConfig.dayNumber(20001 * 86400 + RESET - 1) == 20000 and DailyConfig.dayNumber(20001 * 86400 + RESET) == 20001)
+check("midnight UTC is not a new day", DailyConfig.dayNumber(20001 * 86400) == 20000 and DailyConfig.dayNumber(20001 * 86400 + 1) == 20000)
+check("dayStart is 08:00 UTC", DailyConfig.dayStart(20001) == 20001 * 86400 + RESET)
+check("dayNumber(dayStart(n)) == n", DailyConfig.dayNumber(DailyConfig.dayStart(20001)) == 20001 and DailyConfig.dayNumber(DailyConfig.dayStart(20001) - 1) == 20000)
 check("formatWait", DailyConfig.formatWait(18720) == "5h 12m" and DailyConfig.formatWait(750) == "12m 30s" and DailyConfig.formatWait(42) == "42s")
+
+-- 13. The 08:00 UTC reset in a real flow (D3). Times are given as day D at hour H UTC.
+local function at(day, hour, minute) return day * 86400 + hour * 3600 + (minute or 0) * 60 end
+local savedNow = NOW
+-- claim at 07:59, claim again at 08:00 (a new day), refused at 08:01
+NOW = at(20000, 7, 59)
+p, d = newPlayer(nil)
+check("07:59: ready", p.attrs.DailyReady == true)
+check("07:59: claim ok", tap(p) == true)
+check("07:59: the countdown points at 08:00 UTC", p.attrs.DailyNextAt == at(20000, 8) and p.attrs.DailyReady == false)
+NOW = at(20000, 8)
+DailyServer.setupPlayer(p, d, DailyServer.serialize(d))
+check("08:00: next day is ready", p.attrs.DailyReady == true and p.attrs.DailyDay == 2)
+check("08:00: claim Day 2 ok", tap(p) == true)
+NOW = at(20000, 8, 1)
+check("08:01: same day, refused", tap(p) == false)
+NOW = at(20001, 7, 59)
+check("next 07:59: still claimed", tap(p) == false)
+NOW = at(20001, 8)
+check("next 08:00: Day 3 claimable", tap(p) == true and d.daily.streak == 3)
+-- midnight does nothing: claimed at 23:00, still claimed at 00:30 the next calendar day
+NOW = at(20010, 23)
+p, d = newPlayer(nil)
+check("23:00: claim ok", tap(p) == true)
+NOW = at(20011, 0, 30)
+check("00:30 next calendar day: still claimed", tap(p) == false)
+NOW = at(20011, 8)
+check("08:00 next calendar day: claimable", tap(p) == true)
+-- a save made under the old hour 0 (lastClaimDay = floor(t / 86400)), joining under hour 8
+-- (a) claimed at 10:00 on day 20000 (same number under both rules): next claim 08:00 on 20001
+NOW = at(20000, 12)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+check("old save, claimed 10:00: not ready", p.attrs.DailyReady == false and not tap(p))
+check("old save, claimed 10:00: next at 08:00 UTC", p.attrs.DailyNextAt == at(20001, 8))
+NOW = at(20001, 0, 10)
+check("old save, claimed 10:00: still refused after midnight", not tap(p))
+NOW = at(20001, 8)
+check("old save, claimed 10:00: ready at 08:00", tap(p) == true and d.daily.streak == 3)
+-- (b) claimed at 03:00 on day 20000 under hour 0, joins at 05:00 the same day (new day number is 19999):
+--     counted as claimed today, no warning, and the player waits until 08:00 on 20001 (up to 8 h longer, never an extra claim)
+WARNINGS = {}
+NOW = at(20000, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+check("old save, claimed 03:00, join 05:00: claimed, not clamped", p.attrs.DailyReady == false and d.daily.lastClaimDay == 20000 and #WARNINGS == 0)
+NOW = at(20001, 1)
+check("old save, claimed 03:00: 01:00 next day is still waiting", not tap(p))
+NOW = at(20001, 8)
+check("old save, claimed 03:00: ready at 08:00 next day", tap(p) == true and d.daily.streak == 3)
+-- (c) the grace edge only gets kinder: last claim day 20000, back at 05:00 on 20003 (old rules: 2 missed, Day 1; new: 1 missed, place kept; from 08:00 on both rules agree)
+NOW = at(20003, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, back at 05:00 after 2 days: place kept", p.attrs.DailyKept == true and p.attrs.DailyDay == 4 and p.attrs.DailyMissed == 1)
+NOW = at(20003, 9)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, back at 09:00 after 2 days: back to Day 1 (same as the old rule)", p.attrs.DailyDay == 1 and p.attrs.DailyLostDay == 3)
+NOW = at(20004, 5)
+p, d = newPlayer({ lastClaimDay = 20000, streak = 3, best = 3, claims = 3 })
+check("old save, 3 missed days: back to Day 1", p.attrs.DailyDay == 1 and p.attrs.DailyLostDay == 3)
+-- (d) no extra claim: for an old save claimed on day 20000 (any hour), whenever the new rule says "ready",
+--     the old rule (day = floor(t / 86400)) says "ready" too, checked hour by hour for 4 days
+local extra, firstReady = 0, nil
+for hour = 0, 4 * 24 do
+	NOW = at(20000, hour)
+	local pp = newPlayer({ lastClaimDay = 20000, streak = 2, best = 2, claims = 2 })
+	local newReady = pp.attrs.DailyReady == true
+	local oldReady = math.floor(NOW / 86400) > 20000
+	if newReady and not oldReady then extra += 1 end
+	if newReady and not firstReady then firstReady = hour end
+end
+check("old save: the new reset never allows a claim the old one didn't", extra == 0, extra)
+check("old save: first ready at 08:00 on day 20001 (hour 32 from the start of day 20000)", firstReady == 32, firstReady)
+NOW = savedNow
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
