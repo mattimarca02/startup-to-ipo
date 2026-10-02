@@ -36,7 +36,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
   - (e) Max Visitor Count = 6 in Creator Hub (place Access tab) and Social Slots = Roblox optimized; then check live servers for players who join and are removed, and switch to Disable if that happens.
   - (f) docs/STORE_PAGE.md says "Egg odds are always shown" (lines about 31, 42, 43, 60, 92, 139, 169): reword to "Hire odds are shown, or a fixed hire order where local rules require it" before pasting anything into the store page.
   - (g) The store Description field is empty in Creator Hub.
-  - (h) Cosmetic: the Garage odds display shows 69.99 / 25.01 / 5.00 because rounding is done across creatures; round inside each rarity so it shows 70.00 / 25.00 / 5.00 (the total is exact).
+  - (h) DONE (2026-10-02, branch launch-decisions, `4f4b24f`): cosmetic odds display now rounds inside each rarity (largest remainder), so the Garage shows 70.00 / 25.00 / 5.00 (the total is exact).
   - (i) Right before launch, re-read the current Paid Random Items policy page and note the date and region list (UK, AU, BR, BE, NL according to the review).
   - (j) Answer "Yes, paid random items" in the age questionnaire.
   - (k) An egg bought under one restriction state and hatched under another follows the state at hatch time.
