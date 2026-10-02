@@ -158,3 +158,78 @@ The game can't actually have more than 6 loaded players (`MAX_PLOTS = 6`, `Tycoo
 **Impact:** a joiner is bounced. More likely once the server size is set to exactly 6 (FR-15), and during DataStore trouble. No data is lost.
 
 **Smallest fix (S):** in `onPlayerAdded`, when no slot is free, wait up to 10 s (checking every 0.5 s while the player is still in the game) before kicking.
+
+---
+
+## 3. Session locking (F10), concretely
+
+### Why a hop can only *move* value, not copy it, except through poaching
+
+Every save is a full `SetAsync` of the whole player (`TycoonCore.lua:349`), so the save on disk is always one server's complete picture. When two servers hold the same player, the last write wins and the other server's changes vanish. That's why hopping undoes things but can't add a second copy of anything that lives only in that one save (Cash, Shares, perks, eggs, IPO count, streak).
+
+A copy needs a value that lives **outside** the player's own save. In this game there are only two:
+- **another player's save**, reached through poaching and the Counter-Offer (`PoachServer.transfer`);
+- **Roblox's receipt state**: a receipt answered `PurchaseGranted` is never sent again.
+
+### Hop steps, asset by asset
+
+"Two devices" means: the player is in server A on device 1 and joins server B on device 2. Roblox kicks device 1, but server B reads the save before A's leave save lands.
+
+| Asset | Exact steps | Result | How easy |
+|---|---|---|---|
+| **Cash** | 1. In A, spend Cash (HR level, failed poach, egg). 2. Within ~1 s, before A's save of that spend lands, join B. 3. Play on in B. | The spend is undone, and so is everything else since A's last landed save. No Cash is created. | Hard (two devices, sub-second timing). Gain: an undo. |
+| **Shares, perks, IPO** | Same, right after buying a perk (saved at once, `IpoServer.lua:263`) or going public. Then go public or buy again in B. | One IPO or one purchase survives (B's). Shares are never doubled: the M4 F10 case. | Hard. No gain. |
+| **Employees** | **No hop needed:** FR-4 below (3 accounts). With a hop, the poached victim keeps the employee for the attacker's session only (`reconcile` takes it back on the attacker's next join). | **Permanent copy** (FR-4). | Easy with a script, luck by hand. |
+| **Eggs (free egg, M5 F8)** | New player: join A (free egg), join B within ~1 s of A's first save. | B gives the egg again; one save survives, so one egg. | Hard. No gain. |
+| **Daily streak and reward (M6 F10)** | Claim in A; device 2 joins B before A's claim save lands; claim again in B. | One reward survives. A copy survives only if the egg hatched in A and that employee was poached by an alt in A before B's save overwrote it. | Medium (two devices). Gain: one egg's employee to an alt per day. |
+| **Purchase grant** | Buy in A while device 2 is already loading B. | **Never duplicated** (the receipt isn't sent again). Can be **lost**: FR-5. | Accidental only. |
+
+### FR-4 (Medium): an employee can be copied through a poach chain, no server hop needed
+
+**Where:** `PoachServer.lua:266-268` (a new move erases the old holder's `gained` note), `:270-287` (when the victim's save can't be confirmed, the attacker keeps the note but the employee becomes poachable again), `:452-454` and `:489-490` (only `inTransit` blocks a move).
+
+**How it's exploited** (3 accounts in one server: V, A and C; V owns an Epic employee X; V has HR level 0 and no shield):
+1. A poaches X from V. On success, `transfer` puts X on A's team with a `gained` note `{ from = V }`, keeps X in V's save as `outgoing`, and starts saving A (`:270-271`).
+2. V leaves **before A's save returns** (an exploit script can call `LocalPlayer:Kick()` when the `Poached` event arrives, about 0.1-0.5 s; A can widen the window by buying an HR level just before, so A's confirm save waits behind that save). V's leave save still contains X (`outgoing` is saved as an employee, `EmployeeServer.lua:577-579`).
+3. A's save lands. V is gone, so `finishRelease` and V's `lost` note are skipped (`:272-279`). `confirmSave(V, X, false)` reads V's save, finds X, returns false (`:209-212`). A keeps the `gained` note, and `inTransit[X]` is cleared (`:286`). So far this is the design: on A's next join, `reconcile` would hand X back.
+4. Before A leaves, C poaches X from A (A has no shield: A wasn't poached). The new `transfer(A, C)` sets `A.gained[X] = nil` (`:268`). The note that would have undone step 1 is gone.
+5. C's and A's saves confirm normally. **Final: V's save has X, C's save has X.** A's refund for step 1 is gone too. On C's next join, `reconcile` checks A's save: no X, and A's `lost` note says C took it, so C keeps it.
+
+**Impact:** a permanent copy of any poachable employee (Common to Epic; Legendary can't be poached). Costs two poach fees and two lucky rolls (30-40% for an Epic). Value is limited (no trading, slots are capped), but it is a true duplication, and alt farms are cheap.
+
+**Smallest fix (S):** an employee whose holder still has an open `gained` note can't be moved on. In `start` (`:454`) and `counterOffer` (`:490`), refuse with "That employee isn't available" when `poachOf(target).gained[employeeId]` (or the attacker's, for the Counter-Offer) is set, and hide it in `targetsFor` (`:529`) the same way as `inTransit`. The note is cleared once the victim's save confirms, so normal moves are not affected. Add a `daily_test.py`-style check if possible.
+
+### FR-5 (Medium): no session lock: an overlapping session can wipe a paid purchase, and a fast reconnect loses up to a minute
+
+**Where:** `TycoonCore.lua:241-264` (load reads without any lock), `:325-357` (blind `SetAsync`), `ShopServer.lua:461-480`.
+
+**How it breaks (purchase):**
+1. Device 1 is in server A. Device 2 joins server B; B reads the save (without the purchase below).
+2. Before Roblox kicks device 1, the player buys a Cash pack (or Instant Hatch, Poach Shield) on device 1. A grants it, saves, answers `PurchaseGranted`.
+3. B never sees the purchase. B's autosave overwrites A's save. Roblox won't send the receipt again.
+
+**How it breaks (no exploit, normal players):** the client loses its connection; the player taps Reconnect and lands in a new server while the old server still holds them (it takes a while to notice). The new server reads the last autosave (up to 60 s old). The old server's leave save lands later and is then overwritten by the new server's autosave. Up to 60 s of progress is lost. If the old server's write is stuck in a throttle queue and lands *after* the new session's last save, the whole new session is lost.
+
+**Impact:** paid and not received (rare, two devices at once); "I lost my last minute" after reconnects (common enough to cause reviews); the M4 F10 / M5 F8 / M6 F10 hops above.
+
+**Smallest fix:** the lock below (M). If it can't make launch, an interim (S): on join, if `os.time() - saved.lastSeen < 75` (the save may come from a session that is still running), wait 7 s and read again before setting up. It costs every quick rejoin 7 s of loading but removes most reconnect losses. It does not stop the two-device purchase case.
+
+### FR-6 (Low): an attacker who hops at the exact moment of a poach can destroy the victim's employee and get refunded
+
+**Where:** `PoachServer.lua:202-217`, `:294-311`, `TycoonCore.lua:241-264`.
+
+**How it breaks:** A's poach succeeds in server 1; device 2 has server B read A's save **before** A's confirm save lands (a sub-second window). Server 1 then confirms A (reading A's leave save, which has X), releases X from V for good and saves V. B's later saves overwrite A's save without X, and B already paid A's negotiation `refund` back from the older save. Nobody has X; A paid nothing.
+
+**Impact:** griefing one employee; needs two devices and sub-second luck. Closed by the lock. **Fix:** the lock below; nothing separate.
+
+### The smallest lock that fits the current save format
+
+1. **Where it's stored:** a new top-level section `session = { id, at }` (`id` = `game.JobId`, or a GUID in Studio where `JobId` is empty; `at` = `os.time()`). Add `session` to `KNOWN_SECTIONS` (`TycoonCore.lua:70`) so this code never treats it as unknown. Code with the F2 rule (M4 and later) keeps it as an unknown section and writes it back unchanged, which only makes the lock look held a little longer; code from before F2 drops it, which only frees it. No other section changes, so old saves keep loading.
+2. **Taking it, in `load`:** replace `GetAsync` with `UpdateAsync`. In the callback: if the stored `session` belongs to another server and is younger than 90 s, return `nil` (write nothing) and let `load` try again every 3 s for up to 15 s. Otherwise set `session = { id = ours, at = now }` and return the save. After 15 s, take it anyway (Roblox has already kicked the other device, and a crashed server's lock is stale). A read error keeps today's path: 3 tries, then the load-failure kick (`:550-556`).
+3. **Keeping it, in `save`:** build the payload exactly as today (outside the callback; `buildPayload` doesn't yield), then `UpdateAsync` with a callback that returns `nil` if the stored `session.id` isn't ours, else the payload with `session = { id, at = now }`. If the lock was taken by another server: set `data.loaded = false` (this session never saves again, the same flag the load gate uses) and kick with "You joined another server". The 60 s autosave refreshes `at`, so a live session never looks stale.
+4. **Releasing it:** the leave save writes `session = nil`. `BindToClose` does the same.
+5. **What stays the same:** the all-modules-loaded gate (`data.loaded` is still set only at `:598`), the kick on load failure, `peekSave` (read-only `GetAsync`, never touches `session`), `commitIpo`'s transform (it runs before the callback, inside `buildPayload`), and the one-save-at-a-time lock.
+6. **Cost:** one `UpdateAsync` per save instead of a `SetAsync`; still a small fraction of the budget in section 2.
+7. **Tests:** two Studio servers with negative-ID players: join A, join B (B waits, then takes over, A's next save stops and kicks); kill A mid-session (B waits at most 15 s); IPO and poach during the takeover.
+
+Effort **M** (TycoonCore plus `daily_test.py` cases), plus a 2-server test. It closes FR-5, FR-6, M4 F10, M5 F8 and M6 F10. It does **not** close FR-4, which needs no hop.
