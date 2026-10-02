@@ -72,6 +72,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - Analytics: onboarding funnel, economy events and purchase events via AnalyticsService.
 - Before launch: decide Shareholder pass strength vs shop size (pass finishes the 525-Share shop in about 2 days; sim doesn't model perks).
 - The "Wait longer for more Shares" hint in IpoClient is still true, but waiting past 2x IPO-ready adds nothing (`SharesRatioCap = 2`); reword it.
+- An egg bought under one restriction state and hatched under another follows the state at hatch time; the earlier-shown next hire stays next in the order.
 - Reset all dev saves, set EggsEnabled = true, run sync_monetization (PC), final 2-client test, then publish.
 - From the M4 re-review (docs/reviews/M4_REREVIEW.md), 5 Low findings:
   1. If the pass check times out, loading continues without passes; pay the missing offline difference when it answers, and refuse `GoPublic` until it answers.
