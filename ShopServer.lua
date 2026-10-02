@@ -45,6 +45,7 @@ local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug o
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
 local productHandlers = {} -- effect field -> function(player, data, effect), added by other systems
 local doorCooldown = {} -- player -> os.clock() of the last "VIP only" message
+local passCheckPending = {} -- player -> true until the join-time pass check has finished (true = passes may still be missing)
 
 -- Helpers ---------------------------------------------------------------
 
@@ -225,6 +226,11 @@ function ShopServer.getSharesMultiplier(player)
 	return multiplier
 end
 
+-- true while the join-time pass check is still running: the player's passes may not be known yet
+function ShopServer.isPassCheckPending(player)
+	return passCheckPending[player] == true
+end
+
 -- Game passes -----------------------------------------------------------
 
 -- Returns true/false, or nil if Roblox couldn't be reached (we'll try again later)
@@ -242,16 +248,73 @@ local function userOwnsPass(player, passId)
 	return nil
 end
 
--- Asks Roblox about every pass the player doesn't have yet. Returns true if something changed.
+-- PASSCHECK-START
+-- (tools/daily_test.py runs the code between the PASSCHECK markers, so keep it free of Roblox calls except those it fakes.)
+
+-- Asks Roblox about every pass the player doesn't have yet, all at once, and publishes each pass
+-- as soon as it is found (a slow pass never holds back the others). Returns true if something changed.
 local function checkPasses(player, shop)
 	local changed = false
+	local waiting = 0
 	for _, pass in ipairs(ShopConfig.Passes) do
-		if pass.id ~= 0 and not shop.passes[pass.key] and userOwnsPass(player, pass.id) then
-			shop.passes[pass.key] = true
-			changed = true
+		if pass.id ~= 0 and not shop.passes[pass.key] then
+			waiting += 1
+			task.spawn(function()
+				local ok, err = pcall(function()
+					if userOwnsPass(player, pass.id) then
+						shop.passes[pass.key] = true
+						changed = true
+						publish(player)
+					end
+				end)
+				if not ok then
+					warn("Pass check for " .. pass.key .. " failed: " .. tostring(err))
+				end
+				waiting -= 1
+			end)
 		end
 	end
+	while waiting > 0 do
+		task.wait(0.1)
+	end
 	return changed
+end
+
+local passConfirming = {} -- player -> { [passKey] = true } while a purchase is being confirmed
+
+-- After a purchase: keep asking Roblox until it confirms the pass, for up to ShopConfig.PassConfirm.GiveUpSeconds.
+-- Only a "yes" from Roblox grants the pass, so a client can never talk its way into one.
+local function confirmPurchasedPass(player, pass, shop)
+	local confirming = passConfirming[player]
+	if not confirming then
+		confirming = {}
+		passConfirming[player] = confirming
+	end
+	if confirming[pass.key] then return end -- already waiting for this one
+	confirming[pass.key] = true
+
+	local settings = ShopConfig.PassConfirm
+	local deadline = os.clock() + settings.GiveUpSeconds
+	local told = false
+	while true do
+		if shop.passes[pass.key] or userOwnsPass(player, pass.id) then
+			shop.passes[pass.key] = true
+			publish(player)
+			notify(player, pass.name .. " unlocked!")
+			break
+		end
+		if not player.Parent or getShop(player) ~= shop then break end -- they left
+		if os.clock() >= deadline then
+			notify(player, "Roblox is slow to confirm " .. pass.name .. ". It will unlock by itself when Roblox answers (or when you rejoin).")
+			break
+		end
+		if not told then
+			told = true
+			notify(player, "Confirming " .. pass.name .. " with Roblox...")
+		end
+		task.wait(settings.RetrySeconds)
+	end
+	confirming[pass.key] = nil
 end
 
 -- Fires on the server when a pass prompt closes (bought, cancelled or failed)
@@ -262,12 +325,9 @@ local function onPassPromptFinished(player, passId, wasPurchased)
 	if not pass or not shop then return end
 
 	-- Don't trust the event alone: ask Roblox (its ownership cache refreshes when this event fires)
-	if userOwnsPass(player, passId) then
-		shop.passes[pass.key] = true
-		publish(player)
-		notify(player, pass.name .. " unlocked!")
-	end
+	confirmPurchasedPass(player, pass, shop)
 end
+-- PASSCHECK-END
 
 -- Saving (TycoonCore calls these) ---------------------------------------
 
@@ -310,11 +370,13 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
 	-- Passes aren't saved, so a save written before the answer is still complete.
 	local state = "checking"
+	passCheckPending[player] = true -- the VIP lounge and the door wait for the answer
 	task.spawn(function()
-		checkPasses(player, shop)
-		if state == "gaveUp" then
-			publish(player) -- answered after loading went on
+		local ok, err = pcall(checkPasses, player, shop) -- each pass is published as soon as it is found
+		if not ok then
+			warn("Pass check for " .. player.Name .. " failed: " .. tostring(err))
 		end
+		passCheckPending[player] = nil
 		state = "done"
 	end)
 	local deadline = os.clock() + PASS_CHECK_TIMEOUT
@@ -506,7 +568,7 @@ local function buildVipLounge()
 	-- Touching the door: VIPs walk through; everyone else gets offered the VIP pass
 	door.Touched:Connect(function(hit)
 		local player = Players:GetPlayerFromCharacter(hit.Parent)
-		if not player or hasEffect(player, "vipLounge") then return end
+		if not player or hasEffect(player, "vipLounge") or passCheckPending[player] then return end -- still asking Roblox about their passes
 		if doorCooldown[player] and os.clock() - doorCooldown[player] < 10 then return end
 		doorCooldown[player] = os.clock()
 		local vipPass = findVipPass()
@@ -612,6 +674,8 @@ function ShopServer.init(coreApi)
 	Players.PlayerRemoving:Connect(function(player)
 		lastDebugReceipt[player] = nil
 		doorCooldown[player] = nil
+		passCheckPending[player] = nil
+		passConfirming[player] = nil
 	end)
 
 	-- Anyone who gets into the lounge without VIP (glitch or exploit) is put back outside
@@ -620,7 +684,7 @@ function ShopServer.init(coreApi)
 			task.wait(0.5)
 			for _, player in ipairs(Players:GetPlayers()) do
 				local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if root and isInsideLounge(root.Position) and not hasEffect(player, "vipLounge") then
+				if root and isInsideLounge(root.Position) and not hasEffect(player, "vipLounge") and not passCheckPending[player] then
 					root.CFrame = CFrame.new(LOUNGE_CENTER + Vector3.new(0, 4, LOUNGE_SIZE.Z / 2 + 6))
 					notify(player, "The VIP Lounge is for VIP pass holders only.")
 				end
@@ -634,8 +698,8 @@ function ShopServer.init(coreApi)
 			task.wait(PASS_RECHECK_SECONDS)
 			for _, player in ipairs(Players:GetPlayers()) do
 				local data = core.getData(player)
-				if data and data.ready and checkPasses(player, data.shop) then
-					publish(player)
+				if data and data.ready then
+					checkPasses(player, data.shop) -- publishes each pass it finds
 				end
 			end
 		end

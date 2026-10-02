@@ -18,6 +18,10 @@ ShopConfig.EggsEnabled = false
 -- Studio-only Debug tab for testing without Robux. It never works in live servers.
 ShopConfig.DebugInStudio = true
 
+-- After a game pass purchase, if Roblox is slow to confirm ownership, the server asks again every
+-- RetrySeconds for up to GiveUpSeconds. The pass is granted only once Roblox says the player owns it.
+ShopConfig.PassConfirm = { RetrySeconds = 5, GiveUpSeconds = 120 }
+
 -- Game passes: bought once, owned forever. Cash multipliers stack (2x Cash + VIP = 3x).
 ShopConfig.Passes = {
 	{
