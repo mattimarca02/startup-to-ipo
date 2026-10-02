@@ -109,6 +109,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | @mattimarca02 | milestone-5-onboarding | 2026-10-01 |
+| OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
