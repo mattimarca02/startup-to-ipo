@@ -21,6 +21,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
 - DONE M6 (2026-10-01, merged as PR #17, branch milestone-6-daily-rewards): 7-day login calendar. One claim per UTC day, decided by the server; one missed day keeps your place, 2+ go back to Day 1 (said calmly in the window). Rewards: Cash days (5/10/20/30 min of income, min $300, a gift that never counts toward the IPO valuation), Garage Egg (d3), Startup Egg (d5), Unicorn Egg + 3 Shares (d7, Shares not doubled by Shareholder; no egg is sold for Robux, so the Unicorn Egg stays). Gift chip right of the valuation bar (the bar leaves room on narrow screens), Daily window, IPO confirm reminder, Studio Debug (fake next day, reset). New optional `daily` save section in the all-modules-loaded gate. Logic tests: tools/daily_test.py (69 checks). Sim: tools/economy_sim.py --daily (first IPO unchanged, Shares +7-8%). Review (docs/reviews/M6_REVIEW.md): 0 Critical/High/Medium, 8 Low; F1, F3, F6, F8 fixed, F2/F4/F5/F7 in the M9 list; daily_test.py 69/69. Studio playtest passed (new player, claim, double claim, rejoin, missed days, full incubators, day 7 Shares, IPO keeps the streak, malformed calls) and the phone layout and claim tap were checked by hand. Publishing M6 needs **Shut down all servers** (new save section). CLAUDE.md lists the M6 additions (F8).
 - **Before publishing M6:** use **Shut down all servers** (new `daily` save section), and decide `ResetHourUtc` in DailyConfig before launch (review finding F3).
 - **Before publishing M4, M5, M6 and #14:** use **Shut down all servers** (new save sections).
+- PR #13 final numbers (2026-10-02, main merged in): `SharesGrowthPerIpo = 0.8`, `SharesRatioCap = 2`. Sim re-run (40 seeds, 365 days): IPO timing unchanged, Shares per IPO (active, no pass) 10 / 25 / 26 / 59 / 83, whole shop in about 7 days (about 2 with the Shareholder pass). docs/ECONOMY.md section 3d; tools/daily_test.py 104/104. Not merged yet; sync IpoConfig to Studio.
 - Open PR: #13 (Shares per IPO grow with the IPO count). `tools/economy_sim.py` must be re-run after #13 merges because it changes the Shares figures.
 - Next steps: decide the Shares cap and merge PR #13 (re-run economy_sim.py first), then M7 weekly events.
 
@@ -67,6 +68,7 @@ Play-through rate is Roblox's #1 discovery signal.
 - DataStore session locking (prevent the two-server edge case), request budgets, retry logic. (F10)
 - Full exploit review of every RemoteEvent. Mobile pass on every screen.
 - Analytics: onboarding funnel, economy events and purchase events via AnalyticsService.
+- Before launch: decide Shareholder pass strength vs shop size (pass finishes the 525-Share shop in about 2 days; sim doesn't model perks).
 - Reset all dev saves, set EggsEnabled = true, run sync_monetization (PC), final 2-client test, then publish.
 - From the M4 re-review (docs/reviews/M4_REREVIEW.md), 5 Low findings:
   1. If the pass check times out, loading continues without passes; pay the missing offline difference when it answers, and refuse `GoPublic` until it answers.
