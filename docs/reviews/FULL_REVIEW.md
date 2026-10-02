@@ -214,11 +214,11 @@ A copy needs a value that lives **outside** the player's own save. In this game 
 
 **Smallest fix:** the lock below (M). If it can't make launch, an interim (S): on join, if `os.time() - saved.lastSeen < 75` (the save may come from a session that is still running), wait 7 s and read again before setting up. It costs every quick rejoin 7 s of loading but removes most reconnect losses. It does not stop the two-device purchase case.
 
-### FR-6 (Low): an attacker who hops at the exact moment of a poach can destroy the victim's employee and get refunded
+### FR-6 (Low): an attacker who hops at the exact moment of a poach can destroy the victim's employee
 
 **Where:** `PoachServer.lua:202-217`, `:294-311`, `TycoonCore.lua:241-264`.
 
-**How it breaks:** A's poach succeeds in server 1; device 2 has server B read A's save **before** A's confirm save lands (a sub-second window). Server 1 then confirms A (reading A's leave save, which has X), releases X from V for good and saves V. B's later saves overwrite A's save without X, and B already paid A's negotiation `refund` back from the older save. Nobody has X; A paid nothing.
+**How it breaks:** A's poach succeeds in server 1; device 2 has server B read A's save **before** A's confirm save lands (a sub-second window). Server 1 then confirms A (reading A's leave save, which has X), releases X from V for good and saves V. B's later saves overwrite A's save without X. Nobody has X. If A's last autosave happened during the 8-10 s negotiation, B also paid the fee back from that save's `refund` (`PoachServer.lua:725-729`), so A paid nothing.
 
 **Impact:** griefing one employee; needs two devices and sub-second luck. Closed by the lock. **Fix:** the lock below; nothing separate.
 
@@ -233,3 +233,64 @@ A copy needs a value that lives **outside** the player's own save. In this game 
 7. **Tests:** two Studio servers with negative-ID players: join A, join B (B waits, then takes over, A's next save stops and kicks); kill A mid-session (B waits at most 15 s); IPO and poach during the takeover.
 
 Effort **M** (TycoonCore plus `daily_test.py` cases), plus a 2-server test. It closes FR-5, FR-6, M4 F10, M5 F8 and M6 F10. It does **not** close FR-4, which needs no hop.
+
+---
+
+## 4. Purchases and receipts
+
+### ProcessReceipt, product by product
+
+All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`) -> `grantProduct` (`:461-480`) -> `applyProduct` (`:426-449`).
+
+| Product | Effect applied | Where |
+|---|---|---|
+| Pile / Bag / Vault of Cash | `max(minCash, income x 60 x minutes)` to Cash, and `addEarnings` (raises the valuation, on purpose) | `:434-439`, `ShopConfig.lua:188-191` |
+| Luck Boost | `luckUntil = max(luckUntil, now) + 15 min` | `:440-443` |
+| Instant Hatch | `instantHatches += 1` | `:444-447` |
+| Poach Shield | PoachServer's handler: `shieldUntil = max(shieldUntil, now) + 60 min`, and calls off a deal against the buyer | `PoachServer.lua:865-874` |
+
+| Question | Answer | Holds? |
+|---|---|---|
+| Idempotent by PurchaseId? | `receiptSet` is checked, the reward applied and the PurchaseId remembered with **no yield in between** (`:468-473`). The list is saved in `shop.receipts` (last 100) and reloaded into `receiptSet` on join (`:357-360`). | Yes |
+| Granted only after the save? | `PurchaseGranted` only when `core.save` returns true (`:476-479`). The reward and the PurchaseId are always in the same payload. | Yes |
+| Save not loaded | `not data.loaded` returns `NotProcessedYet` (`:463-465`). On live servers a failed load kicks, so this is Studio only. | Yes |
+| Player not in the server | `GetPlayerByUserId` is nil: `NotProcessedYet` (`:488-491`); Roblox retries on their next join. | Yes |
+| Player leaves during the 30 s wait | `waitForData` returns nil: `NotProcessedYet`. | Yes |
+| Player leaves after the reward was applied | Either the leave save already contains the reward and the PurchaseId (then the retry finds the PurchaseId and only saves), or it was built before the reward (then the receipt's own save finds `playerData` cleared, answers `NotProcessedYet`, and the next join grants it once). | Yes, both orders |
+| The grant throws | `pcall` -> `NotProcessedYet` (`:492-496`). Nothing in `applyProduct` can throw today; if a future handler threw halfway, its half-applied part could be given again on the retry. | Yes today |
+| Two receipts at once | Each applies without yielding, then the saves queue on `data.saving`. Same PurchaseId twice: the second sees `receiptSet`. | Yes |
+| During an IPO save | `data.ready` is false, so the receipt waits (up to 30 s) and lands after the reset. A Cash pack bought just *before* going public is wiped with the rest of the Cash; the confirm screen shows the live Cash amount (`IpoClient.lua:636-681`). | Yes |
+| Debug grants | Only through `ShopDebug`, which exists only in Studio (`:661-666`, `:591-595`). | Yes |
+
+### Game passes
+
+| Path | What happens | Holds? |
+|---|---|---|
+| Join | All passes asked at once; loading waits at most 10 s, then each pass applies as soon as Roblox answers (`:262-287`, `:375-396`). IPO refused while the check runs (`IpoServer.lua:169-173`, `:191-193`). | Yes |
+| Bought in game | Granted only when `UserOwnsGamePassAsync` says yes, retried every 5 s for 120 s (`:293-324`). | Yes |
+| Bought on the website | The 120 s recheck loop picks it up (`:702-712`). | Yes |
+| A faked "purchase finished" event | If an exploit can make Roblox fire `PromptGamePassPurchaseFinished` for itself, the server still asks Roblox before granting. At most one confirm loop per pass per player (`:299-300`), so at most 6 loops of ~24 calls each per 2 minutes, and the only effect is a misleading toast on the exploiter's own screen. | Yes |
+| Pass refunded or revoked by Roblox | Passes are never saved: the next join asks Roblox again, so a revoked pass is gone after a rejoin. Developer products have no revoke callback; Roblox handles the Robux side. | Yes (nothing to do) |
+| Join check times out | Offline earnings are paid without the 2x / VIP multiplier and not topped up later (M4 re-review low 1, still open). | Known |
+
+**Can a player pay and receive nothing?** Only through FR-5 (an overlapping session), FR-7 (an item on sale that ShopConfig doesn't know) and FR-8 (a receipt that waits longer than 30 s). **Can a player receive twice?** No path found: a reward is never saved without its PurchaseId, and a PurchaseId is never dropped while its receipt can still be retried (the 100-receipt cap only drops IDs that were already granted).
+
+### FR-7 (Low): a developer product that is on sale but missing from ShopConfig charges the player and gives nothing for up to 3 days
+
+**Where:** `ShopServer.lua:483-487`, `ShopConfig.lua:176-179`.
+
+**How it breaks:** any product on sale in the universe whose ID isn't in `ShopConfig.Products` (an old test product, the skipped `3715692115` if it still exists and is on sale, a product created in Creator Hub but not synced) answers `NotProcessedYet` forever with only a server warning. Roblox keeps retrying and refunds the Robux after about 3 days (DevForum; the API docs don't state it). Players reach such a product only through a prompt the game doesn't show, so today this needs a stray prompt (another game's or a Roblox page linking it).
+
+**Impact:** a confused paying player and a support request. No Robux kept.
+
+**Smallest fix (S):** before launch, run `sync_monetization.py --dry-run` (checklist C6) and take every product that isn't in ShopConfig off sale. Optional: in `processReceipt`, `notify` the player "This item isn't sold here anymore; Roblox will refund it" for an unknown product.
+
+### FR-8 (Low): a receipt that waits more than 30 s is not retried until the player rejoins, and nobody tells them
+
+**Where:** `ShopServer.lua:27` (`DATA_WAIT_SECONDS = 30`), `:413-423`, `:462-465`.
+
+**How it breaks:** the player buys right after joining while the join is slow (3 load tries with 6 s of waits, the 10 s pass check, a `reconcile` read during DataStore trouble), or during an IPO save stuck in the throttle queue. After 30 s the receipt answers `NotProcessedYet`. Roblox retries only on the player's next join or next purchase. The purchase dialog said "success" and the game shows nothing.
+
+**Impact:** a paying player waits until they rejoin (or loses the purchase to Roblox's ~3-day refund if they never come back). Rare: needs a slow join or a slow IPO save.
+
+**Smallest fix (S):** raise `DATA_WAIT_SECONDS` to 90, and when answering `NotProcessedYet` while the player is still in the server, `notify` them: "Your purchase will arrive when your game finishes loading. If it doesn't, rejoin."
