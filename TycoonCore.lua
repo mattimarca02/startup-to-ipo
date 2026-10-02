@@ -278,6 +278,48 @@ local function peekSave(userId)
 	return result, true
 end
 
+-- BUILDSAVE-START
+-- (tools/daily_test.py runs the code between the BUILDSAVE markers, so keep it free of Roblox calls except warn.)
+-- Builds the payload save() writes, inside a pcall. If a module's serialize or the IPO transform throws,
+-- nothing is written (the payload only exists as a whole, never half-built), the one-save-at-a-time lock
+-- is released so a later save (autosave, the one on leave) isn't stuck behind it forever, and this
+-- returns nil. The caller must have set data.saving = true.
+local function buildPayload(data, transform, playerName)
+	local built, result = pcall(function()
+		local owned = {}
+		for name in pairs(data.owned) do
+			table.insert(owned, name)
+		end
+		local payload = {
+			cash = data.cash.Value,
+			owned = owned,
+			lastSeen = os.time(),
+			shop = ShopServer.serialize(data),
+			team = EmployeeServer.serialize(data),
+			poach = PoachServer.serialize(data),
+			ipo = IpoServer.serialize(data),
+			onboarding = OnboardingServer.serialize(data),
+			daily = DailyServer.serialize(data),
+		}
+		for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
+			if payload[key] == nil then
+				payload[key] = value
+			end
+		end
+		if transform then
+			transform(payload)
+		end
+		return payload
+	end)
+	if built then
+		return result
+	end
+	data.saving = false
+	warn("Save skipped for " .. playerName .. ": building it failed, so nothing was written: " .. tostring(result))
+	return nil
+end
+-- BUILDSAVE-END
+
 -- Returns true if the save worked (the shop needs to know before confirming a purchase).
 -- transform (IPO only) changes the payload before it's written: see commitIpo.
 local function save(player, transform)
@@ -294,29 +336,8 @@ local function save(player, transform)
 	end
 	data.saving = true
 
-	local owned = {}
-	for name in pairs(data.owned) do
-		table.insert(owned, name)
-	end
-	local payload = {
-		cash = data.cash.Value,
-		owned = owned,
-		lastSeen = os.time(),
-		shop = ShopServer.serialize(data),
-		team = EmployeeServer.serialize(data),
-		poach = PoachServer.serialize(data),
-		ipo = IpoServer.serialize(data),
-		onboarding = OnboardingServer.serialize(data),
-		daily = DailyServer.serialize(data),
-	}
-	for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
-		if payload[key] == nil then
-			payload[key] = value
-		end
-	end
-	if transform then
-		transform(payload)
-	end
+	local payload = buildPayload(data, transform, player.Name)
+	if not payload then return false end
 	local ok, err
 	if transform and data.debugFailIpoSave then -- Studio Debug tab only: test the IPO failure path
 		data.debugFailIpoSave = nil
