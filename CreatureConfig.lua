@@ -263,6 +263,95 @@ function CreatureConfig.rarityOdds(creatureOdds)
 	return summary
 end
 
+-- Fixed hire order (Roblox's Paid Random Items policy, review finding FR-13, decision D9 option B).
+-- A player for whom paid random items are restricted (PolicyService, asked on every join) gets no
+-- random roll: each egg hires in a fixed order, known before buying, that follows the same odds.
+-- The order goes in rounds of FIXED_ORDER_LENGTH hires. In every round each rarity comes up its share
+-- of the 100 (getOdds, the numbers the server rolls with, rounded with the largest-remainder method so
+-- they add up to exactly 100), spread out evenly, most common first. Inside a rarity the creatures take
+-- turns, so after a few rounds every creature has come up exactly as often as its own odds say.
+-- Same egg, luck and count: always the same hire, on the server and on every screen.
+CreatureConfig.FIXED_ORDER_LENGTH = 100
+
+-- The rarities of one round, in order: { "Common", "Uncommon", "Common", ... } (FIXED_ORDER_LENGTH long)
+function CreatureConfig.fixedOrder(egg, luckMultiplier)
+	local length = CreatureConfig.FIXED_ORDER_LENGTH
+	local odds = CreatureConfig.getOdds(egg, luckMultiplier)
+	if #odds == 0 then return {} end
+
+	-- Places per rarity: round down, then the biggest remainders get one more (ties: the more common)
+	local total, byRemainder = 0, {}
+	for i, entry in ipairs(odds) do
+		local exact = entry.chance * length
+		entry.places = math.floor(exact)
+		total += entry.places
+		table.insert(byRemainder, { entry = entry, remainder = exact - entry.places, order = i })
+	end
+	table.sort(byRemainder, function(a, b)
+		if a.remainder ~= b.remainder then
+			return a.remainder > b.remainder
+		end
+		return a.order < b.order
+	end)
+	local i = 1
+	while total < length do
+		byRemainder[i].entry.places += 1
+		total += 1
+		i = i % #byRemainder + 1
+	end
+	-- A possible rarity always gets at least one place, taken from the one with the most
+	for _, entry in ipairs(odds) do
+		if entry.places == 0 then
+			local largest = odds[1]
+			for _, other in ipairs(odds) do
+				if other.places > largest.places then
+					largest = other
+				end
+			end
+			largest.places -= 1
+			entry.places = 1
+		end
+	end
+
+	-- Spread them out (smooth weighted round-robin): at every step each rarity earns its places, the
+	-- one with the most credit goes next and pays back a whole round. Ties: the more common rarity.
+	-- After the round every rarity has come up exactly its number of places.
+	local order, credit = {}, {}
+	for _ = 1, length do
+		local best
+		for j, entry in ipairs(odds) do
+			credit[j] = (credit[j] or 0) + entry.places
+			if not best or credit[j] > credit[best] then
+				best = j
+			end
+		end
+		credit[best] -= length
+		table.insert(order, odds[best].rarity)
+	end
+	return order
+end
+
+-- The creature of the next fixed hire from this egg. count = fixed hires already made from it
+-- (EmployeeServer saves it per egg in the fixedHires section). Returns a Creatures entry.
+function CreatureConfig.fixedHire(egg, luckMultiplier, count)
+	local order = CreatureConfig.fixedOrder(egg, luckMultiplier)
+	if #order == 0 then return nil end
+	local round, place = count // #order, count % #order + 1
+	local rarity = order[place]
+	-- Whose turn it is inside the rarity: its places in the earlier rounds, plus the ones before this one
+	local before, perRound = 0, 0
+	for i, other in ipairs(order) do
+		if other == rarity then
+			perRound += 1
+			if i < place then
+				before += 1
+			end
+		end
+	end
+	local creatures = CreatureConfig.creaturesOfRarity(rarity)
+	return creatures[(round * perRound + before) % #creatures + 1]
+end
+
 -- 1333 -> "13.33%", 10000 -> "100.00%"
 function CreatureConfig.formatOdds(units)
 	return string.format("%d.%02d%%", units // 100, units % 100)

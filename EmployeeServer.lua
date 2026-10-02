@@ -8,6 +8,9 @@
 -- IPO perks (IpoServer) add incubators and desks, speed up eggs and improve luck; an IPO empties
 -- the incubators (clearIncubators) and buying a perk calls refreshCapacity.
 -- OnboardingServer gives a brand-new player one free egg with grantEgg (server only, no remote).
+-- Players for whom paid random items are restricted (ShopServer.isRandomRestricted, Roblox policy,
+-- FR-13 / D9 option B) get no random roll: every hatch takes the next hire of the egg's fixed order
+-- (CreatureConfig.fixedHire), counted per egg in its own save section, fixedHires.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -101,8 +104,20 @@ function EmployeeServer.getIncome(data)
 	return sum
 end
 
+local nextFixedHire -- (data, egg) -> the creature the egg's next fixed hire gives (see "Hatching")
+
 -- What the client is allowed to see
 local function snapshot(player, team)
+	local data = core.getData(player)
+	-- Restricted players see what each egg will give instead of odds: egg key -> creature key
+	local nextHires = false
+	if data and data.fixedHires and ShopServer.isRandomRestricted(player) then
+		nextHires = {}
+		for _, egg in ipairs(CreatureConfig.Eggs) do
+			local creature = nextFixedHire(data, egg)
+			nextHires[egg.key] = creature and creature.key or false
+		end
+	end
 	local employees, incubators = {}, {}
 	for _, employee in ipairs(team.employees) do
 		table.insert(employees, { id = employee.id, creature = employee.creature })
@@ -116,6 +131,7 @@ local function snapshot(player, team)
 		incubators = incubators,
 		pending = team.pending and { id = team.pending.id, creature = team.pending.creature } or false,
 		maxEmployees = maxEmployees(player),
+		nextHires = nextHires,
 	}
 end
 
@@ -222,10 +238,29 @@ local function newEmployee(creatureKey)
 	return { id = HttpService:GenerateGUID(false), creature = creatureKey, hiredAt = os.time() }
 end
 
--- The random roll happens only here, on the server
+-- ROLL-START
+-- (tools/daily_test.py runs the code between the ROLL markers, so keep it free of Roblox calls except those it fakes.)
+
+-- Fixed hire order (Roblox's Paid Random Items policy, FR-13, D9 option B). Luck Boost never counts
+-- here (ShopServer keeps it aside for restricted players); the Talent Scouts perk does, as it does
+-- for the random roll, so the order follows the same weights the server rolls with.
+nextFixedHire = function(data, egg)
+	local luck = 1 + IpoServer.perk(data, "BaseLuck")
+	return CreatureConfig.fixedHire(egg, luck, data.fixedHires.counts[egg.key] or 0)
+end
+
+-- The random roll happens only here, on the server. A player with paid random items restricted gets
+-- no roll: the egg's next fixed hire, and its counter moves on (saved in fixedHires). Nothing here
+-- waits, so a save has the new hire and the new count together, or neither.
 local function rollCreature(player, team, egg)
 	local rarity = team.forceRarity -- set by the Studio Debug tab
 	team.forceRarity = nil
+	if not rarity and ShopServer.isRandomRestricted(player) then
+		local data = core.getData(player)
+		local creature = nextFixedHire(data, egg)
+		data.fixedHires.counts[egg.key] = (data.fixedHires.counts[egg.key] or 0) + 1
+		return creature
+	end
 	if not rarity then
 		local roll = rng:NextNumber()
 		local luck = ShopServer.getLuckMultiplier(player) * (1 + IpoServer.perk(core.getData(player), "BaseLuck"))
@@ -240,6 +275,7 @@ local function rollCreature(player, team, egg)
 	local options = CreatureConfig.creaturesOfRarity(rarity)
 	return options[rng:NextInteger(1, #options)]
 end
+-- ROLL-END
 
 -- Hatches a ready egg. If the team is full, the new creature waits as "pending" until the
 -- player replaces someone or lets it go.
@@ -596,6 +632,64 @@ function EmployeeServer.serialize(data)
 		pending = p and { id = p.id, creature = p.creature, hiredAt = p.hiredAt } or nil,
 	}
 end
+
+-- FIXEDSAVE-START
+-- (tools/daily_test.py runs the code between the FIXEDSAVE markers, so keep it free of Roblox calls except warn.)
+-- The fixed hire order's counters have their own top-level save section, "fixedHires" (CLAUDE.md rule
+-- A10: older code keeps an unknown section as it is, but drops unknown fields inside "team"). They
+-- count hires ever, not per run, so an IPO doesn't touch them and older code keeping them frozen is fine.
+
+-- Called right after the player's save loads, before setupPlayer (a free egg can hatch right away).
+-- savedFixed is the "fixedHires" part of the save, or nil (saves from before D9, and new players):
+-- every egg then starts at the first hire of its order. Bad values are skipped with a warning.
+function EmployeeServer.setupFixedHires(player, data, savedFixed)
+	local fixed = {
+		counts = {}, -- egg key -> hires already made from that egg's fixed order (saved; unknown eggs too)
+		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
+	}
+	if typeof(savedFixed) == "table" then
+		local counts = savedFixed.counts
+		if typeof(counts) == "table" then
+			for eggKey, value in pairs(counts) do
+				if typeof(eggKey) == "string" and typeof(value) == "number" and value == value
+					and value >= 0 and value < math.huge and value % 1 == 0 then
+					fixed.counts[eggKey] = value
+				else
+					warn("Skipped a bad fixedHires count in " .. player.Name .. "'s save: " .. tostring(eggKey) .. " = " .. tostring(value))
+				end
+			end
+		elseif counts ~= nil then
+			warn("Skipped bad fixedHires counts in " .. player.Name .. "'s save")
+		end
+		for key, value in pairs(savedFixed) do
+			if key ~= "counts" then
+				fixed.unknown[key] = value
+			end
+		end
+	elseif savedFixed ~= nil then
+		warn("Skipped a bad fixedHires section in " .. player.Name .. "'s save")
+	end
+	data.fixedHires = fixed
+end
+
+-- The "fixedHires" part of the save file, or nil when there's nothing in it (most players never use it)
+function EmployeeServer.serializeFixedHires(data)
+	local fixed = data.fixedHires
+	if not fixed or (next(fixed.counts) == nil and next(fixed.unknown) == nil) then
+		return nil
+	end
+	local section = { counts = {} }
+	for eggKey, count in pairs(fixed.counts) do
+		section.counts[eggKey] = count
+	end
+	for key, value in pairs(fixed.unknown) do -- written by newer code: kept as it was
+		if section[key] == nil then
+			section[key] = value
+		end
+	end
+	return section
+end
+-- FIXEDSAVE-END
 
 -- IPO (IpoServer and TycoonCore call these) ----------------------------------------
 

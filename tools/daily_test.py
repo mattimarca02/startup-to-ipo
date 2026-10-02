@@ -548,6 +548,7 @@ local function module(name, value)
 end
 local ShopServer = module("shop", { luckLeft = 0 })
 local EmployeeServer = module("team", { incubators = { { egg = "Garage" }, false, false }, employees = {} })
+EmployeeServer.serializeFixedHires = function() return nil end -- no fixedHires section (most players)
 local PoachServer = module("poach", { hrLevel = 2 })
 local IpoServer = module("ipo", { count = 1, shares = 3 })
 local OnboardingServer = module("onboarding", { seenIntro = true })

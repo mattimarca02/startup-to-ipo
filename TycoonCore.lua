@@ -67,10 +67,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -316,6 +316,7 @@ local function buildPayload(data, transform, playerName)
 			ipo = IpoServer.serialize(data),
 			onboarding = OnboardingServer.serialize(data),
 			daily = DailyServer.serialize(data),
+			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
 		}
 		for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
 			if payload[key] == nil then
@@ -660,6 +661,7 @@ local function onPlayerAdded(player)
 			legacyValuation = math.min(legacyValuation, IpoConfig.ipoValuation(0))
 		end
 		IpoServer.setupPlayer(player, data, saved and saved.ipo, legacyValuation) -- before employees: perks change slots
+		EmployeeServer.setupFixedHires(player, data, saved and saved.fixedHires) -- fixed hire order counters (before eggs can hatch)
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
 		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
