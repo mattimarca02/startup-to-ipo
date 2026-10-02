@@ -808,6 +808,63 @@ for level = 0, 8 do -- 8 = the top Talent Scouts level (IpoConfig, D1)
 end
 check("every egg x every Talent Scouts level x Luck Boost on/off: exactly 100.00%", allExact)
 
+-- Per rarity (FR-12 follow-up, review finding b): the rounding is done inside each rarity, so the rarity
+-- line shows the rounded true chance and adds up to exactly 100.00 at every level, with and without Luck Boost
+local function luckAt(level) return 1 + 0.1 * level end
+local rarityExact, rarityNear, rarityStrings, perRarityCreatures, rarityCount = true, true, true, true, 0
+local worstRarity = 0
+for level = 0, 8 do
+	for _, boost in ipairs({ 1, 2 }) do
+		for _, egg in ipairs(CreatureConfig.Eggs) do
+			local luck = luckAt(level) * boost
+			local odds = CreatureConfig.getCreatureOdds(egg, luck)
+			local summary = CreatureConfig.rarityOdds(odds)
+			local total, shown = 0, 0
+			for _, entry in ipairs(summary) do
+				total += entry.units
+				local whole, hundredths = string.match(CreatureConfig.formatOdds(entry.units), "^(%d+)%.(%d%d)%%$")
+				shown += tonumber(whole) * 100 + tonumber(hundredths)
+				local exact
+				for _, real in ipairs(CreatureConfig.getOdds(egg, luck)) do
+					if real.rarity == entry.rarity then exact = real.chance * UNITS end
+				end
+				if not exact or math.abs(entry.units - exact) >= 1 then rarityNear = false end
+				worstRarity = math.max(worstRarity, exact and math.abs(entry.units - exact) or math.huge)
+				-- the creatures of this rarity differ by at most 0.01% from each other
+				local lo, hi = math.huge, -math.huge
+				for _, item in ipairs(odds) do
+					if item.rarity == entry.rarity then lo = math.min(lo, item.units); hi = math.max(hi, item.units) end
+				end
+				if hi - lo > 1 then perRarityCreatures = false end
+			end
+			rarityCount += 1
+			if total ~= UNITS then rarityExact = false end
+			if shown ~= UNITS then rarityStrings = false end
+		end
+	end
+end
+check("every egg x Talent Scouts 0-8 x Luck Boost on/off: the per-rarity units add up to exactly 100.00%", rarityExact)
+check("... and so do the per-rarity strings the screens show, added up", rarityStrings)
+check("each shown rarity is its true chance, rounded (off by < 0.01%)", rarityNear, worstRarity)
+check("the creatures of one rarity differ by at most 0.01% from each other", perRarityCreatures)
+check("that loop covered 9 levels x 2 states x every egg", rarityCount == 9 * 2 * #CreatureConfig.Eggs, rarityCount)
+local function rarityLine(egg, luck)
+	local parts = {}
+	for _, entry in ipairs(CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds(egg, luck))) do
+		table.insert(parts, entry.rarity .. " " .. CreatureConfig.formatOdds(entry.units))
+	end
+	return table.concat(parts, " / ")
+end
+check("Garage Egg at level 0 shows 70.00 / 25.00 / 5.00 (was 69.99 / 25.01 / 5.00)",
+	rarityLine(CreatureConfig.getEgg("Garage"), 1) == "Common 70.00% / Uncommon 25.00% / Rare 5.00%", rarityLine(CreatureConfig.getEgg("Garage"), 1))
+-- The real odds are not touched: getOdds is the same function, the server's weights
+local realTotal = 0
+for _, entry in ipairs(CreatureConfig.getOdds(CreatureConfig.getEgg("Garage"), 1)) do realTotal += entry.chance end
+check("the server's own odds (getOdds) still add up to 1", math.abs(realTotal - 1) < 1e-12)
+-- Largest remainder at the rarity level, with awkward numbers
+local awkward = CreatureConfig.rarityOdds(CreatureConfig.getCreatureOdds({ odds = { Common = 1, Rare = 1, Epic = 1 } }, 1))
+check("three equal rarities: 33.34 / 33.33 / 33.33, total exactly 100.00", #awkward == 3 and awkward[1].units == 3334 and awkward[2].units == 3333 and awkward[3].units == 3333)
+
 -- The text shown, added up from the strings themselves
 local shownTotal = 0
 for _, item in ipairs(CreatureConfig.getCreatureOdds(CreatureConfig.Eggs[2], 2)) do
