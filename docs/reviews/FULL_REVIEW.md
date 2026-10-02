@@ -343,3 +343,59 @@ All six products go through one path: `processReceipt` (`ShopServer.lua:482-498`
 **Impact:** none today; it's the same class as PR14 R8, which was left Low. Listed so all of them are fixed together rather than one at a time.
 
 **Smallest fix (S):** one rule everywhere a saved number is read: `tonumber`, then reject NaN, `math.huge`, `-math.huge` and negatives, then clamp to a sane maximum (for example 1e15 for Cash amounts, 30 days for timers), with a `warn`. Each module can carry a 5-line `finiteNumber(value, max)` helper.
+
+---
+
+## 6. Remotes and client trust
+
+### Every entry point a client can reach
+
+There is **no `OnServerEvent` anywhere**: all six RemoteEvents (`ShopNotify`, `TeamUpdate`, `EggHatched`, `PoachEvent`, `IpoEvent`, `OnboardingNotify`) are server-to-client only. A client firing one reaches no code; Roblox queues and then drops the calls with a warning. The client-to-server surface is five RemoteFunctions (plus `ShopDebug`, which only exists in Studio), four `Touched` pads, the incubator `ProximityPrompt`s, and the purchase events Roblox fires.
+
+| Entry | Arguments checked | Spam cost on the server | Holds? |
+|---|---|---|---|
+| `TeamAction` (`EmployeeServer.lua:444-469`) | `action` string; `Hatch`/`InstantHatch` index is a whole number 1..incubators (NaN and inf fail `% 1`); `BuyEgg` key looked up in config; `Fire`/`ResolvePending` string looked up in the team | `Sync` builds a snapshot and fires it back on every call; the rest are lookups | Yes |
+| `PoachAction` (`PoachServer.lua:562-581`) | `Targets` limited to one per 0.25 s; `Start` needs a number and a string of at most 64; `CounterOffer` no argument | `Targets` builds every player's employee list (bounded by the limit) | Yes |
+| `IpoAction` (`IpoServer.lua:267-287`) | `GoPublic` number must equal `count + 1`; `BuyPerk` key in config | `Preview` counts eggs | Yes |
+| `OnboardingAction` (`OnboardingServer.lua:199-211`) | only `DismissTracker` | none | Yes |
+| `DailyAction` (`DailyServer.lua:214-231`) | only `Claim`, 1 s debounce | none | Yes |
+| Green, HR and IPO pads | the touching character must be the plot owner; Cash checked; HR has a 2 s cooldown, IPO pad 3 s | Exploiters can touch from far away, which only saves them walking | Yes |
+| Incubator prompts | `who == player and data.ready` (`EmployeeServer.lua:501-505`) | none | Yes |
+| VIP door | prompts the VIP pass at most every 10 s per player | none | Yes |
+| `PromptGamePassPurchaseFinished` | never trusted, ownership asked from Roblox (section 4) | bounded | Yes |
+| Player attributes | the server writes them and never reads them back (only `Home` on server-owned models) | n/a | Yes |
+
+**Values taken from the client:** only action names, an incubator index, an egg or perk key, an employee ID, a target UserId and the IPO number. No amount, price, time, chance or result. No table argument is ever walked, so a deep or huge table costs only Roblox's own decoding (capped by its remote size limit).
+
+**Still open from PREPUBLISH_RESULTS item 7 (not new):** string arguments other than `Start`'s have no length cap, and only `Targets` and `Claim` are rate-limited. A spammed `Sync` costs a snapshot plus a message back to the spammer. In a 6-player server this can't hurt others noticeably; a 20 calls/s per-player cap in each `onAction` would remove the question (S).
+
+### Per-player state and memory
+
+| Module | Tables keyed by player or ID | Cleaned on leave? |
+|---|---|---|
+| TycoonCore | `playerData`, `plotOwners` | Yes, after the leave save (`:637-645`) |
+| ShopServer | `lastDebugReceipt`, `doorCooldown`, `passCheckPending`, `passConfirming` | Yes (`:680-685`), but see FR-10 |
+| PoachServer | `negotiations` (cancelled on leave), `lastTargetsCall` (cleared), `inTransit` (cleared when the move's saves finish, within ~60 s) | Yes |
+| EmployeeServer, IpoServer, OnboardingServer, DailyServer | nothing per player outside `playerData` | n/a |
+
+A player who leaves **during** setup (while `ShopServer.setupPlayer` waits for the pass check, or `reconcile` reads another save) lets the remaining `setupPlayer` calls run for a player who is gone: they build pads and incubators into the already destroyed plot folder, and the `pcall` result is then ignored (`TycoonCore.lua:592`). Nothing is stored in a module table, so it's garbage collected. Not a finding.
+
+### FR-10 (Low): `passConfirming` is re-created for a player who already left, and never removed
+
+**Where:** `ShopServer.lua:289`, `:294-298`, `:680-685`.
+
+**How it breaks:** `PromptGamePassPurchaseFinished` arrives while the player is leaving: ShopServer's `PlayerRemoving` already cleared `passConfirming[player]`, but TycoonCore hasn't removed their data yet (its leave save is still running), so `getShop` still works and `confirmPurchasedPass` creates `passConfirming[player] = {}` again. The loop ends at once (`player.Parent` is nil), leaving an empty table that holds the Player object forever.
+
+**Impact:** a few hundred bytes per occurrence, only when a pass purchase finishes during a leave. Harmless in practice.
+
+**Smallest fix (S):** at the end of `confirmPurchasedPass`, `if next(confirming) == nil then passConfirming[player] = nil end`.
+
+### FR-11 (Low): the in-server leaderboard puts display names into rich text without escaping them
+
+**Where:** `IpoClient.lua:770` (the row label has `RichText = true`, `:394`); compare `PoachClient.lua:89-91`, which escapes names.
+
+**How it breaks:** a display name containing `&` or `<` (if Roblox allows them in a display name) is read as rich-text markup: the row shows garbled text or broken formatting on every client in the server.
+
+**Impact:** cosmetic; rich text can't run code. Display names are already filtered by Roblox.
+
+**Smallest fix (S):** copy PoachClient's `escape` into IpoClient and use `escape(other.DisplayName)`.
