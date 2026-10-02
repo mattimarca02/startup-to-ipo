@@ -100,9 +100,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
-| IpoConfig | ReplicatedStorage | @mattimarca02 | prepublish-fixes | 2026-10-02 |
+| IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |

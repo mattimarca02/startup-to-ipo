@@ -8,7 +8,7 @@ Run on 2026-10-02 from branch `claude/prepublish-results` (cut from `claude/prep
 | 2 | Debug tools can't run on a live server | **PASS** |
 | 3 | Real IDs for every pass and product | **PASS (format) / NOT VERIFIED against Roblox** |
 | 4 | Egg odds in UI and text match config | **PASS** |
-| 5 | Paid-pass check when Roblox is slow | **Fixed** in `6b3abb2` (was FAIL); one follow-up in IpoServer, see below |
+| 5 | Paid-pass check when Roblox is slow | **Fixed** in `6b3abb2` (was FAIL); Shares follow-up fixed in `22c22ff` |
 | 6 | `data.saving` can stick | **Fixed** in `ebe59cd` (was FAIL) |
 | 7 | Remote exploit sweep, code side | **PASS**, with 2 minor notes |
 
@@ -73,7 +73,7 @@ The only hard-coded numbers in text are in the Luck Boost description ("Legendar
 **Fix (branch `prepublish-fixes`, ShopServer + ShopConfig):**
 - After a purchase, `confirmPurchasedPass` asks Roblox every `ShopConfig.PassConfirm.RetrySeconds` (5) for up to `GiveUpSeconds` (120). The pass is granted only when Roblox answers yes (a "no" or an error just means ask again), so server authority is unchanged. The player sees "Confirming ... with Roblox...", then "... unlocked!", or after 2 minutes "Roblox is slow to confirm ...", and the 120 s recheck loop or a rejoin still picks the pass up. One confirmation runs per player and pass.
 - `checkPasses` now asks all passes at the same time and calls `publish` as each one is found. With Roblox down the join check takes about 6 s instead of 36 s, so it finishes inside the 10 s join timeout.
-- **Join-time findings:** (a) *VIP lounge:* the collision group already blocks a player whose pass isn't known yet, so a VIP owner can't walk in and be thrown out; but the door would offer to *sell* the pass to an owner, and the lounge sweep could move out someone inside. Both now wait while `ShopServer.isPassCheckPending(player)` is true. (b) *Shareholder 2x Shares:* with the parallel check the window is a few seconds, but it still exists (a player who joins ready to go public and presses it at once gets 1x, permanently). Closing it needs 3 lines in `IpoServer.goPublic` (refuse with "Still checking your passes, try again in a moment" while `ShopServer.isPassCheckPending(player)`). IpoServer was not part of this task's claim, so **this is not done yet**.
+- **Join-time findings:** (a) *VIP lounge:* the collision group already blocks a player whose pass isn't known yet, so a VIP owner can't walk in and be thrown out; but the door would offer to *sell* the pass to an owner, and the lounge sweep could move out someone inside. Both now wait while `ShopServer.isPassCheckPending(player)` is true. (b) *Shareholder 2x Shares:* **Fixed in `22c22ff`.** `IpoServer.goPublic` refuses with "One moment: still checking your game passes with Roblox" while `ShopServer.isPassCheckPending` is true (refusing, not waiting, so nothing yields between the checks and `ipo.busy`). A stuck check stops blocking after `IpoConfig.PassCheckMaxWaitSeconds` (20 s).
 
 Original finding, kept for the record:
 
