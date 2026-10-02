@@ -132,7 +132,7 @@ Without the pass nobody finishes the shop in 60 days. The sim stops at 60 days, 
 | casual30 (4 x 72 min/day) | 10 / 20 | 18 / 36 | 26 / 52 | 48 / 98 | 88 / 176 |
 | casual (10 min/day) | 14 / 28 | 18 / 36 | 36 / 73 | 59 / 118 | 84 / 168 |
 
-**Shop pace: the whole IPO shop (525 Shares)**
+**Shop pace: the whole IPO shop (525 Shares, before D1; now 1,770, see 3e)**
 
 | Player | No pass | Shareholder pass |
 |---|---|---|
@@ -144,9 +144,27 @@ Days = online time divided by the player's daily play time (active 1 h/day, casu
 
 **What this does not tell you:** perk effects (FasterEggs, ExtraIncubator, ExtraSlot, OfflineCap, BaseLuck, CheaperPoach) are **not modeled**. Every figure assumes no perk is ever bought; real players buy perks as they go and will be faster, roughly 15-25% per IPO cycle (an estimate, not simulated).
 
-**Decision needed before launch:** the Shareholder pass (2x Shares) finishes the 525-Share shop in about 2 days for an active player, against about 7 days without it. That makes the pass very strong early and leaves it with little to buy after week 1. Decide the pass strength against the shop size (a bigger shop, more perk levels, or a weaker multiplier) before the game launches. Nothing is changed yet.
+**Decision (D1, built on `launch-decisions`, 2026-10-02):** the pass stays at 2x and the shop grew from 525 to 1,770 Shares. See section 3e. The old "very strong early, little to buy after week 1" problem is what 3e fixes.
 
-**3. Running out of things to do.** The base game was finished in about 7 minutes. Now the first run is still 12 minutes, but the run after it is not finished: an active player needs about **1 hour online for 5 IPOs, 6.7 hours online for 10** and still has not bought the whole IPO shop (525 Shares) after 60 days (13 IPOs, 190 Shares; 384 with the pass). So yes, the IPO now carries the mid-game: there is something to do for weeks. The 2-hour binge ends at 4 IPOs (range 4-5), as intended. The honest caveat: the first hour is fast (IPO #1, #2, #3 at 12, 20 and 35 min), and after IPO #5 it slows down sharply.
+### 3e. The 1,770-Share shop (D1)
+
+`IpoConfig.Perks` now costs **1,770 Shares** in total (was 525). Only new levels were added, at the end of three perks: Faster Recruiting 6-7 (90, 140; hatch time up to -70%), Talent Scouts 6-8 (80, 120, 175; luck up to +80%) and Recruiter Network 6-10 (50, 75, 110, 165, 240; poach cost up to -50%). Extra Incubator, Extra Desk and Night Shift were **not** extended (more incubators, desks or offline hours would speed up every IPO), and every old level cost and effect is unchanged. `IPO_PERK_COSTS` in `tools/economy_sim.py` matches. Details, options and checks: docs/D1_SHOP_OPTIONS.md.
+
+IPO timing is unchanged (the shop only decides how fast Shares are spent): `python tools/economy_sim.py --ipo --runs 40 --days 365` still gives the first IPO at 12 min online and IPO 10 at 6.6 h for active, and the rows of section 3d are identical. Only the "whole shop" lines changed. Days are real days (wall clock), median of 40 seeds:
+
+| Player | No pass | Shareholder pass |
+|---|---|---|
+| active (1 h/day) | not in 365 days (IPO 15, 1,063 Shares: 60%) | IPO #14, **125 days** (124.7 h online) |
+| casual30 (4.8 h/day) | not in 365 days (1,031 Shares: 58%) | IPO #14, **96 days** (462 h online) |
+| casual (10 min/day) | not in 365 days (961 Shares: 54%) | IPO #14, **309 days** (51.5 h online) |
+
+For comparison, the 525-Share shop took 7 / 8 / 20 days without the pass and 2 / 1 / 6 with it (section 3d). Share of the 1,770 owned after 7 / 30 / 90 / 365 days, active: no pass 30 / 41 / 47 / 60%, pass 60 / 82 / 94 / 100%.
+
+**The pass is exactly 2x Shares at any date** (it doesn't change when IPOs happen), but "days to finish" is not 2x apart: IPOs get about 2.3 times rarer each time, so doubling the Shares saves about 3 IPOs, and the last IPOs take 10-50 times longer than the early ones. A bigger shop makes that gap larger, not smaller; a real 2x in days would need Shares per IPO to grow geometrically (not done, see D1_SHOP_OPTIONS.md section 2). Also, in the sim `casual30` plays 4.8 h a day and `active` 1 h a day, so casual30 is the heavier player; the order that holds is {active, casual30} faster than casual.
+
+**Perks are still not modeled.** Real players buy perks and are roughly 15-25% faster per IPO cycle, so real days are up to 20% fewer than the table (the 125 / 96 days still clear 4 weeks / 8 weeks). Sections 3b and 3c quote the 525-Share shop of their time and are kept as history.
+
+**3. Running out of things to do.** The base game was finished in about 7 minutes. Now the first run is still 12 minutes, but the run after it is not finished: an active player needs about **1 hour online for 5 IPOs, 6.7 hours online for 10** and still has not bought the whole IPO shop (525 Shares at the time, now 1,770: see 3e) after 60 days (13 IPOs, 190 Shares; 384 with the pass, numbers from before the Shares growth). So yes, the IPO now carries the mid-game: there is something to do for weeks. The 2-hour binge ends at 4 IPOs (range 4-5), as intended. The honest caveat: the first hour is fast (IPO #1, #2, #3 at 12, 20 and 35 min), and after IPO #5 it slows down sharply.
 
 **4. Casual (30% active):** same first 12 minutes, IPO #5 at 82 min online (about a day), IPO #10 at 19 h online (about 4 days at 4.8 h/day), 13 IPOs in 60 days. A once-a-day 10-minute player gets 11 IPOs in 60 days. Casual players are not locked out.
 

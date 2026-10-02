@@ -1,6 +1,6 @@
-# D1: how big should the Shares shop be? (proposal, nothing applied)
+# D1: how big should the Shares shop be? (proposal; option C applied on branch launch-decisions)
 
-Status: **proposal only.** `IpoConfig.lua`, every perk number and the sim are unchanged. Decision already taken by Mattia: the Shareholder pass stays at `sharesMultiplier = 2` (a pass can't be weakened after people bought it), and the Shares shop gets bigger. This file says by how much and how.
+Status: **option C (1,770 Shares) is applied** in `IpoConfig.lua` (branch `launch-decisions`, 2026-10-02), with `IPO_PERK_COSTS` in the sim, 146 new/extended checks in `tools/daily_test.py` and the docs updated. The text below is the original proposal and is kept as written (sections 5 and 6 say "I would change": that is now done as listed, including the optional `tools/daily_test.py` guard). Decision taken by Mattia: the Shareholder pass stays at `sharesMultiplier = 2` (a pass can't be weakened after people bought it), and the Shares shop gets bigger.
 
 Numbers come from `tools/economy_sim.py --ipo --runs 40 --days 365` (the sim's own functions, 40 seeds, 365 days, daily calendar off, no perks). The shop is "bought" on the first day the player's total Shares earned reaches the shop size. Days are **real days** (wall clock) at the sim's session patterns: active = 3 x 20 min/day (1 h), casual30 = 4 x 72 min/day (4.8 h), casual = 1 x 10 min/day. The sim reproduces docs/ECONOMY.md for today's 525-Share shop (active 7 d no pass / 2 d pass, casual30 8 / 1, casual 20 / 6) and IPO timing (first IPO 12 min online, IPO 10 at 6.6 h), so the new numbers are comparable.
 
@@ -72,7 +72,7 @@ If you don't want to extend Talent Scouts (see section 4), take its 375 out of C
 | **IPO screens** | Data-driven: IpoClient draws one card per `IpoConfig.Perks` entry, "Lv n/max" and the next cost come from `#costs`, effect text from `perLevel`. Costs up to 240 should fit the 92 px phone button (`📜 240`), "Lv 10/10" the name line, and the Shares HUD `📜 n` with up to 4 digits (not tested in Studio). No IpoClient code change; check the Shares Shop page on a phone. The IPO confirm screen and the "Wait longer for more Shares" hint don't use the shop total (hint reword is D2, separate). |
 | **Saved Shares and perk levels** | Safe. `ipo.shares` is a plain number; `ipo.perks[key]` is clamped to `#costs` on load (IpoServer.lua:365), so a level that was valid stays valid and a perk at its old max (5/5) gets a buy button for level 6. No new field, no new section, no save-format change. Debug tools (IpoGrantShares, IpoReset) have no perk maximum in them. |
 | **Rollback** (docs/PUBLISH_RULES.md section 2) | Build this **before launch**, so the launch version already has it. After launch, a rollback to a version with fewer levels clamps levels 6+ back to 5 and the Shares spent on them are gone. Same family as rule A10, but the new values are inside an existing field, so it is a one-way change: forward only. |
-| **Tests** | `tools/daily_test.py` has no check on perk costs; its Talent Scouts tests use level 5 (+50%) and don't depend on the max. |
+| **Tests** | At proposal time `tools/daily_test.py` had no check on perk costs and its Talent Scouts tests stopped at level 5 (+50%). Now built: the odds and fixed-order checks also run every egg at Talent Scouts level 8 (+80%) with and without Luck Boost (still exactly 100.00%), and a new IPO shop block runs the real IpoServer with fakes (71 checks). |
 
 ## 5. Files and numbers I would change if you say yes
 
