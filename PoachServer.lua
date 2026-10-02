@@ -216,6 +216,29 @@ local function confirmSave(player, id, shouldHave)
 	return false
 end
 
+-- MOVENOTES-START
+-- (tools/daily_test.py runs the code between the MOVENOTES markers, so keep it free of Roblox calls.)
+
+-- The notes a move leaves: `to` gets a "gained" note (where it came from, and the refund if the move
+-- has to be undone), `from` stops having one for this employee.
+local function recordMove(toPoach, fromPoach, id, fromUserId, refund)
+	toPoach.gained[id] = { from = fromUserId, refund = refund or 0 }
+	toPoach.lost[id] = nil
+	fromPoach.gained[id] = nil
+end
+
+-- Can this employee leave its holder for `toUserId` right now (a poach or a Counter-Offer)?
+-- Not while a move is being saved (inTransit). And not while the holder still has an open "gained"
+-- note for it, unless it's going back to where that note says it came from: the note is what undoes
+-- an unfinished earlier move on the holder's next join, and moving the employee on to someone else
+-- would erase it while the old owner's save may still have the employee (a copy, FR-4).
+local function movable(holderPoach, id, toUserId)
+	if inTransit[id] then return false end
+	local note = holderPoach and holderPoach.gained and holderPoach.gained[id]
+	return note == nil or note.from == toUserId
+end
+-- MOVENOTES-END
+
 -- Moves an employee from one team to another and saves both players in an order that can
 -- never duplicate or lose it, even if the server stops halfway:
 --   1. `to` gets it, with a "gained" note. `from`'s save still keeps it (outgoing).
@@ -263,9 +286,7 @@ local function transfer(from, to, id, refund, payment)
 	end
 
 	local toPoach, fromPoach = getPoach(to), getPoach(from)
-	toPoach.gained[id] = { from = from.UserId, refund = refund or 0 }
-	toPoach.lost[id] = nil
-	fromPoach.gained[id] = nil
+	recordMove(toPoach, fromPoach, id, from.UserId, refund)
 	inTransit[id] = true
 	task.defer(function()
 		if confirmSave(to, id, true) then
@@ -371,7 +392,7 @@ local function finish(negotiation)
 	local problem
 	if not isOnline(target) then
 		problem = name .. " left the server"
-	elseif not findEmployee(target, negotiation.employeeId) or inTransit[negotiation.employeeId] then
+	elseif not findEmployee(target, negotiation.employeeId) or not movable(poachOf(target), negotiation.employeeId, userIdOf(attacker)) then
 		problem = "the employee isn't on " .. name .. "'s team anymore"
 	elseif not negotiation.ignoreShields and protection(target, os.time()) then
 		problem = name .. " got protected"
@@ -451,7 +472,7 @@ local function start(player, targetUserId, employeeId)
 
 	local employee = findEmployee(target, employeeId)
 	local creature = employee and CreatureConfig.getCreature(employee.creature)
-	if not creature or inTransit[employeeId] then return false, "That employee isn't available" end
+	if not creature or not movable(poachOf(target), employeeId, player.UserId) then return false, "That employee isn't available" end
 	local chance = chanceFor(player, target, creature)
 	if not chance then return false, creature.rarity .. " employees can't be poached" end
 	if not EmployeeServer.hasFreeSlot(player) then
@@ -487,7 +508,7 @@ local function counterOffer(player)
 		return false, offer.attackerName .. " is busy right now, try again in a moment"
 	end
 	if not findEmployee(attacker, offer.employeeId) then return drop(offer.attackerName .. " doesn't have them anymore") end
-	if inTransit[offer.employeeId] then return false, "The paperwork isn't done yet, try again in a moment" end
+	if not movable(getPoach(attacker), offer.employeeId, player.UserId) then return false, "The paperwork isn't done yet, try again in a moment" end
 	if not EmployeeServer.hasFreeSlot(player) then return false, "Your team is full: make room first" end
 	if data.cash.Value < offer.price then return false, "Not enough Cash (" .. ShopConfig.formatCash(offer.price) .. ")" end
 
@@ -526,7 +547,7 @@ local function targetsFor(player)
 		}
 		for _, employee in ipairs(employeesOf(target)) do
 			local creature = CreatureConfig.getCreature(employee.creature)
-			if creature and not inTransit[employee.id] then
+			if creature and movable(targetPoach, employee.id, player.UserId) then
 				table.insert(entry.employees, {
 					id = employee.id,
 					creature = creature.key,

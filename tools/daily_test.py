@@ -11,7 +11,7 @@ It runs the real DailyServer and DailyConfig code with a fake Roblox (fake clock
 fake incubators) and checks every claim rule: one claim per UTC day, double tap, rejoin, one
 missed day keeps the place, two missed days go back to Day 1, full incubators, bad saves,
 Day 7 Shares not doubled, Studio-only debug, and that calendar Cash never changes the IPO
-valuation. It also checks the egg odds the screens show (the whole CreatureConfig), and runs the marked code of ShopServer (pass checks: purchase confirmation retries,
+valuation. It also checks the egg odds the screens show (the whole CreatureConfig), and runs the marked code of PoachServer (move notes, the FR-4 guard), ShopServer (pass checks: purchase confirmation retries,
 parallel join check) and TycoonCore (sanitizer, store, save payload build) with fakes.
 It changes nothing in the game or in Studio.
 """
@@ -745,6 +745,67 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+MOVE_TESTS = r"""-- Tests for PoachServer's move notes and the FR-4 guard (the code between its MOVENOTES markers) ----
+local print_real = print
+local inTransit = {}
+__MOVENOTES__
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local function newPoach() return { gained = {}, lost = {} } end
+local V, A, C = 101, 102, 103 -- the owner, the poacher, a third account
+local X = "employee-X"
+
+-- The FR-4 chain, step by step (state exactly as PoachServer.transfer leaves it)
+local pV, pA, pC = newPoach(), newPoach(), newPoach()
+check("no open note: anyone may poach the employee", movable(pV, X, A) and movable(pV, X, C))
+recordMove(pA, pV, X, V, 500) -- 1. A poaches X from V
+inTransit[X] = true
+check("1. the move is recorded on A", pA.gained[X] ~= nil and pA.gained[X].from == V and pA.gained[X].refund == 500)
+check("1. while the move is being saved, nobody can move it", not movable(pA, X, C) and not movable(pA, X, V))
+-- 2-3. V left before A's save returned: V's save still has X, so V's side never confirms. A keeps its note.
+inTransit[X] = nil
+check("3. chain: a third player can't poach it while A's note is open", not movable(pA, X, C))
+check("3. the owner the note points to can still take it back (Counter-Offer)", movable(pA, X, V))
+check("3. other employees of A are not affected", movable(pA, "employee-Y", C))
+-- Why the guard matters: had C's move gone through, it would erase the note that undoes step 1
+local copy = { gained = { [X] = pA.gained[X] }, lost = {} }
+recordMove(pC, copy, X, A, 700)
+check("without the guard: moving on erases the holder's note (V and C would both keep X)", copy.gained[X] == nil and pC.gained[X].from == A)
+-- With the guard, X stays on A with its note; A's next join hands it back to V: one copy
+check("with the guard: A still has the note that hands X back to V on A's next join (one copy)", pA.gained[X] ~= nil and pA.gained[X].from == V)
+
+-- The normal path: V's save confirms, A's note is cleared, X can be poached again
+pV, pA, pC = newPoach(), newPoach(), newPoach()
+recordMove(pA, pV, X, V, 500)
+pA.gained[X] = nil -- confirmSave(V) worked
+check("confirmed move: X can be poached by anyone again", movable(pA, X, C) and movable(pA, X, V))
+
+-- A Counter-Offer back to V: A's note goes, V gets one pointing at A
+pV, pA = newPoach(), newPoach()
+recordMove(pA, pV, X, V, 500)
+check("Counter-Offer allowed while A's note points at V", movable(pA, X, V))
+recordMove(pV, pA, X, A, 250)
+check("after the Counter-Offer: A has no note, V's note points at A", pA.gained[X] == nil and pV.gained[X].from == A and pV.gained[X].refund == 250)
+check("... and then only A may take it back until V's note is confirmed", movable(pV, X, A) and not movable(pV, X, C))
+check("recordMove clears the receiver's old lost note", (function()
+	local r, g = newPoach(), newPoach()
+	r.lost[X] = { to = 9, at = 1 }
+	recordMove(r, g, X, 5)
+	return r.lost[X] == nil and r.gained[X].refund == 0
+end)())
+
+-- Holders with no notes at all (the Studio dummy, a player still loading)
+check("a holder without a gained table (Studio dummy) is movable", movable({ hrLevel = 0 }, X, C))
+check("a holder with no poach data is movable (the loading check stops it elsewhere)", movable(nil, X, C))
+inTransit[X] = true
+check("inTransit still blocks everyone, even the dummy", not movable({}, X, C) and not movable(nil, X, C))
+inTransit[X] = nil
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -809,6 +870,10 @@ def main():
     result7 = run_luau(luau, ODDS_TESTS.replace("__CREATURECONFIG__", creature_config))
     print("CreatureConfig odds check: " + (result7.stdout.strip() or result7.stderr.strip()))
     if result7.returncode != 0 or " 0 failed" not in result7.stdout:
+        code = 1
+    result8 = run_luau(luau, MOVE_TESTS.replace("__MOVENOTES__", marked_source("MOVENOTES", "PoachServer.lua")))
+    print("PoachServer move check: " + (result8.stdout.strip() or result8.stderr.strip()))
+    if result8.returncode != 0 or " 0 failed" not in result8.stdout:
         code = 1
     return code
 
