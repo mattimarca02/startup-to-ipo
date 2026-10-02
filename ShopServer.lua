@@ -470,8 +470,10 @@ function ShopServer.setupPlayer(player, data, savedShop)
 	-- Ask Roblox which passes they own, but never let a slow answer hold up loading: after
 	-- PASS_CHECK_TIMEOUT loading goes on, and the passes apply as soon as Roblox answers.
 	-- Passes aren't saved, so a save written before the answer is still complete.
-	-- The paid random items check runs at the same time, under its own cap (the same 10 s), so the
-	-- join never waits longer than before. It isn't saved either: it's asked again on every join.
+	-- The paid random items check runs at the same time, under its own cap (the same 10 s): the join
+	-- waits for whichever answer comes last, and never more than 10 s, as before. Waiting for it
+	-- means the restriction is final before the player can do anything (it never flips mid-game).
+	-- It isn't saved either: it's asked again on every join.
 	local policyCheck = startPolicyCheck(player, shop)
 	local state = "checking"
 	passCheckPending[player] = os.clock() -- the VIP lounge and the door wait for the answer
