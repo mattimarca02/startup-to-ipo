@@ -101,8 +101,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
-| IpoConfig | ReplicatedStorage | free | | |
+| tools/daily_test.py | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| IpoConfig | ReplicatedStorage | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
@@ -110,5 +110,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
-| tools/economy_sim.py | (repo only) | free | | |
-| docs/ECONOMY.md | (repo only) | free | | |
+| tools/economy_sim.py | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| docs/ECONOMY.md | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| ROADMAP.md | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| docs/D1_SHOP_OPTIONS.md | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| docs/PREPUBLISH.md | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
+| docs/M6_PLAN.md | (repo only) | @mattimarca02 (Claude) | launch-decisions | 2026-10-02 |
