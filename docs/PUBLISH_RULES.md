@@ -60,6 +60,15 @@ tasks = {
 
 `run` (the per-session state in `TaskServer.newRun`, TaskServer.lua about line 92) is not saved, so a rejoin gives a full 60 s budget bank and clears the flag list (early answers, constant reaction). In PR 1 this is harmless (Studio only, no live Cash). **Fix it in PR 2** before `StudioOnly` goes off: save what must survive a rejoin (the bank and a flag cool-down) or start a rejoin with an empty bank.
 
+## 2c. Plot visuals follow-up (branch `visuals-garage`): no new save section
+
+The Office tab, the removal of the walk-on pads and the tidy layout add **no save section and no saved field**: what an upgrade needs (`owned`) and what an HR level needs (`poach.hrLevel`) were already saved, and the Office state the client shows (`Upgrade1` ... `Upgrade6` on the player) is rebuilt from `owned` on every join. So this change needs no extra publish step for the save and the rollback floor stays `V_launch`. (The earlier visuals-garage stage 1 also added no section.)
+
+- **Two new request names, no new remote object except one:** `ShopRemotes.ShopAction` (a RemoteFunction made by `ShopServer.init`, on live servers too: `"Upgrades"` and `"BuyUpgrade"` with the upgrade's number) and `"BuyHr"` on the existing `PoachRemotes.PoachAction`. Publish with **Shut down all servers** as always (section 3): an old server has no `ShopAction`, and the new `ShopClient` then shows "The office upgrades aren't available right now" instead of the upgrades.
+- **Studio sync order:** paste the server scripts first (`TycoonCore`, `ShopServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `EmployeeServer`, `PlotArt`, `PlotVisuals`), then the clients (`ShopClient`, `PoachClient`). An old client with the new server just has no Office tab; a new client with an old server shows the "not available" line (ShopClient) or "Unknown action" (PoachClient's Buy HR button).
+- **A rollback to a version with the pads** keeps working: the saves are the same. The pads come back, and the Office tab is gone.
+- Nothing is bought by touching the world any more (the three pads are gone). The one remaining `Touched` handler is the VIP Lounge door in ShopServer: it only opens Roblox's own purchase confirmation for the VIP pass.
+
 ## 3. Old and new servers must never run at the same time (FR-19)
 
 - Use **Shut down all servers** (the hard shutdown) for every publish. **Never "Migrate to latest update"**: it keeps old servers running while players move, and a player who goes from a new server to an old one loses the new sections (above).

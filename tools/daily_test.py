@@ -3436,12 +3436,11 @@ end
 local L = PlotArt.Layout
 check("layout: Floor size and top match TycoonCore", L.floorSize[1] == EXPECTED.floor[1] and L.floorSize[2] == EXPECTED.floor[2]
 	and L.floorSize[3] == EXPECTED.floor[3] and L.floorTop == EXPECTED.floorTop)
-check("layout: pad size matches the three pads", L.padSize == EXPECTED.padSize)
-for _, pad in ipairs(L.pads) do
-	local e = EXPECTED.pads[pad.name]
-	check("layout: " .. pad.name .. " offset matches its script", e ~= nil and pad.x == e[1] and pad.z == e[2])
+for _, sign in ipairs(L.signs) do
+	local e = EXPECTED.signs[sign.name]
+	check("layout: " .. sign.name .. " offset matches its script", e ~= nil and sign.x == e[1] and sign.z == e[2])
 end
-check("layout: three pads", #L.pads == 3)
+check("layout: two signs and no pad (the walk-on pads are gone)", #L.signs == 2 and L.pads == nil and L.padSize == nil)
 check("layout: spawn landing matches teleportToPlot", L.spawn.x == EXPECTED.spawn[1] and L.spawn.z == EXPECTED.spawn[2])
 check("layout: one item slot per upgrade", #L.itemSlots == #EXPECTED.upgrades)
 for i, slot in ipairs(L.itemSlots) do
@@ -3457,6 +3456,83 @@ end
 check("layout: EMPLOYEE_SPOTS match EmployeeServer", sameSpots(L.employeeSpots, EXPECTED.spots))
 check("layout: INCUBATOR_SPOTS match EmployeeServer", sameSpots(L.incubators, EXPECTED.incubators))
 check("layout: one desk per employee spot", #L.desks == #L.employeeSpots)
+
+-- 2b. The tidy startup-studio layout: an even grid, desks all one way, aisles of 6+ studs --------------------
+do
+	local R = L.reserve
+	local xs, zs, seenX, seenZ = {}, {}, {}, {}
+	for _, spot in ipairs(L.employeeSpots) do
+		if not seenX[spot[1]] then seenX[spot[1]] = true table.insert(xs, spot[1]) end
+		if not seenZ[spot[2]] then seenZ[spot[2]] = true table.insert(zs, spot[2]) end
+	end
+	table.sort(xs) table.sort(zs)
+	check("layout: 11 hire spots in a grid of 4 columns and 3 rows", #L.employeeSpots == 11 and #xs == 4 and #zs == 3, #xs .. " columns, " .. #zs .. " rows")
+	local evenX, evenZ = true, true
+	for i = 3, #xs do if math.abs((xs[i] - xs[i - 1]) - (xs[2] - xs[1])) > 1e-9 then evenX = false end end
+	for i = 3, #zs do if math.abs((zs[i] - zs[i - 1]) - (zs[2] - zs[1])) > 1e-9 then evenZ = false end end
+	check("layout: equal spacing between columns and between rows", evenX and evenZ)
+	local filled = {}
+	local aligned = true
+	for _, spot in ipairs(L.employeeSpots) do
+		local key = spot[1] .. "," .. spot[2]
+		if filled[key] then aligned = false end
+		filled[key] = true
+	end
+	check("layout: no two hires share a spot", aligned)
+	local sameWay = true
+	for _, desk in ipairs(L.desks) do
+		if desk[1] ~= 0 or desk[2] ~= L.desks[1][2] or desk[3] ~= 0 then sameWay = false end
+	end
+	check("layout: every desk is in front of its hire and faces the same way", sameWay)
+	local rowsFilledInOrder = true
+	for i = 2, #L.employeeSpots do
+		if L.employeeSpots[i][2] < L.employeeSpots[i - 1][2] then rowsFilledInOrder = false end
+	end
+	check("layout: spots fill row by row from the back", rowsFilledInOrder)
+	local symmetricStart = L.employeeSpots[1][1] == -L.employeeSpots[2][1] and L.employeeSpots[3][1] == -L.employeeSpots[4][1]
+	check("layout: a small team fills the middle first and stays symmetric", symmetricStart)
+	local aisles = PlotVisuals.aisles(L)
+	check("layout: an aisle in front of the first row and one between every two rows", #aisles == #zs, #aisles)
+	for i, a in ipairs(aisles) do
+		check("layout: aisle " .. i .. " is at least " .. R.minAisle .. " studs deep (" .. (a[4] - a[3]) .. ")", a[4] - a[3] >= R.minAisle)
+	end
+	local lastIncubator = -math.huge
+	for _, s in ipairs(L.incubators) do lastIncubator = math.max(lastIncubator, s[2]) end
+	check("layout: at least 6 studs from the door side (incubators) to the first row of hires",
+		(zs[1] - R.hireHalf) - (lastIncubator + R.incubatorFront) >= R.minAisle)
+	check("layout: the walking lane is clear of every hire column (the spawn stays in it)",
+		(function()
+			for _, spot in ipairs(L.employeeSpots) do
+				if spot[1] - R.hireHalf < L.spawn.x + R.spawnHalf and spot[1] + R.hireHalf > L.spawn.x - R.spawnHalf then return false end
+			end
+			return true
+		end)())
+	-- No two reserved zones overlap, except the ones meant to sit inside another
+	local zones = PlotVisuals.zones(L)
+	local allowed = { ["spawn|lane"] = true, ["spawn|aisle"] = true, ["sign|lane"] = true, ["aisle|lane"] = true }
+	local overlapping
+	for i = 1, #zones do
+		for j = i + 1, #zones do
+			local a, b = zones[i], zones[j]
+			local key1, key2 = a.kind .. "|" .. b.kind, b.kind .. "|" .. a.kind
+			local ab, bb = a.box, b.box
+			local hit = ab[1] < bb[2] - 1e-6 and bb[1] < ab[2] - 1e-6 and ab[5] < bb[6] - 1e-6 and bb[5] < ab[6] - 1e-6
+			if hit and not allowed[key1] and not allowed[key2] then overlapping = overlapping or (a.name .. " / " .. b.name) end
+		end
+	end
+	check("layout: the reserved zones (hires, desks, props, incubators, signs, aisles, lane) never overlap each other", overlapping == nil, overlapping)
+	local inside = true
+	for _, z in ipairs(zones) do
+		local b = z.box
+		if b[1] < -L.floorSize[1] / 2 or b[2] > L.floorSize[1] / 2 or b[5] < -L.floorSize[3] / 2 or b[6] > L.floorSize[3] / 2 then inside = false end
+	end
+	check("layout: every reserved zone is inside the 60 x 60 floor", inside)
+	local walls = true
+	for _, slot in ipairs(L.itemSlots) do
+		if math.abs(slot.x) - R.slotHalfX < 17 then walls = false end
+	end
+	check("layout: the upgrade stations stand on the two side strips, clear of the hire grid", walls)
+end
 
 -- 3. Every room, with every prop in it ----------------------------------------------------
 local center = Vector3.new(-135, 0.5, 150) -- a real plot center (slot 2)
@@ -3487,7 +3563,7 @@ for i = 1, #PlotArt.Stages do
 			lights += 1
 		end
 	end
-	check("room " .. i .. ": at most 220 parts with all 6 props (" .. parts .. ")", parts <= 220 and parts > 0, parts)
+	check("room " .. i .. ": at most 260 parts with all 6 props (" .. parts .. ")", parts <= 260 and parts > 0, parts)
 	check("room " .. i .. ": at most 3 PointLights (" .. lights .. ")", lights <= 3, lights)
 	check("room " .. i .. ": decor anchored, no touch, no query, only floors collide", badFlags == nil, badFlags)
 	check("room " .. i .. ": allowed materials only", badMaterial == nil, badMaterial)
@@ -3513,6 +3589,40 @@ for i = 1, #PlotArt.Stages do
 	local unnamed = nil
 	for _, d in ipairs(room:GetDescendants()) do if d.Name == "" or d.Name == d.ClassName and d:IsA("BasePart") then unnamed = d end end
 	check("room " .. i .. ": every part is named", unnamed == nil)
+end
+
+-- 3b. Clearer props: bigger, with small distinct parts (screen glow, keyboard, mug, handset, rack LEDs, marker tray, sign bracket) ----
+do
+	local DETAILS = {
+		["Desk"] = { "MonitorScreen", "Keyboard", "Mug", "HandleLeft", "LampShade", "DeskLip" },
+		["Coffee Machine"] = { "PanelLED", "Cup2", "SteamWand", "BeanHopper", "MachineCap" },
+		["Laptop"] = { "LaptopScreen", "Mouse", "Mug", "StandGlowStrip", "LaptopLid" },
+		["Server Rack"] = { "ServerLED1", "ServerLED4", "PatchPanel", "CableBlue", "RackTop" },
+		["Whiteboard"] = { "MarkerTray", "MarkerRed", "ChartBar3", "StickyYellow", "FrameTop" },
+		["Neon Logo"] = { "SignBracketLeft", "SignBracketRight", "SignGlow", "LogoRocket", "SignCapTop" },
+	}
+	local total = 0
+	for name, details in pairs(DETAILS) do
+		local have = {}
+		for _, spec in ipairs(PlotArt.Props[name]) do have[spec.name] = spec end
+		local missing
+		for _, d in ipairs(details) do if not have[d] then missing = d end end
+		check("prop " .. name .. ": has its small distinct parts", missing == nil, missing)
+		total += #PlotArt.Props[name]
+		local lit = false
+		for _, spec in ipairs(PlotArt.Props[name]) do if spec.material == "Neon" then lit = true end end
+		check("prop " .. name .. ": has one glowing accent (a Neon screen, LED or sign; the whiteboard's accent is its blue chart)", lit or name == "Whiteboard")
+		check("prop " .. name .. ": 14 to 30 parts (readable, not a pile)", #PlotArt.Props[name] >= 14 and #PlotArt.Props[name] <= 30, #PlotArt.Props[name])
+		-- It is bigger than the old one: the tallest edge of every prop at least 1.2 x its old design's
+		local top = 0
+		for _, spec in ipairs(PlotArt.Props[name]) do top = math.max(top, spec.offset[2] + spec.size[2] / 2) end
+		check("prop " .. name .. ": tall enough to read from the camera (top at " .. string.format("%.1f", top) .. " studs)", top >= 5.5, top)
+	end
+	check("the six props use at most 135 parts together (" .. total .. ")", total <= 135, total)
+	local names = {}
+	for _, spec in ipairs(PlotArt.Stages[1].decor) do names[spec.name] = true end
+	check("the old PC has its bezel, keys, floppy slot and stand; the phone its keypad and handset ear",
+		names.CRTBezel and names.KeyboardKeys and names.TowerFloppy and names.CRTStand and names.PhoneKeypad and names.HandsetEar and names.DeskPhoneHandset)
 end
 
 -- 4. The garage story: the only tech is an old PC and a desk phone -------------------------
@@ -3593,7 +3703,22 @@ local function anyMatch(list, word) for _, p in ipairs(list) do if string.find(p
 do
 	local art = deepCopy(PlotArt)
 	find(art.Stages[1].decor, "Tire1").offset = { 0, 0.45, 24 }
-	check("mutation: a tire on the green pad is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "pad zone BuyPad"))
+	check("mutation: a tire on the next-upgrade sign is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "sign zone BuySign"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Tire1").offset = { 0, 0.45, 3 }
+	check("mutation: a tire in the walking lane down the middle is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "lane zone WalkingLane"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Tire1").offset = { 10, 0.45, -3 }
+	check("mutation: a tire in the aisle between two rows is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "aisle zone RowAisle1"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { 4.5, 0.9, -15 }
+	check("mutation: a box in the aisle in front of the incubators is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "aisle zone DoorAisle"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { -13.5, 0.9, 14 }
+	check("mutation: a box where a hire stands is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "hire zone Hire"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { -4.5, 0.9, 16.3 }
+	check("mutation: a box on a hire's desk is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "desk zone HireDesk"))
 	art = deepCopy(PlotArt)
 	table.insert(art.Stages[1].decor, { name = "Floater", shape = "Block", size = { 2, 2, 2 }, offset = { 8, 20, -8 }, color = { 1, 2, 3 }, material = "Wood" })
 	check("mutation: a floating part is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "Floater is floating"))
@@ -3624,6 +3749,169 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+BUY_TESTS = r"""-- Tests for buying an office upgrade: TycoonCore's checkUpgradePurchase and buyUpgrade (BUYUPGRADE markers),
+-- ShopServer's handleShopAction (SHOPACTION markers) and PoachServer's checkHrPurchase (HRBUY markers) ----
+local print_real = print
+local function typeof(v) return type(v) end
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local CLOCK = 100
+local os = { clock = function() return CLOCK end }
+local UPGRADES = __UPGRADES__
+local playerData = {}
+local CALLS = {}
+local function updateIncome(player) table.insert(CALLS, "income") end
+local function spawnItem(data, i, upg, popIn) table.insert(CALLS, "spawn:" .. i .. ":" .. upg.name .. ":" .. tostring(popIn)) end
+local function refreshSign(player) table.insert(CALLS, "sign") end
+__BUYUPGRADE__
+local function upgradeList()
+	local list = {}
+	for _, upg in ipairs(UPGRADES) do table.insert(list, { name = upg.name, cost = upg.cost, income = upg.income }) end
+	return list
+end
+local core = { buyUpgrade = buyUpgrade, upgradeList = upgradeList }
+__SHOPACTION__
+
+local function newPlayer(cash, ready)
+	local player = {}
+	playerData[player] = { ready = ready ~= false, owned = {}, cash = { Value = cash } }
+	return player, playerData[player]
+end
+local function buy(player, id)
+	CALLS = {}
+	CLOCK += 1 -- a new second: the rate limit is not what is being tested, unless a test says so
+	return handleShopAction(player, "BuyUpgrade", id)
+end
+
+-- 1. The purchase, in the same order and with the same rules as the old pad -------------------------
+do
+	local p, d = newPlayer(1000)
+	local ok, msg = buy(p, 1)
+	check("Desk (free): bought, no Cash taken", ok == true and d.owned.Desk == true and d.cash.Value == 1000, msg)
+	check("a purchase pops its prop in, updates the income and the sign",
+		table.concat(CALLS, ",") == "income,spawn:1:Desk:true,sign", table.concat(CALLS, ","))
+	ok, msg = buy(p, 2)
+	check("Coffee Machine ($25): bought, exactly its price taken", ok == true and d.owned["Coffee Machine"] == true and d.cash.Value == 975, d.cash.Value)
+	ok, msg = buy(p, 3)
+	check("Laptop ($100)", ok == true and d.cash.Value == 875)
+	ok = buy(p, 4); check("Server Rack ($400)", ok == true and d.cash.Value == 475)
+	ok = buy(p, 5); check("Whiteboard ($1500): not enough Cash, refused", ok == false and d.owned.Whiteboard == nil and d.cash.Value == 475)
+	d.cash.Value = 1500
+	ok = buy(p, 5); check("Whiteboard with exactly $1500: bought, Cash is 0 (never negative)", ok == true and d.cash.Value == 0)
+	d.cash.Value = 5000
+	ok = buy(p, 6); check("Neon Logo ($5000): the last one", ok == true and d.cash.Value == 0)
+	local all = true
+	for _, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then all = false end end
+	check("all six owned after buying in order", all)
+	ok, msg = buy(p, 6)
+	check("everything bought: another request is refused", ok == false)
+end
+
+-- 2. Refusals change nothing ----------------------------------------------------------------------
+do
+	local p, d = newPlayer(24)
+	buy(p, 1)
+	local ok, msg = buy(p, 2)
+	check("insufficient Cash ($24 for $25): refused with the price", ok == false and d.cash.Value == 24 and d.owned["Coffee Machine"] == nil
+		and string.find(msg, "$25", 1, true) ~= nil, msg)
+	check("insufficient Cash: no prop, no income change, no sign refresh", #CALLS == 0, table.concat(CALLS, ","))
+	ok, msg = buy(p, 1)
+	check("already owned: refused, nothing taken", ok == false and d.cash.Value == 24 and string.find(msg, "already", 1, true) ~= nil, msg)
+	d.cash.Value = 100000
+	ok, msg = buy(p, 4)
+	check("wrong order (Server Rack before Coffee Machine): refused, says what to buy first", ok == false and d.owned["Server Rack"] == nil
+		and d.cash.Value == 100000 and string.find(msg, "Coffee Machine first", 1, true) ~= nil, msg)
+	ok = buy(p, 6)
+	check("wrong order (Neon Logo with the Desk only): refused", ok == false and d.owned["Neon Logo"] == nil)
+	check("a refused request never spawns a prop", #CALLS == 0)
+end
+
+-- 3. Spam is refused, not queued -----------------------------------------------------------------------
+do
+	local p, d = newPlayer(100000)
+	CLOCK += 10
+	local first = handleShopAction(p, "BuyUpgrade", 1)
+	local second, msg = handleShopAction(p, "BuyUpgrade", 2) -- the same instant
+	check("spam: the second request in the same instant is refused", first == true and second == false and msg == "Too fast" and d.owned["Coffee Machine"] == nil, msg)
+	CLOCK += BUY_MIN_INTERVAL - 0.01
+	check("spam: still refused just under the interval", handleShopAction(p, "BuyUpgrade", 2) == false)
+	CLOCK += 0.02
+	check("spam: allowed again once the interval has passed", handleShopAction(p, "BuyUpgrade", 2) == true and d.owned["Coffee Machine"] == true)
+	local hundred = 0
+	for _ = 1, 100 do if handleShopAction(p, "BuyUpgrade", 3) then hundred += 1 end end
+	check("spam: 100 requests in one instant buy at most once", hundred <= 1, hundred)
+	check("a refused spam request does not push the next allowed time forward", (function()
+		CLOCK += BUY_MIN_INTERVAL + 0.01
+		return handleShopAction(p, "BuyUpgrade", 4) ~= nil
+	end)())
+end
+
+-- 4. Bad numbers and bad states --------------------------------------------------------------------------
+do
+	local p, d = newPlayer(100000)
+	for _, bad in ipairs({ "1", "2", true, {}, 0, -1, 7, 1.5, 2.0000001, 0 / 0, math.huge, -math.huge, 1e300 }) do
+		local ran, ok, msg = pcall(buy, p, bad)
+		check("bad id " .. tostring(bad) .. " (" .. type(bad) .. "): refused cleanly (no error), nothing changed", ran and ok == false and next(d.owned) == nil and d.cash.Value == 100000, msg)
+	end
+	local ok, msg = buy(p, nil)
+	check("no id at all: refused", ok == false and msg == "Bad request" and next(d.owned) == nil, msg)
+	check("a bad action name is refused", handleShopAction(p, "GiveCash", 1) == false and handleShopAction(p, 5, 1) == false and handleShopAction(p, nil, 1) == false)
+	local loading, ld = newPlayer(1000, false)
+	ok, msg = buy(loading, 1)
+	check("data.ready is false (loading, or an IPO being saved): refused", ok == false and ld.owned.Desk == nil and #CALLS == 0, msg)
+	ok, msg = buy({}, 1)
+	check("a player with no data: refused", ok == false, msg)
+	local before = CLOCK
+	check("a bad id never moves the rate limit stamp", d.lastBuyAt == nil, d.lastBuyAt)
+end
+
+-- 5. The client chooses the upgrade, never the price ---------------------------------------------------------
+do
+	local p, d = newPlayer(25)
+	buy(p, 1)
+	CALLS = {}
+	CLOCK += 1
+	local ok = handleShopAction(p, "BuyUpgrade", 2, 0, 1, "cost", { cost = 0 }) -- a client sending a price of 0 and more
+	check("a price sent by the client is ignored: the real $25 is taken", ok == true and d.cash.Value == 0, d.cash.Value)
+	local seen
+	core.buyUpgrade = function(...) seen = { ... } return false, "x" end
+	handleShopAction(p, "BuyUpgrade", 3, 0, 99)
+	check("ShopServer passes only (player, id) on: nothing else the client sent reaches the buy", seen ~= nil and #seen == 2 and seen[1] == p and seen[2] == 3, seen and #seen)
+	core.buyUpgrade = buyUpgrade
+	local ok2, list = handleShopAction(p, "Upgrades", 5, 6)
+	check("Upgrades: the six, in order, with name, price and income", ok2 == true and #list == #UPGRADES and list[1].name == "Desk" and list[2].cost == 25 and list[6].income == 120)
+end
+
+-- 6. HR Department purchase (PoachServer's HRBUY) ------------------------------------------------------------------
+local ShopConfig = { formatCash = function(n) return "$" .. n end }
+__HRBUY__
+do
+	local levels = { { cost = 100, defense = 0.1 }, { cost = 300, defense = 0.2 } }
+	local poach = { hrLevel = 0 }
+	CLOCK = 1000
+	local nextLevel, msg = checkHrPurchase(levels, poach, 99, CLOCK)
+	check("HR: not enough Cash is refused with the price", nextLevel == nil and string.find(msg, "$100", 1, true) ~= nil, msg)
+	CLOCK += 1
+	nextLevel = checkHrPurchase(levels, poach, 100, CLOCK)
+	check("HR: exactly the price is enough, the next level's rules come back", nextLevel == levels[1])
+	CLOCK += 0.1
+	nextLevel, msg = checkHrPurchase(levels, poach, 100000, CLOCK)
+	check("HR: spam within a second is refused", nextLevel == nil and msg == "Too fast", msg)
+	poach.hrLevel = 2
+	CLOCK += 5
+	nextLevel, msg = checkHrPurchase(levels, poach, 100000, CLOCK)
+	check("HR: past the last level there is nothing to buy", nextLevel == nil and string.find(msg, "fully", 1, true) ~= nil, msg)
+	poach.hrLevel = 1
+	CLOCK += 5
+	check("HR: level 2 costs its own price", checkHrPurchase(levels, poach, 299, CLOCK) == nil and (function() CLOCK += 5 return checkHrPurchase(levels, poach, 300, CLOCK) == levels[2] end)())
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
 def code_only(text):
     """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
     lines = []
@@ -3631,6 +3919,112 @@ def code_only(text):
         cut = line.find("--")
         lines.append(line if cut < 0 else line[:cut])
     return "\n".join(lines)
+
+
+def upgrades_lua():
+    """UPGRADES from TycoonCore.lua as a Luau table (name, cost, income: the real prices)."""
+    import re
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("local UPGRADES = {"):]
+    block = block[:block.index("\n}")]
+    rows = re.findall(r'name = "([^"]+)",\s*cost = (\d+),\s*income = (\d+)', block)
+    if len(rows) != 6:
+        raise SystemExit("UPGRADES in TycoonCore.lua no longer has 6 rows with name, cost and income")
+    return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s }' % row for row in rows) + " }"
+
+
+def buy_source(mutation=None):
+    """The BUY_TESTS program, with the real regions. mutation = (old, new) breaks one rule in the TycoonCore or ShopServer region."""
+    core = marked_source("BUYUPGRADE")
+    shop = marked_source("SHOPACTION", "ShopServer.lua")
+    if mutation:
+        old, new = mutation
+        if old in core:
+            core = core.replace(old, new, 1)
+        elif old in shop:
+            shop = shop.replace(old, new, 1)
+        else:
+            raise SystemExit("mutation target not found: " + old)
+    return (BUY_TESTS.replace("__UPGRADES__", upgrades_lua()).replace("__BUYUPGRADE__", core)
+            .replace("__SHOPACTION__", shop).replace("__HRBUY__", marked_source("HRBUY", "PoachServer.lua")))
+
+
+# Each of these breaks one rule of the purchase; the tests must notice (a test that can't fail proves nothing).
+BUY_MUTATIONS = [
+    ("the Cash check", ("if cash < upg.cost then", "if false then")),
+    ("the already-owned check", ("if data.owned[upg.name] then", "if false then")),
+    ("the order check", ("if i ~= id then", "if false then")),
+    ("the rate limit", ("if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then", "if false then")),
+    ("the id range check", ("id < 1 or id > #upgrades", "false")),
+    ("the whole-number check", ("id % 1 ~= 0 or ", "")),
+    ("the ready check", ("if not data.ready then", "if false then")),
+    ("the type check in ShopServer", ("if typeof(id) ~= \"number\" then", "if false then")),
+]
+
+
+def pads_gone_checks():
+    """Source checks: no walk-on pad, no Touched buy or trigger, the Office tab sends only an upgrade number, no new save section."""
+    import re
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    lua_files = [n for n in sorted(os.listdir(ROOT)) if n.endswith(".lua")]
+    touched = {n: len(re.findall(r"\.Touched\b", code_only(read(n)))) for n in lua_files}
+    touched = {n: c for n, c in touched.items() if c}
+    check("the only Touched handler in the game is the VIP Lounge door in ShopServer (it opens Roblox's own confirm prompt)", touched == {"ShopServer.lua": 1}, touched)
+    for name in lua_files:
+        code = code_only(read(name))
+        for word in ("BuyPad", "HRPad", "IpoPad", "HR_PAD_OFFSET", "buildHrPad", "refreshPad", "hrLabel", "padLabel"):
+            check("%s has no %s (the pads are gone)" % (name, word), word not in code)
+
+    core = read("TycoonCore.lua")
+    code = code_only(core)
+    check("TycoonCore: one purchase function, and the shop gets it", "buyUpgrade = buyUpgrade," in code and code.count("local function buyUpgrade(") == 1)
+    check("TycoonCore: the sign has no touch, collision or query", "post.CanCollide, post.CanTouch, post.CanQuery = false, false, false" in code
+          and "board.CanCollide, board.CanTouch, board.CanQuery = false, false, false" in code)
+    check("TycoonCore: a join and an IPO reset refresh the sign and the Office state", code.count("refreshSign(player)") >= 3)
+    check("TycoonCore: spawning on a plot buys nothing (the character only lands and faces the sign)", "auto-buy" not in core and "Touched" not in core)
+    sections = re.search(r"local KNOWN_SECTIONS = \{([^}]*)\}", core).group(1)
+    check("TycoonCore: no new save section (the Office tab saves nothing: owned already is)",
+          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks".split()), sections)
+    check("TycoonCore: nothing new is written to the save for the Office (no lastBuyAt or Upgrade attribute in the payload)",
+          "lastBuyAt" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
+
+    shop = code_only(read("ShopServer.lua"))
+    region = shop[shop.index("local function handleShopAction"):shop.index("function ShopServer.addDebugAction") if "function ShopServer.addDebugAction" in shop else len(shop)]
+    handler = region[:region.index("return false, \"Unknown action\"")]
+    check("ShopServer: the Office action only calls core.buyUpgrade(player, id) (no price, no Cash, no save of its own)",
+          handler.count("core.buyUpgrade(player, id)") == 1 and "cash" not in handler.lower() and "cost" not in handler.lower())
+    check("ShopServer: ShopAction is created on live servers too (not behind the Studio debug check)",
+          shop.index('actionRemote.Name = "ShopAction"') < shop.index("if RunService:IsStudio() and ShopConfig.DebugInStudio then", shop.index('actionRemote.Name = "ShopAction"') - 400))
+
+    client = code_only(read("ShopClient.lua"))
+    invokes = re.findall(r"actionRemote:InvokeServer\(([^)]*)\)", client)
+    check("ShopClient: the Office tab asks only for the list and sends the upgrade number (no price)",
+          sorted(invokes) == ['"BuyUpgrade", index', '"Upgrades"'], invokes)
+    check("ShopClient: an Office tab, first and the one shown when the shop opens",
+          'local tabNames = { "Office",' in client and 'showTab("Office")' in client)
+    check("ShopClient: Buy is only offered for the next upgrade when the Cash is there (the server decides anyway)",
+          'setButton(button, "Locked", COLORS.disabled, false)' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
+
+    poach = code_only(read("PoachClient.lua"))
+    check("PoachClient: Buy HR sends only the action", 'request("BuyHr")' in poach and 'request("BuyHr",' not in poach)
+    check("PoachClient: the HR card no longer sends players to a pad", "pad" not in poach.lower().replace("padding", ""))
+    poach_server = code_only(read("PoachServer.lua"))
+    check("PoachServer: BuyHr is an action of the existing PoachAction remote (no new remote)", 'action == "BuyHr"' in poach_server and poach_server.count("Instance.new(\"Remote") == 2)
+    return passed, failed
 
 
 def task_wiring_checks():
@@ -3728,28 +4122,29 @@ def visuals_expected_lua():
     upgrades_block = core[core.index("local UPGRADES = {"):]
     upgrades_block = upgrades_block[:upgrades_block.index("\n}")]
     upgrades = re.findall(r'name = "([^"]+)"', upgrades_block)
-    if "return Vector3.new(-18 + col * 18, 0, -14 + row * 16)" not in core or "local col = (i - 1) % 3" not in core:
+    item = re.search(r"local function itemOffset\(i\)\s*local col = \(i - 1\) // 3\s*local row = \(i - 1\) % 3\s*return Vector3\.new\((-?[\d.]+) \+ col \* (-?[\d.]+), 0, (-?[\d.]+) \+ row \* (-?[\d.]+)\)", core)
+    if not item:
         raise SystemExit("itemOffset changed in TycoonCore.lua: update visuals_expected_lua and PlotArt.Layout")
-    slots = [(-18 + ((i - 1) % 3) * 18, -14 + ((i - 1) // 3) * 16) for i in range(1, len(upgrades) + 1)]
-    buy = re.search(r"plotCenter\(data\.slot\) \+ Vector3\.new\((-?[\d.]+), 0\.6, (-?[\d.]+)\)\s*\n\s*local pad = makePart\(data\.folder, \"BuyPad\", Vector3\.new\((\d+), 0\.2, (\d+)\)", core)
+    x0, dx, z0, dz = (num(item.group(k)) for k in (1, 2, 3, 4))
+    slots = [(x0 + ((i - 1) // 3) * dx, z0 + ((i - 1) % 3) * dz) for i in range(1, len(upgrades) + 1)]
     spawn = re.search(r"local spawnPos = plotCenter\(slot\) \+ Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
     floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotCenter\(slot\)', core)
     center_y = re.search(r"return Vector3\.new\(startX \+ \(slot - 1\) \* PLOT_SPACING, ([\d.]+), 150\)", core)
-    hr = re.search(r"local HR_PAD_OFFSET = Vector3\.new\((-?[\d.]+), 0\.6, (-?[\d.]+)\)", read("PoachServer.lua"))
-    ipo = re.search(r"local PAD_OFFSET = Vector3\.new\((-?[\d.]+), 0\.6, (-?[\d.]+)\)", read("IpoServer.lua"))
+    buy = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core)
+    ipo = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", read("IpoServer.lua"))
     employee = read("EmployeeServer.lua")
-    if not all((buy, spawn, floor, center_y, hr, ipo)):
-        raise SystemExit("A pad, the spawn or the Floor moved in the scripts: update visuals_expected_lua and PlotArt.Layout")
+    if not all((buy, spawn, floor, center_y, ipo)):
+        raise SystemExit("A sign, the spawn or the Floor moved in the scripts: update visuals_expected_lua and PlotArt.Layout")
     floor_top = float(floor.group(2)) / 2  # the Floor is centered on plotCenter
 
     def pairs(points):
         return "{ " + ", ".join("{ %s, %s }" % p for p in points) + " }"
 
-    return ("{ upgrades = { %s }, slots = %s, spots = %s, incubators = %s, floor = { %s, %s, %s }, floorTop = %s, padSize = %s, "
-            "pads = { BuyPad = { %s, %s }, HRPad = { %s, %s }, IpoPad = { %s, %s } }, spawn = { %s, %s } }") % (
+    return ("{ upgrades = { %s }, slots = %s, spots = %s, incubators = %s, floor = { %s, %s, %s }, floorTop = %s, "
+            "signs = { BuySign = { %s, %s }, IpoSign = { %s, %s } }, spawn = { %s, %s } }") % (
         ", ".join('"%s"' % u for u in upgrades), pairs(slots), pairs(spots(employee, "EMPLOYEE_SPOTS")),
-        pairs(spots(employee, "INCUBATOR_SPOTS")), floor.group(1), floor.group(2), floor.group(3), floor_top, buy.group(3),
-        buy.group(1), buy.group(2), hr.group(1), hr.group(2), ipo.group(1), ipo.group(2), spawn.group(1), spawn.group(2))
+        pairs(spots(employee, "INCUBATOR_SPOTS")), floor.group(1), floor.group(2), floor.group(3), floor_top,
+        buy.group(1), buy.group(2), ipo.group(1), ipo.group(2), spawn.group(1), spawn.group(2))
 
 
 def visuals_wiring_checks():
@@ -3787,11 +4182,11 @@ def visuals_wiring_checks():
     calls = re.findall(r"PlotVisuals\.\w+", code)
     wrapped = re.findall(r'looks\("[^"]*"[^,]*, PlotVisuals\.\w+', code)
     check("TycoonCore: every PlotVisuals call goes through looks() (pcall + warn)", len(calls) == len(wrapped) and len(calls) >= 3, (len(calls), len(wrapped)))
-    spawn_item = core[core.index("local function spawnItem("):core.index("-- The green pad always sells")]
+    spawn_item = core[core.index("local function spawnItem("):core.index("-- Which upgrades the player owns")]
     check("TycoonCore: spawnItem falls back to the plain block when there is no prop", 'makePart(data.folder, upg.name, upg.size' in spawn_item)
     loop = core[core.index("-- Passive income every second"):core.index("-- Autosave every minute")]
     check("TycoonCore: the income loop keeps the room on the current funding stage", "syncRoom(data)" in loop)
-    check("TycoonCore: the stage comes from IpoConfig.stageIndex (the same rule as the IPO pad)", "IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count)" in code)
+    check("TycoonCore: the stage comes from IpoConfig.stageIndex (the same rule as the IPO sign)", "IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count)" in code)
     check("TycoonCore: a purchase pops its prop in", re.search(r"spawnItem\(data, i, upg, true\)", code) is not None)
     check("TycoonCore: no new remote, DataStore or save field for the looks",
           code.count('Instance.new("Remote') == 0 and code.count("GetDataStore(") == 1 and "looks =" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
@@ -3965,6 +4360,23 @@ def main():
     visuals_passed, visuals_failed = visuals_wiring_checks()
     print("Plot visuals wiring check: %d passed, %d failed" % (visuals_passed, visuals_failed))
     if visuals_failed:
+        code = 1
+    result19 = run_luau(luau, buy_source())
+    print("Office upgrade and HR purchase check: " + (result19.stdout.strip() or result19.stderr.strip()))
+    if result19.returncode != 0 or " 0 failed" not in result19.stdout:
+        code = 1
+    caught = 0
+    for label, mutation in BUY_MUTATIONS:
+        mutant = run_luau(luau, buy_source(mutation))
+        if "passed," in mutant.stdout and " 0 failed" not in mutant.stdout:
+            caught += 1  # the tests ran to the end and reported failures (a crash would not count)
+        else:
+            print("FAIL: mutation not caught: the purchase tests do not notice a broken " + label)
+            code = 1
+    print("Office upgrade mutations: %d of %d broken rules caught" % (caught, len(BUY_MUTATIONS)))
+    pads_passed, pads_failed = pads_gone_checks()
+    print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
+    if pads_failed:
         code = 1
     return code
 

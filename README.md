@@ -2,7 +2,7 @@
 
 A Roblox idle tycoon, published as **Build your Startup!** (place `86395856666175`, universe `10768772528`).
 
-Each player gets a garage plot and buys upgrades from a green pad to earn Cash every second. While they're offline they keep earning at 50%, for up to 8 hours. Recruiting eggs hatch creature employees who walk around the garage and add income. A shop sells game passes and developer products. Players can poach employees from each other in the same server and defend with an HR Department or a Poach Shield. Everything the startup earns raises its valuation through five funding stages; at IPO-ready the player can go public (rebirth) for a permanent income multiplier and Shares to spend on permanent perks.
+Each player gets a garage plot and buys upgrades in the shop's Office tab to earn Cash every second (nothing in the garage is bought by walking onto it). While they're offline they keep earning at 50%, for up to 8 hours. Recruiting eggs hatch creature employees who walk around the garage and add income. A shop sells game passes and developer products. Players can poach employees from each other in the same server and defend with an HR Department or a Poach Shield. Everything the startup earns raises its valuation through five funding stages; at IPO-ready the player can go public (rebirth) for a permanent income multiplier and Shares to spend on permanent perks.
 
 | Milestone | What | Status |
 |---|---|---|
@@ -23,8 +23,8 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `TycoonCore.lua` | ServerScriptService | Script | Plots, upgrades, Cash, offline income, saving and loading. Owns all player data. |
 | `ShopServer.lua` | ServerScriptService | ModuleScript | Game passes, developer products, VIP perks, Studio Debug tab |
 | `EmployeeServer.lua` | ServerScriptService | ModuleScript | Eggs, incubators, hatch rolls, team slots, employees in the garage |
-| `PoachServer.lua` | ServerScriptService | ModuleScript | Poaching negotiations, protection and shields, Counter-Offers, the purple HR Department pad |
-| `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the gold IPO pad |
+| `PoachServer.lua` | ServerScriptService | ModuleScript | Poaching negotiations, protection and shields, Counter-Offers, the HR Department (bought in the Poach window) |
+| `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the garage's funding sign |
 | `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
 | `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
 | `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings, grading an answer, the reward, engaged time, the measurement numbers for gate G1 |

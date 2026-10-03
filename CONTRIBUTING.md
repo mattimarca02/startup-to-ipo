@@ -88,39 +88,39 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| ShopServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
-| EmployeeServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| TycoonCore | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | free | | |
+| EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
-| PoachClient | StarterPlayerScripts | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
-| IpoServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
-| tools/daily_test.py | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
+| PoachServer | ServerScriptService | free | | |
+| PoachClient | StarterPlayerScripts | free | | |
+| IpoServer | ServerScriptService | free | | |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| CLAUDE.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| PlotVisuals | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| PlotArt | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| README.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| docs/PLOT_VISUALS.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
+| PlotVisuals | ServerScriptService | free | | |
+| PlotArt | ServerScriptService | free | | |
+| README.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | free | | |
