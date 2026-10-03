@@ -4,7 +4,7 @@ Branch `active-loops`; no game code changed. Numbers are **starting values**, mi
 
 ## 1. The engine
 
-`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer`. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
+`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer` and **before `DailyServer`** (which stays last). **In PR 1 tasks run only in Studio** (`TaskConfig.Enabled` and `RunService:IsStudio()`, like `DebugInStudio`): `addEarnings(kind)` arrives only in PR 2, so no live player earns task Cash before the economy core. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
 
 ```lua
 Call = { wave = 1, role = "sales", action = "click",         -- click | choose | timing | targets
@@ -19,15 +19,15 @@ Call = { wave = 1, role = "sales", action = "click",         -- click | choose |
 
 **Employee auto-resolve.** Roles from `CreatureConfig` (sales, eng, ops, mkt, fin). The team takes an arrival with `A = min(0.75, 1 - (1 - auto)^n_role)`; the founder keeps at least 25%. A team-taken task pays 50% (no chain), only while the player is present, shown as one "Team handled 4 calls" line. Only **routine** tasks (calls, bugs, tickets, pickups, shipping) can be taken; **exceptions** (pitch, events, negotiation, crisis, launch, roadshow) never.
 
-**Caps and skip.** `queue` per row (a full queue drops the arrival), at most 3 chips on screen. **Skip** is free and keeps the chain; only an expired call breaks it. **Quiet mode:** after 3 expiries in a row or 90 s without a graded answer, no new tasks until the player acts. **Difficulty:** `level = rung + min(IPOs, 10)`: gaps up to x1.4 faster, limits `x max(0.65, 1 - 0.03 x level)`, odds -0.8% per level. A task appears at its rung (table below), after the first IPO all are on; tiers 2 and 3 appear one and two rungs later.
+**Caps and skip.** `queue` per row (a full queue drops the arrival), at most 3 chips on screen. **Skip** is free and keeps the chain; only an expired call breaks it. **Quiet mode:** after 3 expiries in a row or 90 s without a graded answer, no new tasks until the player acts. **Difficulty:** `level = rung + min(IPOs, 10)`: gaps up to x1.4 faster, limits `x max(0.65, 1 - 0.03 x level)`, odds -0.8% per level. A task appears at its rung (table below), after the first IPO all are on; tiers 2 and 3 appear one and two rungs later. **Stage to rung in PR 1** (5 stages until PR 2 adds `SeriesCD` and `PreIpo`): Garage 0, Seed 1, Series A 2, Series B 3, IPO-ready 4 (Series C+D budget and difficulty).
 
-**Rewards.** Cash = `seconds x data.income.Value` (passes and IPO multiplier included) through `addEarnings(kind = "task")`, valued at base Cash (LONG doc section 6). Boosts: one per source, total cap +50%, not saved. **Reward budget** (autoclicker wall): per online second at most `B(rung)` seconds of Income, bank 60 s, beyond it 20% (section 4). No pay during `IpoServer.isBusy` or before `data.ready`.
+**Rewards.** Cash = `seconds x data.income.Value` (passes and IPO multiplier included) through `addEarnings(kind = "task")` (PR 2; in PR 1 the Studio-only tasks use the existing wrapper), valued at base Cash (LONG doc section 6). Boosts: one per source, total cap +50%, not saved. **Reward budget** (autoclicker wall): per online second at most `B(rung)` seconds of Income, bank 60 s, beyond it 20% (section 4). No pay during `IpoServer.isBusy` or before `data.ready`.
 
 ## 2. Engaged: a graded task, never a client report
 
-`TaskServer.isEngaged(player)` is true when `os.clock() - lastGradedAt <= 180`. `lastGradedAt` is set **only** when the server grades a valid answer: the id is the player's own open task, argument type and range are valid, the server-clock reaction is at least 0.25 s, the player is not flagged (constant reaction over 30 answers, or 20 flags per hour), and it is not a Skip nor an employee auto-resolve. Movement, jumping, chat, `Start` and any client field never set it; `TaskState` sends the display time only. "Away: tap to resume" is just a prompt to answer a task. The 4 h/day full-value cap (then 10%) and the away bank sit in `IpoServer.addEarnings(kind)`; this module only exposes `isEngaged` and `engagedSeconds`. Result (sim, LONG doc section 2): a macro that only sends input **never** reaches the IPO (before: 4.8 days); a perfect 24/7 task-bot needs 7.2 days (before: 2.3).
+`TaskServer.isEngaged(player)` is true when `os.clock() - lastGradedAt <= 180`. `lastGradedAt` is set **only** when the server grades a valid answer: the id is the player's own open task, argument type and range are valid, the server-clock reaction is at least 0.25 s, the player is not flagged (constant reaction over 30 answers, or 20 flags per hour), and it is not a Skip nor an employee auto-resolve. Movement, jumping, chat, `Start` and any client field never set it; `TaskState` sends the display time only. "Away: tap to resume" is just a prompt to answer a task. The 3 h/day full-value cap (then 5%; the day starts at 08:00 UTC like the daily calendar) and the away bank sit in `IpoServer.addEarnings(kind)` (PR 2); this module only exposes `isEngaged` and `engagedSeconds`. Result (sim, LONG doc section 2): a macro that only sends input **never** reaches the IPO (before: 4.8 days); a perfect 24/7 task-bot needs 10.4 days (before: 2.3).
 
-## 3. Tasks (20 rows; seconds = of current Income)
+## 3. Tasks (20 rows, plus the C+D board request; seconds = of current Income)
 
 | Task | Action | Timing | Reward | Rung |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@ Call = { wave = 1, role = "sales", action = "click",         -- click | choose |
 | Package pickup | targets | every 60-120 s, queue 2 | 2 s + 1 Office Point; every 5th box a decor piece (counter) | C+D |
 | Product launch | 3 steps | ready every 20-25 min | 70 s (partial 35 s) | C+D |
 | Office decoration | choose, place | any time | cosmetic, Office Points | C+D |
+| Board request | choose 1 of 3 | every 45 engaged min, C+D only | **fixed** 60 s, no random reward (D9-safe) | C+D |
 | Pre-IPO roadshow | 3 meetings | once per run | 3 x 40 s (valuation) | Pre-IPO |
 | Paired demo | co-op timing, 2 players | invite 20 s | 90 s of **own** Income; max 3 per pair per hour | outside the 50 h path |
 | Investor Day (M7) | all tasks, 20 min | weekly | x1.5; leaderboard on Investor Points; cosmetic prizes | outside the 50 h path |
@@ -80,14 +81,14 @@ A 20-desk team does not bury the founder: busy stays at 49-59% and the team take
 
 ## 5. Measurement hooks (in PR 1, no pay change)
 
-Studio-only Debug button "Task stats" and a log line every 10 min per player, plus an `AnalyticsService` custom event `task_session`: rung, hires, online seconds, **engaged seconds**, graded answers, auto-resolved count, reward seconds paid, **measured f = reward seconds / online seconds**, budget fill (share of rewards paid at 20%), expiries, flags. Gate G1 (LONG doc section 8): 5 players, two sessions each, compare with the sim (Garage 0.32, Seed 0.50). A measured f below 0.8 x sim means the prices are refitted (sim `f_mult`) before the economy-core PR.
+Studio-only Debug buttons "Task stats" and "Set rung", a log line every 10 min per player, plus an `AnalyticsService` custom event `task_session`: rung, hires, online seconds, **engaged seconds**, graded answers, auto-resolved count, reward seconds paid, **measured f = reward seconds / engaged seconds**, budget fill (share of rewards paid at 20%), expiries, flags. **Gate G1** (LONG doc section 8): PR 1 has only calls, so the target is the **calls-only f per rung: Garage 0.32, Seed 0.37, Series A 0.41** (sim 9m), 5 players, two sessions each, at least 20 engaged minutes per session, rung set with "Set rung". Pass if measured f is within **0.8-1.2x** of the sim; below, raise the call seconds, above, lower them, and refit `f_mult` before PR 2. The all-task values (Garage 0.32, Seed 0.50) are only the PR 2+ target.
 
 ## 6. Safety and saves
 
 - **Server authority.** The server creates each task (id, `os.clock` deadline, answer, targets) and computes the reward. It checks types, ranges, own open task, `data.ready`, not `IpoServer.isBusy`, server clock. Targets are server indexes, unhit, 0.2 s after spawn. **Rate limits:** 8 task remotes per second per player (token bucket), 40 answered tasks per minute; bad input is ignored with a warning.
 - **Autoclicker.** The budget and the daily value cap are the defence; a reaction under 0.25 s, or a constant one over 30 answers, pays 0 for that task and does not count as engaged.
 - **D9.** No task stakes Cash, Shares, eggs or products on a random result; "cost" is a visible deduction with a fixed result; no hidden risk rolls; rewards are never eggs, creatures or random items (decor from a counter); chance only picks which task arrives; no pass or product touches tasks, so restricted players need no `PolicyService` branch.
-- **Saves (rule A10), new top-level sections only.** `tasks = { sharesRun = ipo count the Shares reward was used for, done, bestChain, seen }`; boosts, budget and queues are not saved. Later: `office = { points, owned }`, `investorDay = { week, points }`; the LONG doc adds `away` and `lineage`. Each has `serialize`, a `KNOWN_SECTIONS` entry, optional load; **every new section needs Shut down all servers**; rollback floor `V_launch`.
+- **Saves (rule A10), new top-level sections only.** `tasks = { sharesRun = ipo count the Shares reward was used for, done, bestChain, seen }` (PR 1 adds it: Shut down all servers); boosts, budget and queues are not saved. Later: `office = { points, owned }`, `investorDay = { week, points }`; the LONG doc adds `away` and `lineage`. Each has `serialize`, a `KNOWN_SECTIONS` entry, optional load; **every new section needs Shut down all servers**; rollback floor `V_launch`.
 
 ## 7. UI layout spec (px, from the top-left; a phone at 320x568 and at 667x375)
 
@@ -106,10 +107,10 @@ Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets 
 
 ## 8. Files and task PRs
 
-New: `TaskConfig.lua` (ReplicatedStorage), `TaskServer.lua`, `TaskClient.lua`, `TaskGames.lua`. Changed: `TycoonCore.lua`, `OnboardingConfig.lua` (goal "Answer a call"), README, CLAUDE.md, ROADMAP, `docs/ECONOMY.md`, `tools/daily_test.py`, `tools/economy_sim.py` (keep `ACTIVE_*` equal to `TaskConfig`). Each file is claimed in CONTRIBUTING.md first. Task PRs inside the LONG doc plan: **PR 1** engine + calls + hooks (L: 1,100 Lua + 250 test); **then Studio gate G1**; tasks 2-5 in PR 5-6: bugs/coding/events (M), pitch/interviews (M, Shares slot against `ipo.count`), demo/feedback/tickets (M), marketing and 1-to-1 (M), crunch/roadshow/launch (M), pickups and decoration (M, `office`), paired demo and Investor Day (M, outside the 50 h path).
+New: `TaskConfig.lua` (ReplicatedStorage), `TaskServer.lua`, `TaskClient.lua`, `TaskGames.lua`. Changed: `TycoonCore.lua`, `OnboardingConfig.lua` (goal "Answer a call"), README, CLAUDE.md, ROADMAP, `docs/ECONOMY.md`, `tools/daily_test.py`, `tools/economy_sim.py` (keep `ACTIVE_*` equal to `TaskConfig`). Each file is claimed in CONTRIBUTING.md first. Task PRs inside the LONG doc plan: **PR 1** engine + calls + hooks, tasks Studio-only behind `TaskConfig.Enabled` (L: 1,100 Lua + 250 test); **then Studio gate G1** (calls only); tasks 2-5 in PR 5-6: bugs/coding/events (M), pitch/interviews (M, Shares slot against `ipo.count`), demo/feedback/tickets (M), marketing and 1-to-1 (M), crunch/roadshow/launch (M), pickups and decoration (M, `office`), paired demo and Investor Day (M, outside the 50 h path).
 
 ## 9. Open questions
 
-1. **Budget per rung** (recommended) or flat 0.85 with Office Points for new families?
-2. Calls pay 7 s of Income, not 30 s (30 s per call would double Income). OK?
-3. Investor Day prizes cosmetic only, or Shares too?
+1. **Budget per rung** (recommended, used by the sim and the LONG doc) or flat 0.85 with Office Points for new families?
+
+Closed: calls pay 7 s of Income, not 30 s; Investor Day prizes are cosmetic only (both kept in the LONG doc); paired demo and Investor Day sit outside the 50 h path.
