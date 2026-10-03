@@ -219,26 +219,28 @@ CollectionService:GetInstanceAddedSignal(TAG):Connect(function(model)
 end)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(forget)
 
--- Every frame: is the local character inside each building? Move each fade toward its target, and write
--- Transparency only when the step changes (nothing is written while a roof holds still).
+-- One building, one frame: is the local character inside? Move the fade toward its target and write Transparency
+-- only when the step changes (nothing is written while a roof holds still).
+local function update(state, root, dt)
+	if root then -- no character (dead, respawning): hold the last state
+		local p = root.Position
+		state.inside = isInside(state.bounds, p.X, p.Y, p.Z, state.inside)
+	end
+	local target = state.inside and 1 or 0
+	if state.fade ~= target then
+		state.fade = fadeStep(state.fade, target, dt, state.seconds)
+		local level = quantize(state.fade, state.levels)
+		if level ~= state.level then
+			state.level = level
+			apply(state, level)
+		end
+	end
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	local root = rootPart()
 	for model, state in pairs(buildings) do
-		local ok, err = pcall(function()
-			if root then -- no character (dead, respawning): hold the last state
-				local p = root.Position
-				state.inside = isInside(state.bounds, p.X, p.Y, p.Z, state.inside)
-			end
-			local target = state.inside and 1 or 0
-			if state.fade ~= target then
-				state.fade = fadeStep(state.fade, target, dt, state.seconds)
-				local level = quantize(state.fade, state.levels)
-				if level ~= state.level then
-					state.level = level
-					apply(state, level)
-				end
-			end
-		end)
+		local ok, err = pcall(update, state, root, dt)
 		if not ok then
 			warn("BuildingClient: " .. tostring(err) .. " (this building's roof stays as it is)")
 			forget(model)
