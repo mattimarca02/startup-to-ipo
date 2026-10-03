@@ -1,7 +1,8 @@
 -- ShopServer: game passes, developer products, VIP perks and the Studio Debug tab (milestone 3).
 -- Put this ModuleScript in ServerScriptService, next to TycoonCore.
 -- TycoonCore owns player data and saving, and plugs this module in with ShopServer.init.
--- Everything is granted here on the server. The client can only open Roblox's purchase prompts.
+-- Everything is granted here on the server. The client can only open Roblox's purchase prompts, and
+-- ask for an office upgrade by its number (the Office tab: TycoonCore's buyUpgrade does every check).
 --
 -- For the egg/employee system (milestone 2), ask this module instead of checking passes yourself:
 --   ShopServer.getMaxEmployees(player, baseSlots)  -> baseSlots + Extra Employee Slots
@@ -43,7 +44,7 @@ local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 local ShopServer = {}
 
-local core -- { getData, save, updateIncome, addEarnings }, given by TycoonCore
+local core -- { getData, save, updateIncome, addEarnings, buyUpgrade, upgradeList }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
@@ -693,6 +694,29 @@ local function buildVipLounge()
 	end)
 end
 
+-- Office tab -------------------------------------------------------------
+
+-- SHOPACTION-START
+-- (tools/daily_test.py runs the code between the SHOPACTION markers, with a fake core.)
+-- The one request of the Office tab. "Upgrades" lists the six (name, cost, income, icon: display only).
+-- "BuyUpgrade" passes the upgrade's number to TycoonCore's buyUpgrade, which checks everything. Any
+-- other argument the client sends (a price, an amount) is never read: only the action and the number.
+local function handleShopAction(player, action, id)
+	if typeof(action) ~= "string" then
+		return false, "Bad request"
+	end
+	if action == "Upgrades" then
+		return true, core.upgradeList()
+	elseif action == "BuyUpgrade" then
+		if typeof(id) ~= "number" then
+			return false, "Bad request"
+		end
+		return core.buyUpgrade(player, id)
+	end
+	return false, "Unknown action"
+end
+-- SHOPACTION-END
+
 -- Studio Debug tab ------------------------------------------------------
 
 local function handleDebug(player, action, key)
@@ -775,6 +799,10 @@ function ShopServer.init(coreApi)
 	notifyEvent = Instance.new("RemoteEvent")
 	notifyEvent.Name = "ShopNotify"
 	notifyEvent.Parent = remotes
+	local actionRemote = Instance.new("RemoteFunction")
+	actionRemote.Name = "ShopAction"
+	actionRemote.OnServerInvoke = handleShopAction
+	actionRemote.Parent = remotes
 	if RunService:IsStudio() and ShopConfig.DebugInStudio then
 		local debugRemote = Instance.new("RemoteFunction")
 		debugRemote.Name = "ShopDebug"

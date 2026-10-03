@@ -60,17 +60,19 @@ if not (visualsOk and artOk) then
 	PlotVisuals, PlotArt = nil, nil
 end
 
--- Upgrades are bought in this order. cost = Cash, income = Cash per second.
+-- Upgrades are bought in this order, in the shop's Office tab (ShopClient). cost = Cash, income = Cash per second.
+-- icon is only for that tab.
 local UPGRADES = {
-	{ name = "Desk",           cost = 0,    income = 1,   color = Color3.fromRGB(160, 110, 60),  size = Vector3.new(6, 3, 4) },
-	{ name = "Coffee Machine", cost = 25,   income = 2,   color = Color3.fromRGB(60, 60, 60),    size = Vector3.new(2, 4, 2) },
-	{ name = "Laptop",         cost = 100,  income = 5,   color = Color3.fromRGB(200, 200, 210), size = Vector3.new(3, 1, 2) },
-	{ name = "Server Rack",    cost = 400,  income = 15,  color = Color3.fromRGB(30, 30, 40),    size = Vector3.new(4, 8, 3) },
-	{ name = "Whiteboard",     cost = 1500, income = 40,  color = Color3.fromRGB(245, 245, 245), size = Vector3.new(8, 5, 1) },
-	{ name = "Neon Logo",      cost = 5000, income = 120, color = Color3.fromRGB(0, 170, 255),   size = Vector3.new(10, 4, 1) },
+	{ name = "Desk",           cost = 0,    income = 1,   color = Color3.fromRGB(160, 110, 60),  size = Vector3.new(6, 3, 4),  icon = "🪑" },
+	{ name = "Coffee Machine", cost = 25,   income = 2,   color = Color3.fromRGB(60, 60, 60),    size = Vector3.new(2, 4, 2),  icon = "☕" },
+	{ name = "Laptop",         cost = 100,  income = 5,   color = Color3.fromRGB(200, 200, 210), size = Vector3.new(3, 1, 2),  icon = "💻" },
+	{ name = "Server Rack",    cost = 400,  income = 15,  color = Color3.fromRGB(30, 30, 40),    size = Vector3.new(4, 8, 3),  icon = "🗄️" },
+	{ name = "Whiteboard",     cost = 1500, income = 40,  color = Color3.fromRGB(245, 245, 245), size = Vector3.new(8, 5, 1),  icon = "📋" },
+	{ name = "Neon Logo",      cost = 5000, income = 120, color = Color3.fromRGB(0, 170, 255),   size = Vector3.new(10, 4, 1), icon = "💡" },
 }
 
 local PLOT_SPACING = 90
+local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the garage sign that names the next upgrade (front of the plot)
 local MAX_PLOTS = 6
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
@@ -82,7 +84,7 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, sign, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -123,10 +125,13 @@ local function plotCenter(slot)
 	return Vector3.new(startX + (slot - 1) * PLOT_SPACING, 0.5, 150)
 end
 
+-- Where each upgrade's prop stands: two walls of stations, the first three (Desk, Coffee Machine, Laptop) along
+-- the left wall and the next three (Server Rack, Whiteboard, Neon Logo) along the right wall, 12 studs apart
+-- from the back, in line with the rows of hire desks (EmployeeServer EMPLOYEE_SPOTS).
 local function itemOffset(i)
-	local col = (i - 1) % 3
-	local row = math.floor((i - 1) / 3)
-	return Vector3.new(-18 + col * 18, 0, -14 + row * 16)
+	local col = (i - 1) // 3
+	local row = (i - 1) % 3
+	return Vector3.new(-23 + col * 46, 0, -10 + row * 12)
 end
 
 local function totalIncome(data)
@@ -195,37 +200,101 @@ local function spawnItem(data, i, upg, popIn)
 	data.items[upg.name] = item
 end
 
--- The green pad always sells the next upgrade in the list.
-local function refreshPad(player)
+-- Which upgrades the player owns, for the shop's Office tab: Upgrade1 ... Upgrade6 (true or false), in UPGRADES order
+local function publishUpgrades(player)
 	local data = playerData[player]
 	if not data then return end
-	if data.pad then
-		data.pad:Destroy()
-		data.pad = nil
+	for i, upg in ipairs(UPGRADES) do
+		player:SetAttribute("Upgrade" .. i, data.owned[upg.name] == true)
 	end
+end
+
+-- The sign in the garage names the next upgrade. It is only a sign: nothing happens when you step
+-- on it. Upgrades are bought in the shop's Office tab (buyUpgrade below).
+local function refreshSign(player)
+	local data = playerData[player]
+	if not data then return end
+	if data.sign then
+		data.sign:Destroy()
+		data.sign = nil
+	end
+	publishUpgrades(player)
 
 	local i, upg = nextUpgrade(data)
 	if not i then return end -- everything bought
 
-	local pos = plotCenter(data.slot) + Vector3.new(0, 0.6, 24)
-	local pad = makePart(data.folder, "BuyPad", Vector3.new(8, 0.2, 8), pos, Color3.fromRGB(0, 200, 90), Enum.Material.Neon)
-	addLabel(pad, string.format("Buy %s\n$%d  (+$%d/s)", upg.name, upg.cost, upg.income), 4)
-	data.pad = pad
+	local pos = plotCenter(data.slot) + SIGN_OFFSET
+	local post = makePart(data.folder, "BuySign", Vector3.new(0.4, 3, 0.4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+	post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
+	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos + Vector3.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
+	board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
+	addLabel(board, string.format("Next: %s  $%d\nBuy it in SHOP > Office", upg.name, upg.cost), 3)
+	data.sign = post
+end
 
-	local busy = false
-	pad.Touched:Connect(function(hit)
-		if busy or not data.ready then return end -- not ready: loading, or an IPO is being saved
-		if Players:GetPlayerFromCharacter(hit.Parent) ~= player then return end
-		local cash = player.leaderstats.Cash
-		if cash.Value < upg.cost then return end
+-- Buying an upgrade: the shop's Office tab asks, only with the upgrade's number. The server decides
+-- everything (ready, number, owned, order, Cash, rate). The price is always UPGRADES', never the client's.
+-- BUYUPGRADE-START
+-- (tools/daily_test.py runs the code between the BUYUPGRADE markers, with fakes for the Roblox parts.)
+local BUY_MIN_INTERVAL = 0.4 -- seconds between two requests from one player (spam is refused, not queued)
 
-		busy = true
-		cash.Value -= upg.cost
-		data.owned[upg.name] = true
-		updateIncome(player)
-		spawnItem(data, i, upg, true)
-		refreshPad(player)
-	end)
+-- Returns the index of the upgrade the player may buy now, or nil and the reason (shown to them).
+-- Stamps data.lastBuyAt on every request it looks at, so a spammed button is only looked at once per interval.
+local function checkUpgradePurchase(upgrades, data, cash, id, now)
+	if not data.ready then
+		return nil, "Still loading, try again in a moment" -- loading, or an IPO is being saved
+	end
+	if typeof(id) ~= "number" or id ~= id or id % 1 ~= 0 or id < 1 or id > #upgrades then
+		return nil, "Unknown upgrade"
+	end
+	if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then
+		return nil, "Too fast"
+	end
+	data.lastBuyAt = now
+	local upg = upgrades[id]
+	if data.owned[upg.name] then
+		return nil, upg.name .. " is already yours"
+	end
+	for i, earlier in ipairs(upgrades) do
+		if not data.owned[earlier.name] then
+			if i ~= id then
+				return nil, "Buy " .. earlier.name .. " first"
+			end
+			break
+		end
+	end
+	if cash < upg.cost then
+		return nil, "You need $" .. upg.cost .. " for " .. upg.name
+	end
+	return id
+end
+
+local function buyUpgrade(player, id)
+	local data = playerData[player]
+	if not data then
+		return false, "Still loading, try again in a moment"
+	end
+	local i, reason = checkUpgradePurchase(UPGRADES, data, data.cash.Value, id, os.clock())
+	if not i then
+		return false, reason
+	end
+	local upg = UPGRADES[i]
+	data.cash.Value -= upg.cost
+	data.owned[upg.name] = true
+	updateIncome(player)
+	spawnItem(data, i, upg, true)
+	refreshSign(player)
+	return true, "Bought " .. upg.name
+end
+-- BUYUPGRADE-END
+
+-- What the Office tab shows (it never sends a price: only the number)
+local function upgradeList()
+	local list = {}
+	for _, upg in ipairs(UPGRADES) do
+		table.insert(list, { name = upg.name, cost = upg.cost, income = upg.income, icon = upg.icon })
+	end
+	return list
 end
 
 -- Saving and loading ----------------------------------------------------
@@ -514,7 +583,7 @@ local function commitIpo(player, newIpo)
 		PoachServer.resetHrDepartment(player)
 	end
 	updateIncome(player)
-	refreshPad(player)
+	refreshSign(player)
 	return true
 end
 
@@ -555,6 +624,8 @@ ShopServer.init({
 	save = save,
 	updateIncome = updateIncome,
 	addEarnings = addEarnings,
+	buyUpgrade = buyUpgrade, -- the Office tab
+	upgradeList = upgradeList,
 })
 
 -- Eggs and employees (milestone 2) --------------------------------------
@@ -588,7 +659,7 @@ OnboardingServer.init({
 	end,
 	save = save,
 	updateIncome = updateIncome,
-	nextUpgradeCost = function(data) -- what the green pad sells now, or nil when everything is bought
+	nextUpgradeCost = function(data) -- what the next upgrade costs, or nil when everything is bought
 		local _, upg = nextUpgrade(data)
 		return upg and upg.cost
 	end,
@@ -623,10 +694,10 @@ DailyServer.init({
 local function teleportToPlot(character, slot)
 	local root = character:WaitForChild("HumanoidRootPart")
 	task.wait(0.1)
-	-- Land a few studs in front of the green pad (not on it, or it would auto-buy), facing it
+	-- Land in the middle of the garage, facing the front sign
 	local spawnPos = plotCenter(slot) + Vector3.new(0, 4, 12)
-	local padPos = plotCenter(slot) + Vector3.new(0, 4, 24)
-	root.CFrame = CFrame.lookAt(spawnPos, padPos)
+	local signPos = plotCenter(slot) + Vector3.new(0, 4, 24)
+	root.CFrame = CFrame.lookAt(spawnPos, signPos)
 end
 
 local function onPlayerAdded(player)
@@ -756,7 +827,7 @@ local function onPlayerAdded(player)
 		end
 	end
 
-	refreshPad(player)
+	refreshSign(player)
 	data.ready = true -- the shop waits for this before granting purchases
 
 	player.CharacterAdded:Connect(function(character)

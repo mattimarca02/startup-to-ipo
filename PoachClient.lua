@@ -32,7 +32,7 @@ local COLORS = {
 	gold = Color3.fromRGB(255, 200, 60),
 	danger = Color3.fromRGB(210, 65, 65),
 	poach = Color3.fromRGB(225, 95, 60),
-	hr = Color3.fromRGB(150, 90, 255), -- same purple as the HR pad
+	hr = Color3.fromRGB(150, 90, 255), -- the HR Department's purple
 }
 
 local NEGOTIATION_LINES = {
@@ -696,6 +696,14 @@ counterCard.button.Activated:Connect(function()
 	refreshAll()
 end)
 
+hrCard.button.Activated:Connect(function()
+	local _, message = request("BuyHr") -- only the action: the server knows the level and the price
+	if message then
+		showToast(message)
+	end
+	refreshAll()
+end)
+
 local shield = shieldProduct()
 shieldCard.button.Activated:Connect(function()
 	if shield and ShopConfig.isForSale(shield) then
@@ -725,15 +733,21 @@ table.insert(refreshers, function()
 		setButton(counterCard.button, "Buy back\n" .. formatCash(counterOffer.price), cash() >= counterOffer.price and COLORS.gold or COLORS.disabled, true)
 	end
 
-	-- HR Department: bought on the purple pad in the garage
+	-- HR Department: bought here with Cash (the server checks the level and the Cash)
 	local level = player:GetAttribute("HRLevel") or 0
 	local maxLevel = #RULES.HRDepartment
 	local nextLevel = RULES.HRDepartment[level + 1]
 	hrCard.name.Text = "HR Department Lv " .. level .. "/" .. maxLevel
 	hrCard.desc.Text = (level > 0 and ("Poachers get -" .. percent(CreatureConfig.hrDefense(level)) .. " chance.") or "No defense yet.")
-		.. (nextLevel and string.format("\nNext: Lv %d for %s (-%s). Step on the purple pad in your garage.", level + 1, formatCash(nextLevel.cost), percent(nextLevel.defense))
+		.. (nextLevel and string.format("\nNext: Lv %d for %s (-%s).", level + 1, formatCash(nextLevel.cost), percent(nextLevel.defense))
 			or "\nFully upgraded!")
-	setButton(hrCard.button, "Lv " .. level .. "/" .. maxLevel, COLORS.hr, false)
+	if not nextLevel then
+		setButton(hrCard.button, "MAX", COLORS.hr, false)
+	elseif cash() >= nextLevel.cost then
+		setButton(hrCard.button, "Buy\n" .. formatCash(nextLevel.cost), COLORS.hr, true)
+	else
+		setButton(hrCard.button, formatCash(nextLevel.cost), COLORS.disabled, false)
+	end
 
 	-- Poach Shield (developer product)
 	if shield then
