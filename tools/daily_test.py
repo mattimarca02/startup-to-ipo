@@ -639,6 +639,11 @@ local PoachServer = module("poach", { hrLevel = 2 })
 local IpoServer = module("ipo", { count = 1, shares = 3 })
 local OnboardingServer = module("onboarding", { seenIntro = true })
 local DailyServer = module("daily", { streak = 4 })
+local TASKS = { done = 3 } -- what TaskServer.serialize returns: nil = no tasks section (everyone outside Studio in PR 1)
+local TaskServer = { serialize = function(data)
+	if FAIL == "tasks" then error("tasks exploded") end
+	return TASKS
+end }
 __BUILDSAVE__
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -651,7 +656,12 @@ end
 local data = newData()
 local payload = buildPayload(data, nil, "P")
 check("normal build returns the payload", payload ~= nil and payload.cash == 250 and #payload.owned == 2)
-check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily)
+check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily and payload.tasks)
+check("... the tasks section is the one TaskServer.serialize gave", payload.tasks.done == 3)
+TASKS = nil
+check("no tasks section for a player who never had tasks (nothing is invented)", buildPayload(newData(), nil, "P").tasks == nil)
+TASKS = { done = 3 }
+check("tasks is a known section (saved by its own serialize, never kept as unknown)", KNOWN_SECTIONS.tasks == true)
 check("... unknown sections are written back", payload.future ~= nil and payload.future.x == 1)
 check("... lastSeen is set", payload.lastSeen == NOW)
 check("... a good build leaves the lock to save() (still saving)", data.saving == true)
@@ -668,7 +678,7 @@ check("a save from before D9 has nothing unknown (every section it has is known)
 	return true
 end)())
 
-for _, name in ipairs({ "shop", "team", "poach", "ipo", "onboarding", "daily", "fixedHires" }) do
+for _, name in ipairs({ "shop", "team", "poach", "ipo", "onboarding", "daily", "fixedHires", "tasks" }) do
 	data = newData()
 	FAIL = name
 	WARNINGS = {}
@@ -1757,6 +1767,1235 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+TASK_TESTS = r"""-- Tests for the task engine: the real TaskConfig and TaskServer with a fake Roblox (PR 1) ----------
+local print_real = print
+local NOW = 20000 * 86400 + 12 * 3600 -- noon UTC on day 20000
+local CLOCK = 1000
+local IS_STUDIO = true
+local WARNINGS, PRINTS = {}, {}
+local os = { time = function() return NOW end, clock = function() return CLOCK end }
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function print(...) table.insert(PRINTS, table.concat({...}, " ")) end
+local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local MODULES = {}
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local PLAYER_REMOVING = {}
+local SERVICES = {
+	ReplicatedStorage = token("ReplicatedStorage"),
+	RunService = { IsStudio = function() return IS_STUDIO end },
+	Players = { GetPlayers = function() return {} end, PlayerRemoving = { Connect = function(_, f) table.insert(PLAYER_REMOVING, f) end } },
+}
+local game = { GetService = function(_, n) return SERVICES[n] end }
+local script = { Parent = token("ServerScriptService") }
+local CREATED = {}
+local Instance = { new = function(class)
+	local i = { ClassName = class }
+	if class == "RemoteEvent" then
+		function i:FireClient(player, kind, payload) table.insert(player.events, { kind = kind, payload = payload }) end
+	end
+	table.insert(CREATED, i)
+	return i
+end }
+local SPAWNED = {}
+local task = { spawn = function(f) table.insert(SPAWNED, f) end, wait = function() end }
+
+local RANDOM = 0 -- what math.random() answers (0 = the shortest gap, and the team always takes a call it can)
+local math = setmetatable({ random = function() return RANDOM end }, { __index = math }) -- the real math is read-only; the engine sees this one
+
+MODULES.CreatureConfig = { getEgg = function(k) local e = ({ Garage = 1, Startup = 1, Unicorn = 1 })[k]; return e and { key = k, name = k .. " Egg" } end }
+MODULES.DailyConfig = (function()
+__DAILYCONFIG__
+end)()
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.ShopConfig = { formatCash = function(n) return "$" .. n end, DebugInStudio = true }
+local DEBUG = {}
+MODULES.ShopServer = { addDebugAction = function(name, f) DEBUG[name] = f end }
+MODULES.IpoServer = { isBusy = function(data) return data ~= nil and data.ipo ~= nil and data.ipo.busy == true end }
+MODULES.TaskConfig = (function()
+__TASKCONFIG__
+end)()
+local CONFIG_WARNINGS = #WARNINGS
+MODULES.TaskConfig.BudgetBank = 1e9 -- most tests run without the reward budget; section 17 turns it on
+local function loadServer()
+__TASKSERVER__
+end
+
+-- Tests ---------------------------------------------------------------------
+local C = MODULES.TaskConfig
+local DC = MODULES.DailyConfig
+local IC = MODULES.IpoConfig
+local TEXTS = C.Texts
+local row = C.getRow("Call")
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+local function near(a, b, eps) return math.abs(a - b) <= (eps or 1e-6) end
+
+-- 1. The real config ----------------------------------------------------------
+check("TaskConfig loads without a warning", CONFIG_WARNINGS == 0, WARNINGS[1])
+check("one row: the customer call", #C.Rows == 1 and row ~= nil and row.action == "click" and row.role == "sales")
+check("a call rings every 20-40 s", row.every[1] == 20 and row.every[2] == 40)
+check("at most 3 calls wait", row.queue == 3)
+check("answer within 8 s", row.limit == 8)
+check("reward is 7 s of Income", row.reward.seconds == 7)
+check("chain: +0.1 per answer, up to x2", row.reward.chain.step == 0.1 and row.reward.chain.max == 2)
+check("Sales take 20% each, 0.08 demand per hire, skip is free, the team pays half", row.auto == 0.20 and row.demand == 0.08 and row.skip == true and row.teamPays == 0.5)
+check("a call has no cooldown and no miss penalty in PR 1", row.cooldown == 0 and row.miss == 0)
+check("demand cap D <= 2.0", C.DemandCap == 2.0)
+check("gap, shortest roll, no hires", near(C.gap(row, 0, 0, 0), 20))
+check("gap, longest roll, no hires", near(C.gap(row, 0, 0, 1), 40))
+check("gap with 5 hires: 20 / 1.4", near(C.gap(row, 5, 0, 0), 20 / 1.4))
+check("demand factor 0 hires = 1", C.demandFactor(row, 0) == 1)
+check("demand factor 5 hires = 1.4", near(C.demandFactor(row, 5), 1.4))
+check("demand factor 12 hires = 1.96", near(C.demandFactor(row, 12), 1.96))
+check("demand factor 13 hires hits the cap 2.0", C.demandFactor(row, 13) == 2.0)
+check("demand factor never above 2.0 (1000 hires)", C.demandFactor(row, 1000) == 2.0)
+check("demand factor ignores negative hires", C.demandFactor(row, -5) == 1)
+check("gap at the demand cap: 10 s", near(C.gap(row, 13, 0, 0), 10) and near(C.gap(row, 500, 0, 0), 10))
+check("pace factor", C.paceFactor(0) == 1 and near(C.paceFactor(5), 1.1) and C.paceFactor(100) == 1.4)
+check("limit shrinks with level, never below 65%", C.limitFor(row, 0) == 8 and near(C.limitFor(row, 5), 6.8) and near(C.limitFor(row, 50), 5.2))
+check("auto share: none without employees", C.autoShare(row, 0) == 0)
+check("auto share: 1 employee 20%, 3 employees 48.8%", near(C.autoShare(row, 1), 0.2) and near(C.autoShare(row, 3), 0.488))
+check("auto share is capped at 75% (the founder keeps 25%)", C.autoShare(row, 100) == 0.75)
+check("chain multiplier: x1, x1.1, x2 at 10, x2 forever", C.chainMultiplier(row, 0) == 1 and near(C.chainMultiplier(row, 1), 1.1) and C.chainMultiplier(row, 10) == 2 and C.chainMultiplier(row, 50) == 2)
+check("reward seconds: 7 at the start, 14 at the chain cap", C.rewardSeconds(row, 0) == 7 and C.rewardSeconds(row, 10) == 14 and C.rewardSeconds(row, 99) == 14)
+check("budgets per rung", C.budgetFor(0) == 0.85 and C.budgetFor(1) == 0.85 and C.budgetFor(2) == 0.95 and C.budgetFor(3) == 1.05 and C.budgetFor(4) == 1.15 and C.budgetFor(5) == 1.25 and C.budgetFor(99) == 1.25)
+check("level = rung + IPOs (at most 10)", C.level(0, 0) == 0 and C.level(2, 3) == 5 and C.level(4, 50) == 14)
+row.unlock.rung = 2
+check("a task appears at its rung", not C.isUnlocked(row, 1, 0) and C.isUnlocked(row, 2, 0))
+check("after the first IPO every task is on", C.isUnlocked(row, 0, 1))
+row.unlock.rung = 0
+local allMapped = true
+for i, stage in ipairs(IC.Stages) do
+	if C.rungForStage(stage.key) ~= i - 1 then allMapped = false end
+end
+check("every funding stage maps to its rung (Garage 0, Seed 1, Series A 2, Series B 3, IPO-ready 4)", allMapped and #IC.Stages == 5)
+local bad
+for key, text in pairs(TEXTS) do
+	for _, word in ipairs({ "odds", "chance", "luck", "random", "probab", "%%" }) do
+		if string.find(string.lower(text), word, 1, true) then bad = key .. ": " .. word end
+	end
+end
+check("no task text claims odds or chance (D9)", bad == nil, bad)
+check("sales creatures take calls, others don't", C.roleOf("HustleHamster") == "sales" and C.roleOf("SalesShark") == "sales" and C.roleOf("CodingCat") == "eng" and C.roleOf("UnicornCEO") == nil)
+
+-- 2. Studio only, and Enabled = false does nothing ---------------------------------
+local function active(enabled, studioOnly, studio)
+	local oldE, oldS, oldStudio = C.Enabled, C.StudioOnly, IS_STUDIO
+	C.Enabled, C.StudioOnly, IS_STUDIO = enabled, studioOnly, studio
+	local result = C.isActive()
+	C.Enabled, C.StudioOnly, IS_STUDIO = oldE, oldS, oldStudio
+	return result
+end
+check("active in Studio", active(true, true, true) == true)
+check("not active on a live server in PR 1", active(true, true, false) == false)
+check("Enabled = false: never active", active(false, true, true) == false and active(false, false, false) == false)
+check("StudioOnly = false (PR 2): active everywhere", active(true, false, false) == true)
+check("shipped config: Enabled and StudioOnly", C.Enabled == true and C.StudioOnly == true)
+
+local EARNINGS = {}
+local core = {
+	getData = function(p) return p.data end,
+	addEarnings = function(p, amount) table.insert(EARNINGS, amount) end,
+	baseIncome = function(p) return p.base or p.data.income.Value end,
+}
+local function newPlayerFor(server, saved, opts)
+	opts = opts or {}
+	local player = { Name = opts.name or "P", Parent = true, events = {} }
+	local data = {
+		ready = opts.ready ~= false, loaded = true,
+		cash = { Value = 0 }, income = { Value = opts.income or 10 },
+		ipo = { valuation = opts.valuation or 0, count = opts.ipos or 0, busy = false, shares = 0, lifetime = 0 },
+		team = { employees = opts.employees or {} },
+	}
+	player.data = data
+	player.base = opts.base
+	server.setupPlayer(player, data, saved)
+	return player, data
+end
+
+for _, off in ipairs({ "live server", "Enabled = false" }) do
+	local oldE, oldStudio = C.Enabled, IS_STUDIO
+	if off == "live server" then IS_STUDIO = false else C.Enabled = false end
+	local created, spawned, debugCount = #CREATED, #SPAWNED, 0
+	for _ in pairs(DEBUG) do debugCount += 1 end
+	local removing = #PLAYER_REMOVING
+	local server = loadServer()
+	server.init(core)
+	local debugAfter = 0
+	for _ in pairs(DEBUG) do debugAfter += 1 end
+	check(off .. ": no remotes are built", #CREATED == created)
+	check(off .. ": no loop is started", #SPAWNED == spawned and #PLAYER_REMOVING == removing)
+	check(off .. ": no Debug buttons", debugAfter == debugCount)
+	local p, d = newPlayerFor(server, nil)
+	check(off .. ": a new player gets no tasks section", server.serialize(d) == nil)
+	check(off .. ": nobody is engaged", server.isEngaged(p) == false and server.engagedSeconds(p) == 0)
+	local before = #EARNINGS
+	for _ = 1, 20 do CLOCK += 5; server.step(p, CLOCK) end
+	check(off .. ": time passing creates nothing and pays nothing", #p.events == 0 and #EARNINGS == before and d.cash.Value == 0)
+	local saved = { sharesRun = 2, done = 5, bestChain = 4, seen = { Call = true }, engagedDay = 20000, engagedSeconds = 77, future = { x = 1 } }
+	local p2, d2 = newPlayerFor(server, saved)
+	local out = server.serialize(d2)
+	check(off .. ": a saved section is kept as it was",
+		out and out.done == 5 and out.sharesRun == 2 and out.bestChain == 4 and out.seen.Call == true and out.engagedDay == 20000 and out.engagedSeconds == 77 and out.future.x == 1)
+	C.Enabled, IS_STUDIO = oldE, oldStudio
+end
+
+-- 3. The active engine ---------------------------------------------------------------
+local TaskServer = loadServer()
+local createdBefore, spawnedBefore = #CREATED, #SPAWNED
+TaskServer.init(core)
+local onAction, stateEvent, folder
+for i = createdBefore + 1, #CREATED do
+	local inst = CREATED[i]
+	if inst.Name == "TaskAction" then onAction = inst.OnServerInvoke end
+	if inst.Name == "TaskState" then stateEvent = inst end
+	if inst.Name == "TaskRemotes" then folder = inst end
+end
+check("remotes: TaskAction and TaskState in a TaskRemotes folder", onAction ~= nil and stateEvent ~= nil and folder ~= nil and folder.Parent == SERVICES.ReplicatedStorage)
+check("one loop is started", #SPAWNED == spawnedBefore + 1)
+check("Studio Debug buttons: Set rung, stats, spawn", DEBUG.TaskSetRung and DEBUG.TaskStats and DEBUG.TaskSpawn)
+
+local function newPlayer(saved, opts) return newPlayerFor(TaskServer, saved, opts) end
+local function crew(n, creature)
+	local list = {}
+	for i = 1, n do table.insert(list, { id = tostring(i), creature = creature or "CodingCat" }) end
+	return list
+end
+local function advance(seconds) CLOCK += seconds; NOW += seconds end
+local function tick(p, seconds, stepSize)
+	stepSize = stepSize or 1
+	local left = seconds
+	while left > 1e-9 do
+		local d = math.min(stepSize, left)
+		advance(d)
+		TaskServer.step(p, CLOCK)
+		left -= d
+	end
+end
+local function lastState(p)
+	for i = #p.events, 1, -1 do
+		if p.events[i].kind == "state" then return p.events[i].payload end
+	end
+	return nil
+end
+local function waiting(p)
+	local s = lastState(p)
+	return s and s.tasks or {}
+end
+local function answer(p, id) return onAction(p, "Answer", id) end
+local function spawnCall(p)
+	local text = DEBUG.TaskSpawn(p, p.data)
+	local list = waiting(p)
+	return list[#list] and list[#list].id, text
+end
+local function stats(p) return TaskServer.getStats(p) end
+local function noArrivals(p) p.data.tasks.run.nextAt.Call = 1e12 end
+local function richBank(p) p.data.tasks.run.bank = 1e9 end -- (the budget has its own section)
+local function waitForArrival(p, limit)
+	local before = stats(p).offered + stats(p).autoResolved
+	local waited = 0
+	while waited < limit do
+		tick(p, 0.5, 0.5)
+		waited += 0.5
+		if stats(p).offered + stats(p).autoResolved > before then return waited end
+	end
+	return nil
+end
+
+-- 4. Saving and loading ---------------------------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	check("no section yet for a new player", TaskServer.serialize(d) == nil)
+	check("the default state", d.tasks.done == 0 and d.tasks.bestChain == 0 and d.tasks.sharesRun == 0 and d.tasks.engagedSeconds == 0 and next(d.tasks.seen) == nil)
+	check("the player's other data is untouched by setup", d.cash.Value == 0 and d.ipo.valuation == 0 and d.ipo.count == 0)
+
+	local day = DC.dayNumber(NOW)
+	local good = { sharesRun = 3, done = 120, bestChain = 14, seen = { Call = true }, engagedDay = day, engagedSeconds = 5000 }
+	p, d = newPlayer(good)
+	local out = TaskServer.serialize(d)
+	check("a good section loads and saves back the same",
+		out.sharesRun == 3 and out.done == 120 and out.bestChain == 14 and out.seen.Call == true and out.engagedDay == day and out.engagedSeconds == 5000)
+	check("a good section gives no warning", #WARNINGS == CONFIG_WARNINGS)
+	out.future = nil
+	local p2, d2 = newPlayer({ done = 1, future = { a = 1 }, other = "x" })
+	local out2 = TaskServer.serialize(d2)
+	check("fields this version doesn't know are kept as they were", out2.future.a == 1 and out2.other == "x" and out2.done == 1)
+
+	local function load(saved)
+		WARNINGS = {}
+		local lp, ld = newPlayer(saved)
+		return ld.tasks, #WARNINGS
+	end
+	local t, w
+	t, w = load({ done = -5 })
+	check("done = -5 is skipped with a warning", t.done == 0 and w == 1)
+	t, w = load({ done = 0 / 0 })
+	check("done = NaN is skipped with a warning", t.done == 0 and w == 1)
+	t, w = load({ done = math.huge })
+	check("done = infinity is skipped with a warning", t.done == 0 and w == 1)
+	t, w = load({ done = 2.5 })
+	check("done = 2.5 is skipped with a warning", t.done == 0 and w == 1)
+	t, w = load({ done = "many" })
+	check("done = text is skipped with a warning", t.done == 0 and w == 1)
+	t, w = load({ done = 1e12 })
+	check("done = 1e12 is clamped to 1e9 with a warning", t.done == 1e9 and w == 1)
+	t, w = load({ bestChain = 5e6, sharesRun = -1 })
+	check("bestChain over the limit is clamped, a negative sharesRun skipped", t.bestChain == 1e6 and t.sharesRun == 0 and w == 2)
+	t, w = load({ engagedDay = day, engagedSeconds = 1e9 })
+	check("engagedSeconds over a day is clamped to 86400", t.engagedSeconds == 86400 and w == 1)
+	t, w = load({ engagedDay = day, engagedSeconds = -1 })
+	check("engagedSeconds = -1 is skipped", t.engagedSeconds == 0 and w == 1)
+	t, w = load({ engagedDay = day, engagedSeconds = 0 / 0 })
+	check("engagedSeconds = NaN is skipped", t.engagedSeconds == 0 and w == 1)
+	t, w = load({ engagedDay = day, engagedSeconds = 90.9 })
+	check("engagedSeconds is whole seconds", t.engagedSeconds == 90)
+	t, w = load({ engagedDay = -3, engagedSeconds = 50 })
+	check("engagedDay = -3 is skipped (an old day: the seconds are ignored)", t.engagedDay == day and t.engagedSeconds == 0 and w == 1)
+	t, w = load({ engagedDay = day - 1, engagedSeconds = 5000 })
+	check("an older day's seconds are ignored", t.engagedDay == day and t.engagedSeconds == 0 and w == 0)
+	t, w = load({ engagedDay = day, engagedSeconds = 5000 })
+	check("today's seconds are kept", t.engagedDay == day and t.engagedSeconds == 5000)
+	t, w = load({ engagedDay = day + 5, engagedSeconds = 700 })
+	check("a day in the future counts as today and keeps its seconds (never extra)", t.engagedDay == day and t.engagedSeconds == 700 and w == 1)
+	t, w = load({ engagedDay = day + 1, engagedSeconds = 700 })
+	check("tomorrow (a server clock a few seconds ahead) is kept as it is", t.engagedDay == day + 1 and t.engagedSeconds == 700 and w == 0)
+	t, w = load({ seen = "Call" })
+	check("seen = text is skipped", next(t.seen) == nil and w == 1)
+	t, w = load({ seen = { Call = true, [1] = true, Bad = false, Worse = "yes" } })
+	check("seen keeps only { key = true } entries", t.seen.Call == true and t.seen.Bad == nil and t.seen.Worse == nil and t.seen[1] == nil and w == 3)
+	local many = {}
+	for i = 1, 80 do many["Task" .. i] = true end
+	t, w = load({ seen = many })
+	local kept = 0
+	for _ in pairs(t.seen) do kept += 1 end
+	check("seen keeps at most 50 keys", kept == 50)
+	for _, junk in ipairs({ 5, "text", true }) do
+		WARNINGS = {}
+		local jp, jd = newPlayer(junk)
+		check("a tasks section that is " .. type(junk) .. " is skipped with a warning and saves nothing", #WARNINGS == 1 and TaskServer.serialize(jd) == nil and jd.tasks.done == 0)
+	end
+	t, w = load({ done = 7 })
+	check("a section with only some keys loads with defaults for the rest", t.done == 7 and t.bestChain == 0 and t.engagedSeconds == 0 and w == 0)
+	local before = { cash = d.cash.Value, valuation = d.ipo.valuation, count = d.ipo.count, hires = #d.team.employees }
+	TaskServer.setupPlayer(p, d, { done = "x", engagedSeconds = {}, seen = 3 })
+	check("a bad section never touches the other sections", d.cash.Value == before.cash and d.ipo.valuation == before.valuation and d.ipo.count == before.count and #d.team.employees == before.hires)
+	WARNINGS = {}
+end
+
+-- 5. Grading: too early, too late, double answer ---------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local id, text = spawnCall(p)
+	check("a spawned call is waiting", id ~= nil and #waiting(p) == 1 and waiting(p)[1].kind == "Call" and near(waiting(p)[1].left, 8) and waiting(p)[1].limit == 8)
+	check("offered counted", stats(p).offered == 1)
+
+	advance(0.24)
+	local ok, msg = answer(p, id)
+	check("too early (0.24 s): refused", ok == false and msg == TEXTS.TooEarly, msg)
+	check("too early: no Cash, nothing earned", d.cash.Value == 0 and #EARNINGS == 0)
+	check("too early: the call is closed, counted, and nobody is engaged", #waiting(p) == 0 and stats(p).early == 1 and stats(p).answered == 0 and not TaskServer.isEngaged(p))
+	ok, msg = answer(p, id)
+	check("answering a closed call again: it is gone", ok == false and msg == TEXTS.Gone)
+
+	id = spawnCall(p)
+	advance(0.25)
+	ok = answer(p, id)
+	check("exactly 0.25 s is not too early", ok == true and stats(p).answered == 1)
+	check("0.25 s: engaged", TaskServer.isEngaged(p))
+
+	id = spawnCall(p)
+	advance(8)
+	ok = answer(p, id)
+	check("exactly at the limit (8 s) is still in time", ok == true and stats(p).answered == 2)
+
+	local cash = d.cash.Value
+	id = spawnCall(p)
+	advance(8.01)
+	ok, msg = answer(p, id)
+	check("too late (8.01 s): refused", ok == false and msg == TEXTS.TooLate, msg)
+	check("too late: no Cash, counted as missed, call closed", d.cash.Value == cash and stats(p).missed == 1 and #waiting(p) == 0)
+	check("too late: the chain is broken", lastState(p).chain == 0 and lastState(p).mult == 1)
+
+	-- the tick expires a call by itself; a late answer finds it gone
+	id = spawnCall(p)
+	advance(9)
+	TaskServer.step(p, CLOCK)
+	check("the tick expires a call after its limit", #waiting(p) == 0 and stats(p).missed == 2)
+	ok, msg = answer(p, id)
+	check("answering an expired call: gone", ok == false and msg == TEXTS.Gone)
+
+	-- double answer
+	id = spawnCall(p)
+	advance(1)
+	cash = d.cash.Value
+	local ok1, _, info1 = answer(p, id)
+	local ok2, msg2 = answer(p, id)
+	check("double answer: the first pays", ok1 == true and info1.cash > 0 and d.cash.Value == cash + info1.cash)
+	check("double answer: the second is refused and pays nothing", ok2 == false and msg2 == TEXTS.Gone and d.cash.Value == cash + info1.cash)
+	check("double answer: counted once", stats(p).answered == 3)
+
+	-- an id that was never a call
+	ok, msg = answer(p, 999)
+	check("a call number that never existed: gone", ok == false and msg == TEXTS.Gone)
+end
+
+-- 6. Reward = 7 s of Income, the chain, the pay path ------------------------------------------
+do
+	EARNINGS = {}
+	local p, d = newPlayer(nil, { income = 10 })
+	noArrivals(p)
+	richBank(p)
+	local id = spawnCall(p)
+	advance(1)
+	local ok, text, info = answer(p, id)
+	check("reward = 7 s of Income (10/s -> $70)", ok and info.cash == 70 and d.cash.Value == 70, info and info.cash)
+	check("the Cash goes through addEarnings once, with the same amount", #EARNINGS == 1 and EARNINGS[1] == 70)
+	check("the answer says what it paid", text == "+$70")
+	check("the stats count it", stats(p).cash == 70 and near(stats(p).rewardSeconds, 7))
+
+	for _, income in ipairs({ 1, 3, 100, 12345 }) do
+		local q, qd = newPlayer(nil, { income = income })
+		noArrivals(q); richBank(q)
+		local qid = spawnCall(q)
+		advance(1)
+		local _, _, qi = answer(q, qid)
+		check("reward at Income " .. income .. " = floor(7 x Income)", qi.cash == 7 * income, qi.cash)
+	end
+	local z, zd = newPlayer(nil, { income = 0 })
+	noArrivals(z)
+	local zid = spawnCall(z)
+	advance(1)
+	local zok, _, zinfo = answer(z, zid)
+	check("Income 0: the answer is graded and pays 0 (no error)", zok == true and zinfo.cash == 0 and zd.cash.Value == 0)
+
+	-- the chain: x1.0, x1.1 ... x2.0, then x2.0 forever
+	EARNINGS = {}
+	local c, cd = newPlayer(nil, { income = 10 })
+	noArrivals(c); richBank(c)
+	local expected = { 70, 77, 84, 91, 98, 105, 112, 119, 126, 133, 140, 140, 140 }
+	local all = true
+	local maxMult = 0
+	for i = 1, #expected do
+		local cid = spawnCall(c)
+		advance(0.4 + 0.07 * ((i * 3) % 7))
+		local cok, _, ci = answer(c, cid)
+		if not cok or ci.cash ~= expected[i] then
+			all = false
+			print_real("   chain step " .. i .. " paid " .. tostring(ci and ci.cash) .. ", expected " .. expected[i])
+		end
+		maxMult = math.max(maxMult, ci and ci.mult or 0)
+	end
+	check("chain: 70, 77, 84 ... 140 and then 140 again", all)
+	check("chain bonus never goes above x2", maxMult == 2)
+	check("bestChain is the longest chain", cd.tasks.bestChain == 13)
+
+	-- expiry breaks the chain, skip keeps it
+	local cid = spawnCall(c)
+	advance(9)
+	TaskServer.step(c, CLOCK)
+	cid = spawnCall(c)
+	advance(1)
+	local _, _, afterMiss = answer(c, cid)
+	check("an expired call resets the chain (next answer x1.0)", afterMiss.cash == 70 and afterMiss.mult == 1)
+	cid = spawnCall(c)
+	advance(1)
+	answer(c, cid)
+	cid = spawnCall(c)
+	advance(1)
+	local skipOk = onAction(c, "Skip", cid)
+	check("skip is free", skipOk == true and #waiting(c) == 0 and stats(c).skipped == 1)
+	cid = spawnCall(c)
+	advance(1)
+	local _, _, afterSkip = answer(c, cid)
+	check("skip keeps the chain (x1.2 after two answers)", near(afterSkip.mult, 1.2), afterSkip.mult)
+end
+
+-- 7. Skip rules, cooldown, busy, not ready -----------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local ok, msg = onAction(p, "Skip", 12345)
+	check("skipping a call that isn't there: gone", ok == false and msg == TEXTS.Gone)
+	local id = spawnCall(p)
+	row.skip = false
+	ok, msg = onAction(p, "Skip", id)
+	check("a row with skip = false can't be skipped", ok == false and #waiting(p) == 1)
+	row.skip = true
+	advance(1)
+	onAction(p, "Skip", id)
+	check("a skip never makes the player engaged", not TaskServer.isEngaged(p) and stats(p).answered == 0)
+
+	-- cooldown between two answers of the same kind
+	row.cooldown = 5
+	richBank(p)
+	local a = spawnCall(p)
+	advance(1)
+	answer(p, a)
+	local b = spawnCall(p)
+	advance(1)
+	ok, msg = answer(p, b)
+	check("cooldown: a second answer too soon is refused", ok == false and msg == TEXTS.Slow and #waiting(p) == 1)
+	advance(4)
+	ok = answer(p, b)
+	check("cooldown: allowed again after it", ok == true)
+	row.cooldown = 0
+
+	-- IPO being saved
+	local q, qd = newPlayer(nil)
+	noArrivals(q)
+	local qid = spawnCall(q)
+	advance(1)
+	qd.ipo.busy = true
+	ok, msg = answer(q, qid)
+	check("during an IPO save an answer is refused and the call waits", ok == false and msg == TEXTS.IpoBusy and #waiting(q) == 1 and qd.cash.Value == 0)
+	qd.ipo.busy = false
+	ok = answer(q, qid)
+	check("after the IPO save the same call can be answered", ok == true)
+	local r, rd = newPlayer(nil)
+	RANDOM = 0
+	TaskServer.step(r, CLOCK) -- schedules
+	rd.ipo.busy = true
+	tick(r, 60, 1)
+	check("no call arrives while an IPO is being saved", stats(r).offered == 0)
+	rd.ipo.busy = false
+
+	-- not ready
+	local s, sd = newPlayer(nil, { ready = false })
+	ok, msg = onAction(s, "Sync")
+	check("before data.ready every request is refused", ok == false and msg == TEXTS.Loading)
+	tick(s, 60, 1)
+	check("before data.ready nothing arrives and no time is counted", stats(s).offered == 0 and stats(s).online == 0)
+	sd.ready = true
+	ok = onAction(s, "Sync")
+	check("once ready, it works", ok == true)
+
+	-- the engine can be switched off while a server runs
+	C.Enabled = false
+	ok, msg = onAction(s, "Sync")
+	check("Enabled = false: the remote refuses", ok == false and msg == TEXTS.Off)
+	check("Enabled = false: nobody is engaged", TaskServer.isEngaged(s) == false)
+	check("Enabled = false: Debug is refused", DEBUG.TaskSpawn(s, sd) == TEXTS.Off)
+	C.Enabled = true
+end
+
+-- 8. Queue overflow --------------------------------------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local oldLimit = row.limit
+	row.limit = 1000
+	for i = 1, 3 do spawnCall(p) end
+	check("3 calls wait", #waiting(p) == 3 and stats(p).offered == 3)
+	local id, text = spawnCall(p)
+	check("a 4th call is refused: the queue holds 3", #waiting(p) == 3 and text == "The queue is full" and stats(p).dropped == 1 and stats(p).offered == 3)
+	-- a natural arrival into a full queue is dropped too
+	p.data.tasks.run.nextAt.Call = CLOCK + 5
+	tick(p, 6, 1)
+	check("an arrival into a full queue is dropped", #waiting(p) == 3 and stats(p).dropped == 2 and stats(p).arrivals == 1, #waiting(p) .. " waiting, dropped " .. stats(p).dropped)
+	local ids = {}
+	for _, call in ipairs(waiting(p)) do ids[#ids + 1] = call.id end
+	check("the 3 waiting calls have their own numbers", ids[1] ~= ids[2] and ids[2] ~= ids[3] and ids[1] ~= ids[3])
+	advance(1)
+	check("answering the middle one leaves the other two", answer(p, ids[2]) and #waiting(p) == 2)
+	row.limit = oldLimit
+end
+
+-- 9. Input from the client: only a call number ---------------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local id = spawnCall(p)
+	advance(1)
+	WARNINGS = {}
+	local junk = { "5", 1.5, -3, 0, 0 / 0, math.huge, 2 ^ 40, {}, true, nil }
+	local all = true
+	for i = 1, 10 do
+		advance(0.2)
+		local ok, msg = onAction(p, "Answer", junk[i])
+		if ok ~= false or msg ~= "Bad request" then all = false end
+	end
+	check("a call number that isn't a whole number from 1 up is refused (Bad request)", all)
+	check("bad input paid nothing and changed nothing", d.cash.Value == 0 and #waiting(p) == 1 and stats(p).answered == 0)
+	check("bad input is ignored with a warning, but only one in 10 s", #WARNINGS >= 1 and #WARNINGS <= 2, #WARNINGS)
+	advance(1)
+	local ok, msg = onAction(p, nil)
+	check("no action: Bad request", ok == false and msg == "Bad request")
+	ok, msg = onAction(p, 5)
+	check("a number as the action: Bad request", ok == false and msg == "Bad request")
+	ok, msg = onAction(p, "Hack")
+	check("an unknown action is refused", ok == false and msg == "Unknown action")
+	ok, msg = onAction(p, "Pause", "yes")
+	check("Pause needs a boolean", ok == false and msg == "Bad request" and p.data.tasks.run.paused == false)
+	ok, msg = onAction(p, "Skip", "x")
+	check("Skip needs a call number too", ok == false and msg == "Bad request")
+	check("a client can't send a reward, time or amount: Answer takes only the call number and ignores the rest",
+		(function()
+			advance(1)
+			local before = d.cash.Value
+			local okAns, _, info = onAction(p, "Answer", id, 999999, "reward")
+			return okAns == true and d.cash.Value == before + 70 and info.cash == 70
+		end)())
+end
+
+-- 10. Rate limits ---------------------------------------------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	advance(10)
+	local okCount, refused = 0, 0
+	for i = 1, 10 do
+		local ok, msg = onAction(p, "Sync")
+		if ok then okCount += 1 elseif msg == TEXTS.Slow then refused += 1 end
+	end
+	check("8 requests in one instant pass, the rest are refused (token bucket)", okCount == 8 and refused == 2, okCount)
+	advance(0.5)
+	okCount = 0
+	for i = 1, 6 do
+		if onAction(p, "Sync") then okCount += 1 end
+	end
+	check("half a second later 4 more tokens are back", okCount == 4, okCount)
+
+	-- 40 graded answers a minute
+	local q, qd = newPlayer(nil)
+	noArrivals(q); richBank(q)
+	advance(10)
+	local graded = 0
+	local refusedAt
+	for i = 1, 45 do
+		local id = spawnCall(q)
+		advance(0.25 + 0.06 * ((i * 5) % 11))
+		local ok, msg = answer(q, id)
+		if ok then graded += 1 elseif not refusedAt then refusedAt = i end
+		advance(0.1)
+		if not ok then break end
+	end
+	check("at most 40 graded answers per minute, the 41st waits", graded == 40 and refusedAt == 41, graded)
+	check("the refused call stays open", #waiting(q) >= 1)
+	advance(61)
+	local nid = spawnCall(q)
+	advance(1)
+	check("... and it is graded", answer(q, nid) == true)
+end
+
+-- 11. Auto-resolve by Sales, never engaged -----------------------------------------------------------------
+do
+	-- a player who is engaged, with 3 Sales: the team may take the call
+	local p, d = newPlayer(nil, { income = 10, employees = crew(3, "HustleHamster") })
+	noArrivals(p); richBank(p)
+	local id = spawnCall(p)
+	advance(1)
+	answer(p, id)
+	EARNINGS = {}
+	local cashBefore = d.cash.Value
+	RANDOM = 0.1 -- 0.1 < 1 - 0.8^3 = 0.488: the team takes it
+	p.data.tasks.run.nextAt.Call = CLOCK + 1
+	local offeredBefore = stats(p).offered
+	tick(p, 2, 1)
+	check("Sales take a call: nothing waits for the player", #waiting(p) == 0 and stats(p).offered == offeredBefore and stats(p).autoResolved == 1)
+	check("the team's call pays half: 3.5 s of Income = $35, through addEarnings", d.cash.Value == cashBefore + 35 and #EARNINGS == 1 and EARNINGS[1] == 35, EARNINGS[1])
+	check("the team's call is not graded: answered stays 1, the chain stays", stats(p).answered == 1 and lastState(p).chain == 1)
+	local engagedBefore = stats(p).engaged
+	tick(p, 10, 1)
+	local handled
+	for _, event in ipairs(p.events) do if event.kind == "handled" then handled = event.payload end end
+	check("the player hears it once, as one line: 'Team handled 1 call'", handled == 1)
+
+	-- not a call the team can take: the roll is above the share
+	RANDOM = 0.5 -- 0.5 >= 0.488
+	p.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(p, 2, 1)
+	check("above the share the call waits for the player", #waiting(p) == 1 and stats(p).autoResolved == 1)
+	advance(1)
+	answer(p, waiting(p)[1].id)
+
+	-- a never-engaged player: the team does nothing
+	RANDOM = 0
+	local q, qd = newPlayer(nil, { employees = crew(10, "HustleHamster") })
+	TaskServer.step(q, CLOCK)
+	q.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(q, 2, 1)
+	check("a player who isn't engaged is not 'present': the team does not take the call", stats(q).autoResolved == 0 and #waiting(q) == 1)
+
+	-- other roles don't count
+	local r, rd = newPlayer(nil, { employees = crew(10, "CodingCat") })
+	noArrivals(r); richBank(r)
+	local rid = spawnCall(r)
+	advance(1)
+	answer(r, rid)
+	r.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(r, 2, 1)
+	check("engineers don't take calls (no Sales, no share)", stats(r).autoResolved == 0 and #waiting(r) == 1)
+
+	-- the cap: the founder keeps 25%
+	local many, md = newPlayer(nil, { employees = crew(20, "SalesShark") })
+	noArrivals(many); richBank(many)
+	local mid = spawnCall(many)
+	advance(1)
+	answer(many, mid)
+	RANDOM = 0.74
+	many.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(many, 2, 1)
+	check("20 Sales: share is capped at 75% (0.74 is taken)", stats(many).autoResolved == 1)
+	RANDOM = 0.76
+	many.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(many, 2, 1)
+	check("20 Sales: 0.76 is not taken (the founder keeps 25%)", stats(many).autoResolved == 1 and #waiting(many) == 1)
+
+	-- exceptions are never taken
+	row.routine = false
+	RANDOM = 0
+	local e, ed = newPlayer(nil, { employees = crew(10, "HustleHamster") })
+	noArrivals(e); richBank(e)
+	local eid = spawnCall(e)
+	advance(1)
+	answer(e, eid)
+	e.data.tasks.run.nextAt.Call = CLOCK + 1
+	tick(e, 2, 1)
+	check("a task that isn't routine is never taken by the team", stats(e).autoResolved == 0)
+	row.routine = true
+	RANDOM = 0
+end
+
+-- 12. Demand: the gap shrinks with hires, never past the cap D <= 2.0 ------------------------------------------
+do
+	local function firstArrival(hires, opts)
+		opts = opts or {}
+		opts.employees = crew(hires, "CodingCat")
+		RANDOM = 0
+		local p = newPlayer(nil, opts)
+		TaskServer.step(p, CLOCK) -- schedules the first call
+		local waited = waitForArrival(p, 60)
+		return waited, p
+	end
+	local w0 = firstArrival(0)
+	check("no hires: the first call after 20 s", w0 == 20, w0)
+	local w5 = firstArrival(5)
+	check("5 hires: 20 / 1.4 = 14.3 s -> the call comes in the tick after 14.3 s", w5 == 14.5, w5)
+	local w13 = firstArrival(13)
+	check("13 hires: D hits 2.0, 10 s", w13 == 10, w13)
+	local w50 = firstArrival(50)
+	local w500 = firstArrival(500)
+	check("50 and 500 hires: still 10 s (D <= 2.0)", w50 == 10 and w500 == 10, tostring(w50) .. " " .. tostring(w500))
+	RANDOM = 1
+	local p = newPlayer(nil, { employees = crew(0) })
+	TaskServer.step(p, CLOCK)
+	local waited = waitForArrival(p, 60)
+	check("the longest roll with no hires: 40 s", waited == 40, waited)
+	RANDOM = 0
+
+	-- the rung speeds calls up and shortens the limit
+	local q, qd = newPlayer(nil)
+	DEBUG.TaskSetRung(q, qd, "4")
+	TaskServer.step(q, CLOCK)
+	local qw = waitForArrival(q, 60)
+	check("rung 4 (level 4): the gap is 20 / 1.08 = 18.5 s (the tick after it)", qw == 19, qw)
+	check("rung 4: the limit is 8 x 0.88 = 7.04 s", near(waiting(q)[1].limit, 7.04), waiting(q)[1] and waiting(q)[1].limit)
+	local r, rd = newPlayer(nil, { ipos = 20 })
+	DEBUG.TaskSetRung(r, rd, "0")
+	check("20 IPOs count as level 10 at most", near(C.limitFor(row, C.level(0, 20)), 8 * 0.70))
+end
+
+-- 13. Engaged: only a graded answer, 3 minutes ---------------------------------------------------------------
+do
+	local p, d = newPlayer(nil)
+	noArrivals(p); richBank(p)
+	check("nobody starts engaged", not TaskServer.isEngaged(p))
+	tick(p, 30, 1)
+	check("time alone never makes anyone engaged", not TaskServer.isEngaged(p) and stats(p).engaged == 0)
+	for _, action in ipairs({ "Sync", "Start", "Pause" }) do
+		onAction(p, action, action == "Pause" and false or nil)
+		advance(0.2)
+	end
+	check("Sync, Start and Pause never make anyone engaged", not TaskServer.isEngaged(p))
+	local id = spawnCall(p)
+	advance(1)
+	answer(p, id)
+	check("a graded answer makes the player engaged", TaskServer.isEngaged(p))
+	advance(179)
+	check("... still engaged after 179 s", TaskServer.isEngaged(p))
+	advance(1)
+	check("... and at exactly 180 s", TaskServer.isEngaged(p))
+	advance(0.5)
+	check("... but not after 180.5 s", not TaskServer.isEngaged(p))
+	id = spawnCall(p)
+	advance(1)
+	answer(p, id)
+	check("a new answer makes the player engaged again", TaskServer.isEngaged(p))
+
+	-- seconds are counted while engaged
+	local q, qd = newPlayer(nil, { income = 10 })
+	noArrivals(q); richBank(q)
+	local qid = spawnCall(q)
+	advance(1)
+	answer(q, qid)
+	tick(q, 10, 1)
+	check("engaged seconds are counted: 10 s", stats(q).engaged == 10 and TaskServer.engagedSeconds(q) == 10, stats(q).engaged)
+	tick(q, 200, 2)
+	check("the counter stops when the player isn't engaged any more (180 s window)", stats(q).engaged >= 179 and stats(q).engaged <= 181, stats(q).engaged)
+	check("online seconds are counted too", stats(q).online >= 210)
+
+	-- nothing else sets lastGradedAt
+	local r, rd = newPlayer(nil, { employees = crew(5, "HustleHamster") })
+	noArrivals(r)
+	local rid = spawnCall(r)
+	advance(0.1)
+	answer(r, rid) -- too early
+	rid = spawnCall(r)
+	advance(1)
+	onAction(r, "Skip", rid)
+	check("too early and skip never make a player engaged", not TaskServer.isEngaged(r) and r.data.tasks.run.lastGradedAt == nil)
+end
+
+-- 14. The engaged counter at the 08:00 UTC boundary -------------------------------------------------------------
+do
+	check("the day starts at 08:00 UTC", DC.ResetHourUtc == 8 and DC.dayNumber(DC.dayStart(20001) - 1) == 20000 and DC.dayNumber(DC.dayStart(20001)) == 20001)
+	NOW = DC.dayStart(20001) - 4
+	local p, d = newPlayer(nil)
+	noArrivals(p); richBank(p)
+	local id = spawnCall(p)
+	advance(1) -- NOW = boundary - 3
+	answer(p, id)
+	tick(p, 2, 1) -- boundary - 1: two seconds counted on day 20000
+	check("before 08:00 UTC the seconds belong to day 20000", d.tasks.engagedDay == 20000 and d.tasks.engagedSeconds == 2, d.tasks.engagedSeconds)
+	check("the day's seconds are saved with their day", TaskServer.serialize(d).engagedDay == 20000 and TaskServer.serialize(d).engagedSeconds == 2)
+	tick(p, 1, 1) -- exactly 08:00:00 UTC
+	check("at exactly 08:00:00 UTC the counter starts again on day 20001", d.tasks.engagedDay == 20001 and d.tasks.engagedSeconds == 1, d.tasks.engagedSeconds)
+	tick(p, 3, 1)
+	check("and goes on counting from there", d.tasks.engagedDay == 20001 and d.tasks.engagedSeconds == 4, d.tasks.engagedSeconds)
+	check("the total of the day before is not carried over", TaskServer.engagedSeconds(p) == 4)
+	check("the stats still count the whole session", stats(p).engaged == 6, stats(p).engaged)
+	-- a rejoin after the boundary ignores yesterday
+	local saved = TaskServer.serialize(d)
+	NOW = DC.dayStart(20002) + 5
+	local p2, d2 = newPlayer(saved)
+	check("a rejoin on the next day starts at 0", d2.tasks.engagedDay == 20002 and d2.tasks.engagedSeconds == 0 and TaskServer.engagedSeconds(p2) == 0)
+	NOW = DC.dayStart(20002) - 1
+	local p3, d3 = newPlayer({ engagedDay = 20001, engagedSeconds = 9000 })
+	check("one second before 08:00 UTC yesterday's seconds still count", d3.tasks.engagedDay == 20001 and d3.tasks.engagedSeconds == 9000 and TaskServer.engagedSeconds(p3) == 9000)
+	NOW = 20000 * 86400 + 12 * 3600
+end
+
+-- 15. Quiet mode and resume -------------------------------------------------------------------------------------------
+do
+	RANDOM = 0
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	for i = 1, 3 do
+		spawnCall(p)
+		advance(9)
+		TaskServer.step(p, CLOCK)
+	end
+	check("3 expired calls in a row start quiet mode", lastState(p).quiet == true and stats(p).missed == 3)
+	p.data.tasks.run.nextAt.Call = CLOCK - 1
+	tick(p, 100, 1)
+	check("in quiet mode no call arrives", stats(p).offered == 3 and #waiting(p) == 0)
+	local ok = onAction(p, "Start")
+	check("'Tap to resume' brings back a call at once", ok == true and #waiting(p) == 1 and lastState(p).quiet == false)
+	advance(1)
+	check("and answering it is graded", answer(p, waiting(p)[1].id) == true and TaskServer.isEngaged(p))
+	onAction(p, "Start")
+	check("Start when not quiet changes nothing", #waiting(p) == 0)
+
+	-- 90 s without a graded answer
+	local q, qd = newPlayer(nil)
+	TaskServer.step(q, CLOCK)
+	for _ = 1, 80 do -- the player skips every call: no expiry, but no graded answer either
+		tick(q, 1, 1)
+		for _, call in ipairs(waiting(q)) do onAction(q, "Skip", call.id) end
+	end
+	check("80 s in, calls come and it isn't quiet yet", stats(q).offered >= 3 and stats(q).skipped >= 3 and lastState(q).quiet == false)
+	for _ = 1, 15 do
+		tick(q, 1, 1)
+		for _, call in ipairs(waiting(q)) do onAction(q, "Skip", call.id) end
+	end
+	check("90 s without a graded answer: quiet mode", lastState(q).quiet == true)
+	local offered = stats(q).offered
+	tick(q, 120, 1)
+	check("... and it stays quiet", stats(q).offered == offered)
+
+	-- answering a waiting call also ends quiet mode
+	local r, rd = newPlayer(nil)
+	noArrivals(r)
+	local rid = spawnCall(r)
+	r.data.tasks.run.quiet = true
+	advance(1)
+	answer(r, rid)
+	check("answering a call that was waiting ends quiet mode", r.data.tasks.run.quiet == false)
+
+	-- a skip is not an expiry
+	local s, sd = newPlayer(nil)
+	noArrivals(s)
+	for i = 1, 6 do
+		local sid = spawnCall(s)
+		advance(1)
+		if i % 3 == 0 then onAction(s, "Skip", sid) else advance(9); TaskServer.step(s, CLOCK) end
+	end
+	check("a skip between expiries keeps it from being 3 in a row", s.data.tasks.run.quiet == false or s.data.tasks.run.misses < 3)
+end
+
+-- 16. Flags: early spam and a constant reaction -----------------------------------------------------------------------
+do
+	local function play(p, reaction)
+		local id = spawnCall(p)
+		advance(reaction)
+		local ok, msg, info = answer(p, id)
+		advance(0.5)
+		return ok, msg, info
+	end
+	local p, d = newPlayer(nil)
+	noArrivals(p); richBank(p)
+	local paid = 0
+	local last
+	for i = 1, 30 do
+		local ok, _, info = play(p, 0.5)
+		if i < 30 and ok and info.cash > 0 then paid += 1 end
+		last = info
+	end
+	check("29 answers with the very same reaction time are paid", paid == 29)
+	check("the 30th identical reaction flags the player: it pays 0", last.cash == 0 and stats(p).flagged == 1 and stats(p).answered == 29)
+	local ok, _, info = play(p, 0.9)
+	check("a different reaction time clears the pattern: the next answer pays again", ok == true and info.cash > 0)
+
+	local q, qd = newPlayer(nil)
+	noArrivals(q); richBank(q)
+	local flagged = 0
+	for i = 1, 60 do
+		local _, _, info = play(q, 0.3 + 0.05 * ((i * 7) % 13))
+		advance(1.5)
+		if info and info.cash == 0 then flagged += 1 end
+	end
+	check("60 answers with natural reaction times are never flagged", flagged == 0 and stats(q).flagged == 0 and stats(q).answered == 60, stats(q).answered)
+
+	local r, rd = newPlayer(nil)
+	noArrivals(r); richBank(r)
+	for i = 1, 20 do
+		local ok, msg = play(r, 0.1)
+		if msg ~= TEXTS.TooEarly then paid = -1 end
+	end
+	check("20 early answers in an hour", stats(r).early == 20)
+	local _, _, flaggedInfo = play(r, 1)
+	check("the 21st answer is flagged: pays 0 and is not engaged", flaggedInfo.cash == 0 and stats(r).flagged == 1 and not TaskServer.isEngaged(r))
+	advance(3601)
+	local _, _, freshInfo = play(r, 1)
+	check("an hour later the flags are gone and answers pay again", freshInfo.cash > 0 and TaskServer.isEngaged(r))
+end
+
+-- 17. Budget: the autoclicker wall --------------------------------------------------------------------------------------
+do
+	C.BudgetBank = 60
+	local p, d = newPlayer(nil, { income = 1000 })
+	noArrivals(p)
+	local paidEach = {}
+	for i = 1, 10 do
+		local id = spawnCall(p)
+		advance(0.4 + 0.07 * ((i * 3) % 7))
+		local _, _, info = answer(p, id)
+		paidEach[i] = info.cash
+		advance(0.3)
+	end
+	check("the first answer is paid in full (7 s = $7000)", paidEach[1] == 7000)
+	local naive = 0
+	for i = 1, 10 do naive += math.floor(7 * C.chainMultiplier(row, i - 1) * 1000 + 1e-6) end
+	check("the bank is 60 s: answers beyond it pay 20% of the rest", stats(p).overBudget > 0 and stats(p).cash < naive, stats(p).cash)
+	check("... and never less than the 60 s banked", stats(p).cash >= 60 * 1000, stats(p).cash)
+	check("... the reward seconds in the stats match the Cash", near(stats(p).rewardSeconds * 1000, stats(p).cash, 10))
+
+	local q, qd = newPlayer(nil)
+	noArrivals(q)
+	q.data.tasks.run.bank = 0
+	tick(q, 10, 1)
+	check("the bank refills at the rung's budget (0.85 s per s at Garage): 8.5 s in 10 s", near(q.data.tasks.run.bank, 8.5, 0.01), q.data.tasks.run.bank)
+	DEBUG.TaskSetRung(q, qd, "4")
+	noArrivals(q)
+	q.data.tasks.run.bank = 0
+	tick(q, 10, 1)
+	check("rung 4 refills at 1.15 per s", near(q.data.tasks.run.bank, 11.5, 0.01), q.data.tasks.run.bank)
+	tick(q, 200, 2)
+	check("the bank never holds more than 60 s", q.data.tasks.run.bank == 60)
+	C.BudgetBank = 1e9
+end
+
+-- 18. Pause: a window open freezes waiting calls ---------------------------------------------------------------------------
+do
+	RANDOM = 0
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local id = spawnCall(p)
+	advance(1)
+	check("Pause(true) is accepted", onAction(p, "Pause", true) == true and p.data.tasks.run.paused)
+	tick(p, 20, 1)
+	check("a call waits through 20 s of an open window", #waiting(p) == 1 and stats(p).missed == 0)
+	check("an open window never makes anyone engaged", not TaskServer.isEngaged(p))
+	onAction(p, "Pause", false)
+	check("Pause(false): a fresh state with the exact time left", lastState(p).tasks[1] and near(lastState(p).tasks[1].left, 7, 1.1))
+	advance(1)
+	local ok, _, info = answer(p, id)
+	check("answered after the window: graded and paid (the frozen time doesn't count as reaction)", ok == true and info.cash == 70)
+
+	-- at most 30 s per call
+	local q, qd = newPlayer(nil)
+	noArrivals(q)
+	spawnCall(q)
+	onAction(q, "Pause", true)
+	tick(q, 25, 1)
+	check("25 s open: still waiting", #waiting(q) == 1)
+	tick(q, 20, 1)
+	check("a call can be frozen for 30 s at most: it ended by 45 s", #waiting(q) == 0 and stats(q).missed == 1)
+
+	-- no new calls while a window is open
+	local r, rd = newPlayer(nil)
+	TaskServer.step(r, CLOCK)
+	onAction(r, "Pause", true)
+	tick(r, 120, 1)
+	check("no call arrives while a window is open", stats(r).offered == 0 and stats(r).arrivals == 0, stats(r).arrivals)
+	check("and an open window is not time away (no quiet mode)", lastState(r) == nil or lastState(r).quiet == false)
+	onAction(r, "Pause", false)
+	local arrived = waitForArrival(r, 60)
+	check("calls come again once the window is closed", arrived ~= nil and arrived <= 21, arrived)
+end
+
+-- 19. Measurement hooks (gate G1) -----------------------------------------------------------------------------------------------
+do
+	RANDOM = 0
+	local p, d = newPlayer(nil, { income = 10, employees = crew(4) })
+	DEBUG.TaskSetRung(p, d, "1")
+	noArrivals(p); richBank(p)
+	-- 5 answers, then 100 engaged seconds
+	for i = 1, 5 do
+		local id = spawnCall(p)
+		advance(0.5 + 0.1 * i)
+		answer(p, id)
+	end
+	tick(p, 100, 1)
+	local s = stats(p)
+	check("stats: rung and hires", s.rung == 1 and s.hires == 4)
+	check("stats: calls offered, answered, missed", s.offered == 5 and s.answered == 5 and s.missed == 0)
+	check("stats: engaged seconds", s.engaged >= 100 and s.engaged <= 105, s.engaged)
+	check("stats: Cash and reward seconds", s.cash == 70 + 77 + 84 + 91 + 98 and near(s.rewardSeconds, 42), s.cash)
+	local expectedF = s.cash / (10 * s.engaged)
+	check("measured f = task Cash per engaged second / base Income per second", near(s.f, expectedF, 1e-9) and s.f > 0, s.f)
+	check("measured f in seconds of Income per engaged second", near(s.fSecs, s.rewardSeconds / s.engaged, 1e-9))
+	p.base = 5
+	tick(p, 10, 1)
+	local after = stats(p)
+	check("f follows the base Income, second by second (a pass doesn't inflate it)",
+		near(after.f, after.cash / (10 * s.engaged + 5 * (after.engaged - s.engaged)), 1e-9), after.f)
+	check("the stats are also on the player's tasks section", d.tasks.done == 5 and d.tasks.bestChain == 5 and d.tasks.seen.Call == true)
+
+	-- the log line every 10 minutes, and on leaving
+	PRINTS = {}
+	local q, qd = newPlayer(nil, { employees = crew(2) })
+	noArrivals(q)
+	spawnCall(q)
+	tick(q, 601, 1)
+	local line = PRINTS[#PRINTS]
+	check("a stats line is logged after 10 minutes", line ~= nil and string.find(line, "[TaskStats]", 1, true) ~= nil)
+	check("... it has the rung, hires, engaged seconds, calls, Cash and f",
+		line and string.find(line, "rung=0", 1, true) and string.find(line, "hires=2", 1, true) and string.find(line, "engaged=", 1, true)
+		and string.find(line, "offered=", 1, true) and string.find(line, "answered=", 1, true) and string.find(line, "missed=", 1, true)
+		and string.find(line, "cash=", 1, true) and string.find(line, " f=", 1, true))
+	PRINTS = {}
+	PLAYER_REMOVING[#PLAYER_REMOVING](q)
+	check("a stats line is logged when the player leaves", #PRINTS == 1)
+
+	-- Debug
+	local r, rd = newPlayer(nil)
+	check("Debug Set rung: 3", string.find(DEBUG.TaskSetRung(r, rd, "3"), "Rung set to 3", 1, true) ~= nil and stats(r).rung == 3)
+	check("Debug Set rung: auto goes back to the funding stage", string.find(DEBUG.TaskSetRung(r, rd, "auto"), "Garage", 1, true) ~= nil and stats(r).rung == 0)
+	for _, bad in ipairs({ "5", "-1", "1.5", "abc", "", "nan" }) do
+		check("Debug Set rung '" .. bad .. "' is refused", DEBUG.TaskSetRung(r, rd, bad) == "Bad rung" and stats(r).rung == 0)
+	end
+	check("Debug stats gives a short line", string.find(DEBUG.TaskStats(r, rd), "Rung 0", 1, true) ~= nil)
+	IS_STUDIO = false
+	check("Debug is refused outside Studio", DEBUG.TaskSetRung(r, rd, "2") == "Debug is disabled" and DEBUG.TaskSpawn(r, rd) == "Debug is disabled" and stats(r).rung == 0)
+	IS_STUDIO = true
+	MODULES.ShopConfig.DebugInStudio = false
+	check("Debug is refused with DebugInStudio off", DEBUG.TaskStats(r, rd) == "Debug is disabled")
+	MODULES.ShopConfig.DebugInStudio = true
+
+	-- stage to rung
+	local expectedRungs = { { 0, 0 }, { 1799, 0 }, { 1800, 1 }, { 6300, 2 }, { 23400, 3 }, { 81000, 4 }, { 1e9, 4 } }
+	local allRungs = true
+	for _, pair in ipairs(expectedRungs) do
+		local sp = newPlayer(nil, { valuation = pair[1] })
+		if stats(sp).rung ~= pair[2] then allRungs = false; print_real("   valuation " .. pair[1] .. " gave rung " .. stats(sp).rung) end
+	end
+	check("stage to rung: Garage 0, Seed 1, Series A 2, Series B 3, IPO-ready 4", allRungs)
+	check("after an IPO the stages grow, so the same valuation is a lower rung", stats((newPlayer(nil, { valuation = 1800, ipos = 1 }))).rung == 0)
+end
+
+-- 20. Save round trip ---------------------------------------------------------------------------------------------------------------
+do
+	local p, d = newPlayer(nil, { income = 10 })
+	noArrivals(p); richBank(p)
+	for i = 1, 6 do
+		local id = spawnCall(p)
+		advance(0.5 + 0.1 * i)
+		answer(p, id)
+	end
+	tick(p, 30, 1)
+	local out = TaskServer.serialize(d)
+	check("after play there is a section", out ~= nil and out.done == 6 and out.bestChain == 6 and out.seen.Call == true and out.sharesRun == 0)
+	check("its engaged day is today's and its seconds whole", out.engagedDay == DC.dayNumber(NOW) and out.engagedSeconds >= 30 and out.engagedSeconds % 1 == 0)
+	local keys = 0
+	for _ in pairs(out) do keys += 1 end
+	check("the section has exactly the 6 fields (sharesRun, done, bestChain, seen, engagedDay, engagedSeconds)", keys == 6)
+	local q, qd = newPlayer(out)
+	local out2 = TaskServer.serialize(qd)
+	check("it loads back the same", out2.done == 6 and out2.bestChain == 6 and out2.engagedSeconds == out.engagedSeconds and out2.engagedDay == out.engagedDay and out2.seen.Call == true)
+	check("a loaded player starts with a fresh chain and no waiting calls", #waiting(q) == 0 and (lastState(q) == nil))
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+TRAY_TESTS = r"""-- Tests for TaskClient's tray layout (the code between its TRAY markers): it fits both phone sizes,
+-- clear of the HUD, the pop-up lanes and Roblox's touch controls ----------------------------------------
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
+end
+__TRAY__
+local function rect(x, y, w, h) return { x = x, y = y, w = w, h = h } end
+local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
+local function trayRect(l) return rect(l.x, l.y, l.w, l.h) end
+local function infoRect(l) return rect(l.x, l.infoY, l.w, l.infoH) end
+
+-- The numbers the doc's layout section gives
+local p = trayLayout(320, 568)
+check("portrait 320x568: three chips of 68x48 from x 98 to 310", p.x == 98 and p.chipWidth == 68 and p.h == 48 and p.gap == 4 and p.x + p.w == 310, p.w)
+check("portrait 320x568: the tray is above the thumbstick zone (bottom edge 396, zone starts 398)", p.y == 348 and p.y + p.h == 396)
+local l = trayLayout(667, 375)
+check("landscape 667x375: three chips of 104x48 from x 176 to 496, y 206-254", l.x == 176 and l.chipWidth == 104 and l.h == 48 and l.x + l.w == 496 and l.y == 206 and l.y + l.h == 254)
+
+-- Every size: on screen, chips of 48 or more, clear of the thumbstick and the jump button
+local sizes = { { 320, 568 }, { 375, 667 }, { 360, 640 }, { 414, 736 }, { 768, 1024 }, { 667, 375 }, { 812, 375 }, { 568, 320 }, { 736, 414 }, { 480, 320 }, { 1024, 768 } }
+for _, size in ipairs(sizes) do
+	local w, h = size[1], size[2]
+	local lay = trayLayout(w, h)
+	local label = w .. "x" .. h
+	local tray, info = trayRect(lay), infoRect(lay)
+	check(label .. ": the tray and its line are on the screen", lay.x >= 0 and lay.x + lay.w <= w and lay.y >= 0 and lay.y + lay.h <= h and lay.infoY >= 0)
+	check(label .. ": every chip is 48 or more in both directions (touch target)", lay.chipWidth >= 48 and lay.h >= 48)
+	local thumbstick = rect(0, h - 170, 170, 170)
+	local jump = rect(w - 150, h - 130, 150, 130)
+	check(label .. ": clear of the thumbstick zone", not overlaps(tray, thumbstick) and not overlaps(info, thumbstick))
+	check(label .. ": clear of the jump button zone", not overlaps(tray, jump) and not overlaps(info, jump))
+end
+
+-- The two target sizes against the rest of the HUD (rectangles from IpoClient, OnboardingClient and DailyClient)
+local function clear(layout, others)
+	for name, other in pairs(others) do
+		if overlaps(trayRect(layout), other) or overlaps(infoRect(layout), other) then return false, name end
+	end
+	return true
+end
+local portrait = {
+	hudColumn = rect(12, 74, 76, 420), -- EGGS, SHOP, TEAM, POACH, IPO: x 12-88
+	valuationBar = rect(98, 12, 158, 64),
+	dailyChip = rect(262, 20, 48, 48),
+	goalCard = rect(98, 82, 158, 82),
+	popupLane = rect(0, 504, 320, 48),
+}
+local ok, name = clear(p, portrait)
+check("portrait 320x568: the tray and its line never touch the HUD column, the valuation bar, the gift chip, the Goals card or the pop-up lane", ok, name)
+local landscape = {
+	hudRow = rect(10, 6, 360, 64), -- 5 buttons of 64 + 8 gap
+	valuationBar = rect(370, 6, 233, 64),
+	dailyChip = rect(609, 14, 48, 48),
+	goalCard = rect(370, 76, 233, 82),
+	dailyPopup = rect(0, 255, 667, 48),
+	popupLane = rect(0, 311, 667, 48),
+}
+ok, name = clear(l, landscape)
+check("landscape 667x375: the tray and its line never touch the HUD row, the valuation bar, the gift chip, the Goals card or the pop-up lanes", ok, name)
+check("landscape: the tray's right edge is clear of the jump button by more than 20 px", l.x + l.w < 667 - 150 - 20)
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def code_only(text):
+    """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
+    lines = []
+    for line in text.split("\n"):
+        cut = line.find("--")
+        lines.append(line if cut < 0 else line[:cut])
+    return "\n".join(lines)
+
+
+def task_wiring_checks():
+    """Checks on the source text: load order, the save section, addEarnings call sites, D9 words, the client's requests."""
+    import re
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    core = read("TycoonCore.lua")
+    check("TycoonCore: TaskServer.init comes before DailyServer.init", 0 < core.index("TaskServer.init(") < core.index("DailyServer.init("))
+    check("TycoonCore: TaskServer.setupPlayer comes before DailyServer.setupPlayer (Daily stays last)", 0 < core.index("TaskServer.setupPlayer(") < core.index("DailyServer.setupPlayer("))
+    for earlier in ("IpoServer.setupPlayer(", "EmployeeServer.setupPlayer(", "OnboardingServer.setupPlayer("):
+        check("TycoonCore: " + earlier + " runs before TaskServer.setupPlayer", core.index(earlier) < core.index("TaskServer.setupPlayer("))
+    check("TycoonCore: tasks is a known section", re.search(r"local KNOWN_SECTIONS = \{[^}]*\btasks = true", core) is not None)
+    check("TycoonCore: the payload is built with TaskServer.serialize", "tasks = TaskServer.serialize(data)" in core)
+    check("TycoonCore: a save needs data.tasks like every other part", "data.daily and data.tasks)" in core)
+    check("TycoonCore: DataStore name and key untouched", 'GetDataStore("StartupTycoon_v1")' in core and '"player_" .. player.UserId' in core)
+
+    # Every addEarnings call site in the game. A new one fails here until it is reviewed (valuation!).
+    expected = {"TycoonCore.lua": 3, "ShopServer.lua": 1, "IpoServer.lua": 2, "TaskServer.lua": 1, "DailyServer.lua": 0, "EmployeeServer.lua": 0, "PoachServer.lua": 0, "OnboardingServer.lua": 0}
+    for filename, count in expected.items():
+        calls = 0
+        for line in code_only(read(filename)).split("\n"):
+            if re.search(r"addEarnings\s*\(", line) and not re.search(r"function\s+[\w.]*addEarnings\s*\(", line):
+                calls += 1
+        check("%s has %d addEarnings call(s)" % (filename, count), calls == count, calls)
+
+    server = code_only(read("TaskServer.lua"))
+    check("TaskServer pays only through core.addEarnings (never IpoServer directly)", server.count("core.addEarnings(") == 1 and "IpoServer.addEarnings" not in server)
+    check("TaskServer never grants Shares, eggs or products", all(word not in server for word in ("grantShares", "grantEgg", "grantProduct", "PromptProductPurchase")))
+    check("TaskServer only touches data.tasks, data.cash and data.income of the player's data",
+          not re.search(r"data\.(shop|team|poach|ipo|onboarding|daily|fixedHires)\s*(=[^=]|\.[A-Za-z_]+\s*(=[^=]|\+=|-=))", server))
+    config = read("TaskConfig.lua")
+    check("TaskConfig: Enabled and StudioOnly are on (PR 1 runs only in Studio)", "TaskConfig.Enabled = true" in config and "TaskConfig.StudioOnly = true" in config)
+
+    forbidden = ("odds", "chance", "luck", "random", "probab", "%")
+    for filename in ("TaskClient.lua", "TaskServer.lua"):
+        found = None
+        for literal in re.findall(r'"((?:[^"\\\n]|\\.)*)"', code_only(read(filename))):
+            for word in forbidden:
+                if word in literal.lower() and not (word == "%" and re.search(r"%[ds.0-9]", literal)):
+                    found = literal
+        check(filename + ": no text claims odds, chance or luck (D9)", found is None, found)
+
+    client = code_only(read("TaskClient.lua"))
+    invokes = re.findall(r"InvokeServer\(([^)]*)\)", client)
+    check("TaskClient: only asks the server (Answer with a call number, Start, Pause, Sync)", len(invokes) == 4 and all(len(args.split(",")) <= 2 for args in invokes), invokes)
+    check("TaskClient: sends no Cash, time or reward", not any(word in args.lower() for args in invokes for word in ("cash", "reward", "time", "clock", "amount")))
+    check("TaskClient: ends at once when the engine is off (outside Studio in PR 1)", re.search(r"if not TaskConfig\.isActive\(\) then\s*return\s*end", client) is not None)
+    check("TaskClient: windows hide the tray through the OpenPanel attribute", 'GetAttribute("OpenPanel")' in client)
+
+    shop = read("ShopClient.lua")
+    check("ShopClient: the task Debug rows are inside the Studio-only Debug block", shop.index("TaskSpawn") > shop.index("if debugRemote then") and shop.index("TaskSpawn") < shop.index("-- Tabs, opening and closing"))
+    return passed, failed
+
+
 def sanitize_source():
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
@@ -1881,6 +3120,25 @@ def main():
                         .replace("__SIMCOSTS__", sim_perk_costs_lua()))
     print("IPO shop check (D1, 1,770 Shares): " + (result15.stdout.strip() or result15.stderr.strip()))
     if result15.returncode != 0 or " 0 failed" not in result15.stdout:
+        code = 1
+    with open(os.path.join(ROOT, "DailyConfig.lua"), encoding="utf-8") as f:
+        daily_config = f.read()
+    with open(os.path.join(ROOT, "TaskConfig.lua"), encoding="utf-8") as f:
+        task_config = f.read()
+    with open(os.path.join(ROOT, "TaskServer.lua"), encoding="utf-8") as f:
+        task_server = f.read()
+    result16 = run_luau(luau, TASK_TESTS.replace("__DAILYCONFIG__", daily_config).replace("__IPOCONFIG__", ipo_config)
+                        .replace("__TASKCONFIG__", task_config).replace("__TASKSERVER__", task_server))
+    print("TaskServer engine check (PR 1, customer calls): " + (result16.stdout.strip() or result16.stderr.strip()))
+    if result16.returncode != 0 or " 0 failed" not in result16.stdout:
+        code = 1
+    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")))
+    print("TaskClient tray layout check: " + (result17.stdout.strip() or result17.stderr.strip()))
+    if result17.returncode != 0 or " 0 failed" not in result17.stdout:
+        code = 1
+    wiring_passed, wiring_failed = task_wiring_checks()
+    print("TaskServer wiring check: %d passed, %d failed" % (wiring_passed, wiring_failed))
+    if wiring_failed:
         code = 1
     return code
 
