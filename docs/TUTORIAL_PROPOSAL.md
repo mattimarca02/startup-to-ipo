@@ -151,7 +151,7 @@ tutorial = {                -- TutorialServer.serialize (optional: older saves h
 
 ## 8. Pad leftovers
 
-Every remaining reference to the removed walk-on pads (`BuyPad`, `HRPad`, `IpoPad`, "pad") and to the old `"Open"` event, in code and comments, found with `grep` on 2026-10-04 at `594e7d3`. **List only: no code was changed.** The cleanup belongs on `visuals-garage`, after its stage 4/5 runs finish: the pads were removed there, it still changes these scripts, and on `origin/visuals-garage` it claims `tools/daily_test.py`. Doing it here would conflict. The files must be claimed in CONTRIBUTING.md first.
+Every remaining reference to the removed walk-on pads (`BuyPad`, `HRPad`, `IpoPad`, "pad") and to the old `"Open"` event, in code and comments, found with `grep` on 2026-10-04 at `594e7d3`. **List only: no code was changed.** The cleanup belongs on `visuals-garage`, after its stage 4/5 runs finish: the pads were removed there, and on `origin/visuals-garage` it claims `tools/daily_test.py` (its newer commits change `PlotArt.lua`, docs and that test, not the scripts listed below, so the comment edits themselves would not conflict; the order is about one cleanup in one place). The files must be claimed in CONTRIBUTING.md first.
 
 No identifier `BuyPad`, `HRPad` or `IpoPad` is left in any `.lua` file.
 
