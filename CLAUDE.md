@@ -28,16 +28,19 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 
   New server features follow this pattern. Never add a second DataStore, save loop or PlayerAdded data owner.
   Current ones: `ShopServer`, `EmployeeServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `DailyServer` (the daily calendar; its client is `DailyClient`). `DailyServer.setupPlayer` runs last, inside the all-modules-loaded gate, after `EmployeeServer` (a claim can grant an egg). A claim never yields between the "today is free" check and writing `lastClaimDay`.
+  `TaskServer` (the task engine, PR 1: customer calls; its client is `TaskClient`) plugs in just before `DailyServer`: its `init` and `setupPlayer` come after `EmployeeServer`/`IpoServer` and before `DailyServer`. **PR 1 runs only in Studio** (`TaskConfig.isActive()`: `Enabled` and `StudioOnly` and `RunService:IsStudio()`): outside Studio it builds no remotes, starts no loop and shows nothing. Task Cash is paid through `core.addEarnings`, the one earnings path, and `StudioOnly` stays on until the economy core (PR 2) exists. Only the server grades: the client sends `"Answer"` with a call number and never a time or a reward. `tools/daily_test.py` lists every `addEarnings` call site: a new one fails there until it is reviewed.
 - **Configs** are ModuleScripts in ReplicatedStorage:
   - `ShopConfig`: passes, products, `EggsEnabled`, `PolicyCheck` (the paid random items check on join)
   - `CreatureConfig`: creatures, rarities, eggs, odds, slots, poaching rules (`CreatureConfig.Poaching`)
   - `IpoConfig`: funding stages, IPO rewards (multiplier, Shares), cooldown, IPO shop perks
   - `OnboardingConfig`: the new-player free egg, goals, arrow and tracker settings
+  - `TaskConfig`: one row per task (arrival gap, time limit, reward in seconds of Income, action, team auto-resolve share, demand per hire, queue cap, skip), the stage-to-rung table, the reward budget, the `Enabled` / `StudioOnly` switches. No text in it may claim odds or chance (D9)
   - `DailyConfig`: the 7-day login calendar (rewards, grace days, reset hour, texts). Daily Shares are granted as they are and are **never doubled** by the Shareholder pass; daily Cash is a gift and never goes through `addEarnings` (it must not raise the IPO valuation)
-- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes`, `OnboardingRemotes` and `DailyRemotes` (`DailyAction`, only `"Claim"`) in ReplicatedStorage.
+- **Clients** are LocalScripts in StarterPlayerScripts. They build their UI in code, only display server state, and send requests through the server-created remotes `ShopRemotes`, `EmployeeRemotes`, `PoachRemotes`, `IpoRemotes`, `OnboardingRemotes`, `DailyRemotes` (`DailyAction`, only `"Claim"`) and `TaskRemotes` (`TaskAction`: `"Answer"`, `"Skip"`, `"Start"`, `"Pause"`, `"Sync"`; `TaskState` server to client) in ReplicatedStorage.
 - **UI conventions:**
   - One window open at a time, using the PlayerGui attribute `"OpenPanel"`.
   - The daily gift chip (DailyClient) is not a HUD slot: it sits right of the valuation bar, which leaves room for it (`IpoClient` `CHIP_ROOM`). Its pop-up goes at -240.
+  - The task tray (TaskClient) is not a HUD slot: three 48-high chips at the bottom (portrait: right of the HUD column and above the thumbstick; landscape: between the thumbstick and the jump button). It hides while a window is open. `tools/daily_test.py` checks its layout at both phone sizes.
   - HUD button slots: EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4. They use the shared responsive layout: a column centered on the left, or a top row on short (phone) screens (height under 460).
   - Pop-up messages go at the bottom center.
   - Everything must work on a phone.
@@ -102,6 +105,12 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
     lastClaimDay = number,                       -- UTC day number of the last claim (0 = never)
     streak = number, best = number,              -- claims in a row (one missed day keeps the place), longest ever
     claims = number,                             -- total claims
+  },
+  tasks = {                                      -- TaskServer.serialize (optional: written only once there is something to keep; Studio only in PR 1)
+    sharesRun = number,                          -- IPO count a pitch's Shares reward was last used for (later PRs)
+    done = number, bestChain = number,           -- calls answered and graded, longest chain
+    seen = { [taskKey] = true },                 -- task kinds the player has met
+    engagedDay = number, engagedSeconds = number, -- engaged seconds on that 08:00 UTC day (PR 2 caps full-value time with it)
   },
   onboarding = {                                 -- OnboardingServer.serialize (optional: older saves have none)
     seenIntro = boolean,                         -- the free egg was given (or wasn't needed): never given twice

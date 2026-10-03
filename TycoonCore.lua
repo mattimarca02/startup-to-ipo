@@ -6,6 +6,7 @@
 -- Valuation, the IPO rebirth and the IPO shop live in IpoServer (ServerScriptService) and IpoConfig (ReplicatedStorage).
 -- The first minute for new players (free egg, arrow, goals) lives in OnboardingServer (ServerScriptService) and OnboardingConfig (ReplicatedStorage).
 -- The 7-day login calendar lives in DailyServer (ServerScriptService) and DailyConfig (ReplicatedStorage).
+-- The task engine (customer calls; Studio only until the economy core) lives in TaskServer (ServerScriptService) and TaskConfig (ReplicatedStorage).
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
@@ -46,6 +47,7 @@ local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
 local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
+local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
 local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
 -- Upgrades are bought in this order. cost = Cash, income = Cash per second.
@@ -67,10 +69,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, pad, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -316,6 +318,7 @@ local function buildPayload(data, transform, playerName)
 			ipo = IpoServer.serialize(data),
 			onboarding = OnboardingServer.serialize(data),
 			daily = DailyServer.serialize(data),
+			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep: Studio only in PR 1
 			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
 		}
 		for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
@@ -365,7 +368,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -550,6 +553,21 @@ OnboardingServer.init({
 	end,
 })
 
+-- Task engine (PR 1: customer calls, Studio only) --------------------------
+-- Plugged in before DailyServer, which stays last. Task Cash goes through addEarnings, the one
+-- earnings path; baseIncome is what the stats line measures against (no passes, with the IPO multiplier).
+
+TaskServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	addEarnings = addEarnings,
+	baseIncome = function(player)
+		local data = playerData[player]
+		return data and totalIncome(data) * IpoServer.getMultiplier(player) or 0
+	end,
+})
+
 -- Daily login calendar (milestone 6) -------------------------------------
 
 DailyServer.init({
@@ -665,6 +683,7 @@ local function onPlayerAdded(player)
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
 		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
+		TaskServer.setupPlayer(player, data, saved and saved.tasks) -- after employees (hires) and the IPO (rung); before DailyServer
 		DailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg
 	end)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved

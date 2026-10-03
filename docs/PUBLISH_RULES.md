@@ -22,9 +22,30 @@ M4 has never been published, so **the version live today is older than M4, and s
   - `V_old` (live before launch, below the floor): ______
   - `V_launch` (the floor): ______
 - A rollback to an allowed version is still lossless only if every update follows CLAUDE.md's rule that new saved data gets its own top-level section (A10).
-- The newest section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
+- The newest section is `tasks` (section 2b, task engine PR 1: only written once there is something to keep). The newest *live* section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
 - **Perk levels 6 and up (D1, the 1,770-Share shop):** a rollback to a version with the shorter shop caps every perk level 6+ back to 5, and the Shares spent on those levels are lost (not refunded). It is a one-way change, forward only. Same as docs/D1_SHOP_OPTIONS.md (Rollback row).
 - If saves were already damaged: Roblox keeps older versions of each DataStore key for a limited time (about 30 days); one player's save can be restored by hand from a version. Slow and manual.
+
+## 2b. The `tasks` save section (task engine, PR 1)
+
+PR 1 (branch `pr1-task-engine`: `TaskConfig`, `TaskServer`, `TaskClient`) adds a **new top-level save section `tasks`** (rule A10), and it is in `KNOWN_SECTIONS`:
+
+```lua
+tasks = {
+  sharesRun = number,       -- IPO count a pitch's Shares reward was last used for (later PRs; 0 now)
+  done = number,            -- calls answered and graded by the server, ever
+  bestChain = number,       -- longest chain of answered calls
+  seen = { Call = true },   -- task keys the player has met
+  engagedDay = number,      -- DailyConfig.dayNumber (the 08:00 UTC day) the counter below belongs to
+  engagedSeconds = number,  -- engaged seconds on that day (PR 2 caps full-value time with it)
+}
+```
+
+- **Needs "Shut down all servers"** (new section, same as `daily` and `onboarding`): an old server still running would drop it on its next save. Never Migrate.
+- **Rollback floor stays `V_launch`.** From M4 on, older code keeps a section it doesn't know unchanged, so rolling back to a version without the task engine (but at or after `V_launch`) loses nothing: `tasks` stays frozen and works again when you go forward (a stale `engagedDay` is simply ignored). Code older than M4 deletes it, like every other section (section 2).
+- **PR 1 runs only in Studio** (`TaskConfig.StudioOnly = true`): on a live server the engine builds no remotes, starts no loop and shows nothing, and a player gets **no `tasks` section at all** unless one is already in their save (it is written only once there is something to keep). The DataStore key is shared by Studio and live servers, so a save a developer made in Studio can carry a `tasks` section. It loads and saves back unchanged.
+- **Do not set `StudioOnly = false` on its own.** Task Cash must not count 100% toward the IPO valuation before the economy core (PR 2: `addEarnings(kind)`, the 3 h/day full-value cap). PR 2 flips it, and PR 2 also needs "Shut down all servers" (new `away` section).
+- Loading is defensive: a number that is NaN, infinite, negative or not whole is skipped with a warning (counts over their limit are clamped, `engagedSeconds` to one day), `seen` keeps at most 50 `{ key = true }` entries, a counter dated more than a day ahead counts as today's, an older day's seconds are ignored, and fields this version doesn't know are written back as they were. A bad `tasks` section never touches another section.
 
 ## 3. Old and new servers must never run at the same time (FR-19)
 
@@ -55,7 +76,7 @@ M4 has never been published, so **the version live today is older than M4, and s
 2. Studio matches `main` exactly: compare every script (read only, Studio MCP or by hand). Commit all drafts.
 3. `python3 tools/daily_test.py` passes ("N passed, 0 failed" on every line).
 4. In Creator Hub, open the place's **Version History** and write down the live version as `V_old` (section 2).
-5. Settings that can't change later without side effects: **Max Players = 6**; `DailyConfig.ResetHourUtc` (must be decided before launch: decided 8 UTC, never change it after launch because it gives every player an extra claim; see section 3c); `ShopConfig.EggsEnabled`; the experience stays private.
+5. Settings that can't change later without side effects: `TaskConfig.StudioOnly = true` until PR 2 (section 2b); **Max Players = 6**; `DailyConfig.ResetHourUtc` (must be decided before launch: decided 8 UTC, never change it after launch because it gives every player an extra claim; see section 3c); `ShopConfig.EggsEnabled`; the experience stays private.
 6. Re-read Roblox's current Paid Random Items policy page (https://create.roblox.com/docs/production/monetization/paid-random-items) and the DevForum clarification linked in docs/D9_POLICY_OPTIONS.md. Write down the date you read it and the list of restricted regions it names: ______ (date), ______ (regions). If the rules changed (a new treatment required, Cash multiplier passes counted as paid, odds rules), stop and update D9 before publishing.
 
 **Publishing day**
