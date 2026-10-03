@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
+| tools/daily_test.py | (repo only) | Claude (for @mattimarca02): buyHr tests; and Claude (cloud) plot visuals stages 2-5, VISUALS_TESTS region only | visuals-garage | 2026-10-03 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
