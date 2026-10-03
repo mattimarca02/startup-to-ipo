@@ -89,30 +89,30 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
 | TycoonCore | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
-| ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| EmployeeServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | free | | |
+| ShopClient | StarterPlayerScripts | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | free | | |
-| PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | free | | |
+| PoachServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| PoachClient | StarterPlayerScripts | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
+| IpoServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
 | tools/daily_test.py | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-03 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | free | | |
+| OnboardingServer | ServerScriptService | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | free | | |
+| docs/PUBLISH_RULES.md | (repo only) | Claude Code for @mattimarca02 | visuals-garage | 2026-10-04 |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
