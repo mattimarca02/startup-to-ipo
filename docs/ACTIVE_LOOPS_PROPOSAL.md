@@ -4,7 +4,7 @@ Branch `active-loops`; no game code changed. Numbers are **starting values**, mi
 
 ## 1. The engine
 
-`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer` and **before `DailyServer`** (which stays last). **In PR 1 tasks run only in Studio** (`TaskConfig.Enabled` and `RunService:IsStudio()`, like `DebugInStudio`): `addEarnings(kind)` arrives only in PR 2, so no live player earns task Cash before the economy core. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
+`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer` and **before `DailyServer`** (which stays last). **In PR 1 tasks run only in Studio** (`TaskConfig.isActive()`: `Enabled` and (`StudioOnly` is off or `RunService:IsStudio()`), like `DebugInStudio`): `addEarnings(kind)` arrives only in PR 2, so no live player earns task Cash before the economy core. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
 
 ```lua
 Call = { wave = 1, role = "sales", action = "click",         -- click | choose | timing | targets
@@ -103,7 +103,7 @@ Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76
 | Office window (tabs Upgrades / Desks / Decor) | standard shell 294x523; tabs 40 high, 6 rows of 56 = no scrolling for one office | shell 613x345; tabs in a 110 px left column; 2 x 3 tiles of 240x84 |
 | Prestige wing (a tab of the IPO shop) | 2-column tiles 140x112, 6 visible, then scroll; buy buttons 48 high | 4 x 2 tiles 128x110, no scrolling |
 
-Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray, a window hides the tray and pauses expiry (30 s per task, 60 s per minute); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
+Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray; a window hides the tray and freezes the waiting calls (the code: each call can be frozen **at most 30 s** in all, `TaskConfig.Pause.perTask`, and an open window also stops **new** calls from arriving; closing it is never rate-limited). There is no 60 s per minute cap and none is needed: a lying client gains at most 30 s per call, and a frozen client gets no new calls, so pausing pays nothing by itself (Cash comes only from a graded answer, and a pause never counts as engaged); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
 
 ## 8. Files and task PRs
 

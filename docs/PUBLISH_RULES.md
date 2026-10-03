@@ -45,7 +45,20 @@ tasks = {
 - **Rollback floor stays `V_launch`.** From M4 on, older code keeps a section it doesn't know unchanged, so rolling back to a version without the task engine (but at or after `V_launch`) loses nothing: `tasks` stays frozen and works again when you go forward (a stale `engagedDay` is simply ignored). Code older than M4 deletes it, like every other section (section 2).
 - **PR 1 runs only in Studio** (`TaskConfig.StudioOnly = true`): on a live server the engine builds no remotes, starts no loop and shows nothing, and a player gets **no `tasks` section at all** unless one is already in their save (it is written only once there is something to keep). The DataStore key is shared by Studio and live servers, so a save a developer made in Studio can carry a `tasks` section. It loads and saves back unchanged.
 - **Do not set `StudioOnly = false` on its own.** Task Cash must not count 100% toward the IPO valuation before the economy core (PR 2: `addEarnings(kind)`, the 3 h/day full-value cap). PR 2 flips it, and PR 2 also needs "Shut down all servers" (new `away` section).
-- Loading is defensive: a number that is NaN, infinite, negative or not whole is skipped with a warning (counts over their limit are clamped, `engagedSeconds` to one day), `seen` keeps at most 50 `{ key = true }` entries, a counter dated more than a day ahead counts as today's, an older day's seconds are ignored, and fields this version doesn't know are written back as they were. A bad `tasks` section never touches another section.
+- Loading is defensive: a number that is NaN, infinite, negative or not whole is skipped with a warning (counts over their limit are clamped, `engagedSeconds` to one day), `seen` keeps at most 50 `{ key = true }` entries, a counter dated after today (even tomorrow) is rejected: the engaged day and seconds start again at today with 0 seconds, the other fields stay; an older day's seconds are ignored, and fields this version doesn't know are written back as they were. A bad `tasks` section never touches another section.
+
+### Studio sync order for PR 1 (do this before pasting TycoonCore and ShopClient)
+
+`TycoonCore` requires `TaskServer` with `WaitForChild` **and no timeout**, and `TaskServer` waits for `TaskConfig` the same way. If TycoonCore is pasted first, the server script hangs on "Infinite yield possible" and nobody can load a save. Create the three new scripts first, then paste the two changed ones:
+
+1. `TaskConfig` (ModuleScript) in **ReplicatedStorage**.
+2. `TaskServer` (ModuleScript) in **ServerScriptService**.
+3. `TaskClient` (LocalScript) in **StarterPlayer > StarterPlayerScripts**.
+4. Only then paste the new `TycoonCore` (Script, ServerScriptService) and `ShopClient` (LocalScript, StarterPlayerScripts). `ShopClient` waits 5 s for `TaskConfig` and then shows no Task Debug rows, so it never hangs, but it is still the last one to paste.
+
+### Note for PR 2: a rejoin refills the reward budget
+
+`run` (the per-session state in `TaskServer.newRun`, TaskServer.lua about line 92) is not saved, so a rejoin gives a full 60 s budget bank and clears the flag list (early answers, constant reaction). In PR 1 this is harmless (Studio only, no live Cash). **Fix it in PR 2** before `StudioOnly` goes off: save what must survive a rejoin (the bank and a flag cool-down) or start a rejoin with an empty bank.
 
 ## 3. Old and new servers must never run at the same time (FR-19)
 

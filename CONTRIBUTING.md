@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -112,11 +112,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
-| docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
+| docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
-| TaskConfig | ReplicatedStorage | @mattimarca02 | pr1-task-engine | 2026-10-03 |
-| TaskServer | ServerScriptService | @mattimarca02 | pr1-task-engine | 2026-10-03 |
-| TaskClient | StarterPlayerScripts | @mattimarca02 | pr1-task-engine | 2026-10-03 |
-| ROADMAP.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
-| CLAUDE.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
+| TaskConfig | ReplicatedStorage | free | | |
+| TaskServer | ServerScriptService | free | | |
+| TaskClient | StarterPlayerScripts | free | | |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |

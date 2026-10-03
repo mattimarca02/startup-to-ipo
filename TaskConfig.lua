@@ -6,7 +6,7 @@
 -- when a call arrives, whether an answer came in time, and the reward. The client only asks
 -- "answer call N". One row below = one kind of task.
 --
--- PR 1 runs ONLY in Studio (Enabled and StudioOnly, like ShopConfig.DebugInStudio): outside
+-- PR 1 runs ONLY in Studio (isActive: Enabled and (StudioOnly is off or this is Studio), like ShopConfig.DebugInStudio): outside
 -- Studio the engine builds no remotes, starts no loop and shows nothing. The reason: task Cash
 -- must not count 100% toward the IPO valuation before the economy core (PR 2: addEarnings(kind),
 -- the 3 h/day full-value cap). PR 2 sets StudioOnly = false.
