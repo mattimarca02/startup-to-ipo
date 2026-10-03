@@ -127,3 +127,43 @@ tutorial = {                -- TutorialServer.serialize (optional: older saves h
 2. Should existing players (`legacy`) get the tour once as an opt-in card, or only the "?" replay list?
 3. Is the tour one linear sequence, or should steps 6-9 appear the first time the player meets each system (daily chip, first poach window, first stage)?
 4. Step 5 (calls) is Studio only today: ship the tutorial without it now, or wait for the task engine's PR 2?
+
+## 7. Recommendations on the 4 open questions
+
+**1. Rewards: no Cash rewards in the first version.**
+- The 3 minutes of Income are tiny next to what the Desk (free, step 1) and the first hire already pay, so they teach nothing.
+- Every Cash gift is a second path beside `addEarnings` (like Daily Cash) that must be reviewed so it never raises the valuation; with no rewards, TutorialServer needs no payout code and no "reward and `done` in one block" rule.
+- Steps 3, 7 and 8 can't pay anyway (client-reported `"Opened"`, section 5). Add rewards later only to server-graded steps (2, 4, 5), as a config change.
+
+**2. Existing players: only the "?" replay list, no automatic or opt-in tour.**
+- OnboardingServer already marks old saves `legacy` (no `onboarding` section and `hasProgress`, lines 255-258); the tutorial reuses that flag, no new rule.
+- The game has not launched (PUBLISH_RULES section 2: M4 was never published, the experience is private), so "existing players" today are the two developers and testers.
+- The no-back-pay rule stays simple: nobody with progress gets an automatic card.
+
+**3. Linear for steps 1-4, then on first meeting for steps 6-9.**
+- Steps 1-4 are the first minutes and the server grades them from data it already has (`owned`, `team.employees`).
+- Step 6 is only useful while a claim is ready (the `DailyReady` attribute IpoClient already reads); step 7 means little without another player in the server; steps 8-9 matter near the first IPO, which needs a valuation (`IpoConfig.ipoValuation(0)`) a new player is far from.
+- So each of 6-9 waits for its own trigger (claim ready, a second player in the server, a stage reached), still one card at a time.
+
+**4. Ship without step 5 now; do not wait for task PR 2.**
+- `TaskConfig.isActive()` is false on every live server and `StudioOnly` must stay on until PR 2 (CLAUDE.md, PUBLISH_RULES 2b); the proposal already skips step 5 when it is false.
+- Step 5 then turns on with the task engine, with no tutorial change. PR A needs a test that step 5 is skipped (and never blocks steps 6-9) while `isActive()` is false.
+
+## 8. Pad leftovers
+
+Every remaining reference to the removed walk-on pads (`BuyPad`, `HRPad`, `IpoPad`, "pad") and to the old `"Open"` event, in code and comments, found with `grep` on 2026-10-04 at `594e7d3`. **List only: no code was changed.** The cleanup belongs on `visuals-garage`, after its stage 4/5 runs finish: the pads were removed there, it still changes these scripts, and on `origin/visuals-garage` it claims `tools/daily_test.py`. Doing it here would conflict. The files must be claimed in CONTRIBUTING.md first.
+
+No identifier `BuyPad`, `HRPad` or `IpoPad` is left in any `.lua` file.
+
+| File:line | What it is | What it does now |
+|---|---|---|
+| IpoClient.lua:927 | `if kind == "Open" then -- stepped on the gold IPO pad` in `ipoEvent.OnClientEvent` | Dead branch: IpoServer only ever sends `"Done"` (IpoServer.lua:237); the IPO window opens from the HUD button. Opens the IPO tab if the event ever came. |
+| IpoConfig.lua:55 | `Upgrades = true, -- garage upgrades and the green pad` | Stale comment; the value is right (an IPO clears `owned`). |
+| IpoClient.lua:40 | `gold = ... -- same gold as the IPO pad` | Color comment only. |
+| IpoServer.lua:211 | `-- Lock: income, pads, eggs, poaching and purchases all wait...` | Stale comment; the lock (`data.ready = false`) now covers the Office tab's `BuyUpgrade`. |
+| TycoonCore.lua:175 | `-- ... (the same rule as the IPO pad's sign)` | Stale comment; the garage keeps a non-interactive funding stage sign. |
+| CreatureConfig.lua:127 | `-- HR Department: defense levels bought with Cash on the purple pad in the garage.` | Stale comment; HR levels are bought in the Poach window (`"BuyHr"`). |
+| CreatureModels.lua:24 | `-- players walk through employees, and they never press buy pads` | Stale comment; `CanCollide = false` is still right. |
+| PoachServer.lua:569 | `-- (It used to be a purple pad in the garage; nothing there reacts to touch any more.)` | Correct history; can stay. |
+| ShopClient.lua:27, EmployeeClient.lua:31, PoachClient.lua:30, IpoClient.lua:38, DailyClient.lua:31, OnboardingClient.lua:23, TaskClient.lua:55 | `buy = Color3.fromRGB(0, 200, 90), -- same green as the buy pad` | Color comments only (7 files). |
+| tools/daily_test.py:3443, 3967-3990, 4378 | "no pad" checks (`L.pads == nil`, no `BuyPad` / `HRPad` / `IpoPad` in the sources) | Intentional guards that the pads stay gone: keep. Line 3788's "same rules as the old pad" is correct history. |
