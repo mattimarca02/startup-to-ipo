@@ -132,3 +132,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/BUILDING_PASS_PROPOSAL.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
 | docs/BUILDING_PASS_NOTES.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
 | docs/STUDIO_SYNC_BUILDING.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
+| docs/building_pass_integration.patch (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
