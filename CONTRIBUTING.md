@@ -110,7 +110,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
-| tools/economy_sim.py | (repo only) | free | | |
+| tools/economy_sim.py | (repo only) | @mattimarca02 (Claude Code) | active-loops | 2026-10-03 |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
+| docs/LONG_GAME_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | active-loops | 2026-10-03 |
