@@ -88,20 +88,20 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
+| TycoonCore | ServerScriptService | free | | |
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
+| ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -112,12 +112,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
-| TaskConfig | ReplicatedStorage | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
-| TaskServer | ServerScriptService | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
-| TaskClient | StarterPlayerScripts | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
-| ROADMAP.md | (repo only) | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
-| README.md | (repo only) | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
-| CLAUDE.md | (repo only) | @mattimarca02 (with Claude) | pr1-task-engine | 2026-10-03 |
+| TaskConfig | ReplicatedStorage | free | | |
+| TaskServer | ServerScriptService | free | | |
+| TaskClient | StarterPlayerScripts | free | | |
