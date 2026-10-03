@@ -124,4 +124,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
-| docs/TUTORIAL_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | design-tutorial | 2026-10-04 |
+| docs/TUTORIAL_PROPOSAL.md | (repo only) | free | | |
