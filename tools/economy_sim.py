@@ -258,11 +258,12 @@ def _simulate_tasks(n, fam, level, stage, skill, waves, rng, budget=None, unlock
     """Net Income-seconds per second the tasks add for ONE roster, and how busy the founder is. n = employees,
     fam = role family -> number of employees, stage = funding stage (first run only, None after the 1st IPO).
     budget = reward budget in seconds of Income per online second (None = ACTIVE_BUDGET_RATE); unlock_map = task name ->
-    stage it appears at (None = the unlock of ACTIVE_TASKS); both are used by the long game only."""
+    stage it appears at (None = the unlock of ACTIVE_TASKS; 99 = never); both are used by the long game only."""
     prof = ACTIVE_SKILLS[skill]
     H = ACTIVE_HORIZON
     b_rate = ACTIVE_BUDGET_RATE if budget is None else budget
-    rows = [t for t in ACTIVE_TASKS if t["wave"] in waves and (stage is None or (t["unlock"] if unlock_map is None else unlock_map.get(t["name"], t["unlock"])) <= stage)]
+    rows = [t for t in ACTIVE_TASKS if t["wave"] in waves and (unlock_map is None or unlock_map.get(t["name"], 0) < 99)
+            and (stage is None or (t["unlock"] if unlock_map is None else unlock_map.get(t["name"], t["unlock"])) <= stage)]
     rate = min(1.4, 1 + 0.02 * level)               # harder: tasks come a bit faster ...
     lim_scale = max(0.65, 1 - 0.03 * level)         # ... with less time ...
     p_drop = 0.008 * level                          # ... and are a little harder to get right
@@ -1039,8 +1040,8 @@ LONG_TASK_UNLOCK = {                # task -> rung it appears at in the first ru
     "Investor pitch": 2, "Surprise event": 2, "Support ticket": 2, "Demo and contract": 2,
     "Product feedback": 3, "1-to-1 / team pizza": 3, "Viral post": 3, "Press interview": 3,
     "Ad campaign": 4, "Cash crunch": 4, "Package pickup": 4, "Product launch": 4,
-    "Paired demo": 5,
-}                                   # not in the rate model: roadshow (Pre-IPO), Investor Day, office decoration (C+D); Paired demo and Investor Day sit outside the 50 h path
+    "Paired demo": 99,
+}                                   # not in the rate model: roadshow (Pre-IPO), Investor Day, office decoration (C+D); Paired demo (99 = never) and Investor Day sit outside the 50 h path
 LONG_HIRE_TYPES = [                 # (creature, Income, role family, egg tier it first comes from, exists today): 18 types (12 today + 6 new); the new ones go through CreatureConfig.fixedHire (D9)
     ("Coffee Capybara", 2, "ops", "Garage Egg", True), ("Coding Cat", 3, "eng", "Garage Egg", True), ("Pixel Pigeon", 3, "ops", "Garage Egg", True),
     ("Hustle Hamster", 7, "sales", "Garage Egg", True), ("Bug Beetle", 8, "eng", "Garage Egg", True), ("Memo Mole", 9, "ops", "Garage Egg", True),
@@ -1060,15 +1061,15 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (0, "upgrade", "Desk", 0, 1),
     (0, "upgrade", "Coffee Machine", 1100, 2),
     (0, "desk", "Desk 1", 0, 0),
-    (0, "hire", "Coding Cat", 2400, 3),
-    (0, "upgrade", "Laptop", 4300, 5),
-    (0, "desk", "Desk 2", 3700, 0),
-    (0, "hire", "Bug Beetle", 7400, 8),
+    (0, "hire", "Coding Cat", 2300, 3),
+    (0, "upgrade", "Laptop", 4200, 5),
+    (0, "desk", "Desk 2", 3600, 0),
+    (0, "hire", "Bug Beetle", 7200, 8),
     (0, "upgrade", "Server Rack", 13000, 15),
-    (0, "upgrade", "Whiteboard", 29000, 40),
-    (0, "upgrade", "Neon Logo", 75000, 120),
+    (0, "upgrade", "Whiteboard", 28000, 40),
+    (0, "upgrade", "Neon Logo", 72000, 120),
     # rung 1: Seed
-    (1, "office", "Co-working Loft", 560000, 0),
+    (1, "office", "Co-working Loft", 570000, 0),
     (1, "upgrade", "Standing Desks", 160000, 6),
     (1, "upgrade", "Espresso Bar", 230000, 12),
     (1, "desk", "Desk 3", 150000, 0),
@@ -1078,18 +1079,18 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (1, "upgrade", "Glass Boardroom", 490000, 38),
     (1, "upgrade", "Rooftop Sign", 560000, 44),
     (1, "desk", "Desk 4", 320000, 0),
-    (1, "hire", "Server Sloth", 630000, 50),
+    (1, "hire", "Server Sloth", 640000, 50),
     # rung 2: Series A
-    (2, "office", "Downtown Floor", 1900000, 0),
+    (2, "office", "Downtown Floor", 2000000, 0),
     (2, "upgrade", "Open Plan", 560000, 12),
-    (2, "upgrade", "Quiet Pods", 800000, 24),
+    (2, "upgrade", "Quiet Pods", 810000, 24),
     (2, "upgrade", "Design Studio", 1100000, 40),
-    (2, "desk", "Desk 5", 680000, 0),
+    (2, "desk", "Desk 5", 690000, 0),
     (2, "hire", "Ledger Llama", 1400000, 60),
-    (2, "upgrade", "Data Closet", 1400000, 60),
+    (2, "upgrade", "Data Closet", 1500000, 60),
     (2, "upgrade", "Demo Theater", 1700000, 76),
-    (2, "upgrade", "Lobby Screen", 1900000, 88),
-    (2, "desk", "Desk 6", 1300000, 0),
+    (2, "upgrade", "Lobby Screen", 2000000, 88),
+    (2, "desk", "Desk 6", 1400000, 0),
     (2, "hire", "Unicorn CEO", 2700000, 150),
     (2, "desk", "Desk 7", 1600000, 0),
     (2, "hire", "Venture Dragon", 3200000, 175),
@@ -1137,15 +1138,15 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (5, "upgrade", "Marble Lobby", 18000000, 40),
     (5, "upgrade", "War Room", 25000000, 80),
     (5, "upgrade", "Server Farm", 32000000, 130),
-    (5, "upgrade", "Roadshow Jet", 40000000, 190),
+    (5, "upgrade", "Roadshow Jet", 39000000, 190),
     (5, "upgrade", "Bell Tower", 47000000, 260),
-    (5, "upgrade", "Golden Bell", 52000000, 300),
+    (5, "upgrade", "Golden Bell", 51000000, 300),
     (5, "desk", "Desk 16", 35000000, 0),
-    (5, "hire", "Brand Badger", 71000000, 540),
+    (5, "hire", "Brand Badger", 70000000, 540),
     (5, "desk", "Desk 17", 39000000, 0),
-    (5, "hire", "Board Bison", 79000000, 620),
+    (5, "hire", "Board Bison", 78000000, 620),
     (5, "desk", "Desk 18", 41000000, 0),
-    (5, "hire", "Board Bison", 82000000, 620),
+    (5, "hire", "Board Bison", 81000000, 620),
 ]
 
 LONG_LOOP_GROWTH = 0.10             # prices and valuation thresholds of loop L = IPO multiplier x (1 + this) ^ L
@@ -1348,13 +1349,13 @@ def long_hours(items, price_mult=1.0):
     return [cum[0]] + [cum[i] - cum[i - 1] for i in range(1, len(cum))]
 
 
-LONG_CONTENT = [                    # per rung: (tasks that appear besides LONG_TASK_UNLOCK, products, decor pieces, titles, new egg tiers); 20 tasks, 6 products, 20 decor, 8 titles, 3 new eggs in all
+LONG_CONTENT = [                    # per rung: (tasks that appear besides LONG_TASK_UNLOCK, products, decor pieces, titles, new egg tiers); 18 tasks on the 50 h path (+ paired demo and Investor Day outside it = 20), 6 products, 20 decor, 8 titles, 3 new eggs
     ([], 0, 3, 1, 0),
     ([], 2, 4, 1, 0),
     ([], 1, 4, 1, 1),
     ([], 1, 3, 1, 0),
     (["Office decoration"], 1, 4, 1, 1),
-    (["Pre-IPO roadshow", "Investor Day"], 1, 2, 3, 1),   # 3 titles: Pre-IPO, first IPO, tenth IPO
+    (["Pre-IPO roadshow"], 1, 2, 3, 1),   # 3 titles: Pre-IPO, first IPO, tenth IPO
 ]
 
 
@@ -1561,6 +1562,7 @@ def report_long(n):
         tot = [a + b for a, b in zip(tot, row + [moments])]
         print(f"| {name} | " + " | ".join(str(x) for x in row) + f" | {moments} | {hours[r]:.1f} | {hours[r] * 60 / moments:.0f} |")
     print("| Total | " + " | ".join(str(x) for x in tot[:10]) + f" | {tot[10]} | {sum(hours):.1f} | {sum(hours) * 60 / tot[10]:.0f} |")
+    print("(plus 2 tasks outside the 50 h path: paired demo and Investor Day, so 20 task types in all)")
     early = [it for it in LONG_ITEMS if it[0] <= 1 and it[3] > 0]
     old_hires = {h[0] for h in LONG_HIRE_TYPES if h[4]}
     exists = sum(1 for it in early if (it[0] == 0 and it[1] == "upgrade") or (it[1] == "hire" and it[2] in old_hires))
