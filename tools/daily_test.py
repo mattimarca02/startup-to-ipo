@@ -2582,6 +2582,37 @@ do
 	check("the counter stops when the player isn't engaged any more (180 s window)", stats(q).engaged >= 179 and stats(q).engaged <= 181, stats(q).engaged)
 	check("online seconds are counted too", stats(q).online >= 210)
 
+	-- a pause never counts as engaged: a graded answer, then a window open, adds no engaged seconds beyond the grading window
+	local pp, pd = newPlayer(nil, { income = 10 })
+	noArrivals(pp); richBank(pp)
+	local pid = spawnCall(pp)
+	advance(1)
+	answer(pp, pid)
+	tick(pp, 5, 1)
+	local engagedBefore = stats(pp).engaged
+	local secondsBefore = TaskServer.engagedSeconds(pp)
+	check("before the pause: 5 engaged seconds after the graded answer", engagedBefore == 5 and secondsBefore == 5, engagedBefore)
+	onAction(pp, "Pause", true)
+	tick(pp, 120, 1)
+	check("a pause of 120 s (inside the 180 s window) adds no engaged seconds", stats(pp).engaged == engagedBefore and TaskServer.engagedSeconds(pp) == secondsBefore, stats(pp).engaged)
+	check("... but the session's online seconds still count", stats(pp).online >= 125)
+	tick(pp, 400, 5)
+	check("a pause far past the window adds none either", stats(pp).engaged == engagedBefore, stats(pp).engaged)
+	onAction(pp, "Pause", false)
+	check("closing the window adds none for the time it was open", stats(pp).engaged == engagedBefore, stats(pp).engaged)
+	-- a window that opens late: the seconds before it count, the window does not
+	local qq, qd = newPlayer(nil, { income = 10 })
+	noArrivals(qq); richBank(qq)
+	local qid2 = spawnCall(qq)
+	advance(1)
+	answer(qq, qid2)
+	tick(qq, 10, 1)
+	onAction(qq, "Pause", true)
+	tick(qq, 30, 1)
+	onAction(qq, "Pause", false)
+	tick(qq, 10, 1)
+	check("10 s before, 30 s in a window, 10 s after: 20 engaged seconds", stats(qq).engaged == 20 and TaskServer.engagedSeconds(qq) == 20, stats(qq).engaged)
+
 	-- nothing else sets lastGradedAt
 	local r, rd = newPlayer(nil, { employees = crew(5, "HustleHamster") })
 	noArrivals(r)

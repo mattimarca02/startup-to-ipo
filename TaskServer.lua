@@ -232,7 +232,8 @@ local function settle(player, data, run, now)
 		run.lastActionAt += dt -- and a window never counts as time away
 	end
 
-	if isEngagedRun(run, now) then
+	-- A pause never counts as engaged: the time a window was open adds nothing (the 3 minutes still run out)
+	if not run.paused and isEngagedRun(run, now) then
 		rollDay(tasks)
 		tasks.engagedSeconds = math.min(DAY_SECONDS, tasks.engagedSeconds + dt)
 		tasks.dirty = true
