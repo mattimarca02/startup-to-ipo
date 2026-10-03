@@ -3802,6 +3802,10 @@ local STORY = {
 	[3] = { shell = { "BackWall", "BayLShutter", "BayRShutter", "BayLDark", "PartitionLGlass", "PartitionRGlass", "WallBoard", "WallNote1", "WallBoardTray" },
 		decor = { "WallLampBulbL", "WallLampBulbM", "WallLampBulbR", "BayLineL", "BayLineR", "CabinetA", "SofaBase", "FounderTop", "DeskPhone", "RugBase" },
 		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wall = { 172, 94, 76 }, lights = 3 },
+	[4] = { shell = { "BackLower", "BackGlass", "BackMullion1", "BackMullion5", "SideGlassL", "SideGlassR", "SideRailL", "SideMullionR3" },
+		decor = { "FloorTileX1", "FloorTileZ5", "MeetGlassBack", "MeetGlassSide", "MeetTableTop", "MeetChairA1", "MeetScreen", "GapPlantLPot", "CornerPlantPot",
+			"FounderTop", "DeskPhone", "FloorLampShadeA" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wallPart = "BackLower", wall = { 240, 242, 244 }, lights = 3 },
 }
 local function has(list, name) for _, s in ipairs(list) do if s.name == name then return s end end return nil end
 local function countPrefix(list, prefix) local n = 0 for _, s in ipairs(list) do if string.find(s.name, prefix, 1, true) == 1 then n += 1 end end return n end

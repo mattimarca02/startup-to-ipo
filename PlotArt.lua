@@ -109,6 +109,8 @@ local C = {
 	brick = { 172, 94, 76 }, brickLight = { 190, 112, 90 }, steelBlack = { 40, 44, 54 }, birch = { 232, 224, 206 }, sofaBlue = { 72, 86, 112 },
 	sofaBlueLight = { 112, 130, 164 }, amber = { 246, 154, 52 }, bayDark = { 44, 52, 66 }, shutter = { 196, 202, 206 },
 	stickyPink = { 255, 170, 190 }, stickyGreen = { 170, 232, 150 },
+	-- Stage 4: the office (white, navy, cobalt, blue-gray carpet)
+	officeWhite = { 240, 242, 244 }, navy = { 34, 42, 62 }, cobalt = { 52, 120, 230 }, carpetLine = { 86, 100, 120 }, officeGlass = { 150, 196, 220 },
 }
 
 -- Helpers --------------------------------------------------------------------
@@ -569,7 +571,115 @@ seriesA.desk = {
 	B("MonitorScreen", 0, 2.42, 0, 1.2, 0.64, 0.04, C.screenBlue, "Neon"),
 }
 
-PlotArt.Stages = { garage, seed, seriesA }
+-- Stage 4: the real office (Series B) -----------------------------------------------------
+-- Blue-gray carpet tiles, white walls with a ribbon of windows along the back, glass walls on the two
+-- sides (low, the camera looks in over them), a glass-walled meeting room in the front-left corner,
+-- big plants and a reception desk. Open at the front, no roof.
+
+local seriesB = { key = "SeriesB", floor = { color = { 104, 118, 138 }, material = "Fabric" } }
+
+local function sideWall(tag, x, glassX)
+	local out = {
+		B("SideBase" .. tag, x, 0.6, 0.3, 0.6, 1.2, 59.4, C.officeWhite, "SmoothPlastic"),
+		B("SideGlass" .. tag, x, 3.15, 0.3, 0.2, 3.9, 59.4, C.officeGlass, "Glass", { transparency = 0.4, shadow = false }),
+		B("SideRail" .. tag, x, 5.275, 0.3, 0.7, 0.35, 59.4, C.navy, "Metal"),
+	}
+	for i, z in ipairs({ -19.7, 0.3, 20.3 }) do
+		table.insert(out, B("SideMullion" .. tag .. i, x, 3.15, z, 0.4, 3.9, 0.4, C.navy, "Metal"))
+	end
+	return out
+end
+
+seriesB.shell = join(
+	{
+		-- The back wall: white below, a ribbon of glass in navy mullions, a white band on top
+		B("BackLower", 0, 3.1, -29.7, 60, 6.2, 0.6, C.officeWhite, "SmoothPlastic"),
+		B("BackBase", 0, 0.35, -29.34, 60, 0.7, 0.12, C.navy, "SmoothPlastic"),
+		B("BackAccent", 0, 5.7, -29.34, 60, 0.5, 0.12, C.cobalt, "SmoothPlastic"),
+		B("BackGlass", 0, 7.8, -29.7, 60, 3.2, 0.2, C.officeGlass, "Glass", { transparency = 0.35, shadow = false }),
+		B("BackUpper", 0, 10.5, -29.7, 60, 2.2, 0.6, C.officeWhite, "SmoothPlastic"),
+		B("BackCap", 0, 11.8, -29.7, 60, 0.4, 0.9, C.navy, "Metal"),
+		B("BackSill", 0, 6.3, -29.55, 60, 0.25, 0.7, C.navy, "Metal"),
+		B("BackHead", 0, 9.45, -29.55, 60, 0.25, 0.7, C.navy, "Metal"),
+		B("PostBackL", -29.7, 6, -29.7, 0.9, 12, 0.9, C.navy, "Metal"),
+		B("PostBackR", 29.7, 6, -29.7, 0.9, 12, 0.9, C.navy, "Metal"),
+		B("PostFrontL", -29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.navy, "Metal"),
+		B("PostFrontR", 29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.navy, "Metal"),
+	},
+	(function()
+		local out = {}
+		for i, x in ipairs({ -24, -12, 0, 12, 24 }) do
+			table.insert(out, B("BackMullion" .. i, x, 7.8, -29.55, 0.4, 3.2, 0.5, C.navy, "Metal"))
+		end
+		return out
+	end)(),
+	sideWall("L", -29.7),
+	sideWall("R", 29.7)
+)
+
+-- A floor lamp: a pole and a glowing shade (the shade carries a PointLight)
+local function floorLamp(tag, x, z)
+	return {
+		B("FloorLampPole" .. tag, x, 2.2, z, 0.2, 4.4, 0.2, C.navy, "Metal"),
+		B("FloorLampShade" .. tag, x, 4.8, z, 1.2, 0.9, 1.2, C.bulb, "Neon", { light = { color = C.warmLight, brightness = 1.1, range = 28 } }),
+	}
+end
+
+local function carpetTiles()
+	local out = {}
+	for i, v in ipairs({ -20, -10, 0, 10, 20 }) do
+		table.insert(out, B("FloorTileX" .. i, v, 0.02, -4.25, 0.14, 0.04, 51.5, C.carpetLine, "Fabric")) -- stops short of the signs
+		table.insert(out, B("FloorTileZ" .. i, 0, 0.02, v, 60, 0.04, 0.14, C.carpetLine, "Fabric"))
+	end
+	return out
+end
+
+local function meetingRoom()
+	local out = {
+		-- Glass on the back and the right, open to the front and the left wall
+		B("MeetGlassBack", -19, 2.3, 19.6, 20, 4.6, 0.1, C.officeGlass, "Glass", { transparency = 0.45, shadow = false }),
+		B("MeetGlassSide", -9, 2.3, 24.5, 0.1, 4.6, 9.8, C.officeGlass, "Glass", { transparency = 0.45, shadow = false }),
+		B("MeetRailBack", -19, 4.7, 19.6, 20, 0.25, 0.3, C.navy, "Metal"),
+		B("MeetRailSide", -9, 4.7, 24.5, 0.3, 0.25, 9.8, C.navy, "Metal"),
+		B("MeetPost", -9, 2.35, 19.6, 0.4, 4.7, 0.4, C.navy, "Metal"),
+		-- The table on two pedestals, four chairs (a block seat and a back), the wall screen
+		B("MeetTableTop", -18.8, 2.4, 25, 8, 0.25, 3.4, C.officeWhite, "SmoothPlastic"),
+		B("MeetPedestalA", -20.8, 1.15, 25, 1.2, 2.3, 1.6, C.navy, "Metal"),
+		B("MeetPedestalB", -16.8, 1.15, 25, 1.2, 2.3, 1.6, C.navy, "Metal"),
+		B("MeetScreen", -29.2, 3.8, 24.8, 0.12, 2.2, 3.6, C.cobalt, "Neon"),
+		B("MeetScreenFrame", -29.25, 3.8, 24.8, 0.1, 2.5, 3.9, C.black, "SmoothPlastic"),
+	}
+	for i, x in ipairs({ -20.4, -17.2 }) do
+		table.insert(out, B("MeetChairA" .. i, x, 0.75, 22.7, 1.4, 1.5, 1.4, C.cobalt, "Fabric"))
+		table.insert(out, B("MeetChairBackA" .. i, x, 2.2, 22.15, 1.4, 1.4, 0.25, C.navy, "Fabric"))
+		table.insert(out, B("MeetChairB" .. i, x, 0.75, 27.3, 1.4, 1.5, 1.4, C.cobalt, "Fabric"))
+		table.insert(out, B("MeetChairBackB" .. i, x, 2.2, 27.85, 1.4, 1.4, 0.25, C.navy, "Fabric"))
+	end
+	return out
+end
+
+seriesB.decor = join(
+	carpetTiles(),
+	meetingRoom(),
+	floorLamp("A", -9.8, 28.6),
+	floorLamp("B", 15.6, 21.2),
+	floorLamp("C", 27.6, 19.8),
+	plant("GapPlantL", -6, -26.5, { 1.6, 1.4 }, 3, C.navy, C.leaf),
+	plant("GapPlantR", 6, -26.5, { 1.6, 1.4 }, 3, C.navy, C.leaf),
+	plant("CornerPlant", 27.6, 27.8, { 1.4, 1.3 }, 3, C.navy, C.leaf),
+	founderDesk(10.5, 24.5, { top = C.officeWhite, panel = C.navy, accent = C.screenBlue })
+)
+
+-- A hire's desk: a white top on two navy legs and a monitor
+seriesB.desk = {
+	B("DeskTop", 0, 1.92, 0, 3.6, 0.16, 1.7, C.officeWhite, "SmoothPlastic"),
+	B("DeskLegL", -1.65, 0.92, 0, 0.2, 1.84, 1.5, C.navy, "Metal"),
+	B("DeskLegR", 1.65, 0.92, 0, 0.2, 1.84, 1.5, C.navy, "Metal"),
+	B("MonitorFrame", 0, 2.42, 0.1, 1.4, 0.84, 0.1, C.black, "SmoothPlastic"),
+	B("MonitorScreen", 0, 2.42, 0, 1.2, 0.64, 0.04, C.cobalt, "Neon"),
+}
+
+PlotArt.Stages = { garage, seed, seriesA, seriesB }
 
 -- Upgrade props ----------------------------------------------------------------
 -- Each stands in its upgrade's slot (offsets from the slot on the floor), facing the front. Every prop
