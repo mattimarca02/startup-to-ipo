@@ -23,17 +23,23 @@ Each step is one short card (title, 1-2 lines, one button "Got it" or no button 
 | # | Step | Player does | Completes when (server) | Reward |
 |---|------|-------------|-------------------------|--------|
 | 1 | Your office | Open SHOP > Office, buy Desk (free) | `owned` contains Desk | none (the Desk pays) |
-| 2 | Hire | Hatch the free egg (existing arrow) | employees >= 1 | 1 min Income |
+| 2 | Hire | Hatch the free egg (existing arrow; the card also outlines the EGGS button, which is always there) | employees >= 1 | 1 min Income |
 | 3 | Team slots | Open TEAM, see `1/5` and what a hire earns | team window opened once | none |
 | 4 | Keep growing | Buy the next Office upgrade | owned >= 2 | 1 min Income |
 | 5 | Customer call | Tap a call chip in the tray | one call graded by `TaskServer` | 1 min Income |
 | 6 | Daily gift | Tap CLAIM on the chip | `daily.claims >= 1` | the Daily reward itself |
 | 7 | Poaching | Open POACH: HR level, shield, "needs another player in your server" | window opened once (never needs a second player) | none |
 | 8 | Funding | Open the IPO window: valuation bar, stages | window opened once | none |
-| 9 | Going public | Read what an IPO **resets** (Cash, upgrades, eggs in incubators) and **keeps** (employees, passes, HR, Shares, perks), from `IpoConfig.Resets` | "Got it" (never forces an IPO) | none |
+| 9 | Going public | Read what an IPO **resets** (Cash, upgrades, eggs in incubators, valuation) and **keeps** (employees, HR, passes, boosts and shields, Shares, perks and IPO count); sources in the notes | "Got it" (never forces an IPO) | none |
 
 Notes:
-- **Eggs:** a card for the EGGS button is added to step 2 only while `ShopConfig.EggsEnabled` is true (it is false now), so no card points at a hidden button.
+- **Eggs:** the EGGS button is never hidden. `ShopConfig.EggsEnabled` (false now) is read in one place, `ShopConfig.isOnSale` (line 194): it only stops shop items marked `needsEggs` (Robux egg items) from being sold. EmployeeClient builds `EggsButton` (HUD slot 0) unconditionally (line 175), and Cash eggs and the free Garage Egg work with the flag off (OnboardingConfig line 19). So step 2 always outlines EGGS; the only thing `EggsEnabled` changes for the tour is that no card may point at a Robux egg item (it never does, section 5).
+- **Step 9's list, and where each item really comes from.** Only part of it is config. `IpoConfig.Resets` (lines 53-58) has four keys: `Cash`, `Upgrades`, `Eggs` (true: reset) and `HRDepartment` (false: kept). TycoonCore's `commitIpo` (lines 544-587) applies exactly those four. The rest is hardcoded text in IpoClient, true because of what the server code doesn't touch:
+  - **Resets, from `IpoConfig.Resets`:** Cash, garage upgrades, eggs in incubators (names from `IpoConfig.ResetNames`, read through `IpoConfig.resetItems(true)`).
+  - **Resets, hardcoded:** "your valuation (for the next IPO)" (IpoClient line 519). The server side is IpoServer building the new `ipo` section with the valuation at 0.
+  - **Keeps, from `IpoConfig.Resets`:** HR Department (`HRDepartment = false`, via `resetItems(false)`).
+  - **Keeps, hardcoded in IpoClient (lines 526-531):** "Employees" (`commitIpo` never touches `team.employees`), "game passes" (owned on Roblox, not saved), "Luck Boost, Instant Hatches and shields" (`shop` and `poach` sections, not touched), "your Shares" and "IPO shop perks and your IPO count" (copied into the new `ipo` section by IpoServer).
+  - **So** `TutorialConfig` must not claim step 9 reads "from `IpoConfig.Resets`". Either the step 9 card reuses IpoClient's own wording (best: build it from `IpoConfig.resetItems` plus the same fixed list, moved into `IpoConfig` as a `Kept` list both clients read; that is an `IpoConfig` + `IpoClient` claim in PR B), or the text is fixed in `TutorialConfig` with a test that compares it with IpoClient's list.
 - **Step 5 is skipped** whenever `TaskConfig.isActive()` is false (today: every live server, PR 1 is Studio only). It becomes live with the task engine; no tutorial change needed.
 - Steps 3, 7, 8, 9 are info steps with no reward on purpose: nothing to farm.
 - Steps are shown one at a time, in order, but each one is **marked done by its own condition** if the player did it early (a player who already claimed the daily skips step 6, without a second reward unless the step's own reward was never paid).
