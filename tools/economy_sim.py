@@ -5,6 +5,7 @@ Run:   python tools/economy_sim.py            (prints all tables, takes ~1 minut
        python tools/economy_sim.py --runs 10  (faster, noisier)
        python tools/economy_sim.py --markdown (prints the tables as Markdown for docs/ECONOMY.md)
        python tools/economy_sim.py --daily    (only section 7, the daily calendar table)
+       python tools/economy_sim.py --active   (only section 8, the ACTIVE-PLAY proposal; default OFF everywhere else)
 
 It reads NOTHING from the game: every number is copied by hand into the CONFIG block below.
 If you change a .lua config, update this block too. It never changes any game number.
@@ -15,11 +16,20 @@ section 7. A simulated player claims at the first login of every day (they never
 worst case for the economy). Calendar Cash is a gift: it goes to Cash only, never to the
 valuation, exactly like DailyServer; claim_daily asserts it. Sections 1-6 run without the
 calendar (DAILY_IN_ALL_TABLES = False) so they stay comparable with docs/ECONOMY.md.
+
+ACTIVE PLAY (docs/ACTIVE_LOOPS_PROPOSAL.md) is a PROPOSAL, not in the game yet. The ACTIVE_* block below holds
+the recommended starting numbers of the task engine. It is OFF by default: no section 1-7 number changes
+unless a Player is made with active="typical" (or "expert", "bot"); only `--active` does that (section 8).
+A small Monte Carlo of the task queue (one founder with limited attention, auto-resolve by employees of the
+right role, demand growing with hires, queue caps, a reward budget) gives the extra Income the tasks add, as a
+fraction of Income while the player is ONLINE and present. Offline pay and idle play are untouched.
 """
 
 import argparse
+import math
 import random
 import statistics
+import zlib
 
 # =============================================================================
 # CONFIG: every number the simulator uses. Edit here, nowhere else.
@@ -138,6 +148,74 @@ DAILY_TOO_GENEROUS = [
     {"egg": "Startup"}, {"cash_minutes": 30}, {"egg": "Unicorn", "shares": 10},
 ]
 
+# --- ACTIVE PLAY: the task engine of docs/ACTIVE_LOOPS_PROPOSAL.md (PROPOSAL: not read from any .lua) ---
+# Rewards are in "seconds of the player's current Income" (passes and IPO multiplier included, like DailyConfig).
+# Role families, from CreatureConfig.Creatures (key = employee income): which roles auto-resolve which tasks.
+ACTIVE_ROLE_FAMILY = {
+    2: {"ops": 1},                 # Coffee Capybara (Intern)
+    3: {"eng": 0.5, "ops": 0.5},   # Coding Cat (Junior Engineer) / Pixel Pigeon (Junior Designer)
+    7: {"sales": 1},               # Hustle Hamster (Sales Rep)
+    8: {"eng": 1},                 # Bug Beetle (QA Tester)
+    9: {"ops": 1},                 # Memo Mole (Office Manager)
+    20: {"sales": 1},              # Sales Shark (Sales Lead)
+    24: {"mkt": 1},                # Pitch Parrot (Marketing Lead)
+    50: {"eng": 1},                # Server Sloth (Senior Engineer)
+    60: {"fin": 1},                # Ledger Llama (CFO)
+    150: {"fin": 1},               # Unicorn CEO
+    175: {"fin": 1},               # Venture Dragon (Lead Investor)
+}
+ACTIVE_AUTO_CAP = 0.75             # employees never take more than this share of a task: the founder keeps at least 25%
+ACTIVE_AUTO_PAY = 0.5              # a task an employee resolved pays this share of the reward (only while the player is present)
+ACTIVE_BUDGET_RATE = 0.85          # reward budget: at most this many seconds of Income paid per online second ...
+ACTIVE_BUDGET_BANK = 60            # ... with up to this many seconds banked ...
+ACTIVE_OVER_BUDGET = 0.2           # ... and rewards beyond the budget pay this share (never zero: no punishment)
+ACTIVE_LEVEL_IPO_CAP = 10          # difficulty level = funding stage (0-4) + IPOs done (max 10)
+ACTIVE_CHAIN_STEP, ACTIVE_CHAIN_MAX = 0.1, 2.0   # customer calls: +10% per answer in a row, up to x2
+ACTIVE_SHARES_FRACTION = 0.05      # Shares from the pitch: this share of the run's base Shares, min 1, never doubled by the pass
+ACTIVE_SHARES_WAVE = 1             # the pitch is a wave-1 task
+ACTIVE_HORIZON = 7200              # model seconds the task Monte Carlo runs for each roster (fixed seed per roster)
+# Players: reaction delay (s) before they start a new task, share of tasks they pay attention to, and skill
+ACTIVE_SKILLS = {
+    "typical": {"react": 2.0, "attend": 0.85, "p_bonus": 0.0},
+    "expert": {"react": 0.7, "attend": 1.0, "p_bonus": 0.12},
+    "bot": {"react": 0.15, "attend": 1.0, "p_bonus": 1.0},   # autoclicker / perfect play: skill 1.0, only the budget stops it
+}
+
+
+def _task(name, wave, fam, every, queue, limit, handle, reward, p=1.0, fail=0.0, miss=0.0, count=1, auto=0.0, demand=0.0, unlock=0, chain=False):
+    """One row of the task table. every = (min, max) seconds between arrivals at 0 hires; queue = max waiting;
+    limit = seconds to answer (0 = waits, never expires); handle = seconds of founder attention; reward / fail / miss in
+    seconds of Income (per item if count > 1); auto = share auto-resolved per employee of family fam; demand = extra
+    arrivals per hire; unlock = funding stage (0-4) the task appears at in the FIRST run (after the 1st IPO: always)."""
+    return dict(name=name, wave=wave, fam=fam, every=every, queue=queue, limit=limit, handle=handle, reward=reward, p=p,
+                fail=fail, miss=miss, count=count, auto=auto, demand=demand, unlock=unlock, chain=chain)
+
+
+ACTIVE_TASKS = [
+    # wave 1
+    _task("Customer call", 1, "sales", (20, 40), 3, 8, 3, 7, auto=0.20, demand=0.08, chain=True),
+    _task("Bug storm", 1, "eng", (45, 90), 1, 6, 3, 1.5, p=0.80, fail=-1.0, count=4, auto=0.15, demand=0.08, unlock=1),
+    _task("Ship a feature", 1, "eng", (150, 150), 1, 0, 15, 14, p=0.80, fail=7, auto=0.15, demand=0.04, unlock=1),
+    _task("Investor pitch", 1, None, (480, 720), 1, 30, 8, 40, demand=0.04, unlock=2),
+    _task("Surprise event", 1, "eng", (240, 420), 1, 20, 10, 6, p=0.85, miss=4.5, auto=0.25, demand=0.06, unlock=2),
+    _task("Interview", 1, "ops", (360, 600), 1, 40, 8, 20, auto=0.15, demand=0.08, unlock=1),
+    # wave 2
+    _task("Demo and contract", 2, "sales", (300, 540), 1, 45, 20, 45, p=0.80, fail=18, auto=0.10, demand=0.06, unlock=2),
+    _task("Product feedback", 2, None, (600, 900), 1, 60, 6, 25, demand=0.04, unlock=2),
+    _task("1-to-1 / team pizza", 2, "ops", (480, 900), 2, 90, 6, 12, auto=0.20, demand=0.06, unlock=2),
+    _task("Viral post", 2, "mkt", (360, 600), 1, 10, 4, 16, p=0.75, fail=3, auto=0.20, demand=0.06, unlock=2),
+    _task("Press interview", 2, "mkt", (900, 1200), 1, 45, 15, 28, p=0.80, fail=10, demand=0.04, unlock=3),
+    _task("Ad campaign", 2, "mkt", (600, 900), 1, 0, 8, 20, demand=0.04, unlock=3),
+    _task("Cash crunch", 2, "fin", (900, 1500), 1, 30, 12, 20, p=0.90, miss=9, auto=0.25, demand=0.04, unlock=3),
+    _task("Support ticket", 2, "ops", (40, 70), 5, 12, 2, 2, p=0.90, auto=0.25, demand=0.08, unlock=2),
+    _task("Product launch", 2, None, (1200, 1500), 1, 0, 35, 70, p=0.80, fail=35, unlock=3),
+    # wave 3 (the paired demo needs a partner: arrivals already include the share of time one is around)
+    _task("Paired demo", 3, "sales", (3000, 5000), 1, 20, 20, 90, p=0.85, fail=30, unlock=3),
+    _task("Package pickup", 3, "ops", (60, 120), 2, 15, 2, 2, p=0.90, auto=0.20, demand=0.06, unlock=2),
+]
+# Not in the rate model (each is rare or one per run): pre-IPO roadshow (3 meetings, once per run), Investor Day
+# (weekly), office decoration (cosmetic sink).
+
 SIM_DAYS = 7
 DAY = 24 * 3600
 
@@ -166,10 +244,129 @@ def egg_gain(egg_key, roster, slots, luck):
     return sum(p * max(0, inc - weakest) for p, inc in egg_distribution(egg_key, luck))
 
 
+# =============================================================================
+# Active play (proposal): the task queue Monte Carlo. Used only when a Player has active="typical"/"expert"/"bot".
+# =============================================================================
+
+_ACTIVE_CACHE = {}
+ACTIVE_NONE = {"f": 0.0, "busy": 0.0}
+
+
+def _simulate_tasks(n, fam, level, stage, skill, waves, rng):
+    """Net Income-seconds per second the tasks add for ONE roster, and how busy the founder is. n = employees,
+    fam = role family -> number of employees, stage = funding stage (first run only, None after the 1st IPO)."""
+    prof = ACTIVE_SKILLS[skill]
+    H = ACTIVE_HORIZON
+    rows = [t for t in ACTIVE_TASKS if t["wave"] in waves and (stage is None or t["unlock"] <= stage)]
+    rate = min(1.4, 1 + 0.02 * level)               # harder: tasks come a bit faster ...
+    lim_scale = max(0.65, 1 - 0.03 * level)         # ... with less time ...
+    p_drop = 0.008 * level                          # ... and are a little harder to get right
+    arrivals = []
+    for i, t in enumerate(rows):
+        scale = 1.0 / ((1 + t["demand"] * n) * rate)   # more hires = more demand = shorter gaps
+        clock = rng.uniform(0, t["every"][1]) * scale
+        while clock < H:
+            arrivals.append((clock, i))
+            clock += rng.uniform(*t["every"]) * scale
+    arrivals.sort()
+    share = [min(ACTIVE_AUTO_CAP, 1 - (1 - t["auto"]) ** fam.get(t["fam"], 0)) if t["fam"] and t["auto"] > 0 else 0.0 for t in rows]
+    st = {"net": 0.0, "busy": 0.0, "bucket": float(ACTIVE_BUDGET_BANK), "bt": 0.0, "streak": 0}
+
+    def pay(amount, now):
+        """A reward goes through the budget; a loss (negative) is taken as it is."""
+        if amount <= 0:
+            st["net"] += amount
+            return
+        st["bucket"] = min(ACTIVE_BUDGET_BANK, st["bucket"] + ACTIVE_BUDGET_RATE * (now - st["bt"]))
+        st["bt"] = now
+        if st["bucket"] >= amount:
+            st["bucket"] -= amount
+            st["net"] += amount
+        else:
+            st["net"] += st["bucket"] + (amount - st["bucket"]) * ACTIVE_OVER_BUDGET
+            st["bucket"] = 0.0
+
+    pending = []
+    now, ai = 0.0, 0
+    while now < H:
+        while ai < len(arrivals) and arrivals[ai][0] <= now:
+            at, i = arrivals[ai]
+            ai += 1
+            t = rows[i]
+            if rng.random() < share[i]:                       # an employee took it
+                pay(t["reward"] * t["count"] * ACTIVE_AUTO_PAY, at)
+            elif sum(1 for q in pending if q[0] == i) < t["queue"]:   # queue cap: a full queue drops the arrival, no penalty
+                waits = t["limit"] == 0
+                attend = waits or rng.random() < prof["attend"]
+                pending.append((i, at, (at + t["limit"] * lim_scale) if not waits else math.inf,
+                                at + (prof["react"] if not waits else 10.0) if attend else math.inf))
+        for q in pending[:]:
+            if q[2] <= now:                                    # expired: a miss, never a punishment beyond `miss`
+                pending.remove(q)
+                t = rows[q[0]]
+                st["net"] -= t["miss"] * t["count"]
+                if t["chain"]:
+                    st["streak"] = 0
+        ready = [q for q in pending if q[3] <= now]
+        if ready:
+            q = min(ready, key=lambda r: (r[2], r[1]))
+            t = rows[q[0]]
+            pending.remove(q)
+            if now + t["handle"] > q[2]:                       # no time left to finish it
+                st["net"] -= t["miss"] * t["count"]
+                if t["chain"]:
+                    st["streak"] = 0
+                continue
+            now += t["handle"]
+            st["busy"] += t["handle"]
+            p = 1.0 if skill == "bot" else (min(1.0, max(0.5, t["p"] - p_drop + prof["p_bonus"])) if t["p"] < 1 else 1.0)
+            if t["chain"]:
+                if rng.random() < p:
+                    pay(t["reward"] * min(ACTIVE_CHAIN_MAX, 1 + ACTIVE_CHAIN_STEP * st["streak"]), now)
+                    st["streak"] += 1
+                else:
+                    st["streak"] = 0
+            else:
+                for _ in range(t["count"]):
+                    if rng.random() < p:
+                        pay(t["reward"], now)
+                    else:
+                        pay(t["fail"], now)
+        else:
+            nxt = H
+            if ai < len(arrivals):
+                nxt = min(nxt, arrivals[ai][0])
+            for q in pending:
+                nxt = min(nxt, q[2], q[3] if q[3] > now else math.inf)
+            now = max(nxt, now + 1e-6)
+    return {"f": st["net"] / H, "busy": min(1.0, st["busy"] / H)}
+
+
+def active_factor(roster, stage, ipos, skill, waves):
+    """{"f": extra Income as a fraction of Income, "busy": share of the time the founder is busy} for this team."""
+    if not roster or skill in (None, "ignore"):
+        return ACTIVE_NONE
+    fam = {}
+    for inc in roster:
+        for f, w in ACTIVE_ROLE_FAMILY.get(inc, {"ops": 1}).items():
+            fam[f] = fam.get(f, 0) + w
+    level = stage + min(ipos, ACTIVE_LEVEL_IPO_CAP)
+    first_stage = stage if ipos == 0 else None
+    key = (len(roster), tuple(sorted((f, round(w * 2) / 2) for f, w in fam.items())), level, first_stage, skill, tuple(waves))
+    hit = _ACTIVE_CACHE.get(key)
+    if hit is None:
+        hit = _simulate_tasks(len(roster), dict(key[1]), level, first_stage, skill, waves, random.Random(zlib.crc32(repr(key).encode())))
+        _ACTIVE_CACHE[key] = hit
+    return hit
+
+
 class Player:
     def __init__(self, rng, double_cash=False, vip=False, extra_slots=False, auto_hatch=False, luck_boost=False, shareholder=False,
-                 daily=None, daily_cash_counts=False):
+                 daily=None, daily_cash_counts=False, active=None, active_waves=(1, 2, 3)):
         self.rng = rng
+        self.active = active                # None = OFF (the default); "typical" / "expert" / "bot" = proposal active play
+        self.active_waves = tuple(active_waves)
+        self.online = False                 # True only while a session runs: tasks never pay offline
         self.daily = daily                  # the calendar (list of days) or None
         self.daily_cash_counts = daily_cash_counts   # what-if only: calendar Cash raises the valuation
         self.daily_claims = 0
@@ -204,8 +401,14 @@ class Player:
     def base_income(self):
         return sum(u[2] for u in UPGRADES[: self.upgrades]) + sum(self.roster)
 
-    def income(self):
+    def passive_income(self):
         return self.base_income() * self.mult_pass * self.ipo_mult()
+
+    def income(self):
+        inc = self.passive_income()
+        if self.active and self.online:     # active play only adds Income while the player is online
+            inc *= 1 + active_factor(self.roster, self.stage_index(), self.ipos, self.active, self.active_waves)["f"]
+        return inc
 
     def earn(self, amount):
         self.cash += amount
@@ -263,7 +466,7 @@ class Player:
             self.incubators.append((t + EGGS[egg]["hatch"], egg))
         minutes = min(reward.get("cash_minutes", 0), DAILY_CASH_MAX_MINUTES)
         if minutes > 0:
-            cash = max(DAILY_MIN_CASH, int(self.income() * 60 * minutes))
+            cash = max(DAILY_MIN_CASH, int(self.passive_income() * 60 * minutes))
             if self.daily_cash_counts:
                 self.earn(cash)                 # what-if row only: NOT how the game works
             else:
@@ -357,6 +560,9 @@ class Player:
         # the sim goes public the moment IPO-ready is reached, so the ratio is ~1 (a player who waits gets more)
         ratio = min(IPO_SHARES_RATIO_CAP, max(0.0, self.earned_run / (IPO_STAGES[-1][1] * self.stage_scale)))
         gained = int(IPO_SHARES_PER_IPO * (1 + IPO_SHARES_GROWTH * self.ipos) * ratio ** IPO_SHARES_EXPONENT * self.share_mult)
+        if self.active and ACTIVE_SHARES_WAVE in self.active_waves:
+            # the pitch's Shares: a share of the run's base Shares, never doubled by the Shareholder pass
+            gained += max(1, math.ceil(ACTIVE_SHARES_FRACTION * IPO_SHARES_PER_IPO * (1 + IPO_SHARES_GROWTH * self.ipos)))
         self.shares += gained
         self.shares_log.append(gained)
         self.ipos += 1
@@ -416,6 +622,7 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, daily=None, daily_cash_co
         # daily calendar: claimed at the first login of the day (after hatching, so an incubator is free)
         day_number = int(s_start // DAY)
         p.claim_daily(t, day_number)
+        p.online = True
         while t < s_end:
             wait = p.buy_all_possible(t)
             if p.maybe_ipo(t):
@@ -444,6 +651,7 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, daily=None, daily_cash_co
                 p.mark("all upgrades", t)
             if p.income() >= 500:
                 p.mark("income >= 500/s", t)
+        p.online = False
         last_seen = s_end
     # tail: last offline stretch to the end of the horizon
     end = days * DAY
@@ -736,6 +944,62 @@ def report_daily(n, days=30):
             print(f"| {b} | {name} | {first_text} | {by7:.0f} | {by30:.0f} | {shares:.0f}{change} |")
 
 
+ACTIVE_ROSTERS = [   # employee incomes (CreatureConfig): a typical team at four moments of a run
+    ("1 hire (Cat)", [3]),
+    ("3 hires", [3, 7, 8]),
+    ("5 hires", [3, 7, 8, 20, 24]),
+    ("8 hires, Epics", [3, 7, 8, 9, 20, 24, 50, 60]),
+]
+ACTIVE_MODES = [("passive (today)", None, (1, 2, 3)), ("wave 1", "typical", (1,)), ("waves 1-2", "typical", (1, 2)), ("all waves", "typical", (1, 2, 3))]
+
+
+def report_active(n, days=SIM_DAYS_IPO):
+    """Section 8: what the proposed task engine (docs/ACTIVE_LOOPS_PROPOSAL.md) does to the economy. Only with --active."""
+    total_perks = sum(sum(c) for c in IPO_PERK_COSTS.values())
+    print(f"\n## 8. ACTIVE PLAY (proposal, default OFF), {days} days, median of {n} runs")
+    rows = ", ".join("%s (w%d)" % (t["name"], t["wave"]) for t in ACTIVE_TASKS)
+    print(f"Task rows: {rows}.")
+    print(f"Reward budget {ACTIVE_BUDGET_RATE} s of Income per online second (bank {ACTIVE_BUDGET_BANK} s, over budget pays {ACTIVE_OVER_BUDGET:.0%}); "
+          f"auto-resolve cap {ACTIVE_AUTO_CAP:.0%}, auto-resolved pay {ACTIVE_AUTO_PAY:.0%}; pitch Shares {ACTIVE_SHARES_FRACTION:.0%} of the run's base Shares (min 1, not doubled by the pass).")
+    print("Offline pay and a player who ignores the tasks are exactly today's game (factor 0).\n")
+    print("### 8a. Extra Income from tasks while online (x = 1 + f), by team and moment of the game")
+    print("| Team | Moment | wave 1 | waves 1-2 | all waves | all, expert | all, autoclicker | founder busy (all) |")
+    print("|---|---|---|---|---|---|---|---|")
+    for name, roster in ACTIVE_ROSTERS:
+        for label, stage, ipos in (("1st run, IPO-ready", 4, 0), ("IPO 5", 4, 5), ("IPO 10", 4, 10)):
+            f = [active_factor(roster, stage, ipos, "typical", w) for w in ((1,), (1, 2), (1, 2, 3))]
+            ex = active_factor(roster, stage, ipos, "expert", (1, 2, 3))
+            bot = active_factor(roster, stage, ipos, "bot", (1, 2, 3))
+            print(f"| {name} | {label} | x{1 + f[0]['f']:.2f} | x{1 + f[1]['f']:.2f} | x{1 + f[2]['f']:.2f} | x{1 + ex['f']:.2f} | x{1 + bot['f']:.2f} | {f[2]['busy']:.0%} |")
+    print("\n### 8b. Online time to each IPO, Shares per IPO, and the whole IPO shop (typical player; passive = today's game)")
+    print("| Player | Tasks | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares IPO 1 / 10 (no pass) | Shares IPO 1 / 10 (pass) | IPOs in %d d | Whole shop, pass (%d Shares) |" % (days, total_perks))
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
+    for b in ("active", "casual30", "casual"):
+        for label, skill, waves in ACTIVE_MODES:
+            kw = {"active": skill, "active_waves": waves}
+            runs = [run(b, seed, days=days, use_ipo=True, **kw) for seed in range(n)]
+            pass_runs = [run(b, seed, days=days, use_ipo=True, shareholder=True, **kw) for seed in range(n)]
+            times = []
+            for k in (1, 2, 3, 5, 10):
+                if sum(1 for r in runs if len(r.ipo_times) >= k) < len(runs) / 2:
+                    times.append("not reached")
+                else:
+                    times.append(fmt_active(med([active_minutes_at(b, r.ipo_times[k - 1]) if len(r.ipo_times) >= k else None for r in runs])))
+            def sh(rs, k):
+                v = med([r.shares_log[k - 1] if len(r.shares_log) >= k else None for r in rs])
+                return f"{v:.0f}" if v is not None else "-"
+            done = []
+            for r in pass_runs:
+                total = 0
+                for i, g in enumerate(r.shares_log):
+                    total += g
+                    if total >= total_perks:
+                        done.append((i + 1, r.ipo_times[i] / DAY))
+                        break
+            shop = f"IPO {med([x[0] for x in done]):.0f}, day {med([x[1] for x in done]):.0f}" if len(done) >= len(pass_runs) / 2 else f"not in {days} d ({med([r.shares for r in pass_runs]) / total_perks:.0%})"
+            print(f"| {b} | {label} | " + " | ".join(times) + f" | {sh(runs, 1)} / {sh(runs, 10)} | {sh(pass_runs, 1)} / {sh(pass_runs, 10)} | {med([len(r.ipo_times) for r in runs]):.0f} | {shop} |")
+
+
 def main():
     global SIM_DAYS_IPO
     ap = argparse.ArgumentParser()
@@ -743,7 +1007,8 @@ def main():
     ap.add_argument("--markdown", action="store_true", help="(output is Markdown already; flag kept for clarity)")
     ap.add_argument("--daily", action="store_true", help="only section 7: the daily calendar table")
     ap.add_argument("--ipo", action="store_true", help="only section 6: real IPO numbers in active minutes (all --runs, not half)")
-    ap.add_argument("--days", type=int, default=60, help="days simulated in section 6 (default 60)")
+    ap.add_argument("--active", action="store_true", help="only section 8: the ACTIVE-PLAY proposal (default OFF everywhere else)")
+    ap.add_argument("--days", type=int, default=60, help="days simulated in section 6 and 8 (default 60)")
     args = ap.parse_args()
     n = args.runs
     SIM_DAYS_IPO = args.days
@@ -755,6 +1020,9 @@ def main():
           "to be roughly 15-25% faster per IPO cycle than these numbers show.")
     print(f"Daily login calendar (DailyConfig.lua, M6) IS modeled: claimed at the first login of every day, Cash as a gift "
           f"(not valuation). In sections 1-6: {'ON' if DAILY_IN_ALL_TABLES else 'OFF'} (DAILY_IN_ALL_TABLES); section 7 compares calendars.")
+    if args.active:
+        report_active(n, args.days)
+        return
     if args.daily:
         report_daily(n)
         return
