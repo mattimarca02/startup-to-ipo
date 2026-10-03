@@ -105,6 +105,10 @@ local C = {
 	mint = { 170, 226, 204 }, mintDark = { 46, 110, 100 }, mintLight = { 214, 242, 230 }, coral = { 232, 128, 102 }, coralLight = { 248, 172, 148 },
 	oak = { 214, 184, 140 }, oakDark = { 150, 112, 76 }, offwhite = { 244, 246, 244 }, doorLight = { 238, 242, 242 }, doorGray = { 204, 210, 214 },
 	rugTeal = { 60, 138, 126 }, cream = { 246, 238, 214 }, glassTint = { 126, 172, 190 }, glassDark = { 54, 84, 100 }, skyGlass = { 170, 210, 232 },
+	-- Stage 3: the loft (red brick, black steel, amber)
+	brick = { 172, 94, 76 }, brickLight = { 190, 112, 90 }, steelBlack = { 40, 44, 54 }, birch = { 232, 224, 206 }, sofaBlue = { 72, 86, 112 },
+	sofaBlueLight = { 112, 130, 164 }, amber = { 246, 154, 52 }, bayDark = { 44, 52, 66 }, shutter = { 196, 202, 206 },
+	stickyPink = { 255, 170, 190 }, stickyGreen = { 170, 232, 150 },
 }
 
 -- Helpers --------------------------------------------------------------------
@@ -454,7 +458,118 @@ seed.desk = {
 	B("MonitorScreen", 0, 2.42, -0.0, 1.2, 0.64, 0.04, C.screenBlue, "Neon"),
 }
 
-PlotArt.Stages = { garage, seed }
+-- Stage 3: the expanded garage-office (Series A) ----------------------------------------
+-- The loft: red brick walls with black steel trim, a second bay (two roll-up doors) with glass partitions
+-- around the outer incubators, a whiteboard wall over the middle, warm wall lamps, filing cabinets and
+-- a charcoal sofa. Still open to the camera: low side walls, no roof, no front wall.
+
+local seriesA = { key = "SeriesA", floor = { color = { 172, 176, 178 }, material = "Concrete" } }
+
+-- One roll-up bay door in the back wall, centered at x, its shutter half rolled up
+local function bayDoor(tag, x)
+	return {
+		B("Bay" .. tag .. "Dark", x, 4.4, -29.3, 10.4, 8.8, 0.1, C.bayDark, "SmoothPlastic"),
+		B("Bay" .. tag .. "FrameL", x - 5.45, 4.6, -29.15, 0.5, 9.2, 0.5, C.steelBlack, "Metal"),
+		B("Bay" .. tag .. "FrameR", x + 5.45, 4.6, -29.15, 0.5, 9.2, 0.5, C.steelBlack, "Metal"),
+		B("Bay" .. tag .. "Header", x, 9.15, -29.15, 11.4, 0.7, 0.5, C.steelBlack, "Metal"),
+		B("Bay" .. tag .. "Shutter", x, 7.4, -29.15, 10.4, 2.8, 0.25, C.shutter, "Metal"),
+	}
+end
+
+-- A glass partition standing in the gap between two incubators, from the back wall toward the front
+local function partition(tag, x)
+	return {
+		B("Partition" .. tag .. "Glass", x, 2.7, -23.9, 0.1, 5.4, 10.6, C.glassTint, "Glass", { transparency = 0.55 }),
+		B("Partition" .. tag .. "Rail", x, 5.55, -23.9, 0.25, 0.3, 10.6, C.steelBlack, "Metal"),
+		B("Partition" .. tag .. "PostFront", x, 2.85, -18.75, 0.3, 5.7, 0.3, C.steelBlack, "Metal"),
+		B("Partition" .. tag .. "PostMid", x, 2.85, -24, 0.3, 5.7, 0.3, C.steelBlack, "Metal"),
+	}
+end
+
+-- A warm wall lamp on an arm: arm, shade, glowing bulb (the bulb carries the PointLight)
+local function wallLamp(tag, x)
+	return {
+		B("WallLampArm" .. tag, x, 10.8, -28.7, 0.2, 0.2, 1.4, C.steelBlack, "Metal"),
+		B("WallLampShade" .. tag, x, 10.55, -28.1, 1.1, 0.5, 1.1, C.steelBlack, "Metal"),
+		P("WallLampBulb" .. tag, "Ball", { 0.6, 0.6, 0.6 }, { x, 10.0, -28.1 }, C.bulb, "Neon",
+			{ light = { color = C.warmLight, brightness = 1.3, range = 36 } }),
+	}
+end
+
+local function whiteboardWall()
+	local out = {
+		B("WallBoard", 0, 7.6, -29.3, 15.6, 4.4, 0.12, C.white, "SmoothPlastic"),
+		B("WallBoardTop", 0, 9.9, -29.25, 15.9, 0.25, 0.2, C.steelBlack, "Metal"),
+		B("WallBoardBottom", 0, 5.4, -29.25, 15.9, 0.25, 0.2, C.steelBlack, "Metal"),
+		B("WallBoardTray", 0, 5.2, -29.1, 9, 0.15, 0.4, C.silver, "Metal"),
+		B("WallBoardArrow", -2.4, 7.4, -29.2, 7, 0.22, 0.04, C.amber, "SmoothPlastic"),
+	}
+	local notes = { { -6.2, 8.6, C.sticky }, { -4.6, 8.9, C.stickyPink }, { 4.4, 8.7, C.stickyGreen }, { 6, 8.3, C.sticky }, { 3, 6.2, C.stickyPink } }
+	for i, n in ipairs(notes) do
+		table.insert(out, B("WallNote" .. i, n[1], n[2], -29.2, 0.9, 0.9, 0.04, n[3], "SmoothPlastic"))
+	end
+	return out
+end
+
+seriesA.shell = join(
+	{
+		B("BackWall", 0, 5.8, -29.7, 60, 11.6, 0.6, C.brick, "Brick"),
+		B("BackBase", 0, 0.35, -29.34, 60, 0.7, 0.12, C.steelBlack, "Metal"),
+		B("BackCap", 0, 11.8, -29.7, 60, 0.4, 0.9, C.steelBlack, "Metal"),
+		B("SideWallL", -29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.brickLight, "Brick"),
+		B("SideWallR", 29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.brickLight, "Brick"),
+		B("SideBaseL", -29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.steelBlack, "Metal"),
+		B("SideBaseR", 29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.steelBlack, "Metal"),
+		B("SideCapL", -29.7, 5.65, 0.3, 0.9, 0.3, 59.4, C.steelBlack, "Metal"),
+		B("SideCapR", 29.7, 5.65, 0.3, 0.9, 0.3, 59.4, C.steelBlack, "Metal"),
+		B("PostBackL", -29.7, 6, -29.7, 0.9, 12, 0.9, C.steelBlack, "Metal"),
+		B("PostBackR", 29.7, 6, -29.7, 0.9, 12, 0.9, C.steelBlack, "Metal"),
+		B("PostFrontL", -29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.steelBlack, "Metal"),
+		B("PostFrontR", 29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.steelBlack, "Metal"),
+	},
+	bayDoor("L", -14.5),
+	bayDoor("R", 14.5),
+	whiteboardWall(),
+	partition("L", -18),
+	partition("R", 18)
+)
+
+seriesA.decor = join(
+	wallLamp("L", -22),
+	wallLamp("M", 0),
+	wallLamp("R", 22),
+	{
+		-- Safety lines of the second bay, painted on the floor under the partitions
+		B("BayLineL", -18, 0.03, -23.9, 0.4, 0.06, 10.6, C.amber, "SmoothPlastic"),
+		B("BayLineR", 18, 0.03, -23.9, 0.4, 0.06, 10.6, C.amber, "SmoothPlastic"),
+		-- Two filing cabinets in the gap left of the middle incubator
+		B("CabinetA", -7.2, 2, -27.4, 2, 4, 1.6, C.grayLight, "Metal"),
+		B("CabinetB", -4.8, 2, -27.4, 2, 4, 1.6, C.grayLight, "Metal"),
+		B("CabinetTop", -6, 4.05, -27.4, 4.2, 0.12, 1.7, C.steelBlack, "Metal"),
+		-- The front-left corner: a rug, a charcoal sofa, a table, a plant and a floor lamp
+		B("RugBase", -20.8, 0.03, 24, 9, 0.06, 7, C.steelBlack, "Fabric"),
+		B("RugInner", -20.8, 0.05, 24, 7.6, 0.1, 5.6, C.amber, "Fabric"),
+		B("TableTop", -22.2, 1.35, 24, 2.4, 0.2, 2.4, C.birch, "Wood"),
+		B("TableBase", -22.2, 0.625, 24, 1.6, 1.25, 1.6, C.steelBlack, "Metal"),
+		B("FloorLampPole", -27.8, 2.2, 20.4, 0.2, 4.4, 0.2, C.steelBlack, "Metal"),
+		B("FloorLampShade", -27.8, 4.8, 20.4, 1.2, 0.9, 1.2, C.bulb, "SmoothPlastic"),
+	},
+	sofaLeft("Sofa", -28.1, 24, C.sofaBlue, C.sofaBlueLight),
+	plant("CornerPlant", -27.6, 28.4, { 1.2, 1.1 }, 2.6, C.steelBlack, C.leaf),
+	plant("GapPlant", 6, -26.5, { 1.6, 1.4 }, 3, C.steelBlack, C.leaf),
+	founderDesk(10.5, 24.5, { top = C.birch, panel = C.steelBlack, accent = C.screenBlue })
+)
+
+-- A hire's desk: a birch top on two black steel legs and a monitor (screen toward the hire)
+seriesA.desk = {
+	B("DeskTop", 0, 1.92, 0, 3.6, 0.16, 1.7, C.birch, "Wood"),
+	B("DeskLegL", -1.65, 0.92, 0, 0.2, 1.84, 1.5, C.steelBlack, "Metal"),
+	B("DeskLegR", 1.65, 0.92, 0, 0.2, 1.84, 1.5, C.steelBlack, "Metal"),
+	B("MonitorFrame", 0, 2.42, 0.1, 1.4, 0.84, 0.1, C.black, "SmoothPlastic"),
+	B("MonitorScreen", 0, 2.42, 0, 1.2, 0.64, 0.04, C.screenBlue, "Neon"),
+}
+
+PlotArt.Stages = { garage, seed, seriesA }
 
 -- Upgrade props ----------------------------------------------------------------
 -- Each stands in its upgrade's slot (offsets from the slot on the floor), facing the front. Every prop
