@@ -1,6 +1,6 @@
 # Building pass: a building around each of the five rooms, with a roof that fades when you walk in
 
-Branch `building-pass` (from `visuals-garage` at `7f5c141`). Status: **proposal + new files only**. Nothing in an existing file is changed by this branch except the claim rows in `CONTRIBUTING.md`. The edits to existing files are listed in section 8 and need your approval; they are also ready as `docs/building_pass_integration.patch`.
+Branch `building-pass` (from `visuals-garage` at `7f5c141`). Status: **all five phases built, new files only** (this file was the Phase 1 proposal; the numbers in sections 2, 4, 6 and 9 are now the real ones). Nothing in an existing file is changed by this branch except the claim rows in `CONTRIBUTING.md`. The edits to existing files are listed in section 8 and need your approval; they are also ready as `docs/building_pass_integration.patch`.
 
 Looks only, like the rest of the plot visuals: nothing is saved, sent through a remote or read back, no gameplay position moves, nothing collides, nothing is bought or opened by touching it.
 
@@ -18,15 +18,15 @@ Looks only, like the rest of the plot visuals: nothing is saved, sent through a 
 
 ## 2. The shell, stage by stage
 
-Same footprint for all five (62 x 62 outside, a 60.4 x 60.4 inside, 14 studs to the underside of the roof, roof slab 65 x 65 so it overhangs by 1.5). Door opening 9 wide (x -4.5 to 4.5) and 9 high, centered on the walking lane (the lane is only 5 wide, the spawn is in it). Colors come from each room's palette so the outside matches the inside.
+Same footprint for all five (62 x 62 outside, a 60.4 x 60.4 inside, 14 studs to the underside of the roof, roof slab 65 x 65 so it overhangs by 1.5). Door opening 9 wide (x -4.5 to 4.5) and 9 high, centered on the walking lane (the lane is only 5 wide, the spawn is in it). Colors come from each room's palette so the outside matches the inside. A "step" is a flat 0.1 stud path on the ground (nothing is solid, so a raised step would only bury the player's feet).
 
-| # | Stage | Walls | Roof and rooftop | Door | Windows | Sign | Ground pieces (stay visible) | Target parts |
+| # | Stage | Walls | Roof and rooftop | Door | Windows | Sign | Ground pieces (stay visible) | Parts built (fade + ground) |
 |---|---|---|---|---|---|---|---|---|
-| 1 | `Garage` | Rusty dented sheets (3 per side, 3 at the back, 2 + lintel at the front), dark corner posts, ribs on the front | Rust sheet roof with ribs, a blue repair tarp, a stove pipe, an old AC box, a crooked wooden board | Roll-up door pulled up: drum, two hanging slats, guide rails | One small taped window | `BUILD YOUR STARTUP` on the roof board | Concrete step, a tire, a weed tuft | 52 |
-| 2 | `Seed` | Fresh mint paint, dark teal base band and corner trim | Flat mint roof, teal parapet, a satellite dish, a vent | Four-panel door standing open, teal frame, awning | Two clean windows with sills | `OFFICE` over the door | Step, welcome mat, two small planters | 48 |
-| 3 | `SeriesA` | Red brick with black steel trim, a steel band every few studs | Black steel parapet, skylight boxes, two vents, amber warning stripe | Wide steel frame, one big sliding panel open, two closed roll-up bays beside it | Two glass bays | `OFFICE` on a steel plate | Step, bollards, planters | 54 |
-| 4 | `SeriesB` | White panels with a ribbon of cobalt glass, navy columns | Parapet with cobalt cap, glass skylight strip, HVAC units | Glass entrance with a canopy | Four tall glass panels | `OFFICE` on the canopy | Wide step, planters, a bench | 52 |
-| 5 | `IpoReady` | Polished white with graphite columns, big glass curtain panels | Gold-trimmed parapet, glass dome box, an antenna, a rooftop logo | Lobby with two columns and a deep canopy | Four big curtain-wall panels | `HQ` in a neon-rimmed sign | Wide step, two planters, flag poles | 56 |
+| 1 | `Garage` | Rusty dented sheets (3 per side, 3 at the back, 2 + lintel at the front), dark corner posts, ribs on the front | Rust sheet roof with ribs, a blue repair tarp, a stove pipe, an old AC box, a crooked wooden board | Roll-up door pulled up: drum, two hanging slats, guide rails | One small taped window | `BUILD YOUR STARTUP` on the roof board | Concrete path, a tire, a weed tuft, a crate | 51 (47 + 4) |
+| 2 | `Seed` | Fresh mint paint, dark teal base band and corner trim | Flat mint roof, teal parapet, a satellite dish, a vent | Four-panel door standing open, teal frame, awning | Two clean windows with sills | `OFFICE` over the door | Path, welcome mat, two small planters | 47 (41 + 6) |
+| 3 | `SeriesA` | Red brick with black steel trim, a steel band every few studs | Black steel parapet, skylight boxes, two vents, amber warning stripe | Wide steel frame, one big sliding panel open, two closed roll-up bays beside it | Two glass bays | `OFFICE` on a steel plate | Path, two bollards, two planters | 56 (49 + 7) |
+| 4 | `SeriesB` | White panels with a ribbon of cobalt glass, navy columns | Parapet with cobalt cap, glass skylight strip, HVAC units | Glass entrance with a canopy | Four tall glass panels | `OFFICE` on the canopy | Wide path, a bench, two planters | 48 (40 + 8) |
+| 5 | `IpoReady` | Polished white with graphite columns, big glass curtain panels | Gold-trimmed parapet, glass dome box, an antenna, a rooftop logo | Lobby with two columns and a deep canopy | Four big curtain-wall panels | `HQ` in a neon-rimmed sign | Wide path, two planters, two flag poles | 55 (46 + 9) |
 
 "Bright chunky cartoon": big simple blocks, thick trim, one accent color per stage, no tiny detail. Built-in Parts and the same material list as the rooms; nothing random, no assets.
 
@@ -59,9 +59,9 @@ The existing limit is 260 parts **per room, props included** (`PlotVisuals.MAX_P
 
 **If the shell had to share the 260, it may use 3 to 16 parts. That is not enough** (a roof, four walls with a door gap and a lintel is 8 parts before any window, trim or sign). So the shell does **not** share it (D-1). The building gets its own budget:
 
-- `PlotBuildingVisuals.MAX_PARTS = 64` per stage (targets in section 2 are 48 to 56, the exact count is in section 9), `MAX_STATIC = 12` of them ground pieces, 0 PointLights, 0 particle emitters, at most 2 SurfaceGuis.
+- `PlotBuilding.Budget` = 64 parts per stage (built: 51 / 47 / 56 / 48 / 55), 12 of them ground pieces at most (built: 4 / 6 / 7 / 8 / 9), 0 PointLights, 0 particle emitters, at most 2 SurfaceGuis (built: 1 each).
 - The room check (`PlotVisuals.check`) is not run on the building: it measures `PlotRoom` only, and the building is a sibling Model, so the existing 260 limit, the 3-light limit and the room tests are unaffected.
-- Total on screen per stage becomes room + building, **about 300 to 320 parts per plot**. Six plots: about 1,900 anchored, non-colliding, shadowless parts for the whole server. For scale: the six rooms alone are about 1,500.
+- Total on screen per stage becomes room + building: **307 / 291 / 310 / 301 / 312 parts** (stages 1 to 5). Six plots at the largest stage: 1,872 anchored, non-colliding, shadowless parts for the whole server (six rooms at stage 5 alone are 1,542).
 
 Alternatives I did not take (they need edits to files that are not mine): thin the rooms until the shell fits (edits `PlotArt.lua` and breaks its fingerprints on purpose), or raise 260 (edits `PlotVisuals.lua` and `tools/daily_test.py`, which another session owns).
 
@@ -92,8 +92,8 @@ Client (new `BuildingClient`, a LocalScript, source in `docs/studio_scripts/Buil
 
 ## 6. Performance on phones
 
-- Server: building a stage is one `Model` of at most 64 `Part`s plus two `SurfaceGui`s, built once per stage change (rare) and once on join. `sync` is called every second per player by the income loop: when the stage hasn't changed it does one `FindFirstChild` and one attribute read, no allocation.
-- Client: per frame, 6 building checks at most (6 plots) = about 40 comparisons, no allocation, no raycast, no `GetPartBoundsInBox`. Property writes only while a fade runs (a part per write, about 20 writes per part over 0.4 s, 64 parts at most per building, usually one building at a time).
+- Server: building a stage is one `Model` of at most 64 `Part`s plus two `SurfaceGui`s, built once per stage change (rare) and once on join. `sync` is called every second per player by the income loop: when the stage hasn't changed it does one `FindFirstChild` and one attribute read, no allocation. A building is one `Model` with two child Models, at most 64 `Part`s and one `SurfaceGui`.
+- Client: per frame, 6 building checks at most (6 plots) = about 60 comparisons, one `pcall` per building with no closure, no allocation, no raycast, no `GetPartBoundsInBox`. Property writes only while a fade runs (a part per write, about 20 writes per part over 0.4 s, 64 parts at most per building, usually one building at a time).
 - Rendering: all parts opaque or glass, no shadows, no lights, no particles, no textures, no meshes. Fading parts are 64 transparent draws for 0.4 s. Once the roof is gone the cost is the same as today (fully transparent parts are not drawn).
 - Memory: about 1,900 more tiny anchored parts server-wide. Parts that are far away are not streamed differently from today's.
 - Mitigations if a low-end phone struggles: lower `MAX_PARTS`, drop the `Static` pieces, or fade in 10 levels instead of 20 (`FadeLevels`) with no code change.
@@ -129,6 +129,10 @@ No other line of `TycoonCore.lua` changes (+29 lines, 0 removed). The `data.look
 
 ## 9. What was checked, and what cannot be
 
-Filled in at the end of Phase 5 (test counts, parts per stage, hashes): see `docs/STUDIO_SYNC_BUILDING.md` and the notes at the bottom of this file.
+**Checked** (`python3 tools/building_test.py`, with the free `luau` binary; `tools/daily_test.py` is not touched and still passes):
 
-Cannot be checked without Studio, and is **not** checked: how any of it looks (colors, proportions, whether the roof hides the camera's view the way I expect), the real fade speed on a phone, Roblox's own camera behavior near the walls, streaming, and whether a `LocalScript` pasted by hand runs in the order I assume. The tests use a fake Roblox with real vector and rotation math, so geometry, budgets, flags, overlaps and the fade math are proved; appearance is not.
+- **398 checks and 57 mutation runs** in `tools/building_test.py`: the data (`validate`), the five buildings built in a fake Roblox with real vector and rotation maths (parts 51 / 47 / 56 / 48 / 55, flags, no light, no emitter, text whitelist, doorway clear, no part in a gameplay zone or in a room part, nothing floating, no two faces on one plane), `sync`, the pure inside check (door, corners, y above the roof, hysteresis, NaN and infinity), the pure fade maths (always 0 to 1, never overshoots, bad frame times), the real `BuildingClient` script running against a fake world (walk in, walk out, reversing mid-fade, door apron, hysteresis, a stage change while inside, no character, two buildings, late parts, bad attributes, 3,000 random frames), the fingerprints of the five rooms, the props and the layout (equal to the ones `daily_test.py` pins, and the same layout read from the scripts), and source checks (the client never touches a remote, collision or position; the two copies of the maths are the same text; no existing file is edited).
+- **Mutation runs:** 12 breaks of the inside check and 11 of the fade, each run on the module and on the client copy, plus 11 breaks of the client's wiring: **57 of 57 caught**.
+- **The integration patch** applies to the base `TycoonCore.lua`, compiles, and with it applied both test files pass with the same counts (`python3 tools/building_test.py --integration`).
+
+**Cannot be checked without Studio, and is not checked:** how any of it looks (colors, proportions, whether the front wall, roof and sign read well from the default camera), the real fade speed on a phone, Roblox's own camera behavior near the walls and roof, `Glass` and `Neon` rendering, that `NormalId.Back` is the +Z face (the code follows `PlotVisuals`), that the `Cylinder` parts stand the way they are rotated, whether a `LocalScript` pasted by hand finds the tag in time, StreamingEnabled behavior, and frame rate on a real phone. The list to look at is in `docs/STUDIO_SYNC_BUILDING.md` section (c); the judgment calls and risks are in `docs/BUILDING_PASS_NOTES.md`.
