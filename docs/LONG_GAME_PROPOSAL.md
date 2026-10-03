@@ -1,108 +1,130 @@
 # Long game: the IPO is the last thing (proposal, design only)
 
-Branch `active-loops`; no game code, no `IpoConfig` or perk number changed. Direction from the owner: first IPO after **50+ active online hours**, every later loop 50+ h, tasks are the core. This **supersedes** the pacing and Shares parts of `docs/ACTIVE_LOOPS_PROPOSAL.md` (section 3 and question 1; its engine, task table and safety stay) and `docs/ECONOMY.md` sections 3-3e. Numbers come from `python tools/economy_sim.py --long --runs 40` (section 9). "Active hour" = online and answering tasks. Decided earlier and kept: calls pay 7 s of Income, task Cash counts toward valuation, the Cash pass multiplies task Cash, pitch Shares are never doubled, Investor Day prizes are cosmetic.
+Branch `active-loops`; no game code, no `IpoConfig` or perk number changed. Owner's direction: first IPO after **50+ engaged hours**, every later loop 50+ h, tasks are the core. **Supersedes** the pacing and Shares parts of `docs/ACTIVE_LOOPS_PROPOSAL.md` and `docs/ECONOMY.md` 3-3e. Numbers: `python tools/economy_sim.py --long --runs 40` (item list = data `LONG_ITEMS`). **Engaged** = a task answered and graded by the server in the last 3 minutes; "hour" below = engaged hour. Kept: calls pay 7 s of Income, task Cash counts toward valuation, the Cash pass multiplies it, pitch Shares never doubled, Investor Day prizes cosmetic.
 
-**Principle: Cash can only fill a rung, never skip it.** Each rung has an income ceiling and a valuation threshold. Money (packs, passes, away pay) buys things sooner inside a rung; only active play moves the clock.
+**Principle: Cash can only fill a rung, never skip it.** Money buys sooner inside a rung; only engaged play moves the clock.
 
-## 1. Pacing
+## 1. Pacing: a target to verify, not a result
 
-First IPO **57 active hours** for the typical player (target 55-60; an expert at tasks 55). Later loops: prices and thresholds grow **+5% per loop**: loops 57 / 57 / 58 h, IPO 10 at 607 h in total (about 61 h each). Flat (+0%) shrinks to 53 h by loop 3 (kept team, perks); +10% reaches 64 h by loop 3 and keeps rising. Same ladder every loop, kept employees only make the early rungs faster.
+The ladder (section 3) is **fitted** so an always-engaged typical player takes 1.5 / 4 / 6.5 / 9 / 24 / 15 h per rung (**60 h**; **57 h** for the regular player with away pay). So "50+ hours" is the input of the fit; only Studio can measure the real task bonus and item Incomes. Sensitivity (regular player, IPO 1):
 
-| Player (sim) | Active h/week | IPO 1 | IPO 2 | IPO 5 | IPO 10 |
-|---|---|---|---|---|---|
-| dedicated (2 h/day) | 13 | 57 h, **4 wk** | 9 wk | 22 wk | 46 wk |
-| regular (1 h/day) | 6.4 | 57 h, **9 wk** | 18 wk | 46 wk | 97 wk |
-| casual (3 x 1 h/week) | 2.5 | 57 h, **23 wk** | 45 wk | 114 wk | 238 wk |
+| Change (one at a time) | Hours | | Changes stacked | Hours |
+|---|---|---|---|---|
+| none (draft) | **57** | | optimistic: Income x1.25, prices -30% | 32 |
+| task bonus x0.5 / none | 74 / 107 | | pessimistic: bonus x0.5, Income x0.8, prices +30% | 120 |
+| item Income x0.8 / x1.25 | 71 / 46 | | worst: no bonus, Income x0.8, prices +30% | 173 |
+| prices (thresholds follow) -30% / +30% | 40 / 74 | | | |
 
-A casual player sees a rung every 2-6 weeks and about 3 unlocks per 1-hour session. Honest: casual IPO 1 is 5 months; casual IPO 10 is 4.6 years, so casual players are served by rungs, titles and the leaderboard, not by IPOs.
+**Range: 40-107 h for one wrong assumption, 32-173 h stacked.** Prices are refitted after the measurement (section 8); 50+ h is claimed only then.
 
-## 2. The stage ladder (the spine)
+Weeks to IPO 1 / 10: dedicated (2 h/day) **4** / 52; regular (1 h/day) **9** / 110; casual (3 x 1 h/week) **22** / 270.
 
-7 rungs + IPO-ready (Garage, Seed, Series A, B, **C, D, Pre-IPO** are new; 8 entries in `IpoConfig.Stages` instead of 5). Valuation to enter the next rung (loop 0 prices) and hours from the calibrated sim; a reward moment (new office, hire type, task, product, upgrade, decor, title) every **12-29 min**, faster early (12 in the first 90 minutes).
+Prices and thresholds grow **+10% per loop** (`StageScale`): loops 57 / 54 / 57 h, IPO 10 at 686 h in total (+5%: 57 / 52 / 52; +15%: 57 / 56 / 62; flat: 57 / 49 / 47).
 
-| Rung | Hours in rung (cum.) | Enter next at | Income ceiling /s | Moments (min each) | New this rung |
-|---|---|---|---|---|---|
-| Garage | 1.5 (1.5) | $32K | 6 | 12 (8) | calls; today's 6 upgrades, 3 hires, Garage egg |
-| Seed | 4 (5.5) | $362K | 20 | 20 (12) | office 2, bugs, features, interview, Startup egg, 1 product |
-| Series A | 6.5 (12) | $2.6M | 65 | 24 (16) | office 3, pitch, events, demo, new egg, 2 products |
-| Series B | 9 (21) | $13.8M | 210 | 27 (20) | office 4, press, ads, crisis, Unicorn egg |
-| Series C | 11 (32) | $61.7M | 700 | 28 (24) | office 5, launch, paired demo, new egg |
-| Series D | 13 (45) | $253M | 2,300 | 29 (27) | office 6, 3 products, new egg |
-| Pre-IPO | 15 (60) | $982M | 7,500 | 31 (29) | office 7 (HQ), roadshow, 4 products |
+## 2. Clock rules: engaged, away, daily cap
 
-**Content to fill one loop (171 moments, 21 min each):** 6 offices, 42 office upgrades (6 per office), 25 hire types, 6 egg tiers, 20 tasks, 14 products, 50 decor pieces, 8 titles. **Exists today: 20 (12%)**: 6 upgrades, 11 hires, 3 eggs. **Missing 151:** all offices after the garage, 36 upgrades, 14 hire types (income up to ~600 each: today's best is 175 and 8 slots cap income near 1,400; the ceilings need ~20 desks), 3 egg tiers, all 20 tasks (designed, 0 built), 14 products, 50 decor, 8 titles. Loops 2+ replay the ladder: add one **industry skin** per IPO (office theme, 4 hires, 1 task flavour, titles); honest: after loop 2 the pull is leaderboard, poaching and Investor Day more than content.
+- **Engaged** is decided by the server only: a graded task answer (not skipped, not auto-resolved, reaction at least 0.25 s, not flagged) in the last 180 s. Movement, jumping, chat or client reports never count (ACTIVE doc section 2).
+- **Valuation:** engaged Cash counts **100% for the first 4 engaged hours per UTC day, 10% after**.
+- **Away** (not engaged, online or offline): the startup banks **10% of the base Income** (no passes, boosts or chain) for up to **2 h** per return (Night Shift: +30 min per level, 4 h at most). The next graded answer pays the bank at once; **10%** of it counts toward valuation. Tasks, auto-resolve and chains pay nothing away; Cash packs and daily Cash never count.
 
-## 3. Offline and idle: active hours are the gate
-
-**Rule:** after 3 minutes without a valid input the startup is *away* (also while the app stays open, so AFK does not farm). Away pay = **10% of the active pay you left with**, banked up to **2 h per return** (Night Shift +30 min per level, to 4 h), spendable at once, but **only 10% of it counts toward valuation**. Cash packs and daily Cash never count (gifts). Tasks, auto-resolve and chains pay nothing away.
-
-| Rule (regular player) | Active h to IPO 1 | Valuation from away | Check-in only (1 min/day) |
-|---|---|---|---|
-| none | 60.0 | 0% | never |
-| **proposed** (10% pay, 2 h, 10% counts) | **57.3** | 2% | never in 3 years |
-| 25% counts | 55.9 | 5% | 14.9 h, 133 wk |
-| **today** (50% passive, 8 h, 100% counts) | **20.0** | 69% | 0.6 h, 5 wk |
-
-Today's rule would give IPO 1 after 20 active hours and let a 1-minute-a-day player in 5 weeks. "Come back and see progress" stays: the bank, hatched eggs and a stage bar that moves a little. **Daily calendar:** Cash days stay a gift; eggs come only from tiers already unlocked (no skipping); **Day 7 loses its 3 Shares**: 3 a week is 27 Shares over a regular player's 9 weeks to IPO 1, more than the IPO pays (20). Swap for a decor piece.
-
-## 4. Shares and the shop
-
-Formula keeps its shape: `Shares = 20 x (1 + 0.25 x IPOs done) x min(ratio, 1.5) ^ 0.5` (was 10, 0.8, cap 2; x2 with the pass). Per IPO 20, 25, 30 ... 65 at IPO 10; total 20 / 45 / 150 / 425 after IPO 1 / 2 / 5 / 10 (pass: 40 / 90 / 300 / 850). Shop **750 Shares** (was 1,770): core 316 (same six perks, keys and levels, re-priced) + a new **prestige wing 434** (office skins, creature hats, titles; cosmetic). Speed perks (FasterEggs, ExtraIncubator, ExtraSlot, BaseLuck) cost 154 together and are worth at most about +25% Income (estimate, not simulated).
-
-| After | Shares (pass) | What you own (cheapest levels first) |
+| Player, 24/7 online (sim, median) | Before: any input = engaged, no cap | After: graded task, 4 h/day then 10% |
 |---|---|---|
-| IPO 1 | 20 (40) | hatch -30%, luck +30%, Night Shift 1, poach -10% (pass: + incubator, desk) |
-| IPO 2 | 45 (90) | hatch -40%, luck +40%, +1 incubator, +1 desk, Night Shift 2, poach -15% |
-| IPO 5 | 150 (300) | speed perks nearly done (pass: all, IPO 4); Night Shift 4h, poach -30% |
-| IPO 10 | 425 (850) | core done (IPO 9; pass IPO 6), 110 Shares into the wing (pass: wing done, IPO 10) |
+| **macro** (input only, no tasks) | 115 h, **4.8 days** | **never** (pays nothing, counts nothing) |
+| **task-bot** at the budget cap | 55 h, **2.3 days** | 172 h online, **7.2 days** |
+| pulse-bot (3 min of tasks every 2 h) | 63 days | 63 days (equals a regular player) |
+| for scale: dedicated 2 h/day / regular | 30 / 63 days | 30 / 63 days |
 
-Whole shop: IPO 15 without the pass, IPO 10 with it. Costs (core): FasterEggs 1,2,3,5,7,10,16; Incubator 4,8; Desk 4,8,18; Scouts 1,2,3,5,7,10,16,24; Night Shift 2,4,7,12 (+30 min each); Poach 2,3,4,6,8,11,15,20,28,40. **Must change:** `IpoConfig` (SharesPerIpo, growth, cap, `Perks` costs, OfflineCap `perLevel`, Stages 5 to 8 with new keys `SeriesC`, `SeriesD`, `PreIpo` before `IpoReady`, `StageScale(L) = multiplier(L) x 1.35 x 1.05^L` replaces `StageGrowthPerIpo ^ L` for thresholds and prices); sim constants (`IPO_*`, `IPO_PERK_COSTS`); `tools/daily_test.py` (the 73 shop checks assume 1,770; stage and Shares checks); docs (ECONOMY, CLAUDE.md save notes, ROADMAP, D1_SHOP_OPTIONS); the IpoClient "wait longer" hint. Re-pricing is safe **only before launch** (nobody holds real perks); after launch add levels only.
+The macro hole is closed. A perfect 24/7 task-bot is 3x slower than before but still **4x faster per day than a dedicated human** (7.2 vs 30 days); 3 h/day then 5% gives 11 days, 2 h then 5% 14 (question 2). A check-in player (1 min/day) opens Series C+D in about 1.7 years and never reaches the IPO (today's rule: 21 h, 5 weeks).
 
-## 5. Monetization
+**New top-level save section `away`** (rule A10) = `{ engagedDay = UTC day number, engagedSeconds, bankSeconds }`, optional, clamped on load, stale day ignored, entry in `KNOWN_SECTIONS`. **This replaces the old claim "no new section": PR 2 needs Shut down all servers.** Rollback floor stays `V_launch` (PUBLISH_RULES section 2): code from M4 on keeps `away` frozen, so a rollback loses nothing but runs today's offline rule (50%, 8 h, 100% valuation) until forward again; never restore below `V_launch`. No real saves exist yet.
 
-- **Shareholder pass (199 R$, id 2001728902):** stays exactly 2x Shares, never reduced. At the new pace it is +20 Shares every 57 h, felt on every IPO. It never touches the clock. The only progress edge is that speed perks arrive 2 IPOs sooner (IPO 4 vs 6, about 115 active hours earlier, worth roughly 10-15 h across those loops): small by design because the speed tier is cheap (154). Keep value with cosmetics, not power: a Shareholder Boardroom skin and gold chat tag (`ChatTags`), plus the prestige wing finishing 5 IPOs sooner.
-- **2x Cash pass:** it must **not** double the valuation: if it does, owners reach IPO 1 in **28.7 h** (sim), breaking the 50 h rule for everyone who pays; with valuation at base Cash it is **55.4 h vs 57.3 h**. The pass then buys things sooner and feeds Cash sinks (decor, skins), not the clock. Revenue risk, see question 1.
-- **Cash packs:** gifts, not valuation (today `ShopServer.lua:539` counts them; the Vault is 3 h of income).
-- **Poach Shield (49 R$, 1 h):** unchanged. Kept employees are the carry that speeds every loop, so the shield matters more; add **Night Guard 8 h, 99 R$** (id 0, owner runs the sync).
-- **New products** (cosmetic, fixed and shown contents): decor bundles, Boardroom skins. Never sold: stage skips, valuation, active-hour boosts, mystery boxes. **D9:** nothing sold for Robux is random; random hires keep `isRandomRestricted` and the fixed order.
+## 3. The ladder is data: 6 rungs, 85 items
 
-## 6. Tasks across 50 hours
+**Rule:** valuation to enter the next rung = **1.5 x the price of everything in the rungs so far** (`LONG_K`), so hours per rung are an *output* of the prices. Item price = `s x sqrt(Income before x Income gained)` (quick early waits), one fitted `s` per rung; desk = half its hire, office = 0.7 x. A hire's price is what its egg(s) cost; egg price = the rung's first hire.
 
-Rewards are seconds of Income, so they grow with the rung (cost of nothing extra). The sim's task bonus is **x1.34 in the Garage, x1.71 by Series A, x1.84 at Pre-IPO**: at hour 40 tasks are still about 45% of what an active player earns. To stay interesting: (1) a new task family every ~3 h (1, 3, 4, 4, 4, 3, 1 per rung = 20), each with 3 tiers (more options, tighter limits, same seconds-based reward); (2) an **exception** per rung that employees can never take (pitch, crisis, press, roadshow); (3) difficulty `level = rung + min(IPOs, 10)`, arrival rate cap x1.4, unchanged budget 0.85 s of Income per online second (so x1.85 is the ceiling and a bot gains nothing); (4) **no penalty for hiring:** demand per hire is capped (`D = min(2.0, 1 + demand x hires)`), employees auto-resolve up to 75% of routine tasks, and the founder keeps at least 25% of the calls, so a 20-desk team gets more handled calls, not more work. Not measured: the sim's rosters stop at 8 hires, so founder load with 20 hires is untested (first Studio check of PR 3).
+| Rung | Hours (cum.) | Income ceiling /s | Enter next at | Egg tier (price) | Desk cap /s | Task budget |
+|---|---|---|---|---|---|---|
+| Garage | 1.5 (1.5) | 194 | $197K | Garage (2.3K; today 250) | 25 | 0.85 |
+| Seed | 4.0 (5.5) | 414 | $6.4M | Startup (310K; today 2.5K) | 60 | 0.85 |
+| Series A | 6.5 (12) | 1,099 | $37M | **Scale-up** (1.4M) | 180 | 0.95 |
+| Series B | 9.0 (21) | 2,394 | $152M | Unicorn (7.1M; today 25K) | 300 | 1.05 |
+| Series C+D | 23.9 (45) | 5,834 | $927M | **Decacorn** (26M) | 540 | 1.15 |
+| Pre-IPO | 15.0 (60) | 8,614 | $1.85B | **Blue-Chip** (70M) | 650 | 1.25 |
 
-## 7. Sim (`--long`, default OFF)
+**The item list (draft for the owner to approve; price / +Income; Income/s; in buying order)**
 
-Default, `--ipo`, `--daily`, `--active` outputs are byte-identical to before (checked with `cmp`); `daily_test.py` **658 passed, 0 failed**. The model is a calibrated ladder: thresholds are read off a reference player so the regular player hits 55-60 h **by construction**. What the sim does show: the other players, the away rules, the pass effect, loop growth and the Shares curve. **It cannot measure:** fun, content existing, retention, real 20-desk Income, poaching, luck and egg timers (a +25% perk lump instead), longer sessions, people (friends, leaderboard pull).
+| Rung | Offices | Upgrades | Desks (price) | Hires |
+|---|---|---|---|---|
+| Garage | Garage 0 | Desk 0/+1; Coffee Machine 1.1K/+2; Laptop 4.2K/+5; Server Rack 13K/+15; Whiteboard 28K/+40; Neon Logo 72K/+120 | 1: 0, 2: 3.6K | Coding Cat 2.3K/+3; Bug Beetle 7.2K/+8 |
+| Seed | Co-working Loft 570K | Standing Desks 160K/+6; Espresso Bar 230K/+12; Dev Laptops 320K/+20; Rack Room 410K/+30; Glass Boardroom 490K/+38; Rooftop Sign 560K/+44 | 3: 150K, 4: 320K | Sales Shark 310K/+20; Server Sloth 640K/+50 |
+| Series A | Downtown Floor 2M | Open Plan 560K/+12; Quiet Pods 810K/+24; Design Studio 1.1M/+40; Data Closet 1.5M/+60; Demo Theater 1.7M/+76; Lobby Screen 2M/+88 | 5: 690K, 6: 1.4M, 7: 1.6M | Ledger Llama 1.4M/+60; Unicorn CEO 2.7M/+150; Venture Dragon 3.2M/+175 |
+| Series B | Campus Wing 7.8M | Game Room 2.3M/+25; Gym 3.2M/+50; Cafeteria 4.2M/+80; Data Center 5.3M/+120; Auditorium 6.2M/+150; Fountain 7.5M/+175 | 8: 3.5M, 9: 4.4M, 10: 5.4M | Venture Dragon 7.1M/+175; Growth Gecko 8.8M/+220; Compliance Cobra 11M/+300 |
+| Series C+D | Tech Campus 23M; Glass Tower 31M | Robot Barista 6.8M/+25; Sky Lounge 9.6M/+50; Mega Rack 12M/+80; Innovation Lab 15M/+120; Atrium 17M/+150; Helipad 19M/+175; Trading Floor 9.2M/+30; Spa 13M/+60; Quantum Rack 17M/+95; Observatory 20M/+140; Ballroom 23M/+175; Statue 25M/+200 | 11: 13M, 12: 15M, 13: 20M, 14: 21M, 15: 23M | Compliance Cobra 26M/+300; Platform Panda 31M/+380; Closer Condor 39M/+460 (x2: 41M); Brand Badger 47M/+540 |
+| Pre-IPO | Global HQ 62M | Marble Lobby 18M/+40; War Room 25M/+80; Server Farm 32M/+130; Roadshow Jet 39M/+190; Bell Tower 47M/+260; Golden Bell 51M/+300 | 16: 35M, 17: 39M, 18: 41M | Brand Badger 70M/+540; Board Bison 78M/+620 (x2: 81M) |
 
-## 8. Risks (five biggest)
+**Hire types: 18** = today's 12 (Income 2 to 175) **+ 6 new**: Growth Gecko 220 (marketing), Compliance Cobra 300 (finance), Platform Panda 380 (engineering), Closer Condor 460 (sales), Brand Badger 540 (marketing), Board Bison 620 (finance). **Desks: 18** (today 5 base slots, +3 with the Extra Slots pass; pass desks not simulated, at most +15% Income at the top: measure in PR 3). **Desk cap:** a desk employs a creature only up to its office's Income (a Venture Dragon in a garage desk earns 25/s), so kept, fed or poached hires cannot skip rungs (section 7). After an IPO kept employees refill the same desks **free**. A hire row is the *planned* creature of an egg; the real roll stays random. **D9: the three new egg tiers go into `CreatureConfig.Eggs`, so restricted players roll through `CreatureConfig.fixedHire`; the fixed-order tests must cover them.** **Desks, caps and kept hires change `EmployeeServer`/`CreatureConfig`: their own PR (PR 3).**
 
-1. **Retention over 100+ sessions.** Most players will leave long before hour 57; only a minority will get there. *Design:* 12 moments in hour 1, a moment every 21 min, a rung every 2-6 weeks even for casual, a title and a cutscene per rung, weekly Investor Day.
-2. **Content volume:** 151 of 171 moments do not exist; loops 2+ replay them. *Design:* launch with rungs Garage-B (21 h) and ship one rung every 2 weeks (a regular player reaches rung C in week 4); industry skins per loop; decor via a counter, not new systems. Honest: this is months of work.
-3. **The grind in hours 20-45** (item payback 9-11 h). *Design:* event and exception tasks, the decor Cash sink, ceilings that make each rung feel new. Unknown until played.
-4. **Pay-to-win and pass trust.** *Design:* valuation at base Cash, packs as gifts, the clock never sold, Shareholder power perks cheap (154).
-5. **"Active" detection and exploits** (AFK tabs, autoclickers, honest players marked away). *Design:* 3-minute input rule shown on the HUD ("Away: tap to resume"), 0.85 s budget, reaction flags, rate limits from the active-loops doc.
+## 4. Content, with the owner's scope cuts
 
-## 9. Work already merged, and the PR plan
+Cuts (owner approved): all 20 tasks kept (paired demo and Investor Day **outside** the 50 h path), Series C+D merged, decor 50 to 20, products 14 to 6, hire types 25 to 18. A task's tiers 2 and 3 appear one and two rungs later (a moment each).
 
-**Impact:** D1 shop (1,770, 73 checks) replaced by 750; IPO retune (Seed $1,800, x2.5, IPO in 12 min) replaced by 8 rungs and `StageScale`; daily reward loses Day 7 Shares and gives only unlocked eggs; Cash packs and the Cash pass change valuation rules; onboarding goal "Reach Seed" moves to 1.5 h; dev saves with old valuations just land on a lower rung (no real saves exist before launch).
+| Rung | Offices / upgrades / desks / hires | Tasks (+tiers) | Eggs / products / decor / titles | Moments | Min per moment |
+|---|---|---|---|---|---|
+| Garage | 0 / 6 / 1 / 2 | 1 (+0) | 0 / 0 / 3 / 1 | 14 | 6 |
+| Seed | 1 / 6 / 2 / 2 | 3 (+1) | 0 / 2 / 4 / 1 | 22 | 11 |
+| Series A | 1 / 6 / 3 / 3 | 4 (+4) | 1 / 1 / 4 / 1 | 28 | 14 |
+| Series B | 1 / 6 / 3 / 3 | 4 (+7) | 0 / 1 / 3 / 1 | 29 | 19 |
+| Series C+D | 2 / 12 / 5 / 5 | 5 (+8) | 1 / 1 / 4 / 1 | 44 | **33** |
+| Pre-IPO | 1 / 6 / 3 / 3 | 1 (+8) | 1 / 1 / 2 / 3 | 29 | 31 |
+| **Total** | 6 / 42 / 17 / 18 | 18 (+28) | 3 / 6 / 20 / 8 | **166** | 22 |
 
-| PR | Content | Size | Test plan |
+Series C+D gets a moment only every 33 min: thicken it first. **Content minimum for the first 5.5 h (Garage + Seed):** 19 things to buy (9 exist today, re-priced; 10 new: Seed office, 6 upgrades, 3 desks), 4 tasks, 2 products, 7 decor, 2 titles: 36 moments, one per 9 min. Loops 2+ replay the ladder (one industry skin per IPO).
+
+## 5. Shares, shop, and exactly what changes
+
+`Shares = 20 x (1 + 0.25 x IPOs done) x min(ratio, 1.5) ^ 0.5` (was 10, 0.8, cap 2; x2 with the pass): 20, 25, 30 ... 65 per IPO; total 20 / 45 / 150 / 425 after IPO 1 / 2 / 5 / 10 (pass 40 / 90 / 300 / 850). Shop **750** (was 1,770): core 316 + prestige wing 434 (cosmetic).
+
+**`IpoConfig`:** `SharesPerIpo` 10 to 20; `SharesGrowthPerIpo` 0.8 to 0.25; `SharesRatioCap` 2 to 1.5; perk costs (levels and keys unchanged) FasterEggs 1,2,3,5,7,10,16; ExtraIncubator 4,8; ExtraSlot 4,8,18; BaseLuck 1,2,3,5,7,10,16,24; CheaperPoach 2,3,4,6,8,11,15,20,28,40; Night Shift 2,4,7,12 and `perLevel` 7,200 to **1,800 s** (base away cap 2 h in `TycoonCore`); `Stages` **5 to 7** (add `SeriesCD`, `PreIpo` before `IpoReady`; valuations from section 3); `StageGrowthPerIpo ^ L` replaced by `StageScale(L) = (1 + 0.5 x L^0.75) x 1.10^L` for thresholds **and** every price; the IpoClient "wait longer" hint (cap 1.5). **`DailyConfig`:** Day 7 loses `shares = 3` (its egg = best tier already unlocked); a decor piece joins in PR 4. **`OnboardingConfig`:** goal "Reach Seed" (now 1.5 h) becomes "Buy 3 upgrades". **Tests:** of the 73 D1 checks about 28 hard-code old numbers and are rewritten (1,770 total and per-perk totals, "525 before D1", old and new level costs, Shares 10 / 0.8 / cap 2 and the 10 / 18 / 26 / 68 results, stages 1800 ... 81000 x 2.5, both `IPO_PERK_COSTS` checks, two old-save checks naming 90 and 1,245); the other 45 (keys, effects, pass 2x, save and load) stay. **Docs:** `ECONOMY.md` 3-3e, `D1_SHOP_OPTIONS.md`, PUBLISH_RULES section 2 (perk-level bullet), CLAUDE.md save notes, ROADMAP. **Sim:** `IPO_*`, `IPO_PERK_COSTS`. No real saves exist (PUBLISH_RULES section 2): levels only need clamping to `#costs`; after launch only add levels.
+
+## 6. Money and passes
+
+- **Shareholder pass (199 R$, 2001728902):** exactly **2x Shares**. It gives the **Boardroom skin and a gold chat tag (`ChatTags`) at purchase**. Its only progress edge is speed perks 2 IPOs sooner (IPO 4 vs 6): computed now (the +25% Income for the 154 speed Shares is an estimate) as **about 15 h by IPO 6, still 15 h at IPO 10 (2%)**; the old "10-15 h" claim is gone.
+- **2x Cash pass:** valuation counts **base Cash** (doubled Cash would give owners IPO 1 in 28.6 h). At base: **48.7 h vs 57.1 h** (question 1). **Cash packs** are gifts, never valuation.
+- **Every `addEarnings` call and what it passes:** (1) TycoonCore income loop (`:733`, each second): **base Income** (without the 2x Cash and VIP multipliers, with the IPO multiplier), only while engaged; (2) TycoonCore offline block (`:692`): replaced by the away payout, 10% of base Income; (3) `ShopServer.lua:539` Cash packs: **call deleted**; (4) `IpoServer.addEarnings` (`:125`), the single choke point: new `kind` argument (`engaged`, `away`, `task`, `debug`) applies the 4 h/day weight and saves `away`; (5) `IpoServer.lua:404/411` Debug grants: Studio only, bypass the weight; (6) new `TaskServer`: Cash with passes, valuation at base; (7) `DailyServer` never calls it (its BUG warning stays). The `TycoonCore.addEarnings` wrapper (`:478`) forwards `kind`.
+- New products (cosmetic, fixed contents): Night Guard (8 h Poach Shield, 99 R$, `id = 0`, owner runs the sync), decor bundles. Never sold: stage skips, valuation, engaged-hour boosts, random boxes (D9).
+
+## 7. New exploit: alt accounts feeding top hires
+
+Kept employees carry over every IPO, so an alt that hatches Unicorn-tier eggs and "loses" them to a main account through poaching is now worth real hours. Sim (regular player; a fed hire is free):
+
+| Case | IPO 1 | Loop 2 |
+|---|---|---|
+| no feeding | 57.1 h | 53.9 h |
+| fed without limit, **no desk cap** | **22.0 h** | 23.2 h |
+| R1 desk cap only | 43.8 h | 45.5 h |
+| R1 + 2 poach-ins per UTC day | 43.9 h | 45.5 h (never binds) |
+| R1 + **at most 6 per run** / **3 per run** | 50.9 h / **54.0 h** | 49.8 h / 51.7 h |
+
+**Rules:** R1 desk caps by office; **R2 at most 3 poach-ins per account per run** (new section `lineage = { run = ipo.count, poachIns, poached = { [employeeId] = os.time() } }`, stale run = 0) and poach-won employees **do not carry over an IPO** (only hires you hatched); R3 poaching (either side) needs account age of 14 days or more and 10 engaged hours (`player.AccountAge`; not simulated). Three poach-ins leave the main 5% faster; per-day limits do not work.
+
+## 8. PR plan (order changed), gates
+
+| PR | Content | Size | Gate / test |
 |---|---|---|---|
-| 1 | Economy core: `IpoConfig` stages, Shares, shop, `StageScale`; valuation at base Cash; packs as gifts; sim and test sync | L (500 Lua + 300 test) | `daily_test` new groups: shop 750, `sharesFor`, thresholds, old save loads; Studio: IPO at Debug valuation |
-| 2 | Engaged flag + away bank, "while you were away" (M6b) | M (450) | no input 3 min, cap, 10% valuation, rejoin |
-| 3 | Task engine + calls (active-loops PR 1) | L (1,100 + 250) | as in the active-loops doc |
-| 4 | Office framework (`OfficeConfig`, ceilings, unlock by rung) + Seed, Series A | L (1,200) | rung unlock, both phone sizes |
-| 5 | Tasks 2-5 and rungs B, C (per active-loops PRs 2-4) | M each (450-600) | grading, boost cap, Shares slot |
-| 6 | Daily changes (Day 7, unlocked eggs) | S (120) | claim tests, no double claim |
-| 7 | Rungs D, Pre-IPO, roadshow, products (Night Guard, decor) | M each | once per run, `id = 0` |
-| 8 | Prestige wing, skins, industry skin 1 | M (500) | save section (rule A10), pass skin |
+| 1 | Task engine + customer calls **with measurement hooks** (ACTIVE doc sections 2, 5) | L | daily_test; Studio |
+| **G1** | **Studio playtests: measure the real task bonus and budget fill** (5 players, 2 rungs) | | measured f vs sim 0.32 / 0.50; refit prices (`f_mult`) before PR 2 |
+| 2 | **Economy core:** base-Cash valuation, `kind` weights, engaged and away bank (`away`), `IpoConfig`, Daily Day 7, packs as gifts, sim and test sync. **Shut down all servers** | XL (800 Lua + 500 test; may split) | new test groups; macro and bot in Studio |
+| 3 | Desks, caps, kept-hire free refill, `lineage`, poach limits (`EmployeeServer`) | M | caps, 3 poach-ins, 2-client poach |
+| 4 | Office framework, Seed, Daily decor piece | L | rung unlock, both phone sizes |
+| 5-6 | Tasks 2-5 and rungs A, B; then C+D, Pre-IPO, roadshow, products | M each | grading, budget per rung, `id = 0` |
+| 7 | Prestige wing, skins, industry skin 1, Investor Day | M | rule A10, pass skin |
 
-Each PR re-runs the sim and updates this doc's table; PR 1 needs **Shut down all servers** only if a save section is added (none here).
+## 9. Risks and questions
 
-## 10. Questions for you (recommended numbers first)
+Risks: retention over 100+ sessions; content volume; unmeasured Incomes and task bonus; a perfect task-bot. Not simulated: fun, real poaching, egg timers.
 
-1. **Cash pass x2 and the clock:** valuation at base Cash (recommended; owners IPO in 55.4 h, the pass sells faster buying and Cash sinks) or doubled (28.7 h, breaks the rule). Revenue risk is yours to weigh.
-2. **Launch scope:** launch with 21 h of rungs (Garage-B) and add a rung every 2 weeks (recommended), or hold the launch for all 60 h?
-3. **Loop growth** +5% per loop (recommended; 57-62 h per loop) or flat; the visible IPO multiplier then only sets the size of numbers: OK?
-4. **Daily Day 7:** drop the 3 Shares for a decor piece (recommended) or keep 1 Share?
-5. **Away rule:** 3 minutes without input, 10% pay, 2 h cap, 10% valuation (recommended), or a gentler 5 minutes?
+1. **Cash pass:** base valuation, owners 48.7 h vs 57.1 h (recommended), or slower?
+2. **Task-bot residual:** accept 4 h/100% then 10% (7 days), or 3 h then 5% (11 days)?
+3. **Desk caps** (a Dragon in a garage desk earns 25/s) and 3 poach-ins per run: OK?
+4. **Launch scope:** Garage-B first (21 h, then a rung every 2 weeks) or all rungs?
+5. Loop growth +10% and a Day 7 decor piece instead of 3 Shares: OK?
