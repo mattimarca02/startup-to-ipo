@@ -96,14 +96,27 @@ Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76
 
 | Element | Portrait 320x568 | Landscape 667x375 |
 |---|---|---|
-| Task tray (3 chips, 48 high) | chips 68x48 at x 98-310, y 196-244, its line y 174-194: under the Goals card (y 82-164) and 36 px above the highest pop-up lane (-240, from y 280) | chips 59x48 at x 176-361, y 94-142, its line y 72-92: the strip between the HUD row, the Goals card and the thumbstick, 1 px above the -184 lane. **Provisional: the final landscape spot is chosen in Studio with Test > Device (667x375)** (`LANDSCAPE_SPOT` in TaskClient) |
+| Task tray (3 chips, 48 high) | chips 68x48 at x 98-310, y 188-236, its line y 166-186: under the Goals card (y 82-164) (`PORTRAIT_SPOT`). Clear of every lane with a top bar of 0 or 36 px; with 58 px the -240 lane starts at y 222 and covers the lowest 14 px of the chips | chips 52x48 at x 10-174, y 92-140, its line y 70-90: under the HUD row (`LANDSCAPE_SPOT`). Clear of everything with a top bar of 0 px; with 36 or 58 px the -184 lane (Onboarding pop-up) is touched. **Neither spot is final: confirm both in Studio with Test > Device** |
 | Task card (not a window) | bottom sheet 300x260 at x 10, y 236-496 | **300x220 at x 183-483, y 80-300** (right edge 34 px short of the jump zone, left edge 13 px past the thumbstick) |
 | "Away: tap to resume" | 160x32 under the valuation bar, x 98-258, y 82-114; hit area 48 high | same size at x 370-530, y 76-108 |
 | Away summary | dialog 300x360 centered (x 10-310, y 104-464): 4 lines of 14 px, "Collect" 280x48 at the bottom | 360x300 centered (x 153-513, y 38-338): numbers left, "Collect" 160x48 right |
 | Office window (tabs Upgrades / Desks / Decor) | standard shell 294x523; tabs 40 high, 6 rows of 56 = no scrolling for one office | shell 613x345; tabs in a 110 px left column; 2 x 3 tiles of 240x84 |
 | Prestige wing (a tab of the IPO shop) | 2-column tiles 140x112, 6 visible, then scroll; buy buttons 48 high | 4 x 2 tiles 128x110, no scrolling |
 
-Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray; a window hides the tray and freezes the waiting calls (the code: each call can be frozen **at most 30 s** in all, `TaskConfig.Pause.perTask`, and an open window also stops **new** calls from arriving; closing it is never rate-limited). There is no 60 s per minute cap and none is needed: a lying client gains at most 30 s per call, and a frozen client gets no new calls, so pausing pays nothing by itself (Cash comes only from a graded answer, and a pause never counts as engaged); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
+**Top bar and accepted overlaps.** Every ScreenGui keeps `IgnoreGuiInset = false`, so the GUI is shorter than the device by Roblox's top bar (size not measured; `Debug > Task stats` prints the real one). The tray tests run at a bar of 0, 36 and 58 px: the HUD and Goals card keep their y, the lanes, thumbstick and jump button move up with the GUI's bottom. A spot clear of everything does not exist, so the tray draws **below** every other pop-up (`TaskGui` DisplayOrder -2, pop-ups 0 or more) and these overlaps are accepted (anything not listed touches nothing; `ACCEPTED` in `tools/daily_test.py` TRAY_TESTS checks it both ways):
+
+| Device (top bar 0 / 36 / 58 px) | Tray and its line touch |
+|---|---|
+| 320x568 | none / none / lane -240 |
+| 667x375 | none / lane -184 / lane -184 |
+| 360x640, 375x667, 390x844 | none at any bar |
+| 568x320 | lane -184 and valuation bar / lane -128, lane -184, thumbstick, valuation bar / same |
+| 640x360 | lane -184 / lane -184 / lane -128, lane -184, thumbstick |
+| 812x375, 844x390 | none / lane -184 / lane -184 |
+
+The lanes: -16 Shop and IPO, -72 Recruiting, -128 Poach, -184 Onboarding, -240 Daily (portrait only). The final spots are confirmed in Studio with Test > Device.
+
+Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray; a window hides the tray and freezes the waiting calls (the code: each call can be frozen **at most 30 s** in all, `TaskConfig.Pause.perTask`, and an open window also stops **new** calls from arriving; closing it is never rate-limited). There is no 60 s per minute cap and none is needed: a lying client gains at most 30 s per call, and a frozen client gets no new calls, so pausing pays nothing by itself (Cash comes only from a graded answer, and a pause never counts as engaged: `settle` adds no engaged seconds while the run is paused); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
 
 ## 8. Files and task PRs
 
