@@ -89,6 +89,8 @@ local function newRun(now)
 		bucketTokens = TaskConfig.RateLimit.burst, bucketAt = now,
 		answers = {}, reactions = {}, flags = {}, -- os.clock() of graded answers (last minute), last reaction times, flags (last hour)
 		paused = false, settledAt = now,
+		-- PR 2 (economy core): a rejoin gives a full bank and an empty flag list again, because `run` is not
+		-- saved. Fix it there (save the bank and the flags' cool-down, or start a rejoin with an empty bank).
 		bank = TaskConfig.BudgetBank, -- reward budget, in seconds of Income
 		handled = 0, handledAt = now, -- calls the team took, not yet told to the player
 		rungOverride = nil, -- Studio Debug "Set rung" (not saved)
@@ -178,6 +180,7 @@ local function snapshot(run, now)
 	local row = TaskConfig.Rows[1]
 	return {
 		quiet = run.quiet,
+		paused = run.paused, -- so the client can see when the server's freeze and its own window disagree
 		chain = run.chain,
 		mult = row and TaskConfig.chainMultiplier(row, run.chain) or 1,
 		tasks = list,
@@ -479,7 +482,9 @@ local function onAction(player, action, arg)
 		warnBad(player, run, now, "the action is not text")
 		return false, "Bad request"
 	end
-	if not takeToken(run, now) then
+	-- Closing a window ("Pause", false) is never refused for rate: a refused resume would leave the
+	-- server frozen with no calls coming. It costs nothing (it sends a state only if it changes something).
+	if not (action == "Pause" and arg == false) and not takeToken(run, now) then
 		warnBad(player, run, now, "too many requests")
 		return false, TEXTS.Slow
 	end
@@ -526,12 +531,14 @@ local function onAction(player, action, arg)
 			warnBad(player, run, now, "Pause needs true or false")
 			return false, "Bad request"
 		end
-		run.paused = arg
-		run.changed = true -- a fresh state, so the countdown the player sees on closing the window is exact
+		if run.paused ~= arg then
+			run.paused = arg
+			run.changed = true -- a fresh state, so the countdown the player sees on closing the window is exact
+		end
 		ok = true
 
 	elseif action == "Sync" then
-		run.changed = true
+		run.changed = true -- the state carries `paused`: the client compares it with its own window
 		ok = true
 
 	else
@@ -585,6 +592,7 @@ end
 
 -- One tick for one player (the loop below calls it; the tests call it with a fake clock)
 function TaskServer.step(player, now)
+	if not core or not TaskConfig.isActive() then return end -- off (live server in PR 1, or Enabled = false): never creates or pays anything
 	local data = core.getData(player)
 	local tasks = data and data.tasks
 	if not tasks then return end
@@ -734,10 +742,12 @@ function TaskServer.setupPlayer(player, data, savedTasks)
 				tasks.unknown[key] = value
 			end
 		end
-		-- A counter dated far in the future is bad data (or a wrong clock): it counts as today's, never more
-		if tasks.engagedDay > today() + 1 then
-			warn(string.format("%s's engaged day is in the future (day %d, today is %d): counted as today", player.Name, tasks.engagedDay, today()))
-			tasks.engagedDay = today()
+		-- A counter dated after today is bad data (or a clock that was wrong): the engaged counters of this
+		-- section start again (day and seconds); the other fields and every other section stay as they are
+		if tasks.engagedDay > today() then
+			warn(string.format("%s's engaged day is in the future (day %d, today is %d): the engaged seconds start again", player.Name, tasks.engagedDay, today()))
+			tasks.engagedDay = 0
+			tasks.engagedSeconds = 0
 		end
 		rollDay(tasks) -- an older day's seconds are ignored
 	elseif savedTasks ~= nil then

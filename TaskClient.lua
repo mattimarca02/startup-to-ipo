@@ -264,7 +264,8 @@ place()
 local calls = {} -- waiting calls: { id, limit, endsAt (this device's clock, display only) }
 local quiet = false
 local chainMult = 1
-local windowOpen = false
+local windowOpen = playerGui:GetAttribute("OpenPanel") ~= nil -- a window may already be open when this script starts
+local serverPaused = false -- what the server last told us (state.paused) or accepted from us
 local answering = {} -- ids already tapped, until the server's next state
 local handledText, handledUntil = "", 0 -- "Team handled 4 calls", shown for a few seconds
 
@@ -291,7 +292,45 @@ local function refresh()
 	resume.Visible = showTray and quiet and #calls == 0
 end
 
+-- PAUSE-START
+-- (tools/daily_test.py runs the code between the PAUSE markers, so keep it free of Roblox calls.)
+-- Does the server still have to hear about the window? Returns the value to send, or nil when the server
+-- already agrees. Used at start (a window already open), after a refused request and on every state.
+local function pauseToSend(windowOpen, serverPaused)
+	if windowOpen == serverPaused then
+		return nil
+	end
+	return windowOpen
+end
+-- PAUSE-END
+local PAUSE_RETRY = 1 -- seconds before a refused or lost Pause request is sent again
+local pauseBusy = false
+local function syncPause()
+	if pauseBusy then return end
+	local wanted = pauseToSend(windowOpen, serverPaused)
+	if wanted == nil then return end
+	pauseBusy = true
+	task.spawn(function()
+		local called, ok = pcall(function()
+			return taskAction:InvokeServer("Pause", wanted)
+		end)
+		pauseBusy = false
+		local accepted = called and ok == true
+		if accepted then
+			serverPaused = wanted
+		end
+		-- Refused (rate limit, still loading) or no answer: try again until server and window agree.
+		-- Accepted but the window changed meanwhile: send the newer value at once.
+		if pauseToSend(windowOpen, serverPaused) ~= nil then
+			task.delay(accepted and 0 or PAUSE_RETRY, syncPause)
+		end
+	end)
+end
+
 local function applyState(state)
+	if typeof(state.paused) == "boolean" then
+		serverPaused = state.paused
+	end
 	calls = {}
 	local now = os.clock()
 	for _, call in ipairs(state.tasks or {}) do
@@ -303,6 +342,7 @@ local function applyState(state)
 	chainMult = state.mult or 1
 	answering = {}
 	refresh()
+	syncPause()
 end
 
 taskState.OnClientEvent:Connect(function(kind, payload)
@@ -354,11 +394,7 @@ local function onPanelChanged()
 	if open == windowOpen then return end
 	windowOpen = open
 	refresh()
-	task.spawn(function()
-		pcall(function()
-			taskAction:InvokeServer("Pause", open)
-		end)
-	end)
+	syncPause()
 end
 playerGui:GetAttributeChangedSignal("OpenPanel"):Connect(onPanelChanged)
 
@@ -378,9 +414,12 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- First state: the server answers "Sync" with a state event
+-- First state: the server answers "Sync" with a state event (it says whether it is paused), and if a
+-- window is already open the server hears about it right away
+refresh()
 task.spawn(function()
 	pcall(function()
 		taskAction:InvokeServer("Sync")
 	end)
+	syncPause()
 end)

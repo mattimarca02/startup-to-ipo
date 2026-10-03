@@ -1936,6 +1936,15 @@ for _, off in ipairs({ "live server", "Enabled = false" }) do
 	local before = #EARNINGS
 	for _ = 1, 20 do CLOCK += 5; server.step(p, CLOCK) end
 	check(off .. ": time passing creates nothing and pays nothing", #p.events == 0 and #EARNINGS == before and d.cash.Value == 0)
+	local run = d.tasks.run
+	check(off .. ": no call is open (run.open is empty, nothing in the queue)", next(run.open) == nil and #run.order == 0)
+	local offStats = server.getStats(p)
+	check(off .. ": no call arrived or was offered, no clock ran, nothing answered", offStats.arrivals == 0 and offStats.offered == 0 and offStats.answered == 0 and offStats.online == 0 and next(run.nextAt) == nil)
+	local answerRemote = false
+	for i = created + 1, #CREATED do
+		if CREATED[i].Name == "TaskAction" then answerRemote = true end
+	end
+	check(off .. ": no remote exists to answer", not answerRemote and #CREATED == created)
 	local saved = { sharesRun = 2, done = 5, bestChain = 4, seen = { Call = true }, engagedDay = 20000, engagedSeconds = 77, future = { x = 1 } }
 	local p2, d2 = newPlayerFor(server, saved)
 	local out = server.serialize(d2)
@@ -2006,6 +2015,26 @@ local function waitForArrival(p, limit)
 	return nil
 end
 
+-- 3b. The handler and the tick check isActive themselves (Enabled switched off after the engine started) ----------------
+do
+	RANDOM = 0
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	local id = spawnCall(p)
+	advance(1)
+	local run = d.tasks.run
+	local offeredBefore, onlineBefore = stats(p).offered, stats(p).online
+	C.Enabled = false
+	local ok, msg = onAction(p, "Answer", id)
+	check("Enabled = false: the remote refuses with 'off' and grades nothing", ok == false and msg == TEXTS.Off and stats(p).answered == 0 and run.open[id] ~= nil and d.cash.Value == 0)
+	check("Enabled = false: Pause, Start and Sync are refused too", onAction(p, "Pause", true) == false and run.paused == false and onAction(p, "Start") == false and onAction(p, "Sync") == false)
+	run.nextAt.Call = 0 -- a call would be due right now
+	for _ = 1, 30 do advance(5); TaskServer.step(p, CLOCK) end
+	check("Enabled = false: step() creates nothing, expires nothing, runs no clock and pays nothing",
+		stats(p).offered == offeredBefore and stats(p).arrivals == 0 and stats(p).missed == 0 and stats(p).online == onlineBefore and run.open[id] ~= nil and d.cash.Value == 0)
+	C.Enabled = true
+end
+
 -- 4. Saving and loading ---------------------------------------------------------------------
 do
 	local p, d = newPlayer(nil)
@@ -2060,9 +2089,19 @@ do
 	t, w = load({ engagedDay = day, engagedSeconds = 5000 })
 	check("today's seconds are kept", t.engagedDay == day and t.engagedSeconds == 5000)
 	t, w = load({ engagedDay = day + 5, engagedSeconds = 700 })
-	check("a day in the future counts as today and keeps its seconds (never extra)", t.engagedDay == day and t.engagedSeconds == 700 and w == 1)
+	check("a day in the future is rejected: the engaged counters start again at today with 0 seconds, with a warning", t.engagedDay == day and t.engagedSeconds == 0 and w == 1)
 	t, w = load({ engagedDay = day + 1, engagedSeconds = 700 })
-	check("tomorrow (a server clock a few seconds ahead) is kept as it is", t.engagedDay == day + 1 and t.engagedSeconds == 700 and w == 0)
+	check("tomorrow is a future day too: rejected the same way (never extra seconds)", t.engagedDay == day and t.engagedSeconds == 0 and w == 1)
+	t, w = load({ done = 9, bestChain = 3, sharesRun = 1, seen = { Call = true }, engagedDay = day + 40, engagedSeconds = 80000, future = { x = 1 } })
+	check("a future engagedDay resets only the engaged counters of this section: the other fields stay",
+		t.done == 9 and t.bestChain == 3 and t.sharesRun == 1 and t.seen.Call == true and t.unknown.future.x == 1 and t.engagedDay == day and t.engagedSeconds == 0 and w == 1)
+	do
+		local fp, fd = newPlayer({ done = 9, engagedDay = day + 2, engagedSeconds = 5000 })
+		local out = TaskServer.serialize(fd)
+		check("... and it saves back today's day with 0 seconds and everything else as it was", out.engagedDay == day and out.engagedSeconds == 0 and out.done == 9)
+		check("... and nobody is engaged by it", not TaskServer.isEngaged(fp) and TaskServer.engagedSeconds(fp) == 0)
+		WARNINGS = {}
+	end
 	t, w = load({ seen = "Call" })
 	check("seen = text is skipped", next(t.seen) == nil and w == 1)
 	t, w = load({ seen = { Call = true, [1] = true, Bad = false, Worse = "yes" } })
@@ -2759,6 +2798,60 @@ do
 	check("calls come again once the window is closed", arrived ~= nil and arrived <= 21, arrived)
 end
 
+-- 18b. Pause stays in sync with the client's window -------------------------------------------------------------------------
+do
+	RANDOM = 0
+	local function emptyBucket(p)
+		local n = 0
+		while n < 40 do
+			local ok = onAction(p, "Sync")
+			if ok == false then return n end
+			n += 1
+		end
+		return n
+	end
+	-- the state carries `paused`, so a client that starts with a window open (or lost a request) can see the difference
+	local p, d = newPlayer(nil)
+	noArrivals(p)
+	onAction(p, "Sync")
+	check("Sync on start: the state says the server is not paused", lastState(p) ~= nil and lastState(p).paused == false)
+	onAction(p, "Pause", true)
+	onAction(p, "Sync")
+	check("Sync after a Pause(true): the state says paused", lastState(p).paused == true)
+	local events = #p.events
+	onAction(p, "Pause", true)
+	check("a repeated Pause(true) changes nothing and sends no new state", #p.events == events and p.data.tasks.run.paused == true)
+
+	-- Pause(true) refused for rate: the client retries; nothing is lost and nothing stays frozen
+	local q, qd = newPlayer(nil)
+	local used = emptyBucket(q)
+	check("the request bucket runs out after the burst", used == C.RateLimit.burst, used)
+	local ok, msg = onAction(q, "Pause", true)
+	check("Pause(true) while rate-limited is refused with 'one moment' and the server is NOT paused", ok == false and msg == TEXTS.Slow and q.data.tasks.run.paused == false)
+	advance(0.5)
+	ok = onAction(q, "Pause", true)
+	check("the client's retry a moment later is accepted", ok == true and q.data.tasks.run.paused == true)
+
+	-- Pause(false) is never refused for rate: the server cannot stay paused with no calls coming
+	emptyBucket(q)
+	ok, msg = onAction(q, "Sync")
+	check("the bucket is empty again", ok == false and msg == TEXTS.Slow)
+	ok = onAction(q, "Pause", false)
+	check("Pause(false) with an empty bucket is still accepted: the server resumes", ok == true and q.data.tasks.run.paused == false and lastState(q).paused == false)
+	local arrived2 = waitForArrival(q, 60)
+	check("... and calls come again (not stuck paused with no calls)", arrived2 ~= nil and arrived2 <= 21, arrived2)
+
+	-- spam of Pause(false) costs nothing: no state, no reward, no flag
+	local r, rd = newPlayer(nil)
+	noArrivals(r)
+	local before = #r.events
+	for _ = 1, 100 do onAction(r, "Pause", false) end
+	check("100 x Pause(false) while not paused: nothing is sent and nothing changes", #r.events == before and r.data.tasks.run.paused == false and stats(r).flagged == 0 and rd.cash.Value == 0)
+	-- only a bool is accepted
+	ok = onAction(r, "Pause", "yes")
+	check("Pause needs true or false", ok == false and r.data.tasks.run.paused == false)
+end
+
 -- 19. Measurement hooks (gate G1) -----------------------------------------------------------------------------------------------
 do
 	RANDOM = 0
@@ -2890,6 +2983,7 @@ local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
 end
 __TRAY__
+__PAUSE__
 local GOALS = __GOALCOUNT__ -- OnboardingConfig.Goals: the Goals card is 30 + 22 per goal + 8 high
 local function rect(x, y, w, h) return { x = x, y = y, w = w, h = h } end
 local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
@@ -3004,6 +3098,34 @@ for _, size in ipairs({ { 736, 414 }, { 812, 375 } }) do
 		if touches(lay, other) then why = name end
 	end
 	check("landscape " .. w .. "x" .. h .. ": clear of the HUD row, the valuation bar, the gift chip and the Goals card", why == nil, why)
+end
+
+-- The client's pause sync (PAUSE markers): the server must hear about a window that is already open at start,
+-- and about every change, until it agrees
+check("pause sync: a window already open at start is sent (server says not paused)", pauseToSend(true, false) == true)
+check("pause sync: a closed window is sent while the server is still paused", pauseToSend(false, true) == false)
+check("pause sync: nothing is sent when they agree", pauseToSend(true, true) == nil and pauseToSend(false, false) == nil)
+do
+	-- a refused request is tried again until the server accepts; the server's state then agrees
+	local serverPaused, windowOpen = false, true
+	local refusals, sends = 2, 0
+	local function round()
+		local wanted = pauseToSend(windowOpen, serverPaused)
+		if wanted == nil then return false end
+		sends += 1
+		if refusals > 0 then refusals -= 1 else serverPaused = wanted end
+		return true
+	end
+	while round() and sends < 10 do end
+	check("pause sync: two refused requests (rate limit) are retried and the third is accepted", sends == 3 and serverPaused == true)
+	windowOpen = false
+	refusals = 1
+	sends = 0
+	while round() and sends < 10 do end
+	check("pause sync: closing the window is retried until the server resumes", sends == 2 and serverPaused == false)
+	-- a state that arrives while the window is open and says 'not paused' (a lost request) is repaired
+	windowOpen, serverPaused = true, false
+	check("pause sync: a state that disagrees with the open window sends Pause(true) again", pauseToSend(windowOpen, serverPaused) == true)
 end
 
 print_real(string.format("%d passed, %d failed", passed, failed))
@@ -3230,7 +3352,7 @@ def main():
     print("TaskServer engine check (PR 1, customer calls): " + (result16.stdout.strip() or result16.stderr.strip()))
     if result16.returncode != 0 or " 0 failed" not in result16.stdout:
         code = 1
-    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
+    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__PAUSE__", marked_source("PAUSE", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
     print("TaskClient tray layout check: " + (result17.stdout.strip() or result17.stderr.strip()))
     if result17.returncode != 0 or " 0 failed" not in result17.stdout:
         code = 1
