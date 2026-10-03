@@ -101,11 +101,22 @@ tutorial = {                -- TutorialServer.serialize (optional: older saves h
 
 ## 6. Scripts, PR plan, open questions
 
-**New:** `TutorialConfig` (ReplicatedStorage: steps, texts, reward minutes, button names), `TutorialServer` (ModuleScript, `init` / `setupPlayer` / `serialize`, plugged in after `DailyServer`, inside the all-modules-loaded gate), `TutorialClient` (LocalScript, card, outline, replay list). New remotes `TutorialRemotes` / `TutorialAction` (`TutorialState` to the client).
-**Edited (claims needed first):** `TycoonCore` (require, `KNOWN_SECTIONS`), `ShopClient` ("?" button in the header and narrower title, the `TutorialStrip` and its `applyLayout` lines, the Names listed in section 3), `OnboardingClient` (hide goal card while a tutorial card is up; may also need an `OpenPanel`-style attribute). `README.md`, `CLAUDE.md` (module list, remotes, section shape) and `docs/PUBLISH_RULES.md` get doc lines. **The CONTRIBUTING claim was skipped on purpose** (other sessions own that file); it must be added when the build starts, and the Ownership table checked for TycoonCore, ShopClient and OnboardingClient.
+**New:** `TutorialConfig` (ReplicatedStorage: steps, texts, reward minutes, button names), `TutorialServer` (ModuleScript, `init` / `setupPlayer` / `serialize`), `TutorialClient` (LocalScript, card, outline, replay list). New remotes `TutorialRemotes` / `TutorialAction` (`TutorialState` to the client).
+
+**Module order: `TutorialServer` runs before `DailyServer`, never after.** CLAUDE.md says `DailyServer.setupPlayer` runs last, inside the all-modules-loaded gate (the `pcall` setup block, TycoonCore.lua lines 765-800, with `DailyServer.setupPlayer` at line 799 and `TaskServer.setupPlayer` just before it at line 798; `init` order at lines 672 and 685). So TutorialServer plugs in **between `TaskServer` and `DailyServer`**: `TutorialServer.init` after `TaskServer.init` and before `DailyServer.init`; `TutorialServer.setupPlayer` after `OnboardingServer.setupPlayer` (it needs `data.onboarding.legacy`), `EmployeeServer` and `TaskServer`, and before `DailyServer.setupPlayer`. Consequences:
+- At `TutorialServer.setupPlayer` time `data.daily` does not exist yet, so `setupPlayer` only loads the `tutorial` section and never evaluates step conditions. Conditions (step 6's `daily.claims`, and all others) are checked after setup, once `data.ready` is true: in TutorialServer's own 1 s loop, like OnboardingServer's (OnboardingServer.lua line 340).
+- `save()` only writes when every module's data is there (the `data.daily and data.tasks)` check in TycoonCore); `data.tutorial` joins that check, and the payload gets `tutorial = TutorialServer.serialize(data)` next to `tasks`.
+- CLAUDE.md's module paragraph gets "`TutorialServer` plugs in after `TaskServer` and before `DailyServer`" in the build PR.
+**Edited (claims needed first):** `TycoonCore` (require, `KNOWN_SECTIONS`), `ShopClient` ("?" button in the header and narrower title, the `TutorialStrip` and its `applyLayout` lines, the Names listed in section 3), `OnboardingClient` (hide goal card while a tutorial card is up; may also need an `OpenPanel`-style attribute). `README.md`, `CLAUDE.md` (module list, remotes, section shape) and `docs/PUBLISH_RULES.md` get doc lines. This proposal doc was claimed in CONTRIBUTING.md while it was being fixed and released after; the build needs its own claims, after checking the Ownership table for TycoonCore, ShopClient, OnboardingClient and `tools/daily_test.py`.
 
 **PR plan (size):**
-1. PR A, **server + config + save** (about 450 lines): `TutorialConfig`, `TutorialServer`, `TycoonCore` plug-in, tests in `tools/daily_test.py` (completion, one-time reward, bad input, old save loads, no valuation change). No visible UI. Medium.
+1. PR A, **server + config + save** (about 450 lines): `TutorialConfig`, `TutorialServer`, `TycoonCore` plug-in, tests in `tools/daily_test.py` (completion, one-time reward, bad input, old save loads, no valuation change, and the **required ordering test** below). No visible UI. Medium.
+
+   **Required ordering test** (to add in PR A; not added now: `tools/daily_test.py` is owned by the `test-gap-fixes` work). Today the test only checks Task before Daily (`tools/daily_test.py` lines 4048-4051). The new checks, in the same style, on `TycoonCore.lua`:
+   - `TutorialServer.init(` comes after `TaskServer.init(` and before `DailyServer.init(`.
+   - `TutorialServer.setupPlayer(` comes after `OnboardingServer.setupPlayer(`, `EmployeeServer.setupPlayer(`, `IpoServer.setupPlayer(` and `TaskServer.setupPlayer(`, and **before `DailyServer.setupPlayer(`** (Daily stays last).
+   - `tutorial = true` is in `KNOWN_SECTIONS`; the payload has `tutorial = TutorialServer.serialize(data)`; the save gate includes `data.tutorial`.
+   - A step whose completion is `"Opened"` has reward 0 (section 5).
 2. PR B, **client cards and highlights** (about 500 lines): `TutorialClient`, phone layout tests, Studio phone check. Medium.
 3. PR C, **replay "?" + skip + docs** (about 150 lines): `ShopClient`, PUBLISH_RULES 2d. Small.
 
