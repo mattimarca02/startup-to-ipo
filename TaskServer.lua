@@ -545,9 +545,12 @@ end
 
 -- The tick -----------------------------------------------------------------------------
 
--- The measurement line for gate G1 (docs/LONG_GAME_PROPOSAL.md section 8):
---   f      = task Cash per engaged second / base Income per second (no passes, with the IPO multiplier)
---   fSecs  = seconds of Income paid per engaged second
+-- The measurement numbers for gate G1 (docs/LONG_GAME_PROPOSAL.md section 8):
+--   fSecs = seconds of Income paid per engaged second. THIS IS THE G1 f: it does not depend on the
+--           player's Income, so a Cash x2 pass (or any multiplier) cannot move it.
+--   fCash = task Cash per engaged second / base Income per second (base = no passes, with the IPO
+--           multiplier). Information only, NOT the G1 number: the Cash paid already contains the
+--           pass multipliers and the base does not, so passes inflate it.
 local function statsNumbers(data)
 	local run = data.tasks.run
 	local stats = run.stats
@@ -557,8 +560,8 @@ local function statsNumbers(data)
 		arrivals = stats.arrivals, offered = stats.offered, answered = stats.answered, missed = stats.missed, autoResolved = stats.autoResolved,
 		skipped = stats.skipped, dropped = stats.dropped, early = stats.early, flagged = stats.flagged,
 		cash = stats.cash, teamCash = stats.teamCash, rewardSeconds = stats.rewardSeconds, overBudget = stats.overBudget,
-		f = stats.engagedBase > 0 and stats.cash / stats.engagedBase or 0,
-		fSecs = stats.engaged > 0 and stats.rewardSeconds / stats.engaged or 0,
+		fSecs = stats.engaged > 0 and stats.rewardSeconds / stats.engaged or 0, -- the G1 f
+		fCash = stats.engagedBase > 0 and stats.cash / stats.engagedBase or 0, -- information only (passes inflate it)
 		engagedToday = data.tasks.engagedSeconds,
 		bestChain = data.tasks.bestChain,
 	}
@@ -567,17 +570,17 @@ end
 local function statsLine(player, data)
 	local n = statsNumbers(data)
 	return string.format(
-		"[TaskStats] %s rung=%d (%s) hires=%d online=%ds engaged=%ds offered=%d answered=%d missed=%d team=%d skipped=%d dropped=%d early=%d flagged=%d cash=%d (team %d) rewardSec=%.1f overBudgetSec=%.1f f=%.3f fSecs=%.3f engagedToday=%ds bestChain=%d",
+		"[TaskStats] %s rung=%d (%s) hires=%d online=%ds engaged=%ds offered=%d answered=%d missed=%d team=%d skipped=%d dropped=%d early=%d flagged=%d cash=%d (team %d) rewardSec=%.1f overBudgetSec=%.1f fSecs=%.3f (G1 f) fCash=%.3f (info, passes inflate it) engagedToday=%ds bestChain=%d",
 		player.Name, n.rung, TaskConfig.RungNames[n.rung + 1] or "?", n.hires, n.online, n.engaged, n.offered, n.answered, n.missed,
 		n.autoResolved, n.skipped, n.dropped, n.early, n.flagged, n.cash, n.teamCash, n.rewardSeconds, n.overBudget,
-		n.f, n.fSecs, n.engagedToday, n.bestChain)
+		n.fSecs, n.fCash, n.engagedToday, n.bestChain)
 end
 
 -- A short line for the Studio Debug tab (the log line above is too long for its label)
 local function statsSummary(data)
 	local n = statsNumbers(data)
-	return string.format("Rung %d · hires %d · engaged %ds · %d answered, %d missed, %d team · cash %d · f %.2f",
-		n.rung, n.hires, n.engaged, n.answered, n.missed, n.autoResolved, n.cash, n.f)
+	return string.format("Rung %d · hires %d · engaged %ds · %d answered, %d missed, %d team · cash %d · G1 f = %.2f (Income-seconds per engaged second) · fCash %.2f (info only, passes inflate it)",
+		n.rung, n.hires, n.engaged, n.answered, n.missed, n.autoResolved, n.cash, n.fSecs, n.fCash)
 end
 
 -- One tick for one player (the loop below calls it; the tests call it with a fake clock)

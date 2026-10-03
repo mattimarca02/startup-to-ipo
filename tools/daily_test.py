@@ -2778,13 +2778,34 @@ do
 	check("stats: engaged seconds", s.engaged >= 100 and s.engaged <= 105, s.engaged)
 	check("stats: Cash and reward seconds", s.cash == 70 + 77 + 84 + 91 + 98 and near(s.rewardSeconds, 42), s.cash)
 	local expectedF = s.cash / (10 * s.engaged)
-	check("measured f = task Cash per engaged second / base Income per second", near(s.f, expectedF, 1e-9) and s.f > 0, s.f)
-	check("measured f in seconds of Income per engaged second", near(s.fSecs, s.rewardSeconds / s.engaged, 1e-9))
+	check("fCash = task Cash per engaged second / base Income per second (information only)", near(s.fCash, expectedF, 1e-9) and s.fCash > 0, s.fCash)
+	check("fSecs (the G1 f) = seconds of Income paid per engaged second", near(s.fSecs, s.rewardSeconds / s.engaged, 1e-9) and s.fSecs > 0, s.fSecs)
+	check("the stats have no bare 'f': G1 reads fSecs, so nobody reads the Cash-based value by mistake", s.f == nil)
 	p.base = 5
 	tick(p, 10, 1)
 	local after = stats(p)
-	check("f follows the base Income, second by second (a pass doesn't inflate it)",
-		near(after.f, after.cash / (10 * s.engaged + 5 * (after.engaged - s.engaged)), 1e-9), after.f)
+	check("fCash follows the base Income, second by second",
+		near(after.fCash, after.cash / (10 * s.engaged + 5 * (after.engaged - s.engaged)), 1e-9), after.fCash)
+
+	-- Blocker 1: a pass multiplier moves fCash, never fSecs. Same play twice; the second player's Income is
+	-- 3x (Cash x2 pass and the like) while the base Income, which has no passes, is the same.
+	local function session(income)
+		local sp, sd = newPlayer(nil, { income = income, base = 10 })
+		DEBUG.TaskSetRung(sp, sd, "1")
+		noArrivals(sp); richBank(sp)
+		for i = 1, 5 do
+			local id = spawnCall(sp)
+			advance(0.5 + 0.1 * i)
+			answer(sp, id)
+		end
+		tick(sp, 100, 1)
+		return stats(sp), sd
+	end
+	local plain = session(10)
+	local boosted = session(30)
+	check("a pass multiplier pays more Cash (x3 here)", boosted.cash == plain.cash * 3, boosted.cash)
+	check("fSecs, the G1 f, is the same with or without a pass multiplier", near(plain.fSecs, boosted.fSecs, 1e-9) and plain.fSecs > 0, boosted.fSecs)
+	check("fCash is inflated by it (x3 here), which is why it is not the G1 number", near(boosted.fCash, plain.fCash * 3, 1e-9) and boosted.fCash > plain.fCash, boosted.fCash)
 	check("the stats are also on the player's tasks section", d.tasks.done == 5 and d.tasks.bestChain == 5 and d.tasks.seen.Call == true)
 
 	-- the log line every 10 minutes, and on leaving
@@ -2798,7 +2819,9 @@ do
 	check("... it has the rung, hires, engaged seconds, calls, Cash and f",
 		line and string.find(line, "rung=0", 1, true) and string.find(line, "hires=2", 1, true) and string.find(line, "engaged=", 1, true)
 		and string.find(line, "offered=", 1, true) and string.find(line, "answered=", 1, true) and string.find(line, "missed=", 1, true)
-		and string.find(line, "cash=", 1, true) and string.find(line, " f=", 1, true))
+		and string.find(line, "cash=", 1, true) and string.find(line, " fSecs=", 1, true) and string.find(line, " fCash=", 1, true))
+	check("... the log line says which one is the G1 f",
+		line and string.find(line, "(G1 f)", 1, true) and string.find(line, "(info, passes inflate it)", 1, true))
 	PRINTS = {}
 	PLAYER_REMOVING[#PLAYER_REMOVING](q)
 	check("a stats line is logged when the player leaves", #PRINTS == 1)
@@ -2810,7 +2833,11 @@ do
 	for _, bad in ipairs({ "5", "-1", "1.5", "abc", "", "nan" }) do
 		check("Debug Set rung '" .. bad .. "' is refused", DEBUG.TaskSetRung(r, rd, bad) == "Bad rung" and stats(r).rung == 0)
 	end
-	check("Debug stats gives a short line", string.find(DEBUG.TaskStats(r, rd), "Rung 0", 1, true) ~= nil)
+	local summary = DEBUG.TaskStats(r, rd)
+	check("Debug stats gives a short line", string.find(summary, "Rung 0", 1, true) ~= nil)
+	check("Debug stats shows both numbers, labelled, and says which one G1 uses",
+		string.find(summary, "G1 f = ", 1, true) and string.find(summary, "Income-seconds per engaged second", 1, true)
+		and string.find(summary, "fCash ", 1, true) and string.find(summary, "info only", 1, true), summary)
 	IS_STUDIO = false
 	check("Debug is refused outside Studio", DEBUG.TaskSetRung(r, rd, "2") == "Debug is disabled" and DEBUG.TaskSpawn(r, rd) == "Debug is disabled" and stats(r).rung == 0)
 	IS_STUDIO = true
