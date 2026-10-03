@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -118,9 +118,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
+| CLAUDE.md | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
 | PlotVisuals | ServerScriptService | free | | |
-| PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | free | | |
-| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| PlotArt | ServerScriptService | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
+| README.md | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
+| docs/PLOT_VISUALS.md | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
+| docs/STUDIO_SYNC.md | (repo only) | @mattimarca02 (Claude Code, cloud) | visuals-garage | 2026-10-03 |
