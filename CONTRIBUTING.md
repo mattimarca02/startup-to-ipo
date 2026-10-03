@@ -118,3 +118,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | @mattimarca02 | pr1-task-engine | 2026-10-03 |
 | TaskServer | ServerScriptService | @mattimarca02 | pr1-task-engine | 2026-10-03 |
 | TaskClient | StarterPlayerScripts | @mattimarca02 | pr1-task-engine | 2026-10-03 |
+| ROADMAP.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |
+| CLAUDE.md | (repo only) | @mattimarca02 | pr1-task-engine | 2026-10-03 |

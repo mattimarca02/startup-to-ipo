@@ -92,11 +92,11 @@ Studio-only Debug buttons "Task stats" and "Set rung", a log line every 10 min p
 
 ## 7. UI layout spec (px, from the top-left; a phone at 320x568 and at 667x375)
 
-Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76, pop-up lane y 504-552; landscape HUD row y 6-70, pop-up lane y 311-359 (daily pop-up y 255-303); windows 0.92 of the screen, max 640x470. **Touch controls to keep clear** (assumed from Roblox's defaults, check with Test > Device): thumbstick x < 170 and y > H-170; **jump button x > W-150 and y > H-130**.
+Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76, pop-up lanes (bottom center, 48 high, offsets from the bottom -16, -72, -128, -184, and -240 in portrait only: Shop/IPO, Recruiting, Poach, Onboarding, Daily) y 504-552 for -16 and every 56 px up from there; landscape HUD row y 6-70, lanes y 311-359 for -16 up to y 143-191 for -184 (daily pop-up at -72, y 255-303); windows 0.92 of the screen, max 640x470. **Touch controls to keep clear** (assumed from Roblox's defaults, check with Test > Device): thumbstick x < 170 and y > H-170; **jump button x > W-150 and y > H-130**.
 
 | Element | Portrait 320x568 | Landscape 667x375 |
 |---|---|---|
-| Task tray (3 chips) | chips 68x44 at x 98-310, y 392-436 | chips 104x44 at x 176-500, y 206-250 |
+| Task tray (3 chips, 48 high) | chips 68x48 at x 98-310, y 196-244, its line y 174-194: under the Goals card (y 82-164) and 36 px above the highest pop-up lane (-240, from y 280) | chips 59x48 at x 176-361, y 94-142, its line y 72-92: the strip between the HUD row, the Goals card and the thumbstick, 1 px above the -184 lane. **Provisional: the final landscape spot is chosen in Studio with Test > Device (667x375)** (`LANDSCAPE_SPOT` in TaskClient) |
 | Task card (not a window) | bottom sheet 300x260 at x 10, y 236-496 | **300x220 at x 183-483, y 80-300** (right edge 34 px short of the jump zone, left edge 13 px past the thumbstick) |
 | "Away: tap to resume" | 160x32 under the valuation bar, x 98-258, y 82-114; hit area 48 high | same size at x 370-530, y 76-108 |
 | Away summary | dialog 300x360 centered (x 10-310, y 104-464): 4 lines of 14 px, "Collect" 280x48 at the bottom | 360x300 centered (x 153-513, y 38-338): numbers left, "Collect" 160x48 right |

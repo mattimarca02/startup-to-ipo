@@ -2883,24 +2883,42 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 
 
 TRAY_TESTS = r"""-- Tests for TaskClient's tray layout (the code between its TRAY markers): it fits both phone sizes,
--- clear of the HUD, the pop-up lanes and Roblox's touch controls ----------------------------------------
+-- clear of the HUD, every bottom-center pop-up lane and Roblox's touch controls ---------------------------
 local print_real = print
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
 end
 __TRAY__
+local GOALS = __GOALCOUNT__ -- OnboardingConfig.Goals: the Goals card is 30 + 22 per goal + 8 high
 local function rect(x, y, w, h) return { x = x, y = y, w = w, h = h } end
 local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
 local function trayRect(l) return rect(l.x, l.y, l.w, l.h) end
 local function infoRect(l) return rect(l.x, l.infoY, l.w, l.infoH) end
+local function touches(layout, other) return overlaps(trayRect(layout), other) or overlaps(infoRect(layout), other) end
+
+-- The bottom-center pop-up lanes: AnchorPoint (0.5, 1), Position (0.5, 0, 1, -offset), Size (0.6, 0, 0, 48) at most 520 wide.
+-- Shop and IPO -16, Recruiting -72, Poach -128, Onboarding -184, Daily -240 (-72 on short screens).
+local LANE_OFFSETS = { 16, 72, 128, 184, 240 }
+local function lane(w, h, offset)
+	local width = math.min(0.6 * w, 520)
+	return rect((w - width) / 2, h - offset - 48, width, 48)
+end
+local function lanes(w, h, portrait)
+	local list = {}
+	for _, offset in ipairs(LANE_OFFSETS) do
+		if portrait or offset ~= 240 then list["lane -" .. offset] = lane(w, h, offset) end
+	end
+	return list
+end
 
 -- The numbers the doc's layout section gives
 local p = trayLayout(320, 568)
 check("portrait 320x568: three chips of 68x48 from x 98 to 310", p.x == 98 and p.chipWidth == 68 and p.h == 48 and p.gap == 4 and p.x + p.w == 310, p.w)
-check("portrait 320x568: the tray is above the thumbstick zone (bottom edge 396, zone starts 398)", p.y == 348 and p.y + p.h == 396)
+check("portrait 320x568: chips at y 196-244, their line at y 174-194", p.y == 196 and p.y + p.h == 244 and p.infoY == 174 and p.infoY + p.infoH == 194)
 local l = trayLayout(667, 375)
-check("landscape 667x375: three chips of 104x48 from x 176 to 496, y 206-254", l.x == 176 and l.chipWidth == 104 and l.h == 48 and l.x + l.w == 496 and l.y == 206 and l.y + l.h == 254)
+check("landscape 667x375: three chips of 59x48 from x 176 to 361, y 94-142, their line at y 72-92",
+	l.x == 176 and l.chipWidth == 59 and l.h == 48 and l.x + l.w == 361 and l.y == 94 and l.y + l.h == 142 and l.infoY == 72 and l.infoY + l.infoH == 92, l.w)
 
 -- Every size: on screen, chips of 48 or more, clear of the thumbstick and the jump button
 local sizes = { { 320, 568 }, { 375, 667 }, { 360, 640 }, { 414, 736 }, { 768, 1024 }, { 667, 375 }, { 812, 375 }, { 568, 320 }, { 736, 414 }, { 480, 320 }, { 1024, 768 } }
@@ -2917,33 +2935,76 @@ for _, size in ipairs(sizes) do
 	check(label .. ": clear of the jump button zone", not overlaps(tray, jump) and not overlaps(info, jump))
 end
 
--- The two target sizes against the rest of the HUD (rectangles from IpoClient, OnboardingClient and DailyClient)
-local function clear(layout, others)
-	for name, other in pairs(others) do
-		if overlaps(trayRect(layout), other) or overlaps(infoRect(layout), other) then return false, name end
-	end
-	return true
+-- Portrait (height 460 and up uses the tall layout): the HUD, and EVERY pop-up lane, for every portrait size
+local function portraitRects(w, h)
+	local barWidth = math.clamp(w - 108 - 54, 150, 250) -- IpoClient: leaves room for the gift chip
+	return {
+		hudColumn = rect(12, h / 2 - 210, 76, 420), -- EGGS, SHOP, TEAM, POACH, IPO: x 12-88, centered
+		valuationBar = rect(98, 12, barWidth, 64),
+		dailyChip = rect(98 + barWidth + 6, 20, 48, 48),
+		goalCard = rect(98, 82, barWidth, 30 + 22 * GOALS + 8),
+	}
 end
-local portrait = {
-	hudColumn = rect(12, 74, 76, 420), -- EGGS, SHOP, TEAM, POACH, IPO: x 12-88
-	valuationBar = rect(98, 12, 158, 64),
-	dailyChip = rect(262, 20, 48, 48),
-	goalCard = rect(98, 82, 158, 82),
-	popupLane = rect(0, 504, 320, 48),
-}
-local ok, name = clear(p, portrait)
-check("portrait 320x568: the tray and its line never touch the HUD column, the valuation bar, the gift chip, the Goals card or the pop-up lane", ok, name)
+for _, size in ipairs({ { 320, 568 }, { 375, 667 }, { 360, 640 }, { 414, 736 }, { 768, 1024 }, { 1024, 768 } }) do
+	local w, h = size[1], size[2]
+	local lay = trayLayout(w, h)
+	local label = "portrait " .. w .. "x" .. h
+	local bad
+	for name, other in pairs(portraitRects(w, h)) do
+		if touches(lay, other) then bad = name end
+	end
+	check(label .. ": the tray and its line never touch the HUD column, the valuation bar, the gift chip or the Goals card", bad == nil, bad)
+	bad = nil
+	for name, other in pairs(lanes(w, h, true)) do
+		if touches(lay, other) then bad = name end
+	end
+	check(label .. ": the tray and its line never touch a pop-up lane (-16, -72, -128, -184, -240)", bad == nil, bad)
+end
+local card = portraitRects(320, 568).goalCard
+check("portrait 320x568: the Goals card ends at y " .. (card.y + card.h) .. " and the line above the tray starts at 174 (at least 8 px apart)", p.infoY - (card.y + card.h) >= 8, card.y + card.h)
+check("portrait 320x568: the -240 lane starts at y 280, 36 px below the tray", lane(320, 568, 240).y == 280 and lane(320, 568, 240).y - (p.y + p.h) == 36)
+local laneClear = true
+for height = 532, 1400 do
+	if overlaps(trayRect(trayLayout(320, height)), lane(320, height, 240)) then laneClear = false end
+end
+check("portrait, any height from 532 up (the -240 lane then starts at or below the tray): clear of the highest lane", laneClear)
+
+-- Landscape 667x375: PROVISIONAL spot (the final one is chosen in Studio, Test > Device). At least: clear of the
+-- HUD button row, the valuation bar, the Goals card, the gift chip (CLAIM), the thumbstick and the jump button.
 local landscape = {
 	hudRow = rect(10, 6, 360, 64), -- 5 buttons of 64 + 8 gap
 	valuationBar = rect(370, 6, 233, 64),
 	dailyChip = rect(609, 14, 48, 48),
-	goalCard = rect(370, 76, 233, 82),
-	dailyPopup = rect(0, 255, 667, 48),
-	popupLane = rect(0, 311, 667, 48),
+	goalCard = rect(370, 76, 233, 30 + 22 * GOALS + 8),
+	thumbstick = rect(0, 375 - 170, 170, 170),
+	jump = rect(667 - 150, 375 - 130, 150, 130),
 }
-ok, name = clear(l, landscape)
-check("landscape 667x375: the tray and its line never touch the HUD row, the valuation bar, the gift chip, the Goals card or the pop-up lanes", ok, name)
-check("landscape: the tray's right edge is clear of the jump button by more than 20 px", l.x + l.w < 667 - 150 - 20)
+local bad
+for name, other in pairs(landscape) do
+	if touches(l, other) then bad = name end
+end
+check("landscape 667x375: the tray and its line never touch the HUD row, the valuation bar, the gift chip, the Goals card, the thumbstick or the jump button", bad == nil, bad)
+check("landscape: the tray's right edge is clear of the Goals card by 8 px or more", l.x + l.w <= 370 - 8)
+bad = nil
+for name, other in pairs(lanes(667, 375, false)) do
+	if touches(l, other) then bad = name end
+end
+check("landscape 667x375: it also clears the pop-up lanes (-16, -72, -128, -184), with the current provisional spot", bad == nil, bad)
+-- Other wide landscape screens (the bar sits right of the HUD row from 614 px wide on)
+for _, size in ipairs({ { 736, 414 }, { 812, 375 } }) do
+	local w, h = size[1], size[2]
+	local lay = trayLayout(w, h)
+	local barWidth = math.clamp(w - 370 - 10 - 54, 0, 250)
+	local rects = {
+		hudRow = rect(10, 6, 360, 64), valuationBar = rect(370, 6, barWidth, 64),
+		dailyChip = rect(370 + barWidth + 6, 14, 48, 48), goalCard = rect(370, 76, barWidth, 30 + 22 * GOALS + 8),
+	}
+	local why
+	for name, other in pairs(rects) do
+		if touches(lay, other) then why = name end
+	end
+	check("landscape " .. w .. "x" .. h .. ": clear of the HUD row, the valuation bar, the gift chip and the Goals card", why == nil, why)
+end
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
@@ -3036,6 +3097,16 @@ def marked_source(name, filename="TycoonCore.lua"):
         text = f.read()
     start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
     return text[start:text.index("-- %s-END" % name)]
+
+
+def onboarding_goal_count():
+    """How many goals OnboardingConfig.Goals has (the Goals card grows by 22 px per goal)."""
+    import re
+    with open(os.path.join(ROOT, "OnboardingConfig.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("OnboardingConfig.Goals = {"):]
+    block = block[:block.index("\n}")]
+    return len(re.findall(r"\{\s*key = ", block))
 
 
 def known_sections_line():
@@ -3159,7 +3230,7 @@ def main():
     print("TaskServer engine check (PR 1, customer calls): " + (result16.stdout.strip() or result16.stderr.strip()))
     if result16.returncode != 0 or " 0 failed" not in result16.stdout:
         code = 1
-    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")))
+    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
     print("TaskClient tray layout check: " + (result17.stdout.strip() or result17.stderr.strip()))
     if result17.returncode != 0 or " 0 failed" not in result17.stdout:
         code = 1

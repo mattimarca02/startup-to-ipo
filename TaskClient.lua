@@ -6,9 +6,16 @@
 -- Outside Studio (PR 1) TaskConfig.isActive() is false: this script ends at once and shows nothing.
 --
 -- Layout (px, from the top-left). The tray sits clear of the other HUD, of Roblox's touch controls
--- (thumbstick x < 170 and y > H-170; jump button x > W-150 and y > H-130) and of the pop-up lanes:
---   portrait 320x568:   3 chips of 68x48 at x 98-310, y 348-396
---   landscape 667x375:  3 chips of 104x48 at x 176-496, y 206-254
+-- (thumbstick x < 170 and y > H-170; jump button x > W-150 and y > H-130) and, in portrait, of every
+-- bottom-center pop-up lane (offsets -16, -72, -128, -184 and -240 from the bottom, 48 high each):
+--   portrait 320x568:   3 chips of 68x48 at x 98-310, y 196-244; the line above them y 174-194.
+--                       Valuation bar y 12-76, Goals card y 82-164 (2 goals), the lowest lane (-240) starts at y 280.
+--   landscape 667x375:  3 chips of 59x48 at x 176-361, y 94-142; the line above them y 72-92.
+--                       It fills the strip between the HUD button row (bottom y 70), the Goals card (x from 370),
+--                       the thumbstick (x up to 170) and the pop-up lane at -184 (top y 143).
+-- LANDSCAPE IS PROVISIONAL: the strip is only 73 px high at 667x375 and it assumes Roblox's default touch
+-- controls and the HUD sizes above. The final landscape spot must be chosen in Studio with Test > Device
+-- (667x375): change the one constant LANDSCAPE_SPOT below, nothing else. tools/daily_test.py checks the rest.
 -- A window open (PlayerGui attribute "OpenPanel") hides the tray and tells the server to freeze the
 -- waiting calls for a moment.
 
@@ -69,29 +76,39 @@ end
 -- TRAY-START
 -- (tools/daily_test.py runs the code between the TRAY markers, so keep it free of Roblox calls.)
 -- A screen of w x h pixels -> the tray's rectangle, the size of one chip and the line above it.
--- Short screens (phones held sideways, height under 460, the same switch as the HUD buttons):
--- right of the thumbstick, left of the jump button. Tall screens: right of the HUD column and above
--- the thumbstick. Chips are 48 high (the touch target minimum).
+-- Short screens (phones held sideways, height under 460, the same switch as the HUD buttons) and tall
+-- screens each have their own spot (see the layout notes at the top). Chips are 48 high (the touch
+-- target minimum).
 local CHIP_COUNT = 3
 local CHIP_HEIGHT = 48
 local CHIP_GAP = 4
 local INFO_HEIGHT = 20
+local INFO_GAP = 2
+-- Portrait: right of the HUD column (x 98 on), just under the Goals card, far above the pop-up lanes.
+-- Goals card bottom = 12 + 64 (valuation bar) + 6 + (30 + 22 x goals + 8) = 164 with 2 goals; the line
+-- above the tray starts at PORTRAIT_TOP - 22 = 174, so each extra goal (22 px) needs a bigger number here.
+local PORTRAIT_TOP = 196
+-- Landscape (PROVISIONAL, choose the final spot in Studio with Test > Device 667x375): the strip left of
+-- the Goals card and under the HUD button row. HUD_ROW_END is where the valuation bar and the Goals card
+-- start (10 + 5 button slots x 72).
+local LANDSCAPE_SPOT = { x = 176, y = 94 } -- top-left corner of the chips
+local HUD_ROW_END = 370
 local function trayLayout(w, h)
 	local left, right, top
 	if h < 460 then
-		left = 176
-		right = math.min(w - 156, left + 320)
-		top = h - 169
+		left = LANDSCAPE_SPOT.x
+		right = math.min(w - 156, HUD_ROW_END - 8)
+		top = LANDSCAPE_SPOT.y
 	else
 		left = 98
 		right = w - 10
-		top = h - 220
+		top = PORTRAIT_TOP
 	end
 	local chipWidth = math.clamp(math.floor((right - left - CHIP_GAP * (CHIP_COUNT - 1)) / CHIP_COUNT), 48, 104)
 	local width = chipWidth * CHIP_COUNT + CHIP_GAP * (CHIP_COUNT - 1)
 	return {
 		x = left, y = top, w = width, h = CHIP_HEIGHT, chipWidth = chipWidth, gap = CHIP_GAP,
-		infoY = top - INFO_HEIGHT - 2, infoH = INFO_HEIGHT,
+		infoY = top - INFO_HEIGHT - INFO_GAP, infoH = INFO_HEIGHT,
 	}
 end
 -- TRAY-END
