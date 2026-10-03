@@ -1,0 +1,49 @@
+--- a/TycoonCore.lua
++++ b/TycoonCore.lua
+@@ -60,6 +60,16 @@
+ 	PlotVisuals, PlotArt = nil, nil
+ end
+ 
++-- The building around each room: PlotBuildingVisuals builds it from the data in PlotBuilding (both in
++-- ServerScriptService), and the client script BuildingClient fades its roof when you are inside. Only looks,
++-- never saved. Loaded inside pcall: if either is missing or broken, the rooms stay open, as they were.
++local buildingOk, PlotBuildingVisuals = pcall(require, script.Parent:WaitForChild("PlotBuildingVisuals", 5))
++local buildingDataOk, PlotBuilding = pcall(require, script.Parent:WaitForChild("PlotBuilding", 5))
++if not (buildingOk and buildingDataOk) then
++	warn("Plot buildings are off: " .. tostring(buildingOk and PlotBuilding or PlotBuildingVisuals))
++	PlotBuildingVisuals, PlotBuilding = nil, nil
++end
++
+ -- Upgrades are bought in this order, in the shop's Office tab (ShopClient). cost = Cash, income = Cash per second.
+ -- icon is only for that tab.
+ local UPGRADES = {
+@@ -177,12 +187,21 @@
+ 	return data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
+ end
+ 
++-- The building around the room: built for the current funding stage, replaced when the stage changes,
++-- nothing to do otherwise (PlotBuildingVisuals.sync checks). Looks only, like the room.
++local function syncBuilding(data)
++	if PlotBuildingVisuals and data.looks then
++		looks("building", PlotBuildingVisuals.sync, data.folder, data.looks.center, PlotArt, PlotBuilding, stageOf(data))
++	end
++end
++
+ -- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
+ -- swaps the room with a quick flash. The bought props move along.
+ local function syncRoom(data)
+ 	if data.looks and data.looks.stage ~= stageOf(data) then
+ 		looks("stage", PlotVisuals.setStage, data.looks, stageOf(data), true)
+ 	end
++	syncBuilding(data)
+ end
+ 
+ -- An upgrade shows its prop from PlotArt in its slot (popIn on a purchase); without one, the plain block
+@@ -808,6 +827,7 @@
+ 
+ 	-- The room of the player's funding stage, then the props of the upgrades they own
+ 	data.looks = PlotVisuals and looks("room", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))
++	syncBuilding(data) -- the building is there when the player spawns, not a second later
+ 	for i, upg in ipairs(UPGRADES) do
+ 		if data.owned[upg.name] then
+ 			spawnItem(data, i, upg)

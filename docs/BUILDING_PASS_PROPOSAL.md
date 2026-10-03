@@ -117,11 +117,11 @@ Line numbers are for `visuals-garage` at `7f5c141`. They are ready as `docs/buil
 
 | # | File | Line | Change |
 |---|---|---|---|
-| E1 | `TycoonCore.lua` | after 61 (the `end` of the "Plot visuals are off" block) | Require `PlotBuildingVisuals` and `PlotBuilding` inside `pcall` (5 second wait, `warn` and set both to `nil` on failure), same shape as the PlotVisuals block above it. |
-| E2 | `TycoonCore.lua` | 182 to 186 (`syncRoom`) | After the existing stage check, add: `if data.looks and PlotBuildingVisuals then looks("building", PlotBuildingVisuals.sync, data.folder, data.looks.center, PlotArt, PlotBuilding, stageOf(data)) end`. `sync` does nothing when the building already shows that stage. |
-| E3 | `TycoonCore.lua` | after 810 (`data.looks = ...newPlot...`) | The same `looks("building", ...)` call once, so the building is there when the player spawns instead of one second later. |
+| E1 | `TycoonCore.lua` | insert after line 62 (the blank line after the `end` of the "Plot visuals are off" block at 58-61) | 10 lines: require `PlotBuildingVisuals` and `PlotBuilding` inside `pcall` (5 second wait; on failure `warn` and set both to `nil`), same shape as the PlotVisuals block above it. |
+| E2 | `TycoonCore.lua` | insert before line 180 (the comment above `syncRoom`, which is 182 to 186), and one line before the `end` at 186 | A new `local function syncBuilding(data)` (7 lines: `if PlotBuildingVisuals and data.looks then looks("building", PlotBuildingVisuals.sync, data.folder, data.looks.center, PlotArt, PlotBuilding, stageOf(data)) end`), and `syncBuilding(data)` as the last line of `syncRoom`. `sync` does nothing when the building already shows that stage. |
+| E3 | `TycoonCore.lua` | insert after line 810 (`data.looks = ...newPlot...`) | One line, `syncBuilding(data)`, so the building is there when the player spawns instead of one second later. |
 
-No other line of `TycoonCore.lua` changes. The `data.looks` table is not extended and nothing is saved.
+No other line of `TycoonCore.lua` changes (+29 lines, 0 removed). The `data.looks` table is not extended and nothing is saved. **Proved on a scratch copy** (the repo files are untouched): the patch applies cleanly, the patched `TycoonCore.lua` compiles, and `tools/daily_test.py` and `tools/building_test.py` both pass with it, with the same counts as without it.
 
 **Docs to update when the pass is approved** (not done, they are existing files): `README.md` (file list: three new scripts), `docs/PLOT_VISUALS.md` ("Not built yet" paragraph and the open-shell rule: rooms stay open, the building is separate), `CLAUDE.md` (plot visuals bullet: one line on the building and its separate budget), `ROADMAP.md` (the "Full-building pass" line moves to Status), `docs/STUDIO_SYNC.md` (point to `docs/STUDIO_SYNC_BUILDING.md`), and `tools/daily_test.py` (its owner may add the three new scripts to the wiring checks; **not needed for it to keep passing**, proved on a scratch copy, see section 9).
 
