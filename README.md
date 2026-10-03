@@ -13,6 +13,7 @@ Each player gets a garage plot and buys upgrades in the shop's Office tab to ear
 | 4 | IPO rebirth: valuation, funding stages, Go Public, Shares, IPO shop perks, in-server leaderboard, Shareholder pass | Done (PR open). The Shareholder pass shows "Coming soon" until the owner runs the sync (`id = 0`) |
 | 5 | First minute: free egg for new players, glowing arrow, goal tracker | Done |
 | 6 | Daily rewards: 7-day login calendar (UTC days, one missed day allowed), gift chip next to the valuation bar | Built, waiting for the Studio playtest (branch `milestone-6-daily-rewards`) |
+| Visuals | Plot visuals: the garage grows through five rooms as the startup passes each funding stage (stage 1 to 5 built as data in `PlotArt`; no walk-on pads, upgrades are bought in the shop's Office tab) | Built on branch `visuals-garage`, waiting for the Studio check (docs/PLOT_VISUALS.md, docs/STUDIO_SYNC.md) |
 
 ## Folder structure
 
@@ -28,6 +29,8 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
 | `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
 | `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings, grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
+| `PlotVisuals.lua` | ServerScriptService | ModuleScript | Builds each player's plot room and the upgrade props from `PlotArt` (looks only), and checks a room against the reserved gameplay zones, part and light budgets |
+| `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, built from Parts on the same 60 x 60 plot), the hire desks, the six upgrade props |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
@@ -52,6 +55,8 @@ Other files:
 | `icons/` | Pass icons that `sync_monetization` uploads |
 | `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |
 | `tools/daily_test.py` | Logic tests (daily calendar, saves, shop, eggs, IPO, and the task engine and its tray layout): runs the real server code with a fake Roblox. Needs the free `luau` tool (instructions inside) |
+| `docs/PLOT_VISUALS.md` | The five plot rooms, the rules every room keeps and how to add one |
+| `docs/STUDIO_SYNC.md` | What exists only in Studio (script hashes, Lighting and Baseplate settings) and the Mac steps to sync it |
 | `CONTRIBUTING.md` | How we work together, plus the **Ownership** table (who is editing which script) |
 | `CLAUDE.md` | Rules Claude Code follows in this project |
 | `.env` | Your Roblox API key. You create it yourself, and it is never committed. |
