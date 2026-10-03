@@ -19,6 +19,7 @@
 --   TaskAction("Pause", bool) -> a window is open on the client: waiting calls freeze (at most
 --                                TaskConfig.Pause.perTask seconds each)
 --   TaskAction("Sync")        -> the current state, once, when the screen starts
+--   TaskAction("Layout", Vector3) -> Studio only, display only: the client's TaskGui size and top bar (Debug > Task stats)
 --   TaskState (server to client) -> "state" { quiet, chain, mult, tasks = { { id, kind, left, limit } } },
 --                                   "handled" count: "Team handled N calls"
 --
@@ -89,6 +90,7 @@ local function newRun(now)
 		bucketTokens = TaskConfig.RateLimit.burst, bucketAt = now,
 		answers = {}, reactions = {}, flags = {}, -- os.clock() of graded answers (last minute), last reaction times, flags (last hour)
 		paused = false, settledAt = now,
+		layout = nil, -- Studio only: { w, h, inset } the client's TaskGui size (Debug > Task stats), never saved
 		-- PR 2 (economy core): a rejoin gives a full bank and an empty flag list again, because `run` is not
 		-- saved. Fix it there (save the bank and the flags' cool-down, or start a rejoin with an empty bank).
 		bank = TaskConfig.BudgetBank, -- reward budget, in seconds of Income
@@ -537,6 +539,18 @@ local function onAction(player, action, arg)
 		end
 		ok = true
 
+	elseif action == "Layout" then
+		-- Studio only, display only: the client's GUI size and Roblox's top bar, for the Debug stats
+		if not RunService:IsStudio() then
+			return false, "Unknown action"
+		end
+		if typeof(arg) ~= "Vector3" or not isNumber(arg.X) or not isNumber(arg.Y) or not isNumber(arg.Z) then
+			warnBad(player, run, now, "Layout needs a size")
+			return false, "Bad request"
+		end
+		run.layout = { w = math.clamp(math.floor(arg.X), 0, 10000), h = math.clamp(math.floor(arg.Y), 0, 10000), inset = math.clamp(math.floor(arg.Z), 0, 1000) }
+		ok = true
+
 	elseif action == "Sync" then
 		run.changed = true -- the state carries `paused`: the client compares it with its own window
 		ok = true
@@ -571,23 +585,32 @@ local function statsNumbers(data)
 		fCash = stats.engagedBase > 0 and stats.cash / stats.engagedBase or 0, -- information only (passes inflate it)
 		engagedToday = data.tasks.engagedSeconds,
 		bestChain = data.tasks.bestChain,
+		layout = run.layout,
 	}
+end
+
+-- "TaskGui 375x609 (top bar 58 px)", or what is missing (the client reports it in Studio only)
+local function layoutText(layout)
+	if not layout then
+		return "TaskGui size not reported yet"
+	end
+	return string.format("TaskGui %dx%d (top bar %d px, device height %d)", layout.w, layout.h, layout.inset, layout.h + layout.inset)
 end
 
 local function statsLine(player, data)
 	local n = statsNumbers(data)
 	return string.format(
-		"[TaskStats] %s rung=%d (%s) hires=%d online=%ds engaged=%ds offered=%d answered=%d missed=%d team=%d skipped=%d dropped=%d early=%d flagged=%d cash=%d (team %d) rewardSec=%.1f overBudgetSec=%.1f fSecs=%.3f (G1 f) fCash=%.3f (info, passes inflate it) engagedToday=%ds bestChain=%d",
+		"[TaskStats] %s rung=%d (%s) hires=%d online=%ds engaged=%ds offered=%d answered=%d missed=%d team=%d skipped=%d dropped=%d early=%d flagged=%d cash=%d (team %d) rewardSec=%.1f overBudgetSec=%.1f fSecs=%.3f (G1 f) fCash=%.3f (info, passes inflate it) engagedToday=%ds bestChain=%d %s",
 		player.Name, n.rung, TaskConfig.RungNames[n.rung + 1] or "?", n.hires, n.online, n.engaged, n.offered, n.answered, n.missed,
 		n.autoResolved, n.skipped, n.dropped, n.early, n.flagged, n.cash, n.teamCash, n.rewardSeconds, n.overBudget,
-		n.fSecs, n.fCash, n.engagedToday, n.bestChain)
+		n.fSecs, n.fCash, n.engagedToday, n.bestChain, layoutText(n.layout))
 end
 
 -- A short line for the Studio Debug tab (the log line above is too long for its label)
 local function statsSummary(data)
 	local n = statsNumbers(data)
-	return string.format("Rung %d · hires %d · engaged %ds · %d answered, %d missed, %d team · cash %d · G1 f = %.2f (Income-seconds per engaged second) · fCash %.2f (info only, passes inflate it)",
-		n.rung, n.hires, n.engaged, n.answered, n.missed, n.autoResolved, n.cash, n.fSecs, n.fCash)
+	return string.format("Rung %d · hires %d · engaged %ds · %d answered, %d missed, %d team · cash %d · G1 f = %.2f (Income-seconds per engaged second) · fCash %.2f (info only, passes inflate it) · %s",
+		n.rung, n.hires, n.engaged, n.answered, n.missed, n.autoResolved, n.cash, n.fSecs, n.fCash, layoutText(n.layout))
 end
 
 -- One tick for one player (the loop below calls it; the tests call it with a fake clock)

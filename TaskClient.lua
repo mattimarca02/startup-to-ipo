@@ -5,23 +5,33 @@
 -- display, the server's clock decides. Nothing here says anything about odds or chance (D9).
 -- Outside Studio (PR 1) TaskConfig.isActive() is false: this script ends at once and shows nothing.
 --
--- Layout (px, from the top-left). The tray sits clear of the other HUD, of Roblox's touch controls
--- (thumbstick x < 170 and y > H-170; jump button x > W-150 and y > H-130) and, in portrait, of every
--- bottom-center pop-up lane (offsets -16, -72, -128, -184 and -240 from the bottom, 48 high each):
---   portrait 320x568:   3 chips of 68x48 at x 98-310, y 196-244; the line above them y 174-194.
---                       Valuation bar y 12-76, Goals card y 82-164 (2 goals), the lowest lane (-240) starts at y 280.
---   landscape 667x375:  3 chips of 59x48 at x 176-361, y 94-142; the line above them y 72-92.
---                       It fills the strip between the HUD button row (bottom y 70), the Goals card (x from 370),
---                       the thumbstick (x up to 170) and the pop-up lane at -184 (top y 143).
--- LANDSCAPE IS PROVISIONAL: the strip is only 73 px high at 667x375 and it assumes Roblox's default touch
--- controls and the HUD sizes above. The final landscape spot must be chosen in Studio with Test > Device
--- (667x375): change the one constant LANDSCAPE_SPOT below, nothing else. tools/daily_test.py checks the rest.
+-- Layout (px, from the top-left of the GUI). IMPORTANT: every ScreenGui here keeps IgnoreGuiInset = false, so
+-- the GUI is shorter than the device by Roblox's top bar (the size is not measured yet: the tests use 0, 36 and
+-- 58 px). Everything at the top (HUD, Goals card) moves with the GUI's top; the pop-up lanes, the thumbstick and
+-- the jump button hang from the GUI's bottom, so a taller bar squeezes the space between them.
+-- The tray sits clear of the other HUD, of Roblox's touch controls (thumbstick x < 170 and y > H-170; jump
+-- button x > W-150 and y > H-130) and of the bottom-center pop-up lanes (offsets -16, -72, -128, -184 and -240
+-- from the bottom, 48 high each), as far as the space allows:
+--   PORTRAIT_SPOT  chips at x 98, y 188 (320x568: 3 chips of 68x48, x 98-310, y 188-236; the line above them y 166-186).
+--                  Under the Goals card (y 82-164 with 2 goals), right of the HUD column (x 12-88).
+--                  Clear of every lane with a top bar of 0 or 36 px. With 58 px at 320x568 the -240 lane (the Daily
+--                  pop-up) starts at y 222 and covers the lowest 14 px of the chips for as long as that pop-up shows.
+--   LANDSCAPE_SPOT chips at x 10, y 92 (667x375: 3 chips of 52x48, x 10-174, y 92-140; the line above them y 70-90),
+--                  right under the HUD button row and left of the valuation bar. Clear of everything with a top bar of 0.
+--                  With 36 or 58 px the -184 lane (the Onboarding pop-up) starts at y 107 or 85 and the lane is
+--                  wider than the gap, so it covers part of the chips for as long as that pop-up shows.
+-- The full list of what the tray touches, by device size and top bar, is the ACCEPTED list in tools/daily_test.py
+-- (TRAY_TESTS) and in docs/ACTIVE_LOOPS_PROPOSAL.md. Nothing fits everywhere (a 568x320 phone has no free gap at
+-- all), so the tray draws BELOW every other pop-up (DisplayOrder -2): a pop-up is never hidden by it.
+-- THE FINAL SPOTS MUST BE CONFIRMED IN STUDIO with Test > Device (320x568 and 667x375): change the two constants
+-- PORTRAIT_SPOT and LANDSCAPE_SPOT below, nothing else. (Debug > Task stats shows the real TaskGui size.)
 -- A window open (PlayerGui attribute "OpenPanel") hides the tray and tells the server to freeze the
 -- waiting calls for a moment.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
 
 local TaskConfig = require(ReplicatedStorage:WaitForChild("TaskConfig"))
 if not TaskConfig.isActive() then
@@ -75,36 +85,35 @@ end
 
 -- TRAY-START
 -- (tools/daily_test.py runs the code between the TRAY markers, so keep it free of Roblox calls.)
--- A screen of w x h pixels -> the tray's rectangle, the size of one chip and the line above it.
--- Short screens (phones held sideways, height under 460, the same switch as the HUD buttons) and tall
--- screens each have their own spot (see the layout notes at the top). Chips are 48 high (the touch
--- target minimum).
+-- A screen of w x h pixels (the GUI's size, without the top bar) -> the tray's rectangle, the size of one chip
+-- and the line above it. Short screens (phones held sideways, height under 460, the same switch as the HUD
+-- buttons) and tall screens each have their own spot (see the layout notes at the top). Chips are 48 high
+-- (the touch target minimum).
 local CHIP_COUNT = 3
 local CHIP_HEIGHT = 48
 local CHIP_GAP = 4
 local INFO_HEIGHT = 20
 local INFO_GAP = 2
--- Portrait: right of the HUD column (x 98 on), just under the Goals card, far above the pop-up lanes.
--- Goals card bottom = 12 + 64 (valuation bar) + 6 + (30 + 22 x goals + 8) = 164 with 2 goals; the line
--- above the tray starts at PORTRAIT_TOP - 22 = 174, so each extra goal (22 px) needs a bigger number here.
-local PORTRAIT_TOP = 196
--- Landscape (PROVISIONAL, choose the final spot in Studio with Test > Device 667x375): the strip left of
--- the Goals card and under the HUD button row. HUD_ROW_END is where the valuation bar and the Goals card
--- start (10 + 5 button slots x 72).
-local LANDSCAPE_SPOT = { x = 176, y = 94 } -- top-left corner of the chips
-local HUD_ROW_END = 370
+-- Portrait: right of the HUD column (x 98 on), just under the Goals card. Goals card bottom = 12 + 64 (valuation
+-- bar) + 6 + (30 + 22 x goals + 8) = 164 with 2 goals; the line above the tray starts at y - 22 = 166, so each
+-- extra goal (22 px) needs a bigger y here. The chips run to the right edge of the screen minus 10.
+local PORTRAIT_SPOT = { x = 98, y = 188 } -- top-left corner of the chips
+-- Landscape: the strip under the HUD button row (bottom y 70, where the line starts), left of the valuation bar.
+-- Chips are a fixed 52 wide, so the tray is as narrow as a touch target allows (it stays out of the pop-up lanes
+-- as far as it can).
+local LANDSCAPE_SPOT = { x = 10, y = 92 } -- top-left corner of the chips
+local LANDSCAPE_CHIP_WIDTH = 52
 local function trayLayout(w, h)
-	local left, right, top
+	local left, top, chipWidth
 	if h < 460 then
 		left = LANDSCAPE_SPOT.x
-		right = math.min(w - 156, HUD_ROW_END - 8)
 		top = LANDSCAPE_SPOT.y
+		chipWidth = LANDSCAPE_CHIP_WIDTH
 	else
-		left = 98
-		right = w - 10
-		top = PORTRAIT_TOP
+		left = PORTRAIT_SPOT.x
+		top = PORTRAIT_SPOT.y
+		chipWidth = math.clamp(math.floor((w - 10 - left - CHIP_GAP * (CHIP_COUNT - 1)) / CHIP_COUNT), 48, 104)
 	end
-	local chipWidth = math.clamp(math.floor((right - left - CHIP_GAP * (CHIP_COUNT - 1)) / CHIP_COUNT), 48, 104)
 	local width = chipWidth * CHIP_COUNT + CHIP_GAP * (CHIP_COUNT - 1)
 	return {
 		x = left, y = top, w = width, h = CHIP_HEIGHT, chipWidth = chipWidth, gap = CHIP_GAP,
@@ -115,12 +124,20 @@ end
 
 -- The screen -------------------------------------------------------------------------
 
--- Under every window (DisplayOrder -1), like the HUD buttons
+-- Under every window and under every other pop-up (DisplayOrder -2; the HUD buttons are at -1, the other
+-- pop-ups at 0 or more), so the tray never hides a message. The tray's own message has a layer above.
 local gui = make("ScreenGui", {
 	Name = "TaskGui",
 	ResetOnSpawn = false,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = -1,
+	DisplayOrder = -2,
+	Parent = playerGui,
+})
+local front = make("ScreenGui", {
+	Name = "TaskFrontGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 5,
 	Parent = playerGui,
 })
 
@@ -223,7 +240,7 @@ local toast = make("TextLabel", {
 	TextColor3 = COLORS.gold,
 	Visible = false,
 	ZIndex = 10,
-	Parent = gui,
+	Parent = front,
 })
 round(toast, 12)
 fitText(toast, 20)
@@ -256,7 +273,33 @@ local function place()
 	info.Position = UDim2.fromOffset(layout.x, layout.infoY)
 	info.Size = UDim2.fromOffset(layout.w, layout.infoH)
 end
-gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+
+-- Studio only: the real size of this GUI and Roblox's top bar, to the Output and to the server (Debug > "Task
+-- stats" prints them), so the owner can read the top bar that the layout tests only assume (0, 36 and 58 px).
+local reportToken = 0
+local lastReport = ""
+local function reportSize(force)
+	if not RunService:IsStudio() then return end
+	reportToken += 1
+	local myToken = reportToken
+	task.delay(0.4, function()
+		if reportToken ~= myToken then return end
+		local size, inset = gui.AbsoluteSize, GuiService:GetGuiInset()
+		local key = string.format("%dx%d top bar %d px", size.X, size.Y, inset.Y)
+		if key == lastReport and not force then return end
+		lastReport = key
+		print("[TaskGui] AbsoluteSize " .. key .. " (GuiService:GetGuiInset)")
+		local sizeAndBar = Vector3.new(size.X, size.Y, inset.Y)
+		pcall(function()
+			taskAction:InvokeServer("Layout", sizeAndBar)
+		end)
+	end)
+end
+
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	place()
+	reportSize(false)
+end)
 place()
 
 -- State from the server ----------------------------------------------------------------
@@ -422,4 +465,5 @@ task.spawn(function()
 		taskAction:InvokeServer("Sync")
 	end)
 	syncPause()
+	reportSize(true)
 end)

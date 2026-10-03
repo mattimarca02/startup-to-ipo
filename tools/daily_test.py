@@ -1796,6 +1796,10 @@ local Instance = { new = function(class)
 	table.insert(CREATED, i)
 	return i
 end }
+-- A fake Vector3 (the plain Luau tool has none): typeof says "Vector3" for it, like Roblox does
+local realTypeof = typeof
+local function typeof(v) if type(v) == "table" and v.isFakeVector3 then return "Vector3" end return realTypeof(v) end
+local function Vector3(x, y, z) return { isFakeVector3 = true, X = x, Y = y, Z = z } end
 local SPAWNED = {}
 local task = { spawn = function(f) table.insert(SPAWNED, f) end, wait = function() end }
 
@@ -2931,6 +2935,19 @@ do
 	check("Debug stats shows both numbers, labelled, and says which one G1 uses",
 		string.find(summary, "G1 f = ", 1, true) and string.find(summary, "Income-seconds per engaged second", 1, true)
 		and string.find(summary, "fCash ", 1, true) and string.find(summary, "info only", 1, true), summary)
+	check("Debug stats says the GUI size is not reported yet", string.find(summary, "TaskGui size not reported yet", 1, true) ~= nil, summary)
+	local okLayout = onAction(r, "Layout", Vector3(375, 609, 58))
+	local withBar = DEBUG.TaskStats(r, rd)
+	check("Layout (Studio only): Debug stats shows the TaskGui size, the top bar and the device height",
+		okLayout == true and string.find(withBar, "TaskGui 375x609 (top bar 58 px, device height 667)", 1, true) ~= nil, withBar)
+	check("Layout with a number is refused", onAction(r, "Layout", 5) == false and string.find(DEBUG.TaskStats(r, rd), "375x609", 1, true) ~= nil)
+	check("Layout with NaN is refused", onAction(r, "Layout", Vector3(0 / 0, 1, 1)) == false)
+	onAction(r, "Layout", Vector3(1e12, -5, 1e9))
+	check("a huge or negative size is clamped (display only)", string.find(DEBUG.TaskStats(r, rd), "TaskGui 10000x0 (top bar 1000 px", 1, true) ~= nil, DEBUG.TaskStats(r, rd))
+	onAction(r, "Layout", Vector3(375, 609, 58))
+	IS_STUDIO = false
+	check("Layout is refused outside Studio", onAction(r, "Layout", Vector3(1, 2, 3)) == false)
+	IS_STUDIO = true
 	IS_STUDIO = false
 	check("Debug is refused outside Studio", DEBUG.TaskSetRung(r, rd, "2") == "Debug is disabled" and DEBUG.TaskSpawn(r, rd) == "Debug is disabled" and stats(r).rung == 0)
 	IS_STUDIO = true
@@ -3009,10 +3026,10 @@ end
 -- The numbers the doc's layout section gives
 local p = trayLayout(320, 568)
 check("portrait 320x568: three chips of 68x48 from x 98 to 310", p.x == 98 and p.chipWidth == 68 and p.h == 48 and p.gap == 4 and p.x + p.w == 310, p.w)
-check("portrait 320x568: chips at y 196-244, their line at y 174-194", p.y == 196 and p.y + p.h == 244 and p.infoY == 174 and p.infoY + p.infoH == 194)
+check("portrait 320x568: chips at y 188-236, their line at y 166-186", p.y == 188 and p.y + p.h == 236 and p.infoY == 166 and p.infoY + p.infoH == 186)
 local l = trayLayout(667, 375)
-check("landscape 667x375: three chips of 59x48 from x 176 to 361, y 94-142, their line at y 72-92",
-	l.x == 176 and l.chipWidth == 59 and l.h == 48 and l.x + l.w == 361 and l.y == 94 and l.y + l.h == 142 and l.infoY == 72 and l.infoY + l.infoH == 92, l.w)
+check("landscape 667x375: three chips of 52x48 from x 10 to 174, y 92-140, their line at y 70-90",
+	l.x == 10 and l.chipWidth == 52 and l.h == 48 and l.x + l.w == 174 and l.y == 92 and l.y + l.h == 140 and l.infoY == 70 and l.infoY + l.infoH == 90, l.w)
 
 -- Every size: on screen, chips of 48 or more, clear of the thumbstick and the jump button
 local sizes = { { 320, 568 }, { 375, 667 }, { 360, 640 }, { 414, 736 }, { 768, 1024 }, { 667, 375 }, { 812, 375 }, { 568, 320 }, { 736, 414 }, { 480, 320 }, { 1024, 768 } }
@@ -3055,13 +3072,13 @@ for _, size in ipairs({ { 320, 568 }, { 375, 667 }, { 360, 640 }, { 414, 736 }, 
 	check(label .. ": the tray and its line never touch a pop-up lane (-16, -72, -128, -184, -240)", bad == nil, bad)
 end
 local card = portraitRects(320, 568).goalCard
-check("portrait 320x568: the Goals card ends at y " .. (card.y + card.h) .. " and the line above the tray starts at 174 (at least 8 px apart)", p.infoY - (card.y + card.h) >= 8, card.y + card.h)
-check("portrait 320x568: the -240 lane starts at y 280, 36 px below the tray", lane(320, 568, 240).y == 280 and lane(320, 568, 240).y - (p.y + p.h) == 36)
+check("portrait 320x568: the Goals card ends at y " .. (card.y + card.h) .. " and the line above the tray starts at 166 (at least 2 px apart)", p.infoY - (card.y + card.h) >= 2, card.y + card.h)
+check("portrait 320x568 (top bar 0): the -240 lane starts at y 280, 44 px below the tray", lane(320, 568, 240).y == 280 and lane(320, 568, 240).y - (p.y + p.h) == 44)
 local laneClear = true
-for height = 532, 1400 do
+for height = 524, 1400 do
 	if overlaps(trayRect(trayLayout(320, height)), lane(320, height, 240)) then laneClear = false end
 end
-check("portrait, any height from 532 up (the -240 lane then starts at or below the tray): clear of the highest lane", laneClear)
+check("portrait, any GUI height from 524 up (the -240 lane then starts at or below the tray): clear of the highest lane", laneClear)
 
 -- Landscape 667x375: PROVISIONAL spot (the final one is chosen in Studio, Test > Device). At least: clear of the
 -- HUD button row, the valuation bar, the Goals card, the gift chip (CLAIM), the thumbstick and the jump button.
@@ -3098,6 +3115,101 @@ for _, size in ipairs({ { 736, 414 }, { 812, 375 } }) do
 		if touches(lay, other) then why = name end
 	end
 	check("landscape " .. w .. "x" .. h .. ": clear of the HUD row, the valuation bar, the gift chip and the Goals card", why == nil, why)
+end
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Top bar (IgnoreGuiInset = false): the GUI is shorter than the device by Roblox's top bar, whose size is NOT
+-- measured (Debug > Task stats prints the real one). Every size below is run with a bar of 0, 36 and 58 px.
+-- Top-anchored things (HUD, valuation bar, Goals card, gift chip) keep their y; the lanes, the thumbstick and the
+-- jump button hang from the bottom of the GUI; the left button column is centered in the GUI.
+-- ---------------------------------------------------------------------------------------------------------------
+local BARS = { 0, 36, 58 }
+local function hud(w, h)
+	local list = {}
+	local cardHeight = 30 + 22 * GOALS + 8
+	local barX, barY, barW
+	if h < 460 then
+		-- short screens: the HUD buttons are a row (5 x 64, 8 apart, from x 10); the valuation bar is right of the row
+		-- when it has 180 px or more (IpoClient), else under it
+		list["HUD button row"] = rect(10, 6, 352, 64)
+		local width = math.clamp(w - 370 - 10 - 54, 0, 250)
+		if width >= 180 then
+			barX, barY, barW = 370, 6, width
+		else
+			barX, barY, barW = 10, 76, math.min(250, w - 20 - 54)
+		end
+	else
+		list["left button column"] = rect(12, h / 2 - 210, 76, 420)
+		barX, barY, barW = 98, 12, math.clamp(w - 108 - 54, 150, 250)
+	end
+	list["valuation bar"] = rect(barX, barY, barW, 64)
+	list["CLAIM chip"] = rect(math.min(barX + barW + 6, w - 50), barY + 8, 48, 48)
+	list["Goals card"] = rect(barX, barY + 70, barW, cardHeight)
+	for name, r in pairs(lanes(w, h, h >= 460)) do list[name] = r end
+	list["thumbstick"] = rect(0, h - 170, 170, 170)
+	list["jump button"] = rect(w - 150, h - 130, 150, 130)
+	return list
+end
+local function touched(w, h)
+	local lay = trayLayout(w, h)
+	local names = {}
+	for name, other in pairs(hud(w, h)) do
+		if touches(lay, other) then table.insert(names, name) end
+	end
+	table.sort(names)
+	return names, lay
+end
+
+-- ACCEPTED overlaps. Nothing fits everywhere: a spot clear of every lane does not exist at 667x375 with a top bar of
+-- 36 px or more, nor at 320x568 with 58 px, and a 568x320 phone has no free gap at all. The tray draws below every
+-- other pop-up (DisplayOrder -2), so these overlaps never hide a message. A size/bar that is not listed must touch
+-- nothing; a listed one must touch exactly what is listed (so the list can't go stale). Confirm in Studio with Test >
+-- Device (320x568 and 667x375); the lines are also in docs/ACTIVE_LOOPS_PROPOSAL.md.
+local ACCEPTED = {
+	["320x568/58"] = "lane -240",
+	["667x375/36"] = "lane -184",
+	["667x375/58"] = "lane -184",
+	["568x320/0"] = "lane -184, valuation bar",
+	["568x320/36"] = "lane -128, lane -184, thumbstick, valuation bar",
+	["568x320/58"] = "lane -128, lane -184, thumbstick, valuation bar",
+	["640x360/0"] = "lane -184",
+	["640x360/36"] = "lane -184",
+	["640x360/58"] = "lane -128, lane -184, thumbstick",
+	["812x375/36"] = "lane -184",
+	["812x375/58"] = "lane -184",
+	["844x390/36"] = "lane -184",
+	["844x390/58"] = "lane -184",
+}
+local DUMP = __DUMP__
+local REFERENCE = { { 320, 568 }, { 667, 375 } }
+local SWEEP = { { 360, 640 }, { 375, 667 }, { 390, 844 }, { 568, 320 }, { 640, 360 }, { 812, 375 }, { 844, 390 } }
+local ALL = { { 320, 568 }, { 667, 375 }, { 360, 640 }, { 375, 667 }, { 390, 844 }, { 568, 320 }, { 640, 360 }, { 812, 375 }, { 844, 390 } }
+for _, size in ipairs(ALL) do
+	for _, bar in ipairs(BARS) do
+		local w, h = size[1], size[2] - bar
+		local label = w .. "x" .. size[2] .. " top bar " .. bar
+		local names, lay = touched(w, h)
+		local key = w .. "x" .. size[2] .. "/" .. bar
+		local got = table.concat(names, ", ")
+		if DUMP then print_real("DUMP " .. key .. " = " .. (got == "" and "none" or got)) end
+		local want = ACCEPTED[key] or ""
+		check(label .. ": the tray and its line touch " .. (want == "" and "nothing" or ("only " .. want)), got == want, got)
+		check(label .. ": on the screen, chips 48 or more (touch target)", lay.x >= 0 and lay.x + lay.w <= w and lay.infoY >= 0 and lay.y + lay.h <= h and lay.chipWidth >= 48 and lay.h >= 48)
+		-- never an overlap with the HUD, the Goals card, the gift chip or the touch controls on the two reference sizes
+		if size == REFERENCE[1] or size == REFERENCE[2] then
+			local bad
+			for _, name in ipairs(names) do
+				if not string.find(name, "^lane %-") then bad = name end
+			end
+			check(label .. ": reference size: only pop-up lanes are ever touched (never HUD, Goals card, CLAIM, thumbstick, jump)", bad == nil, bad)
+		end
+	end
+end
+check("reference sizes with a top bar of 0 px touch nothing at all", #touched(320, 568) == 0 and #touched(667, 375) == 0)
+check("320x568 with 36 px: clear of every lane (-16 ... -240)", #touched(320, 568 - 36) == 0)
+do
+	local names = touched(320, 568 - 58)
+	check("320x568 with 58 px: only the -240 lane (the Daily pop-up) is touched", #names == 1 and names[1] == "lane -240", table.concat(names, ","))
 end
 
 -- The client's pause sync (PAUSE markers): the server must hear about a window that is already open at start,
@@ -3196,10 +3308,16 @@ def task_wiring_checks():
 
     client = code_only(read("TaskClient.lua"))
     invokes = re.findall(r"InvokeServer\(([^)]*)\)", client)
-    check("TaskClient: only asks the server (Answer with a call number, Start, Pause, Sync)", len(invokes) == 4 and all(len(args.split(",")) <= 2 for args in invokes), invokes)
+    check("TaskClient: only asks the server (Answer with a call number, Start, Pause, Sync, and Layout: the GUI size, Studio only)", len(invokes) == 5 and all(len(args.split(",")) <= 2 for args in invokes), invokes)
+    check("TaskClient: the Layout report is Studio only", re.search(r'if not RunService:IsStudio\(\) then\s*return\s*end\s*reportToken', client) is not None)
     check("TaskClient: sends no Cash, time or reward", not any(word in args.lower() for args in invokes for word in ("cash", "reward", "time", "clock", "amount")))
     check("TaskClient: ends at once when the engine is off (outside Studio in PR 1)", re.search(r"if not TaskConfig\.isActive\(\) then\s*return\s*end", client) is not None)
     check("TaskClient: windows hide the tray through the OpenPanel attribute", 'GetAttribute("OpenPanel")' in client)
+    tray_gui = client[client.index('Name = "TaskGui"'):client.index('Name = "TaskFrontGui"')]
+    front_gui = client[client.index('Name = "TaskFrontGui"'):client.index("local tray = make")]
+    check("TaskClient: the tray draws below every other pop-up (TaskGui DisplayOrder -2, under the HUD at -1)", "DisplayOrder = -2" in tray_gui)
+    check("TaskClient: its own message sits in a layer above the HUD (TaskFrontGui DisplayOrder 5, like the other pop-ups)", "DisplayOrder = 5" in front_gui and "Parent = front" in client[client.index('Name = "Toast"'):client.index("round(toast, 12)")])
+    check("TaskClient: the spots are the named constants PORTRAIT_SPOT and LANDSCAPE_SPOT", "local PORTRAIT_SPOT = {" in client and "local LANDSCAPE_SPOT = {" in client and "PORTRAIT_SPOT.y" in client and "LANDSCAPE_SPOT.y" in client)
 
     shop = read("ShopClient.lua")
     check("ShopClient: the task Debug rows are inside the Studio-only Debug block", shop.index("TaskSpawn") > shop.index("if debugRemote then") and shop.index("TaskSpawn") < shop.index("-- Tabs, opening and closing"))
@@ -3352,7 +3470,7 @@ def main():
     print("TaskServer engine check (PR 1, customer calls): " + (result16.stdout.strip() or result16.stderr.strip()))
     if result16.returncode != 0 or " 0 failed" not in result16.stdout:
         code = 1
-    result17 = run_luau(luau, TRAY_TESTS.replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__PAUSE__", marked_source("PAUSE", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
+    result17 = run_luau(luau, TRAY_TESTS.replace("__DUMP__", "true" if "--layout-table" in sys.argv else "false").replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__PAUSE__", marked_source("PAUSE", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
     print("TaskClient tray layout check: " + (result17.stdout.strip() or result17.stderr.strip()))
     if result17.returncode != 0 or " 0 failed" not in result17.stdout:
         code = 1
