@@ -50,6 +50,16 @@ local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
 local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
 local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
+-- The garage that grows with the startup: PlotVisuals builds it from the data in PlotArt (both in
+-- ServerScriptService). Only looks, never saved. Loaded inside pcall: if either is missing or broken,
+-- the game runs as before with plain upgrade blocks and a warning in the Output.
+local visualsOk, PlotVisuals = pcall(require, script.Parent:WaitForChild("PlotVisuals", 5))
+local artOk, PlotArt = pcall(require, script.Parent:WaitForChild("PlotArt", 5))
+if not (visualsOk and artOk) then
+	warn("Plot visuals are off: " .. tostring(visualsOk and PlotArt or PlotVisuals))
+	PlotVisuals, PlotArt = nil, nil
+end
+
 -- Upgrades are bought in this order. cost = Cash, income = Cash per second.
 local UPGRADES = {
 	{ name = "Desk",           cost = 0,    income = 1,   color = Color3.fromRGB(160, 110, 60),  size = Vector3.new(6, 3, 4) },
@@ -145,7 +155,38 @@ local function nextUpgrade(data)
 	return nil
 end
 
-local function spawnItem(data, i, upg)
+-- Plot looks: a failing look is warned about and skipped, never allowed to stop loading, a
+-- purchase or an IPO. data.looks is the plot's PlotVisuals state (in memory only).
+local function looks(what, fn, ...)
+	if not PlotVisuals then return nil end
+	local ok, result = pcall(fn, ...)
+	if not ok then
+		warn("Plot visuals: " .. what .. " failed: " .. tostring(result))
+		return nil
+	end
+	return result
+end
+
+-- The funding stage decides the room (the same rule as the IPO pad's sign)
+local function stageOf(data)
+	return data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
+end
+
+-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
+-- swaps the room with a quick flash. The bought props move along.
+local function syncRoom(data)
+	if data.looks and data.looks.stage ~= stageOf(data) then
+		looks("stage", PlotVisuals.setStage, data.looks, stageOf(data), true)
+	end
+end
+
+-- An upgrade shows its prop from PlotArt in its slot (popIn on a purchase); without one, the plain block
+local function spawnItem(data, i, upg, popIn)
+	local prop = data.looks and looks("prop " .. upg.name, PlotVisuals.addProp, data.looks, upg.name, itemOffset(i), popIn)
+	if prop then
+		data.items[upg.name] = prop
+		return
+	end
 	local pos = plotCenter(data.slot) + itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0)
 	local item = makePart(data.folder, upg.name, upg.size, pos, upg.color)
 	if upg.name == "Neon Logo" then
@@ -182,7 +223,7 @@ local function refreshPad(player)
 		cash.Value -= upg.cost
 		data.owned[upg.name] = true
 		updateIncome(player)
-		spawnItem(data, i, upg)
+		spawnItem(data, i, upg, true)
 		refreshPad(player)
 	end)
 end
@@ -694,6 +735,8 @@ local function onPlayerAdded(player)
 	end
 	data.loaded = ok -- from here on, saves are complete
 
+	-- The room of the player's funding stage, then the props of the upgrades they own
+	data.looks = PlotVisuals and looks("room", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))
 	for i, upg in ipairs(UPGRADES) do
 		if data.owned[upg.name] then
 			spawnItem(data, i, upg)
@@ -750,6 +793,7 @@ task.spawn(function()
 			if stats and data.ready then
 				stats.Cash.Value += stats.Income.Value
 				addEarnings(player, stats.Income.Value)
+				syncRoom(data)
 			end
 		end
 	end
