@@ -101,6 +101,10 @@ local C = {
 	walnutLight = { 184, 136, 92 }, charcoal = { 52, 54, 60 }, grayLight = { 170, 176, 186 }, frameDark = { 78, 82, 92 },
 	beigeDark = { 172, 162, 136 }, phoneRed = { 190, 56, 50 }, phoneRedDark = { 142, 40, 38 }, powerGreen = { 90, 220, 120 },
 	barBlueLight = { 140, 190, 245 }, barBlueDark = { 40, 96, 190 }, rocketWhite = { 235, 244, 255 },
+	-- Stage 2: the glow-up (fresh mint paint, a coral sofa, teal trim)
+	mint = { 170, 226, 204 }, mintDark = { 46, 110, 100 }, mintLight = { 214, 242, 230 }, coral = { 232, 128, 102 }, coralLight = { 248, 172, 148 },
+	oak = { 214, 184, 140 }, oakDark = { 150, 112, 76 }, offwhite = { 244, 246, 244 }, doorLight = { 238, 242, 242 }, doorGray = { 204, 210, 214 },
+	rugTeal = { 60, 138, 126 }, cream = { 246, 238, 214 }, glassTint = { 126, 172, 190 }, glassDark = { 54, 84, 100 }, skyGlass = { 170, 210, 232 },
 }
 
 -- Helpers --------------------------------------------------------------------
@@ -133,6 +137,48 @@ end
 -- A cylinder standing up (its length is the height)
 local function upright(name, height, diameter, x, y, z, color, material)
 	return P(name, "Cylinder", { height, diameter, diameter }, { x, y + height / 2, z }, color, material, { rot = { 0, 0, 90 } })
+end
+
+-- A block from its center and its width, height and depth (the shape most decor is)
+local function B(name, x, y, z, w, h, d, color, material, extra)
+	return P(name, "Block", { w, h, d }, { x, y, z }, color, material, extra)
+end
+
+-- A plant: a pot and a round bush on it
+local function plant(name, x, z, pot, bush, potColor, leafColor)
+	return {
+		upright(name .. "Pot", pot[1], pot[2], x, 0, z, potColor, "SmoothPlastic"),
+		P(name .. "Leaves", "Ball", { bush, bush, bush }, { x, pot[1] + bush * 0.4, z }, leafColor, "Fabric"),
+	}
+end
+
+-- A sofa against the left wall, facing +X (the center is the middle of its base on the floor)
+local function sofaLeft(name, x, z, body, cushion)
+	return {
+		B(name .. "Base", x, 0.45, z, 2.6, 0.9, 6, body, "SmoothPlastic"),
+		B(name .. "Seat", x + 0.3, 1.15, z, 2, 0.5, 5.2, cushion, "Fabric"),
+		B(name .. "Back", x - 0.8, 1.9, z, 0.7, 2, 6, body, "SmoothPlastic"),
+		B(name .. "ArmA", x, 1.4, z - 2.65, 2.4, 1, 0.7, body, "SmoothPlastic"),
+		B(name .. "ArmB", x, 1.4, z + 2.65, 2.4, 1, 0.7, body, "SmoothPlastic"),
+	}
+end
+
+-- The founder's desk, standing in the front band (z 24.5) with its chair on the +Z side: its screen
+-- and its DeskPhone (the one the phone step makes ring) face the front. look = { top, panel, accent }
+local function founderDesk(x, z, look)
+	return {
+		B("FounderTop", x, 2.5, z, 5.4, 0.2, 2.4, look.top, "Wood"),
+		B("FounderPanelLeft", x - 2.3, 1.2, z, 0.2, 2.4, 2.2, look.panel, "Metal"),
+		B("FounderPanelRight", x + 2.3, 1.2, z, 0.2, 2.4, 2.2, look.panel, "Metal"),
+		B("FounderStand", x - 0.5, 2.775, z, 0.3, 0.35, 0.3, C.charcoal, "Metal"),
+		B("FounderMonitor", x - 0.5, 3.55, z, 2.4, 1.4, 0.12, C.black, "SmoothPlastic"),
+		B("FounderScreen", x - 0.5, 3.55, z + 0.08, 2.1, 1.1, 0.04, look.accent, "Neon"),
+		B("DeskPhone", x + 1.6, 2.75, z + 0.4, 1.1, 0.3, 0.85, C.phoneRed, "SmoothPlastic"),
+		B("FounderKeyboard", x - 0.5, 2.64, z + 0.7, 1.6, 0.08, 0.5, C.charcoal, "SmoothPlastic"),
+		upright("FounderChairPost", 1.5, 0.3, x - 0.5, 0, z + 2, C.steel, "Metal"),
+		B("FounderChairSeat", x - 0.5, 1.65, z + 2, 1.8, 0.3, 1.8, C.black, "Fabric"),
+		B("FounderChairBack", x - 0.5, 2.8, z + 2.9, 1.8, 2, 0.3, C.black, "Fabric"),
+	}
 end
 
 -- A prop designed at its natural size, then made bigger so it reads from the default camera: every
@@ -317,7 +363,98 @@ garage.desk = {
 	P("Board", "Block", { 3.6, 0.15, 1.7 }, { 0, 2.075, 0 }, C.board, "Wood"),
 }
 
-PlotArt.Stages = { garage }
+-- Stage 2: the garage glow-up (Seed) -------------------------------------------------
+-- The same garage with money in it: fresh mint paint with dark teal trim, a new sectional door, clean
+-- windows, a desk for every hire, string lights over the door and a rug and a sofa in the front-left
+-- corner. Nothing of it stands in a reserved gameplay zone (PlotVisuals.check proves it).
+
+local seed = { key = "Seed", floor = { color = { 190, 188, 180 }, material = "Concrete" } }
+
+seed.shell = {
+	-- Back wall (12 high): mint paint, a dark baseboard and cap
+	B("BackWall", 0, 5.8, -29.7, 60, 11.6, 0.6, C.mint, "SmoothPlastic"),
+	B("BackBase", 0, 0.35, -29.34, 60, 0.7, 0.12, C.mintDark, "SmoothPlastic"),
+	B("BackCap", 0, 11.8, -29.7, 60, 0.4, 0.9, C.mintDark, "Metal"),
+	-- Side walls (5.5 high, the camera looks in over them)
+	B("SideWallL", -29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "SmoothPlastic"),
+	B("SideWallR", 29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "SmoothPlastic"),
+	B("SideBaseL", -29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.mintDark, "SmoothPlastic"),
+	B("SideBaseR", 29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.mintDark, "SmoothPlastic"),
+	B("SideCapL", -29.7, 5.65, 0.3, 0.9, 0.3, 59.4, C.mintDark, "Metal"),
+	B("SideCapR", 29.7, 5.65, 0.3, 0.9, 0.3, 59.4, C.mintDark, "Metal"),
+	B("PostBackL", -29.7, 6, -29.7, 0.9, 12, 0.9, C.steelDark, "Metal"),
+	B("PostBackR", 29.7, 6, -29.7, 0.9, 12, 0.9, C.steelDark, "Metal"),
+	B("PostFrontL", -29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.steelDark, "Metal"),
+	B("PostFrontR", 29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.steelDark, "Metal"),
+	-- The new sectional door (x -7..7): dark frame, four panels, a smoked glass band, a mint stripe
+	B("DoorFrameL", -7.3, 5, -29.2, 0.6, 10, 0.5, C.mintDark, "Metal"),
+	B("DoorFrameR", 7.3, 5, -29.2, 0.6, 10, 0.5, C.mintDark, "Metal"),
+	B("DoorHeader", 0, 10.4, -29.2, 15.2, 0.8, 0.5, C.mintDark, "Metal"),
+	B("DoorPanel1", 0, 1.2, -29.2, 14, 2.4, 0.25, C.doorLight, "SmoothPlastic"),
+	B("DoorPanel2", 0, 3.6, -29.2, 14, 2.4, 0.25, C.doorGray, "SmoothPlastic"),
+	B("DoorPanel3", 0, 6, -29.2, 14, 2.4, 0.25, C.doorLight, "SmoothPlastic"),
+	B("DoorPanel4", 0, 8.4, -29.2, 14, 2.4, 0.25, C.doorGray, "SmoothPlastic"),
+	B("DoorGlassBand", 0, 6, -29.02, 12.6, 1.2, 0.1, C.glassDark, "Glass", { transparency = 0.2 }),
+	B("DoorStripe", 0, 2.4, -29.05, 14, 0.25, 0.05, C.mint, "SmoothPlastic"),
+	-- Two clean windows in the gaps between the incubators
+	B("WindowFrameL", -18, 7, -29.27, 6.8, 4.4, 0.25, C.offwhite, "SmoothPlastic"),
+	B("WindowGlassL", -18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25 }),
+	B("WindowBarL", -18, 7, -29.04, 0.25, 3.6, 0.06, C.offwhite, "SmoothPlastic"),
+	B("WindowFrameR", 18, 7, -29.27, 6.8, 4.4, 0.25, C.offwhite, "SmoothPlastic"),
+	B("WindowGlassR", 18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25 }),
+	B("WindowBarR", 18, 7, -29.04, 0.25, 3.6, 0.06, C.offwhite, "SmoothPlastic"),
+}
+
+-- String lights: a cord under the cap on each side of the door, warm bulbs hanging from it
+local function stringLights()
+	local out = {
+		B("StringCordL", -18, 11.1, -29.3, 20, 0.08, 0.3, C.cord, "SmoothPlastic"),
+		B("StringCordR", 18, 11.1, -29.3, 20, 0.08, 0.3, C.cord, "SmoothPlastic"),
+	}
+	for i = 0, 5 do
+		for _, side in ipairs({ { "L", -1 }, { "R", 1 } }) do
+			local x = side[2] * (9.5 + i * 3.6)
+			local extra = nil
+			if i == 2 then
+				extra = { light = { color = C.warmLight, brightness = 1.4, range = 34 } }
+			end
+			table.insert(out, P("StringBulb" .. side[1] .. i, "Ball", { 0.55, 0.55, 0.55 }, { x, 10.8, -29.2 }, C.bulb, "Neon", extra))
+		end
+	end
+	return out
+end
+
+seed.decor = join(
+	stringLights(),
+	{
+		B("DoorSign", 0, 11.2, -29.28, 6.4, 0.8, 0.2, C.mintDark, "SmoothPlastic",
+			{ text = { value = "OFFICE", font = "FredokaOne", color = C.offwhite } }),
+		-- The front-left corner: a rug, a coral sofa against the wall, a coffee table, a plant and a floor lamp
+		B("RugBase", -20.8, 0.03, 24, 9, 0.06, 7, C.rugTeal, "Fabric"),
+		B("RugInner", -20.8, 0.05, 24, 7.6, 0.1, 5.6, C.cream, "Fabric"),
+		B("TableTop", -22.2, 1.35, 24, 2.4, 0.2, 2.4, C.oak, "Wood"),
+		B("TableBase", -22.2, 0.625, 24, 1.6, 1.25, 1.6, C.oakDark, "Wood"),
+		B("FloorLampPole", -27.8, 2.2, 20.4, 0.2, 4.4, 0.2, C.steelDark, "Metal"),
+		B("FloorLampShade", -27.8, 4.8, 20.4, 1.2, 0.9, 1.2, C.bulb, "Neon", { light = { color = C.warmLight, brightness = 1.2, range = 26 } }),
+	},
+	sofaLeft("Sofa", -28.1, 24, C.coral, C.coralLight),
+	plant("CornerPlant", -27.6, 28.4, { 1.2, 1.1 }, 2.6, C.pot, C.leaf),
+	plant("GapPlantL", -6, -26.5, { 1.6, 1.4 }, 3, C.pot, C.leaf),
+	plant("GapPlantR", 6, -26.5, { 1.6, 1.4 }, 3, C.pot, C.leaf),
+	founderDesk(10.5, 24.5, { top = C.oak, panel = C.mintDark, accent = C.screenBlue })
+)
+
+-- A hire's desk (zone: 3.8 wide, 1.8 deep, 3 high): a light oak top on two dark legs and a monitor
+-- whose screen faces the hire
+seed.desk = {
+	B("DeskTop", 0, 1.92, 0, 3.6, 0.16, 1.7, C.oak, "Wood"),
+	B("DeskLegL", -1.65, 0.92, 0, 0.2, 1.84, 1.5, C.mintDark, "Metal"),
+	B("DeskLegR", 1.65, 0.92, 0, 0.2, 1.84, 1.5, C.mintDark, "Metal"),
+	B("MonitorFrame", 0, 2.42, 0.1, 1.4, 0.84, 0.1, C.black, "SmoothPlastic"),
+	B("MonitorScreen", 0, 2.42, -0.0, 1.2, 0.64, 0.04, C.screenBlue, "Neon"),
+}
+
+PlotArt.Stages = { garage, seed }
 
 -- Upgrade props ----------------------------------------------------------------
 -- Each stands in its upgrade's slot (offsets from the slot on the floor), facing the front. Every prop

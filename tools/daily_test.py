@@ -3745,6 +3745,176 @@ do
 	check("mutation: a size of 0 is caught", anyMatch(PlotVisuals.validate(art), "size must be"))
 end
 
+-- 7. Stages 2 to 5 (visuals-garage): same builder, same rules, new shells and decor --------------------
+-- The fingerprints below were taken from the commit before stages 2-5 (cb326d8). If one fails, stage 1, the
+-- six props or the layout changed: that is only allowed on purpose, by hand.
+local function num(n) return string.format("%.4f", n) end
+local function triple(t) if not t then return "-" end return num(t[1]) .. "," .. num(t[2]) .. "," .. num(t[3]) end
+local function specString(s)
+	local tr = s.text and (s.text.value .. s.text.font) or ""
+	local lt = s.light and (s.light.brightness .. "/" .. s.light.range) or ""
+	return table.concat({ s.name, s.shape, triple(s.size), triple(s.offset), triple(s.rot), triple(s.color), s.material, num(s.transparency or 0), tostring(s.collide), tr, lt }, "|")
+end
+local function listString(list)
+	local out = {}
+	for _, s in ipairs(list) do table.insert(out, specString(s)) end
+	return table.concat(out, ";")
+end
+local function hash(str)
+	local h = 5381
+	for i = 1, #str do h = (h * 33 + string.byte(str, i)) % 4294967291 end
+	return h
+end
+do
+	local g = PlotArt.Stages[1]
+	check("stage 1 is unchanged (fingerprint of its shell, decor, desks, floor and key)",
+		hash(listString(g.shell) .. "#" .. listString(g.decor) .. "#" .. listString(g.desk) .. g.floor.material .. triple(g.floor.color) .. g.key) == 2156961517
+		and #g.shell == 35 and #g.decor == 81 and #g.desk == 2)
+	local names = {}
+	for n in pairs(PlotArt.Props) do table.insert(names, n) end
+	table.sort(names)
+	local ps = {}
+	for _, n in ipairs(names) do table.insert(ps, n .. "=" .. listString(PlotArt.Props[n])) end
+	check("the six upgrade props are unchanged (fingerprint of every part)", hash(table.concat(ps, "##")) == 893633666)
+	local L2 = PlotArt.Layout
+	local ls = {}
+	for _, s in ipairs(L2.employeeSpots) do table.insert(ls, s[1] .. "," .. s[2]) end
+	for _, s in ipairs(L2.incubators) do table.insert(ls, s[1] .. "," .. s[2]) end
+	for _, s in ipairs(L2.itemSlots) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
+	for _, s in ipairs(L2.signs) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
+	for _, s in ipairs(L2.desks) do table.insert(ls, s[1] .. "," .. s[2] .. "," .. s[3]) end
+	table.insert(ls, L2.spawn.x .. "," .. L2.spawn.z)
+	local rs = {}
+	for k, v in pairs(L2.reserve) do table.insert(rs, k .. "=" .. v) end
+	table.sort(rs)
+	check("every gameplay position is unchanged: hire grid, incubators, upgrade stations, signs, spawn, desk offsets, reserved zones (fingerprint)",
+		hash(table.concat(ls, ";") .. table.concat(rs, ";")) == 1471280708)
+	for i, look in ipairs(PlotArt.Stages) do
+		check("stage " .. i .. ": no stage owns props (the six props are one shared list)", look.props == nil and look.Props == nil)
+	end
+end
+
+-- What each later room must show: the parts that tell its story (a name each), and the rules it keeps
+local STORY = {
+	[2] = { shell = { "BackWall", "DoorPanel1", "DoorPanel4", "DoorGlassBand", "WindowGlassL", "WindowGlassR" },
+		decor = { "StringBulbL0", "StringBulbR5", "StringCordL", "RugBase", "RugInner", "SofaBase", "SofaBack", "CornerPlant" .. "Pot", "FounderTop", "DeskPhone", "DoorSign" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wall = { 170, 226, 204 }, lights = 3 },
+}
+local function has(list, name) for _, s in ipairs(list) do if s.name == name then return s end end return nil end
+local function countPrefix(list, prefix) local n = 0 for _, s in ipairs(list) do if string.find(s.name, prefix, 1, true) == 1 then n += 1 end end return n end
+for i = 2, #PlotArt.Stages do
+	local look = PlotArt.Stages[i]
+	local room = fullRoom(PlotArt, i)
+	local story = STORY[i]
+	check("stage " .. i .. ": has a story entry in this test (add one when a stage is added)", story ~= nil)
+	if story then
+		for _, group in ipairs({ "shell", "decor", "desk" }) do
+			local missing
+			for _, name in ipairs(story[group]) do if not has(look[group], name) then missing = name end end
+			check("stage " .. i .. ": its " .. group .. " has the parts of its story", missing == nil, missing)
+		end
+		local wall = has(look.shell, story.wallPart or "BackWall")
+		check("stage " .. i .. ": the back wall has its color", wall ~= nil and wall.color[1] == story.wall[1] and wall.color[2] == story.wall[2] and wall.color[3] == story.wall[3])
+		local lights = 0
+		for _, d in ipairs(room:GetDescendants()) do if d:IsA("PointLight") then lights += 1 end end
+		check("stage " .. i .. ": uses " .. story.lights .. " of its 3 PointLights", lights == story.lights, lights)
+	end
+	check("stage " .. i .. ": a different floor from every earlier stage", (function()
+		for j = 1, i - 1 do
+			local f = PlotArt.Stages[j].floor
+			if f.material == look.floor.material and f.color[1] == look.floor.color[1] and f.color[2] == look.floor.color[2] and f.color[3] == look.floor.color[3] then return false end
+		end
+		return true
+	end)())
+	-- Only walls, floors and decor: nothing collides, nothing is a roof or a facade, the front stays open
+	local solid, roof, front, parts = 0, nil, nil, 0
+	local tall = 0
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("BasePart") then
+			parts += 1
+			if d.CanCollide then solid += 1 end
+			local oy, hy = d.CFrame.y - center.Y - 0.5, d.Size.Y / 2
+			local lowest = oy - hy
+			if d.Size.X > 20 and d.Size.Z > 20 and lowest > 5 and string.find(d.Name, "Skyline", 1, true) ~= 1 then roof = roof or d:GetFullName() end
+			if d.Size.X > 30 and d.CFrame.z - center.Z > 20 and string.find(d.Name, "Floor", 1, true) == nil and d.Size.Y > 0.3 then front = front or d:GetFullName() end
+		end
+	end
+	check("stage " .. i .. ": nothing collides (walls and floors are looks; the real Floor is the only solid)", solid == 0, solid)
+	check("stage " .. i .. ": no roof", roof == nil, roof)
+	check("stage " .. i .. ": the front is open (no long wall or facade along the front)", front == nil, front)
+	local desks = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
+	check("stage " .. i .. ": hire desks are not the garage crate", desks ~= nil and desks:FindFirstChild("Crate") == nil and #desks:GetChildren() >= 3)
+	check("stage " .. i .. ": shell, decor and 11 desks use at most 142 parts so the six props (118) always fit (" .. (parts - 118) .. ")", parts - 118 <= 142, parts)
+	-- The six props are the same in every room
+	local propsOf = function(r)
+		local out = {}
+		for _, m in ipairs(r:FindFirstChild("UpgradeProps"):GetChildren()) do
+			for _, p in ipairs(m:GetChildren()) do
+				table.insert(out, string.format("%s.%s %.3f,%.3f,%.3f %.3f,%.3f,%.3f", m.Name, p.Name, p.Size.X, p.Size.Y, p.Size.Z, p.CFrame.x, p.CFrame.y, p.CFrame.z))
+			end
+		end
+		return table.concat(out, ";")
+	end
+	check("stage " .. i .. ": the six props are exactly the same parts in the same places as in the Garage", propsOf(room) == propsOf(fullRoom(PlotArt, 1)))
+	-- Every part of this room outside the props: nothing in the six slots but the prop itself
+	local slotClear = true
+	for _, d in ipairs(room:FindFirstChild("Decor"):GetDescendants()) do
+		if d:IsA("BasePart") and string.find(d:GetFullName(), "HireDesk", 1, true) == nil then
+			for _, slot in ipairs(L.itemSlots) do
+				local x, z = d.CFrame.x - center.X - slot.x, d.CFrame.z - center.Z - slot.z
+				if math.abs(x) < 4 and z > -3.5 and z < 2.5 and d.Size.Y > 0.3 then slotClear = false end
+			end
+		end
+	end
+	check("stage " .. i .. ": no decor stands in an upgrade station", slotClear)
+	-- The skyline stays behind the back wall and the plot's own width
+	for _, group in ipairs({ look.shell, look.decor }) do
+		for _, s in ipairs(group) do
+			if string.find(s.name, "Skyline", 1, true) == 1 then
+				check("stage " .. i .. ": " .. s.name .. " stays behind the back wall inside the plot's width", s.offset[3] + s.size[3] / 2 <= PlotVisuals.BACKDROP_Z and math.abs(s.offset[1]) + s.size[1] / 2 <= 30, s.name)
+			end
+		end
+	end
+end
+
+-- 7b. Mutations on every later room: the same checks catch a bad part in stages 2 to 5 too
+for i = 2, #PlotArt.Stages do
+	local function extra(part)
+		local art = deepCopy(PlotArt)
+		table.insert(art.Stages[i].decor, part)
+		return PlotVisuals.check(fullRoom(art, i), center, art)
+	end
+	local box = { name = "TestBox", shape = "Block", size = { 2, 2, 2 }, color = { 1, 2, 3 }, material = "Wood" }
+	local function at(x, y, z, more)
+		local part = deepCopy(box)
+		part.offset = { x, y, z }
+		for k, v in pairs(more or {}) do part[k] = v end
+		return part
+	end
+	check("mutation (stage " .. i .. "): a box where a hire stands is caught", anyMatch(extra(at(-4.5, 1, 14)), "hire zone"))
+	check("mutation (stage " .. i .. "): a box in the walking lane is caught", anyMatch(extra(at(0, 1, 20)), "lane zone WalkingLane"))
+	check("mutation (stage " .. i .. "): a box inside an upgrade station is caught", anyMatch(extra(at(-23, 1, 2)), "slot zone Coffee Machine"))
+	check("mutation (stage " .. i .. "): a box on a hire's desk is caught", anyMatch(extra(at(4.5, 1, 5.3)), "desk zone HireDesk"))
+	check("mutation (stage " .. i .. "): a box on the BuySign is caught", anyMatch(extra(at(0, 1, 24)), "sign zone BuySign"))
+	check("mutation (stage " .. i .. "): a floating box is caught", anyMatch(extra(at(8, 20, 26)), "TestBox is floating"))
+	check("mutation (stage " .. i .. "): a collidable box is caught", anyMatch(extra(at(-8, 1, 26, { collide = true })), "only floors and low walls may collide"))
+	check("mutation (stage " .. i .. "): four extra PointLights are caught", (function()
+		local art = deepCopy(PlotArt)
+		for k = 1, 4 do
+			table.insert(art.Stages[i].decor, at(-8 + k, 1, 26, { name = "TestLight" .. k, material = "Neon", light = { color = { 255, 255, 255 }, brightness = 1, range = 10 } }))
+		end
+		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "lights (budget 3)")
+	end)())
+	check("mutation (stage " .. i .. "): a tall wall on the side is caught", anyMatch(extra({ name = "TestWall", shape = "Block", size = { 0.6, 9, 6 }, offset = { -29.7, 4.5, 24 }, color = { 1, 2, 3 }, material = "Wood" }), "taller than 6"))
+	check("mutation (stage " .. i .. "): too many parts is caught", (function()
+		local art = deepCopy(PlotArt)
+		for k = 1, 60 do
+			table.insert(art.Stages[i].decor, at(-8 + (k % 10) * 0.5, 0.2 + math.floor(k / 10) * 0.1, 27, { name = "Extra" .. k, size = { 0.4, 0.2, 0.4 } }))
+		end
+		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "parts (budget 260)")
+	end)())
+end
+
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
