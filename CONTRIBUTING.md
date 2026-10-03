@@ -125,11 +125,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
-| PlotBuilding (new) | ServerScriptService (ModuleScript, new) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| PlotBuildingVisuals (new) | ServerScriptService (ModuleScript, new) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| docs/studio_scripts/BuildingClient.lua (new) | StarterPlayerScripts (LocalScript, made by hand, pasted from the docs folder; not in the game tree) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| tools/building_test.py (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| docs/BUILDING_PASS_PROPOSAL.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| docs/BUILDING_PASS_NOTES.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| docs/STUDIO_SYNC_BUILDING.md (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
-| docs/building_pass_integration.patch (new) | (repo only) | Claude (for @mattimarca02) | building-pass | 2026-10-03 |
+| PlotBuilding (new) | ServerScriptService (ModuleScript, new) | free | | |
+| PlotBuildingVisuals (new) | ServerScriptService (ModuleScript, new) | free | | |
+| docs/studio_scripts/BuildingClient.lua (new) | StarterPlayerScripts (LocalScript, made by hand, pasted from the docs folder; not in the game tree) | free | | |
+| tools/building_test.py (new) | (repo only) | free | | |
+| docs/BUILDING_PASS_PROPOSAL.md (new) | (repo only) | free | | |
+| docs/BUILDING_PASS_NOTES.md (new) | (repo only) | free | | |
+| docs/STUDIO_SYNC_BUILDING.md (new) | (repo only) | free | | |
+| docs/building_pass_integration.patch (new) | (repo only) | free | | |
