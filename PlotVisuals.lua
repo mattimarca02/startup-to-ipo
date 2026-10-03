@@ -21,7 +21,7 @@
 --   PlotVisuals.check(room, center, art)  -> list of problems in a built room (zones, floating parts, walls, budget)
 --
 -- Offsets in the art are studs from the plot's floor-top center: the middle of the Floor's top
--- face (plot center + Layout.floorTop). +X is right, +Z is the front (the pads), -Z the back wall.
+-- face (plot center + Layout.floorTop). +X is right, +Z is the front (the signs), -Z the back wall.
 
 local PlotVisuals = {}
 
@@ -36,7 +36,7 @@ local FACES = { Top = true, Bottom = true, Left = true, Right = true, Front = tr
 PlotVisuals.LIGHT_WORDS = { "Bulb", "Lamp", "Light", "Screen", "LED", "Sign", "Logo", "Neon", "Glow", "Flash" }
 PlotVisuals.TINY = 2 -- a part whose longest side is shorter than this casts no shadow
 PlotVisuals.FLAT = 0.2 -- a part at most this tall lying on the floor or the ground is a floor mark (rug, stain, line)
-PlotVisuals.MAX_PARTS = 220 -- per stage room, upgrade props included
+PlotVisuals.MAX_PARTS = 260 -- per stage room, upgrade props included
 PlotVisuals.MAX_LIGHTS = 3 -- PointLights per plot
 PlotVisuals.SIDE_WALL_MAX = 6 -- the sides and the front, where the camera looks in
 PlotVisuals.BACK_WALL_MAX = 12 -- behind the incubators (z <= BACK_BAND)
@@ -130,7 +130,7 @@ function PlotVisuals.buildPart(parent, base, spec)
 	if text then
 		local gui = Instance.new("SurfaceGui")
 		gui.Name = "Text"
-		gui.Face = Enum.NormalId[text.face or "Back"] -- Back = the +Z side, toward the pads
+		gui.Face = Enum.NormalId[text.face or "Back"] -- Back = the +Z side, toward the front
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 		gui.PixelsPerStud = 40
 		gui.LightInfluence = text.glow and 0 or 1
@@ -471,37 +471,63 @@ function PlotVisuals.validate(art)
 	return problems
 end
 
--- The reserved gameplay zones from the layout map: boxes no room part may enter (pads, the spawn
--- and its lane to the green pad, incubators and the space in front of them, where each hire
--- stands, the front aisle) and the upgrade slots (only that upgrade's prop goes in its slot).
+-- The aisles of the hire grid, from the layout map: the strip between the incubators and the first row
+-- of hires, and the strips between rows (a hire's desk is in front of it). Each is { x0, x1, z0, z1 }
+-- over the width of the grid; its depth z1 - z0 must be at least reserve.minAisle.
+function PlotVisuals.aisles(layout)
+	local r = layout.reserve
+	local rows, x0, x1 = {}, math.huge, -math.huge
+	local seen = {}
+	for _, spot in ipairs(layout.employeeSpots) do
+		if not seen[spot[2]] then
+			seen[spot[2]] = true
+			table.insert(rows, spot[2])
+		end
+		x0 = math.min(x0, spot[1] - r.deskHalfX)
+		x1 = math.max(x1, spot[1] + r.deskHalfX)
+	end
+	table.sort(rows)
+	local doorEnd = -math.huge
+	for _, spot in ipairs(layout.incubators) do
+		doorEnd = math.max(doorEnd, spot[2] + r.incubatorFront)
+	end
+	local aisles = { { x0, x1, doorEnd, rows[1] - r.hireHalf } }
+	for i = 2, #rows do
+		table.insert(aisles, { x0, x1, rows[i - 1] + r.deskTo, rows[i] - r.hireHalf })
+	end
+	return aisles
+end
+
+-- The reserved gameplay zones from the layout map: boxes no room part may enter (the garage signs,
+-- the spawn and the walking lane down the middle, incubators and the space in front of them, where each
+-- hire stands and its desk, the aisles) and the upgrade slots (only that upgrade's prop goes in its slot).
 function PlotVisuals.zones(layout)
 	local r = layout.reserve
 	local zones = {}
 	local function add(kind, name, x0, x1, z0, z1, top, owner)
 		table.insert(zones, { kind = kind, name = name, owner = owner, box = { x0, x1, 0, top, z0, z1 } })
 	end
-	local padHalf = layout.padSize / 2 + r.padMargin
-	local buyPad
-	for _, pad in ipairs(layout.pads) do
-		add("pad", pad.name, pad.x - padHalf, pad.x + padHalf, pad.z - padHalf, pad.z + padHalf, r.height)
-		if pad.name == "BuyPad" then
-			buyPad = pad
-		end
+	for _, sign in ipairs(layout.signs) do
+		add("sign", sign.name, sign.x - r.signHalfX, sign.x + r.signHalfX, sign.z - r.signHalfZ, sign.z + r.signHalfZ, r.signHeight)
 	end
 	local s = layout.spawn
-	add("spawn", "Spawn", s.x - r.spawnHalf, s.x + r.spawnHalf, s.z - r.spawnHalf, buyPad.z - padHalf, r.height)
+	add("spawn", "Spawn", s.x - r.spawnHalf, s.x + r.spawnHalf, s.z - r.spawnHalf, s.z + r.spawnHalf, r.height)
+	local aisles = PlotVisuals.aisles(layout)
+	add("lane", "WalkingLane", s.x - r.spawnHalf, s.x + r.spawnHalf, aisles[1][3], r.laneEnd, r.height)
 	for i, spot in ipairs(layout.incubators) do
 		add("incubator", "Incubator" .. i, spot[1] - r.incubatorHalf, spot[1] + r.incubatorHalf,
 			spot[2] - r.incubatorHalf, spot[2] + r.incubatorFront, r.height)
 	end
 	for i, spot in ipairs(layout.employeeSpots) do
 		add("hire", "Hire" .. i, spot[1] - r.hireHalf, spot[1] + r.hireHalf, spot[2] - r.hireHalf, spot[2] + r.hireHalf, r.hireHeight)
+		add("desk", "HireDesk" .. i, spot[1] - r.deskHalfX, spot[1] + r.deskHalfX, spot[2] + r.deskFrom, spot[2] + r.deskTo, r.deskHeight)
 	end
 	for _, slot in ipairs(layout.itemSlots) do
-		add("slot", slot.name, slot.x - r.slotHalfX, slot.x + r.slotHalfX, slot.z - r.slotHalfZ, slot.z + r.slotHalfZ, r.slotHeight, slot.name)
+		add("slot", slot.name, slot.x - r.slotHalfX, slot.x + r.slotHalfX, slot.z - r.slotBack, slot.z + r.slotFront, r.slotHeight, slot.name)
 	end
-	local a = r.aisle
-	add("aisle", "FrontAisle", a[1], a[2], a[3], a[4], r.height)
+	for i, a in ipairs(aisles) do
+		add("aisle", i == 1 and "DoorAisle" or ("RowAisle" .. (i - 1)), a[1], a[2], a[3], a[4], r.height)
+	end
 	return zones
 end
 
@@ -524,13 +550,16 @@ function PlotVisuals.check(room, center, art)
 		elseif d:IsA("BasePart") then
 			local b = boxOf(d.CFrame, d.Size)
 			b = { b[1] - ox, b[2] - ox, b[3] - oy, b[4] - oy, b[5] - oz, b[6] - oz }
-			local upgrade, node = nil, d.Parent
+			local upgrade, deskName, node = nil, nil, d.Parent
 			while node and node ~= room do
 				upgrade = upgrade or node:GetAttribute("Upgrade")
+				if not deskName and string.find(node.Name, "HireDesk", 1, true) == 1 then
+					deskName = node.Name
+				end
 				node = node.Parent
 			end
 			local flat = b[4] - b[3] <= PlotVisuals.FLAT and (math.abs(b[3]) <= TOUCH or math.abs(b[3] - ground) <= TOUCH)
-			table.insert(parts, { part = d, name = d:GetFullName(), box = b, upgrade = upgrade, flat = flat })
+			table.insert(parts, { part = d, name = d:GetFullName(), box = b, upgrade = upgrade, desk = deskName, flat = flat })
 		end
 	end
 	if #parts > PlotVisuals.MAX_PARTS then
@@ -541,10 +570,12 @@ function PlotVisuals.check(room, center, art)
 	end
 
 	local zones = PlotVisuals.zones(layout)
-	local slotOf = {}
+	local slotOf, deskOf = {}, {}
 	for _, zone in ipairs(zones) do
 		if zone.kind == "slot" then
 			slotOf[zone.owner] = zone
+		elseif zone.kind == "desk" then
+			deskOf[zone.name] = zone.box
 		end
 	end
 	for _, p in ipairs(parts) do
@@ -573,8 +604,8 @@ function PlotVisuals.check(room, center, art)
 		end
 		-- Reserved zones
 		for _, zone in ipairs(zones) do
-			if (not p.flat or zone.kind == "pad") and overlaps(b, zone.box, OVERLAP)
-				and not (zone.kind == "slot" and p.upgrade == zone.owner) then
+			if (not p.flat or zone.kind == "sign") and overlaps(b, zone.box, OVERLAP)
+				and not (zone.kind == "slot" and p.upgrade == zone.owner) and not (zone.kind == "desk" and p.desk == zone.name) then
 				problem(p.name .. " is inside " .. zone.kind .. " zone " .. zone.name)
 			end
 		end
@@ -583,6 +614,12 @@ function PlotVisuals.check(room, center, art)
 			local z = own and own.box
 			if not z or b[1] < z[1] - OVERLAP or b[2] > z[2] + OVERLAP or b[5] < z[5] - OVERLAP or b[6] > z[6] + OVERLAP or b[4] > z[4] + OVERLAP then
 				problem(p.name .. ": a prop must stay inside its own slot")
+			end
+		end
+		if p.desk then
+			local z = deskOf[p.desk]
+			if not z or b[1] < z[1] - OVERLAP or b[2] > z[2] + OVERLAP or b[5] < z[5] - OVERLAP or b[6] > z[6] + OVERLAP or b[4] > z[4] + OVERLAP then
+				problem(p.name .. ": a hire desk must stay inside its own desk zone")
 			end
 		end
 		-- Walls where the camera looks in

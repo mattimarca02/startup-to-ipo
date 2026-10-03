@@ -23,12 +23,15 @@ local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 
--- Where employees hang out, as offsets from the plot center: between the furniture rows,
--- away from the spawn point and the green pad
+-- Where employees hang out, as offsets from the plot center: a tidy startup-studio grid of 4 columns
+-- (9 studs apart) and 3 rows (12 studs apart, so at least 6 studs of aisle between rows and between the
+-- back incubators and the first row). Each hire's desk is in front of it (+Z) in PlotArt, all facing
+-- the same way. The spots fill the grid row by row from the middle out, so a small team looks even.
+-- The spawn lane (x -3 to 3) and the two walls of upgrade props (TycoonCore itemOffset) stay free.
 local EMPLOYEE_SPOTS = {
-	Vector3.new(-9, 0, -6), Vector3.new(9, 0, -6), Vector3.new(-25, 0, -6), Vector3.new(25, 0, -6),
-	Vector3.new(-18, 0, 10), Vector3.new(18, 0, 10), Vector3.new(-12, 0, 21), Vector3.new(12, 0, 21),
-	Vector3.new(-25, 0, 21), Vector3.new(25, 0, 21), Vector3.new(0, 0, -6),
+	Vector3.new(-4.5, 0, -10), Vector3.new(4.5, 0, -10), Vector3.new(-13.5, 0, -10), Vector3.new(13.5, 0, -10),
+	Vector3.new(-4.5, 0, 2), Vector3.new(4.5, 0, 2), Vector3.new(-13.5, 0, 2), Vector3.new(13.5, 0, 2),
+	Vector3.new(-4.5, 0, 14), Vector3.new(4.5, 0, 14), Vector3.new(-13.5, 0, 14),
 }
 -- The first three are the base incubators; the rest come from the Extra Incubator IPO perk
 local INCUBATOR_SPOTS = {

@@ -11,7 +11,6 @@
 --   IpoServer.isBusy(data)            -> true while an IPO is being saved
 --   IpoServer.grantShares(player, n)  -> server only (DailyServer): n Shares as a gift
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -19,10 +18,9 @@ local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 
-local PAD_OFFSET = Vector3.new(21, 0.6, 24) -- front-right of the plot, across from the purple HR pad
-local PAD_COLOR = Color3.fromRGB(255, 200, 60)
+local SIGN_OFFSET = Vector3.new(21, 0.5, 24) -- front-right of the plot, across from the garage's upgrade sign
+local SIGN_COLOR = Color3.fromRGB(255, 200, 60)
 local WHITE = Color3.new(1, 1, 1)
-local PAD_OPEN_COOLDOWN = 3 -- seconds between two "open the IPO window" from the pad
 local MAX_DEBUG_AMOUNT = 1e12
 
 local IpoServer = {}
@@ -64,23 +62,23 @@ local function publish(player)
 	end
 end
 
--- The garage pad's sign: your stage, or GO PUBLIC when you can
-local function padText(ipo)
+-- The garage's funding sign: your stage, or GO PUBLIC when you can
+local function signText(ipo)
 	local index = IpoConfig.stageIndex(ipo.valuation, ipo.count)
 	local stage = IpoConfig.Stages[index]
 	if index == #IpoConfig.Stages then
-		return "🔔 GO PUBLIC!\nStep here to IPO"
+		return "🔔 GO PUBLIC!\nTap the IPO button"
 	end
 	local nextValuation = IpoConfig.stageValuation(index + 1, ipo.count)
 	return string.format("%s %s\n%s / %s", stage.icon, stage.name,
 		IpoConfig.formatShort(ipo.valuation), IpoConfig.formatShort(nextValuation))
 end
 
-local function refreshPad(ipo)
-	if ipo.padLabel then
-		local text = padText(ipo)
-		if ipo.padLabel.Text ~= text then
-			ipo.padLabel.Text = text
+local function refreshSign(ipo)
+	if ipo.signLabel then
+		local text = signText(ipo)
+		if ipo.signLabel.Text ~= text then
+			ipo.signLabel.Text = text
 		end
 	end
 end
@@ -133,7 +131,7 @@ function IpoServer.addEarnings(player, amount)
 	ipo.best = math.max(ipo.best, ipo.valuation)
 	player:SetAttribute("IpoValuation", ipo.valuation)
 	player:SetAttribute("IpoBest", ipo.best)
-	refreshPad(ipo)
+	refreshSign(ipo)
 end
 
 -- Server only (DailyServer's Day 7): adds Shares as a gift. No remote can call this.
@@ -233,7 +231,7 @@ local function goPublic(player, ipoNumber)
 	ipo.valuation = 0
 	ipo.best = after.best
 	ipo.lastIpoAt = now
-	refreshPad(ipo)
+	refreshSign(ipo)
 	publish(player)
 	core.updateIncome(player)
 	send(player, "Done", {
@@ -286,29 +284,38 @@ local function onAction(player, action, arg)
 	return false, "Unknown action"
 end
 
--- Garage pad ----------------------------------------------------------------
+-- Garage sign ---------------------------------------------------------------
 
--- A gold pad next to the green one. Stepping on it opens the IPO window (the window has the
--- button: going public always needs the two-step confirm there).
-local function buildPad(player, data)
-	local center = core.plotCenter(data.slot)
-	local pad = Instance.new("Part")
-	pad.Name = "IpoPad"
-	pad.Size = Vector3.new(8, 0.2, 8)
-	pad.Position = center + PAD_OFFSET
-	pad.Color = PAD_COLOR
-	pad.Material = Enum.Material.Neon
-	pad.Anchored = true
-	pad.TopSurface = Enum.SurfaceType.Smooth
-	pad.BottomSurface = Enum.SurfaceType.Smooth
-	pad.Parent = data.folder
+-- A gold sign that shows your funding stage and valuation, and says GO PUBLIC when you can. It is
+-- only a sign: nothing happens when you step on it. The IPO window opens from the IPO button on
+-- the HUD (and from the valuation bar), and going public always needs the two-step confirm there.
+local function buildSign(player, data)
+	local pos = core.plotCenter(data.slot) + SIGN_OFFSET
+	local function part(parent, name, size, position, color, material)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Size = size
+		p.Position = position
+		p.Color = color
+		p.Material = material
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.Parent = parent
+		return p
+	end
+	local post = part(data.folder, "IpoSign", Vector3.new(0.4, 3, 0.4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+	local board = part(post, "Board", Vector3.new(8, 2.6, 0.3), pos + Vector3.new(0, 4.3, 0), SIGN_COLOR, Enum.Material.SmoothPlastic)
 
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(10, 2.6) -- in studs, like the HR pad label
-	gui.StudsOffset = Vector3.new(0, 4, 0)
+	gui.Size = UDim2.fromScale(10, 2.6) -- in studs
+	gui.StudsOffset = Vector3.new(0, 3, 0)
 	gui.AlwaysOnTop = true
 	gui.MaxDistance = 90
-	gui.Parent = pad
+	gui.Parent = board
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
@@ -318,16 +325,8 @@ local function buildPad(player, data)
 	label.TextStrokeTransparency = 0
 	label.Text = ""
 	label.Parent = gui
-	data.ipo.padLabel = label
-	refreshPad(data.ipo)
-
-	local lastTouch = 0
-	pad.Touched:Connect(function(hit)
-		if Players:GetPlayerFromCharacter(hit.Parent) ~= player or not data.ready then return end
-		if os.clock() - lastTouch < PAD_OPEN_COOLDOWN then return end
-		lastTouch = os.clock()
-		send(player, "Open")
-	end)
+	data.ipo.signLabel = label
+	refreshSign(data.ipo)
 end
 
 -- Saving (TycoonCore calls these) ----------------------------------------------
@@ -345,7 +344,7 @@ function IpoServer.setupPlayer(player, data, savedIpo, legacyValuation)
 		lastIpoAt = 0, -- os.time() of the last IPO, for the cooldown (saved)
 		perks = {}, -- perk key -> level (saved)
 		busy = false, -- true while an IPO is being saved
-		padLabel = nil,
+		signLabel = nil,
 	}
 	local function number(value)
 		value = tonumber(value)
@@ -380,7 +379,7 @@ function IpoServer.setupPlayer(player, data, savedIpo, legacyValuation)
 		ipos.Name = "IPOs"
 		ipos.Parent = stats
 	end
-	buildPad(player, data)
+	buildSign(player, data)
 	publish(player)
 end
 
@@ -426,7 +425,7 @@ local function addDebugActions()
 		if ipo.busy then return "An IPO is being filed" end
 		ipo.count, ipo.shares, ipo.valuation, ipo.best, ipo.lastIpoAt = 0, 0, 0, 0, 0
 		table.clear(ipo.perks)
-		refreshPad(ipo)
+		refreshSign(ipo)
 		publish(player)
 		core.onPerksChanged(player)
 		core.updateIncome(player)

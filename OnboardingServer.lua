@@ -98,8 +98,8 @@ end
 
 -- The glowing arrow -------------------------------------------------------
 
--- Where to go next: a ready egg (tap Hatch), else the green pad if its upgrade is affordable
--- (the first one is free), else the egg that's still incubating. nil = nowhere.
+-- Where to go next: a ready egg (tap Hatch), else the garage sign of the next upgrade if it's affordable
+-- (the first one is free; the sign says to buy it in SHOP > Office), else the egg that's still incubating. nil = nowhere.
 local function arrowTarget(data, now)
 	local team = data.team
 	local incubating
@@ -114,8 +114,8 @@ local function arrowTarget(data, now)
 		end
 	end
 	local cost = core.nextUpgradeCost(data)
-	if data.pad and cost and data.cash.Value >= cost then
-		return data.pad.Position
+	if data.sign and cost and data.cash.Value >= cost then
+		return data.sign.Position
 	end
 	return incubating
 end
