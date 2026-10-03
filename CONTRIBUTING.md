@@ -115,3 +115,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
+| docs/reviews/INCOME_REJOIN_INVESTIGATION.md | (repo only) | Claude Code for @mattimarca02 | income-rejoin-investigation | 2026-10-03 |
