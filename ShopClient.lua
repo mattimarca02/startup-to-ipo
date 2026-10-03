@@ -599,6 +599,19 @@ if debugRemote then
 	-- Daily rewards (milestone 6)
 	debugRow("📅", "Daily: next day (fake)", "Pretends one UTC day passed for you. After a claim: once = next day, twice = 1 missed day (place kept), 3 times = 2 missed days (back to Day 1).", "+1 day", "DailyNextDay")
 	debugRow("🗓️", "Daily: reset calendar", "Like a save from before milestone 6: next claim is Day 1, no streak.", "Reset", "DailyReset")
+
+	-- Task engine (PR 1, customer calls). The task Debug actions exist only while TaskConfig is active (Studio).
+	-- (waits 5 s at most: a Studio place that doesn't have TaskConfig yet must never freeze the rest of this script)
+	local taskConfigModule = ReplicatedStorage:WaitForChild("TaskConfig", 5)
+	local TaskConfig = taskConfigModule and require(taskConfigModule)
+	if TaskConfig and TaskConfig.isActive() then
+		debugRow("📞", "Task: spawn a call", "A customer call rings now (the queue still holds at most 3).", "Spawn", "TaskSpawn")
+		debugRow("📊", "Task stats", "This session's numbers for gate G1: rung, hires, engaged time, calls, Cash and the measured f. The full line is also in the Output window.", "Show", "TaskStats")
+		for rung = 0, TaskConfig.MaxRung do
+			debugRow("🪜", "Task rung: " .. TaskConfig.RungNames[rung + 1], "Sets the rung tasks scale with (pace, time limit, reward budget). Hires and Income stay as they are. Not saved.", "Set", "TaskSetRung", tostring(rung))
+		end
+		debugRow("🔁", "Task rung: your real stage", "Back to the rung your funding stage gives.", "Set", "TaskSetRung", "auto")
+	end
 end
 
 -- Tabs, opening and closing ---------------------------------------------

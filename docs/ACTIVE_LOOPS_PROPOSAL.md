@@ -4,7 +4,7 @@ Branch `active-loops`; no game code changed. Numbers are **starting values**, mi
 
 ## 1. The engine
 
-`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer` and **before `DailyServer`** (which stays last). **In PR 1 tasks run only in Studio** (`TaskConfig.Enabled` and `RunService:IsStudio()`, like `DebugInStudio`): `addEarnings(kind)` arrives only in PR 2, so no live player earns task Cash before the economy core. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
+`TaskServer` runs every task from one `TaskConfig` row. It is a feature module like `DailyServer` (`init(core)`, `setupPlayer`, `serialize`), plugged in by TycoonCore in the all-modules-loaded gate, after `EmployeeServer` and `IpoServer` and **before `DailyServer`** (which stays last). **In PR 1 tasks run only in Studio** (`TaskConfig.isActive()`: `Enabled` and (`StudioOnly` is off or `RunService:IsStudio()`), like `DebugInStudio`): `addEarnings(kind)` arrives only in PR 2, so no live player earns task Cash before the economy core. `TaskClient` draws; remotes `TaskRemotes` (`TaskAction`: `Answer`, `Choose`, `Hit`, `Skip`, `Start`; `TaskState` server to client).
 
 ```lua
 Call = { wave = 1, role = "sales", action = "click",         -- click | choose | timing | targets
@@ -81,7 +81,7 @@ A 20-desk team does not bury the founder: busy stays at 49-59% and the team take
 
 ## 5. Measurement hooks (in PR 1, no pay change)
 
-Studio-only Debug buttons "Task stats" and "Set rung", a log line every 10 min per player, plus an `AnalyticsService` custom event `task_session`: rung, hires, online seconds, **engaged seconds**, graded answers, auto-resolved count, reward seconds paid, **measured f = reward seconds / engaged seconds**, budget fill (share of rewards paid at 20%), expiries, flags. **Gate G1** (LONG doc section 8): PR 1 has only calls, so the target is the **calls-only f per rung: Garage 0.32, Seed 0.37, Series A 0.41** (sim 9m), 5 players, two sessions each, at least 20 engaged minutes per session, rung set with "Set rung". Pass if measured f is within **0.8-1.2x** of the sim; below, raise the call seconds, above, lower them, and refit `f_mult` before PR 2. The all-task values (Garage 0.32, Seed 0.50) are only the PR 2+ target.
+Studio-only Debug buttons "Task stats" and "Set rung", a log line every 10 min per player, plus an `AnalyticsService` custom event `task_session`: rung, hires, online seconds, **engaged seconds**, graded answers, auto-resolved count, reward seconds paid, **measured f = reward seconds / engaged seconds** (`fSecs` in the code and the Debug "Task stats": this is the G1 number, it does not depend on Income, so passes cannot move it; `fCash` = task Cash per engaged second / base Income per second is shown next to it for information only, because passes inflate it), budget fill (share of rewards paid at 20%), expiries, flags. **Gate G1** (LONG doc section 8): PR 1 has only calls, so the target is the **calls-only f per rung: Garage 0.32, Seed 0.37, Series A 0.41** (sim 9m), 5 players, two sessions each, at least 20 engaged minutes per session, rung set with "Set rung". Pass if measured f (`fSecs`) is within **0.8-1.2x** of the sim; below, raise the call seconds, above, lower them, and refit `f_mult` before PR 2. The all-task values (Garage 0.32, Seed 0.50) are only the PR 2+ target.
 
 ## 6. Safety and saves
 
@@ -92,18 +92,31 @@ Studio-only Debug buttons "Task stats" and "Set rung", a log line every 10 min p
 
 ## 7. UI layout spec (px, from the top-left; a phone at 320x568 and at 667x375)
 
-Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76, pop-up lane y 504-552; landscape HUD row y 6-70, pop-up lane y 311-359 (daily pop-up y 255-303); windows 0.92 of the screen, max 640x470. **Touch controls to keep clear** (assumed from Roblox's defaults, check with Test > Device): thumbstick x < 170 and y > H-170; **jump button x > W-150 and y > H-130**.
+Existing geometry: portrait HUD column x 12-88 (y 74-494), valuation bar y 12-76, pop-up lanes (bottom center, 48 high, offsets from the bottom -16, -72, -128, -184, and -240 in portrait only: Shop/IPO, Recruiting, Poach, Onboarding, Daily) y 504-552 for -16 and every 56 px up from there; landscape HUD row y 6-70, lanes y 311-359 for -16 up to y 143-191 for -184 (daily pop-up at -72, y 255-303); windows 0.92 of the screen, max 640x470. **Touch controls to keep clear** (assumed from Roblox's defaults, check with Test > Device): thumbstick x < 170 and y > H-170; **jump button x > W-150 and y > H-130**.
 
 | Element | Portrait 320x568 | Landscape 667x375 |
 |---|---|---|
-| Task tray (3 chips) | chips 68x44 at x 98-310, y 392-436 | chips 104x44 at x 176-500, y 206-250 |
+| Task tray (3 chips, 48 high) | chips 68x48 at x 98-310, y 188-236, its line y 166-186: under the Goals card (y 82-164) (`PORTRAIT_SPOT`). Clear of every lane with a top bar of 0 or 36 px; with 58 px the -240 lane starts at y 222 and covers the lowest 14 px of the chips | chips 52x48 at x 10-174, y 92-140, its line y 70-90: under the HUD row (`LANDSCAPE_SPOT`). Clear of everything with a top bar of 0 px; with 36 or 58 px the -184 lane (Onboarding pop-up) is touched. **Neither spot is final: confirm both in Studio with Test > Device** |
 | Task card (not a window) | bottom sheet 300x260 at x 10, y 236-496 | **300x220 at x 183-483, y 80-300** (right edge 34 px short of the jump zone, left edge 13 px past the thumbstick) |
 | "Away: tap to resume" | 160x32 under the valuation bar, x 98-258, y 82-114; hit area 48 high | same size at x 370-530, y 76-108 |
 | Away summary | dialog 300x360 centered (x 10-310, y 104-464): 4 lines of 14 px, "Collect" 280x48 at the bottom | 360x300 centered (x 153-513, y 38-338): numbers left, "Collect" 160x48 right |
 | Office window (tabs Upgrades / Desks / Decor) | standard shell 294x523; tabs 40 high, 6 rows of 56 = no scrolling for one office | shell 613x345; tabs in a 110 px left column; 2 x 3 tiles of 240x84 |
 | Prestige wing (a tab of the IPO shop) | 2-column tiles 140x112, 6 visible, then scroll; buy buttons 48 high | 4 x 2 tiles 128x110, no scrolling |
 
-Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray, a window hides the tray and pauses expiry (30 s per task, 60 s per minute); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
+**Top bar and accepted overlaps.** Every ScreenGui keeps `IgnoreGuiInset = false`, so the GUI is shorter than the device by Roblox's top bar (size not measured; `Debug > Task stats` prints the real one). The tray tests run at a bar of 0, 36 and 58 px: the HUD and Goals card keep their y, the lanes, thumbstick and jump button move up with the GUI's bottom. A spot clear of everything does not exist, so the tray draws **below** every other pop-up (`TaskGui` DisplayOrder -2, pop-ups 0 or more) and these overlaps are accepted (anything not listed touches nothing; `ACCEPTED` in `tools/daily_test.py` TRAY_TESTS checks it both ways):
+
+| Device (top bar 0 / 36 / 58 px) | Tray and its line touch |
+|---|---|
+| 320x568 | none / none / lane -240 |
+| 667x375 | none / lane -184 / lane -184 |
+| 360x640, 375x667, 390x844 | none at any bar |
+| 568x320 | lane -184 and valuation bar / lane -128, lane -184, thumbstick, valuation bar / same |
+| 640x360 | lane -184 / lane -184 / lane -128, lane -184, thumbstick |
+| 812x375, 844x390 | none / lane -184 / lane -184 |
+
+The lanes: -16 Shop and IPO, -72 Recruiting, -128 Poach, -184 Onboarding, -240 Daily (portrait only). The final spots are confirmed in Studio with Test > Device.
+
+Rules: text 14 px or more, buttons and targets 48 px or more, at most 6 targets (2 columns in portrait); a card hides the tray; a window hides the tray and freezes the waiting calls (the code: each call can be frozen **at most 30 s** in all, `TaskConfig.Pause.perTask`, and an open window also stops **new** calls from arriving; closing it is never rate-limited). There is no 60 s per minute cap and none is needed: a lying client gains at most 30 s per call, and a frozen client gets no new calls, so pausing pays nothing by itself (Cash comes only from a graded answer, and a pause never counts as engaged: `settle` adds no engaged seconds while the run is paused); the tray never covers the daily chip. Every PR has a screenshot check at both sizes and a Studio-only Debug button "Task: spawn".
 
 ## 8. Files and task PRs
 

@@ -115,3 +115,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
+| TaskConfig | ReplicatedStorage | free | | |
+| TaskServer | ServerScriptService | free | | |
+| TaskClient | StarterPlayerScripts | free | | |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
