@@ -3806,6 +3806,10 @@ local STORY = {
 		decor = { "FloorTileX1", "FloorTileZ5", "MeetGlassBack", "MeetGlassSide", "MeetTableTop", "MeetChairA1", "MeetScreen", "GapPlantLPot", "CornerPlantPot",
 			"FounderTop", "DeskPhone", "FloorLampShadeA" },
 		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wallPart = "BackLower", wall = { 240, 242, 244 }, lights = 3 },
+	[5] = { shell = { "BackLower", "WindowA", "WindowB", "WindowC", "WindowD", "MullionL", "MullionR", "LogoWall", "LogoWallGlow", "LogoWallSign", "LogoWallUnderline",
+			"SideGlassL", "SideGlassR", "Skyline1", "Skyline9" },
+		decor = { "ShelfBack", "ShelfBoard3", "Trophy1", "Trophy5", "RugBase", "LoungeTable", "ArmchairA", "ArmchairB", "FounderTop", "DeskPhone", "GapPlantLPot", "FloorLampShadeA" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen", "Keyboard" }, wallPart = "BackLower", wall = { 246, 247, 248 }, lights = 3 },
 }
 local function has(list, name) for _, s in ipairs(list) do if s.name == name then return s end end return nil end
 local function countPrefix(list, prefix) local n = 0 for _, s in ipairs(list) do if string.find(s.name, prefix, 1, true) == 1 then n += 1 end end return n end
@@ -3881,6 +3885,95 @@ for i = 2, #PlotArt.Stages do
 				check("stage " .. i .. ": " .. s.name .. " stays behind the back wall inside the plot's width", s.offset[3] + s.size[3] / 2 <= PlotVisuals.BACKDROP_Z and math.abs(s.offset[1]) + s.size[1] / 2 <= 30, s.name)
 			end
 		end
+	end
+end
+
+-- 7a. What makes each room different, measured on the parts (not only named)
+do
+	local function room(i) return fullRoom(PlotArt, i) end
+	local function find(r, name)
+		for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") and d.Name == name then return d end end
+		return nil
+	end
+	local function count(r, prefix, material)
+		local n = 0
+		for _, d in ipairs(r:GetDescendants()) do
+			if d:IsA("BasePart") and string.find(d.Name, prefix, 1, true) == 1 and (material == nil or d.Material.Name == material) then n += 1 end
+		end
+		return n
+	end
+	if PlotArt.Stages[2] then
+		local r = room(2)
+		check("stage 2: twelve warm string-light bulbs, all glowing (Neon), on two cords", count(r, "StringBulb", "Neon") == 12 and count(r, "StringCord") == 2)
+		check("stage 2: a new door of four panels with a smoked glass band", count(r, "DoorPanel") == 4 and find(r, "DoorGlassBand").Material.Name == "Glass")
+		check("stage 2: fresh paint is smooth (SmoothPlastic), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "SmoothPlastic" and count(r, "SideWall", "CorrodedMetal") == 0)
+		check("stage 2: a rug of two layers and a sofa of five parts", count(r, "Rug") == 2 and count(r, "Sofa") == 5)
+		check("stage 2: every hire desk has an oak top, two legs and a monitor (5 parts)", #PlotArt.Stages[2].desk == 5)
+	end
+	if PlotArt.Stages[3] then
+		local r = room(3)
+		check("stage 3: brick walls (Brick material) on the back and the sides", find(r, "BackWall").Material.Name == "Brick" and find(r, "SideWallL").Material.Name == "Brick")
+		check("stage 3: a second bay: two roll-up doors, each with a dark opening, a frame, a header and a shutter; two safety lines", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				for _, part in ipairs({ "Dark", "FrameL", "FrameR", "Header", "Shutter" }) do
+					if not find(r, "Bay" .. side .. part) then return false end
+				end
+			end
+			return count(r, "BayLine") == 2
+		end)())
+		check("stage 3: two glass partitions (see-through) that stand 5 studs high or more", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				local g = find(r, "Partition" .. side .. "Glass")
+				if not g or g.Material.Name ~= "Glass" or g.Transparency < 0.3 or g.Size.Y < 5 then return false end
+			end
+			return true
+		end)())
+		check("stage 3: a whiteboard wall at least 15 studs wide with sticky notes and a tray", find(r, "WallBoard").Size.X >= 15 and count(r, "WallNote") == 5 and find(r, "WallBoardTray") ~= nil)
+		check("stage 3: three wall lamps, each with a bulb", count(r, "WallLampBulb", "Neon") == 3)
+	end
+	if PlotArt.Stages[4] then
+		local r = room(4)
+		check("stage 4: carpet tiles: a Fabric floor and a grid of tile lines (10)", PlotArt.Stages[4].floor.material == "Fabric" and count(r, "FloorTile") == 10)
+		check("stage 4: glass walls on both sides, nearly the whole length (55 studs or more)", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				local g = find(r, "SideGlass" .. side)
+				if not g or g.Material.Name ~= "Glass" or g.Size.Z < 55 then return false end
+			end
+			return true
+		end)())
+		check("stage 4: a ribbon of glass along the back wall in navy mullions", find(r, "BackGlass").Material.Name == "Glass" and count(r, "BackMullion") == 5)
+		check("stage 4: a glass-walled meeting room: two glass walls, a table, four chairs and a wall screen", count(r, "MeetGlass", "Glass") == 2
+			and find(r, "MeetTableTop") ~= nil and count(r, "MeetChairA") + count(r, "MeetChairB") >= 4 and find(r, "MeetScreen") ~= nil)
+		check("stage 4: three plants", count(r, "GapPlantLPot") + count(r, "GapPlantRPot") + count(r, "CornerPlantPot") == 3)
+	end
+	if PlotArt.Stages[5] then
+		local r = room(5)
+		check("stage 5: a polished light floor (SmoothPlastic, bright)", PlotArt.Stages[5].floor.material == "SmoothPlastic" and PlotArt.Stages[5].floor.color[1] >= 200)
+		check("stage 5: big windows: four glass panes at least 7 studs tall on the back wall", count(r, "Window", "Glass") == 4 and find(r, "WindowA").Size.Y >= 7)
+		check("stage 5: a simple block skyline: 9 towers behind the back wall, none over 30 studs", count(r, "Skyline") == 9)
+		check("stage 5: the skyline is inside the plot's width (it never reaches a neighbour)", (function()
+			for _, d in ipairs(r:GetDescendants()) do
+				if d:IsA("BasePart") and string.find(d.Name, "Skyline", 1, true) == 1 then
+					local x = d.CFrame.x - center.X
+					if math.abs(x) + d.Size.X / 2 > 30 or d.CFrame.z - center.Z + d.Size.Z / 2 > -43 then return false end
+				end
+			end
+			return true
+		end)())
+		check("stage 5: a neon logo wall (a Neon rim and underline, a sign saying HQ)", find(r, "LogoWallGlow").Material.Name == "Neon" and find(r, "LogoWallUnderline").Material.Name == "Neon"
+			and (function() for _, d in ipairs(r:GetDescendants()) do if d.ClassName == "TextLabel" and d.Text == "HQ" then return true end end return false end)())
+		check("stage 5: a trophy shelf with three shelves and five gold cups", count(r, "ShelfBoard") == 3 and count(r, "Trophy", "Metal") == 5)
+		check("stage 5: no text in the room claims odds, chances or prices (D9)", (function()
+			for _, d in ipairs(r:GetDescendants()) do
+				if d.ClassName == "TextLabel" then
+					local text = string.lower(d.Text)
+					for _, word in ipairs({ "odds", "chance", "%", "$", "r$", "robux", "free", "win", "lucky" }) do
+						if string.find(text, word, 1, true) then return false end
+					end
+				end
+			end
+			return true
+		end)())
 	end
 end
 
@@ -4275,8 +4368,8 @@ def task_wiring_checks():
     return passed, failed
 
 
-# Rooms are built one stage at a time (visuals-garage): until all 5 exist, a later stage shows the last room.
-VISUALS_ALL_STAGES = False
+# Rooms were built one stage at a time (visuals-garage); all 5 exist now, one per IpoConfig funding stage.
+VISUALS_ALL_STAGES = True
 
 
 def visuals_expected_lua():

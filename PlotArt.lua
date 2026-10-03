@@ -111,6 +111,8 @@ local C = {
 	stickyPink = { 255, 170, 190 }, stickyGreen = { 170, 232, 150 },
 	-- Stage 4: the office (white, navy, cobalt, blue-gray carpet)
 	officeWhite = { 240, 242, 244 }, navy = { 34, 42, 62 }, cobalt = { 52, 120, 230 }, carpetLine = { 86, 100, 120 }, officeGlass = { 150, 196, 220 },
+	-- Stage 5: the headquarters (polished white, graphite, gold, a pale blue skyline)
+	hqWhite = { 246, 247, 248 }, graphite = { 38, 40, 48 }, skyA = { 128, 156, 196 }, skyB = { 154, 180, 214 }, skyC = { 104, 132, 172 },
 }
 
 -- Helpers --------------------------------------------------------------------
@@ -400,14 +402,14 @@ seed.shell = {
 	B("DoorPanel2", 0, 3.6, -29.2, 14, 2.4, 0.25, C.doorGray, "SmoothPlastic"),
 	B("DoorPanel3", 0, 6, -29.2, 14, 2.4, 0.25, C.doorLight, "SmoothPlastic"),
 	B("DoorPanel4", 0, 8.4, -29.2, 14, 2.4, 0.25, C.doorGray, "SmoothPlastic"),
-	B("DoorGlassBand", 0, 6, -29.02, 12.6, 1.2, 0.1, C.glassDark, "Glass", { transparency = 0.2 }),
+	B("DoorGlassBand", 0, 6, -29.02, 12.6, 1.2, 0.1, C.glassDark, "Glass", { transparency = 0.2, shadow = false }),
 	B("DoorStripe", 0, 2.4, -29.05, 14, 0.25, 0.05, C.mint, "SmoothPlastic"),
 	-- Two clean windows in the gaps between the incubators
 	B("WindowFrameL", -18, 7, -29.27, 6.8, 4.4, 0.25, C.offwhite, "SmoothPlastic"),
-	B("WindowGlassL", -18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25 }),
+	B("WindowGlassL", -18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25, shadow = false }),
 	B("WindowBarL", -18, 7, -29.04, 0.25, 3.6, 0.06, C.offwhite, "SmoothPlastic"),
 	B("WindowFrameR", 18, 7, -29.27, 6.8, 4.4, 0.25, C.offwhite, "SmoothPlastic"),
-	B("WindowGlassR", 18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25 }),
+	B("WindowGlassR", 18, 7, -29.1, 6, 3.6, 0.1, C.skyGlass, "Glass", { transparency = 0.25, shadow = false }),
 	B("WindowBarR", 18, 7, -29.04, 0.25, 3.6, 0.06, C.offwhite, "SmoothPlastic"),
 }
 
@@ -679,7 +681,121 @@ seriesB.desk = {
 	B("MonitorScreen", 0, 2.42, 0, 1.2, 0.64, 0.04, C.cobalt, "Neon"),
 }
 
-PlotArt.Stages = { garage, seed, seriesA, seriesB }
+-- Stage 5: the headquarters (IPO-ready) ----------------------------------------------------
+-- A polished light floor, big windows along the back with a simple block skyline behind them, a graphite
+-- logo wall with a neon rim in the middle, a trophy shelf and a lounge in the front-left corner and a
+-- reception desk. Low glass-topped side walls, open front, no roof: the full building comes later.
+
+local ipoReady = { key = "IpoReady", floor = { color = { 228, 230, 232 }, material = "SmoothPlastic" } }
+
+local function hqSide(tag, x)
+	return {
+		B("SideBase" .. tag, x, 1.2, 0.3, 0.6, 2.4, 59.4, C.hqWhite, "SmoothPlastic"),
+		B("SideGlass" .. tag, x, 3.9, 0.3, 0.2, 3, 59.4, C.officeGlass, "Glass", { transparency = 0.4, shadow = false }),
+		B("SideRail" .. tag, x, 5.55, 0.3, 0.7, 0.3, 59.4, C.graphite, "Metal"),
+	}
+end
+
+-- The skyline stands behind the back wall (z -46, 3 to 6 studs deep), on the ground, inside the plot's width
+local function skyline()
+	local towers = { -- x, width, height, color
+		{ -26, 6, 18, C.skyA }, { -19.5, 5, 26, C.skyB }, { -13, 6, 21, C.skyC }, { -6.5, 5, 29, C.skyA }, { 0, 6, 17, C.skyB },
+		{ 6.5, 5, 24, C.skyC }, { 13, 6, 28, C.skyA }, { 19.5, 5, 20, C.skyB }, { 26, 6, 25, C.skyC },
+	}
+	local out = {}
+	for i, tower in ipairs(towers) do
+		table.insert(out, B("Skyline" .. i, tower[1], -1 + tower[3] / 2, -46, tower[2], tower[3], 6, tower[4], "Concrete"))
+	end
+	return out
+end
+
+ipoReady.shell = join(
+	{
+		B("BackLower", 0, 1.6, -29.7, 60, 3.2, 0.6, C.hqWhite, "SmoothPlastic"),
+		B("BackSill", 0, 3.35, -29.55, 60, 0.3, 0.7, C.graphite, "Metal"),
+		B("BackHead", 0, 11.35, -29.55, 60, 0.5, 0.7, C.graphite, "Metal"),
+		B("BackCap", 0, 11.8, -29.7, 60, 0.4, 0.9, C.graphite, "Metal"),
+		-- Four big panes and the mullions between them
+		B("WindowA", -24.5, 7.4, -29.7, 9.8, 7.7, 0.2, C.skyGlass, "Glass", { transparency = 0.3, shadow = false }),
+		B("WindowB", -13.9, 7.4, -29.7, 9.8, 7.7, 0.2, C.skyGlass, "Glass", { transparency = 0.3, shadow = false }),
+		B("WindowC", 13.9, 7.4, -29.7, 9.8, 7.7, 0.2, C.skyGlass, "Glass", { transparency = 0.3, shadow = false }),
+		B("WindowD", 24.5, 7.4, -29.7, 9.8, 7.7, 0.2, C.skyGlass, "Glass", { transparency = 0.3, shadow = false }),
+		B("MullionL", -19.2, 7.4, -29.55, 0.8, 7.7, 0.5, C.graphite, "Metal"),
+		B("MullionR", 19.2, 7.4, -29.55, 0.8, 7.7, 0.5, C.graphite, "Metal"),
+		-- The logo wall in the middle: graphite, a neon rim, the company sign
+		B("LogoWall", 0, 7.4, -29.7, 18, 7.7, 0.6, C.graphite, "SmoothPlastic"),
+		B("LogoWallGlow", 0, 7.4, -29.33, 17.2, 7.2, 0.1, C.neonBlue, "Neon", { light = { color = C.neonBlue, brightness = 1.2, range = 40 } }),
+		B("LogoWallSign", 0, 7.4, -29.25, 16.6, 6.6, 0.2, C.navyDark, "SmoothPlastic",
+			{ text = { value = "HQ", font = "LuckiestGuy", color = C.neonBlue, glow = true, area = { 0.3, 0.1, 0.4, 0.55 } } }),
+		B("LogoWallTagline", 0, 5.1, -29.12, 11, 1, 0.04, C.navyDark, "SmoothPlastic",
+			{ text = { value = "BUILD YOUR STARTUP", font = "GothamBold", color = C.rocketWhite, glow = true } }),
+		B("LogoWallUnderline", 0, 4.4, -29.11, 12, 0.14, 0.05, C.neonBlue, "Neon"),
+		B("PostBackL", -29.7, 6, -29.7, 0.9, 12, 0.9, C.graphite, "Metal"),
+		B("PostBackR", 29.7, 6, -29.7, 0.9, 12, 0.9, C.graphite, "Metal"),
+		B("PostFrontL", -29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.graphite, "Metal"),
+		B("PostFrontR", 29.7, 2.95, 29.55, 0.9, 5.9, 0.9, C.graphite, "Metal"),
+	},
+	hqSide("L", -29.7),
+	hqSide("R", 29.7),
+	skyline()
+)
+
+-- The trophy shelf against the left wall (faces +X): a back panel, two ends, three shelves, gold cups
+local function trophyShelf(x, z)
+	local out = {
+		B("ShelfBack", x - 0.55, 3, z, 0.3, 6, 5, C.graphite, "SmoothPlastic"),
+		B("ShelfEndN", x, 3, z - 2.35, 1.4, 6, 0.3, C.graphite, "SmoothPlastic"),
+		B("ShelfEndS", x, 3, z + 2.35, 1.4, 6, 0.3, C.graphite, "SmoothPlastic"),
+	}
+	for i, y in ipairs({ 0.4, 2.2, 4 }) do
+		table.insert(out, B("ShelfBoard" .. i, x, y, z, 1.4, 0.2, 4.4, C.hqWhite, "SmoothPlastic"))
+	end
+	local cups = { { 0.5, z - 1.3, 1.1 }, { 0.5, z + 1.2, 0.8 }, { 2.3, z - 0.6, 0.9 }, { 2.3, z + 1.4, 0.7 }, { 4.1, z, 1 } }
+	for i, cup in ipairs(cups) do
+		table.insert(out, upright("Trophy" .. i, cup[3], 0.6, x, cup[1] - 0.1, cup[2], C.gold, "Metal"))
+	end
+	return out
+end
+
+-- An armchair: a block seat and a back (facing the table)
+local function armchair(tag, x, z, backZ)
+	return {
+		B("Armchair" .. tag, x, 0.8, z, 1.8, 1.6, 1.8, C.graphite, "Fabric"),
+		B("ArmchairBack" .. tag, x, 2.2, z + backZ, 1.8, 1.8, 0.4, C.graphite, "Fabric"),
+	}
+end
+
+ipoReady.decor = join(
+	trophyShelf(-28.4, 25),
+	{
+		-- The lounge rug, a round-edged table and two armchairs facing each other
+		B("RugBase", -19.8, 0.03, 24.5, 9, 0.06, 7, C.graphite, "Fabric"),
+		B("RugInner", -19.8, 0.05, 24.5, 7.6, 0.1, 5.6, C.rocketWhite, "Fabric"),
+		P("LoungeTable", "Cylinder", { 1.2, 2.6, 2.6 }, { -19.8, 0.7, 24.5 }, C.gold, "Metal", { rot = { 0, 0, 90 } }),
+		B("FloorLampPoleA", -9.8, 2.2, 28.6, 0.2, 4.4, 0.2, C.graphite, "Metal"),
+		B("FloorLampShadeA", -9.8, 4.8, 28.6, 1.2, 0.9, 1.2, C.bulb, "Neon", { light = { color = C.warmLight, brightness = 1.1, range = 28 } }),
+		B("FloorLampPoleB", 27.6, 2.2, 19.8, 0.2, 4.4, 0.2, C.graphite, "Metal"),
+		B("FloorLampShadeB", 27.6, 4.8, 19.8, 1.2, 0.9, 1.2, C.bulb, "Neon", { light = { color = C.warmLight, brightness = 1.1, range = 28 } }),
+	},
+	armchair("A", -19.8, 21.6, -0.7),
+	armchair("B", -19.8, 27.4, 0.7),
+	plant("GapPlantL", -6, -26.5, { 1.6, 1.4 }, 3, C.graphite, C.leaf),
+	plant("GapPlantR", 6, -26.5, { 1.6, 1.4 }, 3, C.graphite, C.leaf),
+	plant("CornerPlant", 27.6, 27.8, { 1.4, 1.3 }, 3, C.graphite, C.leaf),
+	founderDesk(10.5, 24.5, { top = C.hqWhite, panel = C.graphite, accent = C.screenBlue })
+)
+
+-- A hire's desk: a glossy white top on two graphite legs, a monitor and a keyboard
+ipoReady.desk = {
+	B("DeskTop", 0, 1.92, 0, 3.6, 0.16, 1.7, C.hqWhite, "SmoothPlastic"),
+	B("DeskLegL", -1.65, 0.92, 0, 0.2, 1.84, 1.5, C.graphite, "Metal"),
+	B("DeskLegR", 1.65, 0.92, 0, 0.2, 1.84, 1.5, C.graphite, "Metal"),
+	B("MonitorFrame", 0, 2.42, 0.1, 1.4, 0.84, 0.1, C.black, "SmoothPlastic"),
+	B("MonitorScreen", 0, 2.42, 0, 1.2, 0.64, 0.04, C.neonBlue, "Neon"),
+	B("Keyboard", 0, 2.03, 0.4, 1.3, 0.06, 0.4, C.graphite, "SmoothPlastic"),
+}
+
+PlotArt.Stages = { garage, seed, seriesA, seriesB, ipoReady }
 
 -- Upgrade props ----------------------------------------------------------------
 -- Each stands in its upgrade's slot (offsets from the slot on the floor), facing the front. Every prop
