@@ -6,6 +6,7 @@ Run:   python tools/economy_sim.py            (prints all tables, takes ~1 minut
        python tools/economy_sim.py --markdown (prints the tables as Markdown for docs/ECONOMY.md)
        python tools/economy_sim.py --daily    (only section 7, the daily calendar table)
        python tools/economy_sim.py --active   (only section 8, the ACTIVE-PLAY proposal; default OFF everywhere else)
+       python tools/economy_sim.py --long     (only section 9, the LONG-GAME proposal: 55 active hours to the first IPO; default OFF)
 
 It reads NOTHING from the game: every number is copied by hand into the CONFIG block below.
 If you change a .lua config, update this block too. It never changes any game number.
@@ -1000,6 +1001,281 @@ def report_active(n, days=SIM_DAYS_IPO):
             print(f"| {b} | {label} | " + " | ".join(times) + f" | {sh(runs, 1)} / {sh(runs, 10)} | {sh(pass_runs, 1)} / {sh(pass_runs, 10)} | {med([len(r.ipo_times) for r in runs]):.0f} | {shop} |")
 
 
+# =============================================================================
+# LONG GAME (docs/LONG_GAME_PROPOSAL.md): PROPOSAL, not read from any .lua, default OFF (only `--long` runs it).
+# The IPO is the last thing a player reaches: first IPO after ~55-60 ACTIVE online hours, every later loop 55+ h.
+# Model: a ladder of LONG_STAGES. Each stage has an income CEILING (what its office can hold) and the player buys
+# LONG_ITEMS_PER_STAGE items (offices, upgrades, hires) that lift Income from the last ceiling to this one. Prices and
+# valuation thresholds are CALIBRATED (long_ladder) so a "regular" player who is always engaged hits the target hours:
+# the sim does not prove the targets, it shows what happens to the OTHER players, rules and loops. Valuation counts only
+# Cash earned while the player is engaged (online and acting); Cash from away time (10% of active pay, 2 h cap) counts 10% toward it.
+# =============================================================================
+LONG_STAGES = [                     # (name, target active hours inside the stage in the first run, income ceiling in Cash/s)
+    ("Garage", 1.5, 6), ("Seed", 4, 20), ("Series A", 6.5, 65), ("Series B", 9, 210),
+    ("Series C", 11, 700), ("Series D", 13, 2300), ("Pre-IPO", 15, 7500),
+]                                   # the 8th rung is IPO-ready: the valuation at the end of Pre-IPO (target 60 h in total with no away pay; about 56 h for the typical player with it)
+LONG_ITEMS_PER_STAGE = 10           # priced purchases per stage (office pieces, upgrades, hires), after the stage opens
+LONG_START_INCOME = 2.0             # Cash/s of an empty garage
+LONG_BUY_FRACTION = 0.6             # the stage's items are all bought after this share of the stage's target time
+LONG_ROSTERS = [[3], [3, 7], [3, 7, 8], [3, 7, 8, 20], [3, 7, 8, 20, 24], [3, 7, 8, 20, 24, 50], [3, 7, 8, 9, 20, 24, 50, 60]]
+LONG_LOOP_GROWTH = 0.05             # prices and valuation thresholds of loop L = multiplier x carry x (1 + this) ^ L
+LONG_CARRY = 1.35                   # kept employees refill the new offices fast: Income x this from the 2nd run on
+LONG_AWAY = (0.10, 2 * 3600, 0.10)  # NEW rule: away pay = 10% of the ACTIVE pay you left with, at most 2 h per return, 10% of it counts toward valuation
+LONG_AWAY_OLD = (0.50, 8 * 3600, 1.0)   # today: 50% of passive Income, 8 h, 100% valuation (passive only: no task bonus)
+LONG_SHARES = (20, 0.25, 1.5, 0.5)  # Shares = base x (1 + growth x IPOs done) x min(ratio, cap) ^ exponent (x2 Shareholder pass)
+LONG_SHOP = {                       # PROPOSED IPO shop (same keys and levels as IpoConfig.Perks, re-priced; the sim only uses the totals)
+    "FasterEggs": [1, 2, 3, 5, 7, 10, 16], "ExtraIncubator": [4, 8], "ExtraSlot": [4, 8, 18],
+    "BaseLuck": [1, 2, 3, 5, 7, 10, 16, 24], "OfflineCap": [2, 4, 7, 12], "CheaperPoach": [2, 3, 4, 6, 8, 11, 15, 20, 28, 40],
+}
+LONG_PRESTIGE_WING = 434            # new cosmetic / prestige items (office skins, creature hats, titles): Shares, all cosmetic
+LONG_SPEED_KEYS = ("FasterEggs", "ExtraIncubator", "ExtraSlot", "BaseLuck")   # the perks that move the clock
+LONG_SPEED_PERKS = (sum(sum(LONG_SHOP[k]) for k in LONG_SPEED_KEYS), 0.25)   # their whole price (154 Shares) is worth at most +25% Income (an estimate)
+LONG_DT = 20.0                      # seconds per step while a session runs
+LONG_PLAYERS = {                    # (sessions per day as (start hour, minutes), days of the week played, chance a planned session happens)
+    "dedicated": ([(0, 60), (12, 60)], range(7), 0.95),    # 2 h a day, 14 h a week
+    "regular": ([(0, 60)], range(7), 0.90),                # 1 h a day, ~6 h a week
+    "casual": ([(0, 60)], (0, 2, 5), 0.85),                # 3 sessions a week, ~2.5 h a week
+    "check-in": ([(0, 1)], range(7), 0.90),                # 1 minute a day: collects the away Cash and leaves
+}
+
+
+def _long_f(stage, loop, skill):
+    return active_factor(LONG_ROSTERS[stage], min(stage, 4), loop, skill, (1, 2, 3))["f"]
+
+
+def long_ladder():
+    """Calibrated rungs: [(name, target h, ceiling, payback P in seconds, valuation earned inside the rung, f, r, previous ceiling)]
+    and the cumulative valuation thresholds (entering rung i needs cum[i]; cum[-1] = IPO-ready), all at loop 0 prices.
+    The payback P makes a stage's items all bought after LONG_BUY_FRACTION of its target time; the thresholds are then
+    read off a reference player (always engaged, no away pay, average task bonus) at the target times, so that player hits
+    the targets by construction."""
+    rows, prev, k = [], LONG_START_INCOME, LONG_ITEMS_PER_STAGE
+    for s, (name, hours, ceiling) in enumerate(LONG_STAGES):
+        f = _long_f(s, 0, "typical")
+        r = (ceiling / prev) ** (1.0 / k)
+        pay = LONG_BUY_FRACTION * hours * 3600 * (1 + f) / (k * (r - 1))
+        rows.append([name, hours, ceiling, pay, 0.0, f, r, prev])
+        prev = ceiling
+    inc, pay_of = long_items(rows)
+    cum, stage, owned, cash, val, t, edge = [0.0], 0, 0, 0.0, 0.0, 0.0, 0.0
+    ends = []
+    for row in rows:
+        edge += row[1] * 3600
+        ends.append(edge)
+    dt = 10.0
+    while stage < len(rows):
+        gain = inc[owned] * (1 + rows[stage][5]) * dt
+        cash += gain
+        val += gain
+        t += dt
+        while owned < len(pay_of) and owned // k <= stage:
+            cost = pay_of[owned] * (inc[owned + 1] - inc[owned])
+            if cash < cost:
+                break
+            cash -= cost
+            owned += 1
+        if t >= ends[stage]:
+            cum.append(val)
+            rows[stage][4] = cum[-1] - cum[-2]
+            stage += 1
+    return [tuple(r) for r in rows], cum
+
+
+def long_items(rows):
+    """Income after buying item j (inc[0] = empty garage) and the payback of each item, over all rungs."""
+    inc, pay_of = [LONG_START_INCOME], []
+    for row in rows:
+        for i in range(1, LONG_ITEMS_PER_STAGE + 1):
+            inc.append(row[7] * row[6] ** i)
+            pay_of.append(row[3])
+    return inc, pay_of
+
+
+def long_scale(loop, growth):
+    """Prices and thresholds of a run after `loop` IPOs (also the Income multiplier x carry, which cancels out)."""
+    if loop <= 0:
+        return 1.0
+    return (1 + IPO_BONUS_PER_IPO * loop ** IPO_BONUS_EXPONENT) * LONG_CARRY * (1 + growth) ** loop
+
+
+def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill="typical", cash_mult=1.0, valuation_at_base=True,
+             shareholder=False, max_days=1100):
+    """One player until `loops` IPOs. Returns dict(stage_h = [[active hours when each stage opened] per loop], ipo_h, ipo_day,
+    shares, away_share = share of the valuation that came from away time)."""
+    rng = random.Random(seed * 7919 + zlib.crc32(kind.encode()))
+    sessions, days, chance = LONG_PLAYERS[kind]
+    rows, cum = long_ladder()
+    k = LONG_ITEMS_PER_STAGE
+    inc, pay_of = long_items(rows)
+    n_items = len(pay_of)
+    loop, owned, cash, val, active_s = 0, 0, 0.0, 0.0, 0.0
+    stage, shares, spent_speed = 0, 0, 0
+    out = {"stage_h": [[0.0]], "ipo_h": [], "ipo_day": [], "shares": [], "away_val": 0.0, "val_total": 0.0}
+    last_end = None
+    base_ratio = 1.0 if valuation_at_base else cash_mult   # the Cash pass only multiplies spendable Cash unless the valuation counts it too
+    speed = 1.0
+    for day in range(max_days):
+        if day % 7 not in days:
+            continue
+        for start_h, minutes in sessions:
+            if rng.random() > chance:
+                continue
+            length = max(1, minutes * rng.uniform(0.7, 1.3)) * 60
+            s_start = day * DAY + start_h * 3600
+            sc = long_scale(loop, growth)
+            m_inc = (long_scale(loop, 0.0) if loop else 1.0)
+            if last_end is not None and away[0] > 0:
+                gap = min(s_start - last_end, away[1])
+                if away is LONG_AWAY_OLD:
+                    pay_away = gap * away[0] * inc[owned] * m_inc * speed
+                else:
+                    pay_away = gap * away[0] * inc[owned] * m_inc * speed * (1 + _long_f(stage, loop, skill))
+                cash += pay_away * cash_mult
+                credit = pay_away * away[2] * base_ratio
+                val += credit
+                out["away_val"] += credit
+            t = 0.0
+            while t < length:
+                dt = min(LONG_DT, length - t)
+                f = _long_f(stage, loop, skill) * rng.uniform(0.85, 1.15)
+                income = inc[owned] * m_inc * speed
+                gain = income * (1 + f) * dt
+                cash += gain * cash_mult
+                val += gain * base_ratio
+                active_s += dt
+                t += dt
+                while owned < n_items:
+                    s_of = owned // k
+                    if s_of > stage:
+                        break
+                    cost = pay_of[owned] * (inc[owned + 1] - inc[owned]) * sc
+                    if cash < cost:
+                        break
+                    cash -= cost
+                    owned += 1
+                while stage < len(LONG_STAGES) and val >= cum[stage + 1] * sc:
+                    stage += 1
+                    if stage < len(LONG_STAGES):
+                        out["stage_h"][-1].append(active_s / 3600)
+                if stage >= len(LONG_STAGES):          # IPO-ready: the player goes public right away
+                    ratio = min(LONG_SHARES[2], val / (cum[-1] * sc))
+                    gained = int(LONG_SHARES[0] * (1 + LONG_SHARES[1] * loop) * ratio ** LONG_SHARES[3] * (2 if shareholder else 1))
+                    shares += gained
+                    out["shares"].append(gained)
+                    out["ipo_h"].append(active_s / 3600)
+                    out["ipo_day"].append((s_start + t) / DAY)
+                    out["val_total"] += val
+                    room = max(0, LONG_SPEED_PERKS[0] - spent_speed)
+                    buy = min(room, shares)
+                    spent_speed += buy
+                    shares -= buy
+                    speed = 1 + LONG_SPEED_PERKS[1] * spent_speed / LONG_SPEED_PERKS[0]
+                    loop += 1
+                    owned, cash, val, stage = 0, 0.0, 0.0, 0
+                    out["stage_h"].append([active_s / 3600])
+                    if loop >= loops:
+                        out["away_share"] = out["away_val"] / max(out["val_total"], 1e-9)
+                        return out
+                    sc = long_scale(loop, growth)
+                    m_inc = long_scale(loop, 0.0)
+            last_end = s_start + length
+    out["away_share"] = out["away_val"] / max(val + out["val_total"], 1e-9)
+    return out
+
+
+def _long_many(kind, n, **kw):
+    return [long_run(kind, seed, **kw) for seed in range(n)]
+
+
+def _fmt_h(v):
+    return "never" if v is None else f"{v:.1f} h"
+
+
+def report_long(n):
+    """Section 9: the long game. Only with --long."""
+    rows, cum = long_ladder()
+    print(f"\n## 9. LONG GAME (proposal, default OFF), median of {n} runs, minutes/hours are ACTIVE online time (engaged)")
+    print("### 9a. Calibrated ladder (loop 0 prices; thresholds are what the regular player needs to hit the target hours)")
+    print("| Rung | Target h in stage | Cumulative h | Income ceiling /s | Payback of an item (active h) | Valuation to enter next rung | Task bonus f |")
+    print("|---|---|---|---|---|---|---|")
+    tot = 0.0
+    for i, (name, hours, ceiling, pay, earned, f, r, prev) in enumerate(rows):
+        tot += hours
+        nxt = LONG_STAGES[i + 1][0] if i + 1 < len(LONG_STAGES) else "IPO-ready"
+        print(f"| {name} | {hours:g} | {tot:g} | {ceiling:,.0f} | {pay / 3600:.1f} | {cum[i + 1]:,.0f} ({nxt}) | x{1 + f:.2f} |")
+    print("\n### 9b. Active hours to each rung and IPO 1, three players (new away rule), and the weeks that takes")
+    head = "| Player (played) | " + " | ".join(s[0] for s in LONG_STAGES[1:]) + " | IPO-ready (IPO 1) | Weeks to IPO 1 | Shares |"
+    print(head)
+    print("|" + "---|" * (len(LONG_STAGES) + 4))
+    for kind in ("dedicated", "regular", "casual", "check-in"):
+        runs = _long_many(kind, n if kind != "check-in" else max(5, n // 4), max_days=1100)
+        done = [r for r in runs if r["ipo_h"]]
+        cells = []
+        for si in range(1, len(LONG_STAGES)):
+            vals = [r["stage_h"][0][si] for r in runs if len(r["stage_h"][0]) > si]
+            cells.append(_fmt_h(med(vals)) if len(vals) >= len(runs) / 2 else "not in 3 y")
+        ipo_h = med([r["ipo_h"][0] for r in done]) if len(done) >= len(runs) / 2 else None
+        wk = med([r["ipo_day"][0] / 7 for r in done]) if ipo_h is not None else None
+        sh = med([r["shares"][0] for r in done]) if ipo_h is not None else None
+        label = {"dedicated": "dedicated (2 h/day)", "regular": "regular (1 h/day)", "casual": "casual (3 x 1 h/week)", "check-in": "check-in only (1 min/day)"}[kind]
+        print(f"| {label} | " + " | ".join(cells) + f" | {_fmt_h(ipo_h)} | {'-' if wk is None else f'{wk:.0f}'} | {'-' if sh is None else f'{sh:.0f}'} |")
+    ex = _long_many("regular", n, skill="expert")
+    print(f"| regular, expert at tasks | (same ladder) | | | | | | {_fmt_h(med([r['ipo_h'][0] for r in ex]))} | {med([r['ipo_day'][0] / 7 for r in ex]):.0f} | {med([r['shares'][0] for r in ex]):.0f} |")
+    print("\n### 9c. Offline rule: what decides the IPO (regular player, active hours to IPO 1 and share of valuation that came from away time)")
+    print("| Rule | Active h to IPO 1 | Wall weeks | Valuation from away |")
+    print("|---|---|---|---|")
+    for label, rule in (("no away pay at all", (0.0, 0, 0.0)), ("NEW: 10% of active pay, 2 h cap, 10% counts", LONG_AWAY),
+                        ("NEW but 25% counts", (0.10, 2 * 3600, 0.25)), ("NEW but 100% counts", (0.10, 2 * 3600, 1.0)), ("TODAY: 50% of passive, 8 h cap, 100% counts", LONG_AWAY_OLD)):
+        for kind in ("regular", "check-in"):
+            runs = _long_many(kind, n if kind == "regular" else max(5, n // 4), away=rule, max_days=1100)
+            done = [r for r in runs if r["ipo_h"]]
+            h = med([r["ipo_h"][0] for r in done]) if len(done) >= len(runs) / 2 else None
+            wk = med([r["ipo_day"][0] / 7 for r in done]) if h is not None else None
+            share = med([r["away_share"] for r in runs])
+            print(f"| {label}, {kind} | {_fmt_h(h)} | {'-' if wk is None else f'{wk:.0f}'} | {share:.0%} |")
+    print("\n### 9d. Cash pass (x2): does it still halve the first IPO?")
+    print("| Regular player | Active h to IPO 1 |")
+    print("|---|---|")
+    for label, kw in (("no pass", {}), ("2x Cash pass, valuation counts base Cash (proposed)", {"cash_mult": 2.0, "valuation_at_base": True}),
+                      ("2x Cash pass, valuation counts doubled Cash (today)", {"cash_mult": 2.0, "valuation_at_base": False})):
+        runs = _long_many("regular", n, **kw)
+        print(f"| {label} | {_fmt_h(med([r['ipo_h'][0] for r in runs]))} |")
+    print("\n### 9e. Loops: active hours per loop and Shares (3 loops)")
+    print("| Player | Thresholds grow | Loop 1 | Loop 2 | Loop 3 | Shares IPO 1 / 2 / 3 (no pass) | with Shareholder pass |")
+    print("|---|---|---|---|---|---|---|")
+    for kind in ("dedicated", "regular"):
+        for growth in (0.0, LONG_LOOP_GROWTH, 0.10):
+            runs = _long_many(kind, max(5, n // 2), loops=3, growth=growth)
+            pr = _long_many(kind, max(5, n // 4), loops=3, growth=growth, shareholder=True)
+            def loop_h(rs, i):
+                vals = [(r["ipo_h"][i] - (r["ipo_h"][i - 1] if i else 0)) for r in rs if len(r["ipo_h"]) > i]
+                return _fmt_h(med(vals))
+            def shr(rs):
+                return " / ".join(f"{med([r['shares'][i] for r in rs if len(r['shares']) > i]):.0f}" for i in range(3))
+            print(f"| {kind} | +{growth:.0%} per loop | {loop_h(runs, 0)} | {loop_h(runs, 1)} | {loop_h(runs, 2)} | {shr(runs)} | {shr(pr)} |")
+    print("\n### 9f. Ten loops (+5% per loop, Shareholder pass in brackets): active hours and wall weeks to IPO N, Shares owned in total, no spending limit")
+    print("| Player | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares after IPO 1 / 2 / 5 / 10 |")
+    print("|---|---|---|---|---|---|---|")
+    for kind in ("dedicated", "regular", "casual"):
+        runs = _long_many(kind, max(5, n // 6), loops=10, max_days=4000)
+        pr = _long_many(kind, max(5, n // 6), loops=10, max_days=4000, shareholder=True)
+        cells = []
+        for k in (1, 2, 3, 5, 10):
+            h = med([r["ipo_h"][k - 1] for r in runs if len(r["ipo_h"]) >= k])
+            w = med([r["ipo_day"][k - 1] / 7 for r in runs if len(r["ipo_day"]) >= k])
+            cells.append(f"{h:.0f} h / {w:.0f} wk" if h is not None else "-")
+        def tot(rs, k):
+            return med([sum(r["shares"][:k]) for r in rs if len(r["shares"]) >= k])
+        print(f"| {kind} | " + " | ".join(cells) + " | " + " / ".join(f"{tot(runs, k):.0f} ({tot(pr, k):.0f})" for k in (1, 2, 5, 10)) + " |")
+    core = sum(sum(c) for c in LONG_SHOP.values())
+    print(f"\nProposed shop: core perks {core} Shares (speed perks {LONG_SPEED_PERKS[0]}), prestige wing {LONG_PRESTIGE_WING}, total {core + LONG_PRESTIGE_WING} (today {sum(sum(c) for c in IPO_PERK_COSTS.values())}).")
+    print("\nNot measured: how fun the tasks are at hour 40, whether the content exists (docs/LONG_GAME_PROPOSAL.md section 2), "
+          "the real task Income (a Monte Carlo with a fixed roster per rung, 8 hires at most, not the real team of 20 desks), egg timers, "
+          "luck, poaching, perks beyond a +25% speed lump (an estimate), sessions that run longer than planned, players who leave, Investor Day, and "
+          "anything that depends on people (retention, friends, social pull). The thresholds are fitted to the regular player, so 'regular = about 57 h' is the target, not a result.")
+
+
+
 def main():
     global SIM_DAYS_IPO
     ap = argparse.ArgumentParser()
@@ -1008,6 +1284,7 @@ def main():
     ap.add_argument("--daily", action="store_true", help="only section 7: the daily calendar table")
     ap.add_argument("--ipo", action="store_true", help="only section 6: real IPO numbers in active minutes (all --runs, not half)")
     ap.add_argument("--active", action="store_true", help="only section 8: the ACTIVE-PLAY proposal (default OFF everywhere else)")
+    ap.add_argument("--long", action="store_true", help="only section 9: the LONG GAME proposal (default OFF everywhere else)")
     ap.add_argument("--days", type=int, default=60, help="days simulated in section 6 and 8 (default 60)")
     args = ap.parse_args()
     n = args.runs
@@ -1020,6 +1297,9 @@ def main():
           "to be roughly 15-25% faster per IPO cycle than these numbers show.")
     print(f"Daily login calendar (DailyConfig.lua, M6) IS modeled: claimed at the first login of every day, Cash as a gift "
           f"(not valuation). In sections 1-6: {'ON' if DAILY_IN_ALL_TABLES else 'OFF'} (DAILY_IN_ALL_TABLES); section 7 compares calendars.")
+    if args.long:
+        report_long(n)
+        return
     if args.active:
         report_active(n, args.days)
         return
