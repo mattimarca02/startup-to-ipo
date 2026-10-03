@@ -1023,8 +1023,13 @@ def report_active(n, days=SIM_DAYS_IPO):
 # that). Everything else (away, online but idle, a macro) is the away bank: LONG_AWAY of the BASE Income.
 # =============================================================================
 LONG_ENGAGED_WINDOW = 180           # seconds: "engaged" = a graded task answered in the last 3 minutes (the server decides, never the client)
-LONG_FULL_HOURS = 4                 # engaged hours per UTC day whose Cash counts 100% toward the valuation ...
-LONG_OVER_CAP = 0.10                # ... and the share that counts after that
+LONG_FULL_HOURS = 3                 # engaged hours per day whose Cash counts 100% toward the valuation ...
+LONG_OVER_CAP = 0.05                # ... and the share that counts after that
+LONG_RESET_HOUR = 8                 # the day for this cap starts at 08:00 UTC, like the daily calendar (DailyConfig.ResetHourUtc): away.engagedDay = DailyConfig.dayNumber(os.time())
+LONG_BOARD_RUNG = 4                 # Series C+D (index in LONG_RUNGS): the only rung with board requests and valuation milestones (its moments were 33 min apart)
+LONG_BOARD = (45 * 60, 60)          # board request: one every 45 ENGAGED minutes in that rung, a FIXED reward of 60 s of base Income (no random reward, D9-safe); counts like task Cash
+LONG_MILESTONES = (0.2, 0.4, 0.6, 0.8)                          # share of the rung's valuation distance (entry to next threshold) at which a milestone fires ...
+LONG_MILESTONE_REWARDS = ("decor piece", "title", "decor piece", "task tier")   # ... and what each one gives (new content: 2 decor, 1 title, 1 extra task tier)
 LONG_K = 1.5                        # valuation to enter the next rung = K x the price of everything in the rungs so far (the rule that derives the ladder)
 LONG_RUNGS = [                      # (name, egg tier of its hires, Income cap of one desk, task budget in seconds of Income per online second, target hours in rung for the fit)
     ("Garage", "Garage Egg", 25, 0.85, 1.5),
@@ -1047,7 +1052,7 @@ LONG_HIRE_TYPES = [                 # (creature, Income, role family, egg tier i
     ("Hustle Hamster", 7, "sales", "Garage Egg", True), ("Bug Beetle", 8, "eng", "Garage Egg", True), ("Memo Mole", 9, "ops", "Garage Egg", True),
     ("Sales Shark", 20, "sales", "Startup Egg", True), ("Pitch Parrot", 24, "mkt", "Startup Egg", True),
     ("Server Sloth", 50, "eng", "Startup Egg", True), ("Ledger Llama", 60, "fin", "Scale-up Egg", True),
-    ("Unicorn CEO", 150, "fin", "Scale-up Egg", True), ("Venture Dragon", 175, "fin", "Unicorn Egg", True),
+    ("Unicorn CEO", 150, "fin", "Scale-up Egg", True), ("Venture Dragon", 175, "fin", "Scale-up Egg", True),
     ("Growth Gecko", 220, "mkt", "Unicorn Egg", False), ("Compliance Cobra", 300, "fin", "Unicorn Egg", False),
     ("Platform Panda", 380, "eng", "Decacorn Egg", False), ("Closer Condor", 460, "sales", "Decacorn Egg", False),
     ("Brand Badger", 540, "mkt", "Blue-Chip Egg", False), ("Board Bison", 620, "fin", "Blue-Chip Egg", False),
@@ -1055,11 +1060,13 @@ LONG_HIRE_TYPES = [                 # (creature, Income, role family, egg tier i
 for _name, _inc, _role, _egg, _old in LONG_HIRE_TYPES:
     ACTIVE_ROLE_FAMILY.setdefault(_inc, {_role: 1})   # the new Income values (220 and up) get their role; nothing older is touched
 
-LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING ORDER; a hire's price is what its egg(s) cost, a desk and an office have no Income
+LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING ORDER; a hire's price is what its egg(s) cost, a desk and an office have no Income.
+    # Each rung's first office comes after its first 2 upgrades (no rung opens with nothing to buy); in Series C+D every upgrade is two levels (I and II), each at half the price and half the Income.
+    # Prices were refitted (one factor per rung, rounded to 2 significant digits) so that the reference player takes the LONG_RUNGS target hours.
     # rung 0: Garage
-    (0, "office", "Garage", 0, 0),
     (0, "upgrade", "Desk", 0, 1),
     (0, "upgrade", "Coffee Machine", 1100, 2),
+    (0, "office", "Garage", 0, 0),
     (0, "desk", "Desk 1", 0, 0),
     (0, "hire", "Coding Cat", 2300, 3),
     (0, "upgrade", "Laptop", 4200, 5),
@@ -1069,21 +1076,21 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (0, "upgrade", "Whiteboard", 28000, 40),
     (0, "upgrade", "Neon Logo", 72000, 120),
     # rung 1: Seed
-    (1, "office", "Co-working Loft", 570000, 0),
     (1, "upgrade", "Standing Desks", 160000, 6),
     (1, "upgrade", "Espresso Bar", 230000, 12),
+    (1, "office", "Co-working Loft", 580000, 0),
     (1, "desk", "Desk 3", 150000, 0),
     (1, "hire", "Sales Shark", 310000, 20),
     (1, "upgrade", "Dev Laptops", 320000, 20),
     (1, "upgrade", "Rack Room", 410000, 30),
-    (1, "upgrade", "Glass Boardroom", 490000, 38),
-    (1, "upgrade", "Rooftop Sign", 560000, 44),
+    (1, "upgrade", "Glass Boardroom", 500000, 38),
+    (1, "upgrade", "Rooftop Sign", 570000, 44),
     (1, "desk", "Desk 4", 320000, 0),
-    (1, "hire", "Server Sloth", 640000, 50),
+    (1, "hire", "Server Sloth", 650000, 50),
     # rung 2: Series A
-    (2, "office", "Downtown Floor", 2000000, 0),
     (2, "upgrade", "Open Plan", 560000, 12),
     (2, "upgrade", "Quiet Pods", 810000, 24),
+    (2, "office", "Downtown Floor", 2000000, 0),
     (2, "upgrade", "Design Studio", 1100000, 40),
     (2, "desk", "Desk 5", 690000, 0),
     (2, "hire", "Ledger Llama", 1400000, 60),
@@ -1095,9 +1102,9 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (2, "desk", "Desk 7", 1600000, 0),
     (2, "hire", "Venture Dragon", 3200000, 175),
     # rung 3: Series B
-    (3, "office", "Campus Wing", 7800000, 0),
     (3, "upgrade", "Game Room", 2300000, 25),
     (3, "upgrade", "Gym", 3200000, 50),
+    (3, "office", "Campus Wing", 7800000, 0),
     (3, "upgrade", "Cafeteria", 4200000, 80),
     (3, "upgrade", "Data Center", 5300000, 120),
     (3, "upgrade", "Auditorium", 6200000, 150),
@@ -1109,34 +1116,46 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (3, "desk", "Desk 10", 5400000, 0),
     (3, "hire", "Compliance Cobra", 11000000, 300),
     # rung 4: Series C+D
+    (4, "upgrade", "Robot Barista I", 3400000, 12.5),
+    (4, "upgrade", "Robot Barista II", 3400000, 12.5),
     (4, "office", "Tech Campus", 23000000, 0),
-    (4, "upgrade", "Robot Barista", 6800000, 25),
-    (4, "upgrade", "Sky Lounge", 9600000, 50),
-    (4, "upgrade", "Mega Rack", 12000000, 80),
-    (4, "upgrade", "Innovation Lab", 15000000, 120),
-    (4, "upgrade", "Atrium", 17000000, 150),
-    (4, "upgrade", "Helipad", 19000000, 175),
+    (4, "upgrade", "Sky Lounge I", 4900000, 25),
+    (4, "upgrade", "Sky Lounge II", 4900000, 25),
+    (4, "upgrade", "Mega Rack I", 6100000, 40),
+    (4, "upgrade", "Mega Rack II", 6100000, 40),
+    (4, "upgrade", "Innovation Lab I", 7600000, 60),
+    (4, "upgrade", "Innovation Lab II", 7600000, 60),
+    (4, "upgrade", "Atrium I", 8600000, 75),
+    (4, "upgrade", "Atrium II", 8600000, 75),
+    (4, "upgrade", "Helipad I", 9600000, 87.5),
+    (4, "upgrade", "Helipad II", 9600000, 87.5),
     (4, "desk", "Desk 11", 13000000, 0),
     (4, "hire", "Compliance Cobra", 26000000, 300),
     (4, "desk", "Desk 12", 15000000, 0),
     (4, "hire", "Platform Panda", 31000000, 380),
     (4, "office", "Glass Tower", 31000000, 0),
-    (4, "upgrade", "Trading Floor", 9200000, 30),
-    (4, "upgrade", "Spa", 13000000, 60),
-    (4, "upgrade", "Quantum Rack", 17000000, 95),
-    (4, "upgrade", "Observatory", 20000000, 140),
-    (4, "upgrade", "Ballroom", 23000000, 175),
-    (4, "upgrade", "Statue", 25000000, 200),
+    (4, "upgrade", "Trading Floor I", 4700000, 15),
+    (4, "upgrade", "Trading Floor II", 4700000, 15),
+    (4, "upgrade", "Spa I", 6600000, 30),
+    (4, "upgrade", "Spa II", 6600000, 30),
+    (4, "upgrade", "Quantum Rack I", 8600000, 47.5),
+    (4, "upgrade", "Quantum Rack II", 8600000, 47.5),
+    (4, "upgrade", "Observatory I", 10000000, 70),
+    (4, "upgrade", "Observatory II", 10000000, 70),
+    (4, "upgrade", "Ballroom I", 12000000, 87.5),
+    (4, "upgrade", "Ballroom II", 12000000, 87.5),
+    (4, "upgrade", "Statue I", 13000000, 100),
+    (4, "upgrade", "Statue II", 13000000, 100),
     (4, "desk", "Desk 13", 20000000, 0),
-    (4, "hire", "Closer Condor", 39000000, 460),
+    (4, "hire", "Closer Condor", 40000000, 460),
     (4, "desk", "Desk 14", 21000000, 0),
-    (4, "hire", "Closer Condor", 41000000, 460),
+    (4, "hire", "Closer Condor", 42000000, 460),
     (4, "desk", "Desk 15", 23000000, 0),
-    (4, "hire", "Brand Badger", 47000000, 540),
+    (4, "hire", "Brand Badger", 48000000, 540),
     # rung 5: Pre-IPO
-    (5, "office", "Global HQ", 62000000, 0),
     (5, "upgrade", "Marble Lobby", 18000000, 40),
     (5, "upgrade", "War Room", 25000000, 80),
+    (5, "office", "Global HQ", 62000000, 0),
     (5, "upgrade", "Server Farm", 32000000, 130),
     (5, "upgrade", "Roadshow Jet", 39000000, 190),
     (5, "upgrade", "Bell Tower", 47000000, 260),
@@ -1149,7 +1168,7 @@ LONG_ITEMS = [   # (rung, kind, name, price in Cash, Income in Cash/s) in BUYING
     (5, "hire", "Board Bison", 81000000, 620),
 ]
 
-LONG_LOOP_GROWTH = 0.10             # prices and valuation thresholds of loop L = IPO multiplier x (1 + this) ^ L
+LONG_LOOP_GROWTH = 0.05             # prices and valuation thresholds of loop L = IPO multiplier x (1 + this) ^ L
 LONG_AWAY = (0.10, 2 * 3600, 0.10)  # away pay = 10% of the BASE Income (no passes, boosts or chain), banked up to 2 h per return, 10% of it counts toward valuation
 LONG_AWAY_OLD = (0.50, 8 * 3600, 1.0)   # today: 50% of passive Income, 8 h, 100% valuation
 LONG_SHARES = (20, 0.25, 1.5, 0.5)  # Shares = base x (1 + growth x IPOs done) x min(ratio, cap) ^ exponent (x2 Shareholder pass)
@@ -1224,7 +1243,9 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
     now_inc = [0.0] * n_items
     nhire = 0
     fcache = {}
-    out = {"stage_h": [[0.0]], "ipo_h": [], "ipo_day": [], "online_h": [], "shares": [], "away_val": 0.0, "val_total": 0.0}
+    out = {"stage_h": [[0.0]], "ipo_h": [], "ipo_day": [], "online_h": [], "shares": [], "away_val": 0.0, "val_total": 0.0,
+           "buy_h": [], "ms_h": [], "board_h": []}   # the last three (loop 0 only): engaged hours of each purchase (rung, h), milestone and board request
+    board_t, ms_next = 0.0, 0
     last_end = None
 
     def f_now():
@@ -1262,8 +1283,8 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
             t = 0.0
             while t < length:
                 dt = min(LONG_DT, length - t)
-                d = int((s_start + t) // DAY)
-                if d != cur_day:                             # a new UTC day: the engaged-hours counter and the feed start again
+                d = int((s_start + t - LONG_RESET_HOUR * 3600) // DAY)   # the day starts at 08:00 UTC (shared with the daily calendar)
+                if d != cur_day:                             # a new day: the engaged-hours counter and the feed start again
                     cur_day, eng_today, fed_left = d, 0.0, (fed or 0)
                 if not engaged_kind:                         # online but no task graded: the same as away, the bank only fills
                     if away is not LONG_AWAY_OLD:
@@ -1287,6 +1308,15 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
                 eng_s += dt
                 online_s += dt
                 t += dt
+                if stage == LONG_BOARD_RUNG:                 # a board request every LONG_BOARD[0] engaged seconds: fixed reward, like task Cash
+                    board_t += dt
+                    if board_t >= LONG_BOARD[0]:
+                        board_t -= LONG_BOARD[0]
+                        pay = LONG_BOARD[1] * base
+                        cash += pay * cash_mult
+                        val += pay * w * base_ratio
+                        if loop == 0:
+                            out["board_h"].append(eng_s / 3600)
                 while owned < n_items and rung_of[owned] <= stage:
                     j = owned
                     cost, g = price[j] * sc, gain_of[j]
@@ -1302,9 +1332,17 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
                     cash -= cost
                     income += g
                     now_inc[j] = g
+                    if loop == 0:
+                        out["buy_h"].append((rung_of[j], eng_s / 3600))
                     if is_hire[j]:
                         nhire += 1
                     owned += 1
+                if stage == LONG_BOARD_RUNG:                 # valuation milestones inside the rung (before the stage can move on)
+                    lo_v, hi_v = thr[stage - 1] * sc, thr[stage] * sc
+                    while ms_next < len(LONG_MILESTONES) and val >= lo_v + LONG_MILESTONES[ms_next] * (hi_v - lo_v):
+                        if loop == 0:
+                            out["ms_h"].append(eng_s / 3600)
+                        ms_next += 1
                 while stage < n_rungs and val >= thr[stage] * sc:
                     stage += 1
                     if stage < n_rungs:
@@ -1328,6 +1366,7 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
                     speed = 1 + LONG_SPEED_PERKS[1] * spent_speed / LONG_SPEED_PERKS[0]
                     loop += 1
                     owned, income, cash, val, stage, nhire = 0, 0.0, 0.0, 0.0, 0, 0
+                    board_t, ms_next = 0.0, 0
                     fed_run_left = fed_run if fed_run is not None else 10 ** 9
                     out["stage_h"].append([eng_s / 3600])
                     if loop >= loops:
@@ -1340,9 +1379,14 @@ def long_run(kind, seed, loops=1, away=LONG_AWAY, growth=LONG_LOOP_GROWTH, skill
     return out
 
 
+def long_ref_run(items, price_mult=1.0):
+    """The fit run: the always-engaged reference player, loop 0, no away pay, no daily cap (it also records purchases, milestones and board requests)."""
+    return long_run("reference", 0, items=items, away=(0, 0, 0), engaged_rule="input", price_mult=price_mult, max_days=400)
+
+
 def long_hours(items, price_mult=1.0):
     """Fit tool: hours the always-engaged reference player needs inside each rung (and in total), loop 0, no away pay, no daily cap."""
-    r = long_run("reference", 0, items=items, away=(0, 0, 0), engaged_rule="input", price_mult=price_mult, max_days=400)
+    r = long_ref_run(items, price_mult)
     if not r["ipo_h"]:
         return None
     cum = r["stage_h"][0][1:] + [r["ipo_h"][0]]
@@ -1391,6 +1435,54 @@ def long_rung_table():
     return rows
 
 
+def report_long_cd(ref, hours, tot):
+    """Series C+D moments (the three fixes), from the reference run: how many, how far apart, what the milestones give."""
+    r = LONG_BOARD_RUNG
+    name = LONG_RUNGS[r][0]
+    its = [it for it in LONG_ITEMS if it[0] == r]
+    levels = sum(1 for it in its if it[1] == "upgrade")
+    # moments of the draft (12 upgrades, no milestones, no requests) = this rung's moments minus the added levels and milestones
+    cur = sum(1 for it in its if it[1] != "upgrade" and it[3] > 0) + levels
+    draft = cur - levels // 2
+    after_levels = cur
+    after_ms = cur + len(LONG_MILESTONES)
+    n_board = len(ref["board_h"])
+    # the rung's content that is not bought (tasks, tiers, products, decor, title, egg) is the same in every row
+    content = LONG_CONTENT[r][1] + LONG_CONTENT[r][2] + LONG_CONTENT[r][3] + LONG_CONTENT[r][4] + len(LONG_CONTENT[r][0]) + \
+        sum(1 for ur in LONG_TASK_UNLOCK.values() if ur == r) + sum(1 for ur in LONG_TASK_UNLOCK.values() if ur == r - 1) + sum(1 for ur in LONG_TASK_UNLOCK.values() if ur == r - 2)
+    h = hours[r]
+    print(f"\n### 9n. {name} moments: the three fixes (reference player, {h:.1f} engaged hours in the rung)")
+    print("| Version | Moments | Minutes per moment |")
+    print("|---|---|---|")
+    rows = [("draft: 12 upgrades, nothing else", draft + content, 0), ("+ Level I and II (24 levels at half price, half Income)", after_levels + content, 0),
+            (f"+ {len(LONG_MILESTONES)} valuation milestones ({', '.join(f'{m:.0%}' for m in LONG_MILESTONES)} of the rung: {', '.join(LONG_MILESTONE_REWARDS)})", after_ms + content, 0),
+            (f"+ board requests every {LONG_BOARD[0] // 60} min ({n_board} in the rung, fixed {LONG_BOARD[1]} s of Income each)", after_ms + content + n_board, n_board)]
+    for label, m, _ in rows:
+        print(f"| {label} | {m} | {h * 60 / m:.0f} |")
+    ev = sorted([hh for rr, hh in ref["buy_h"] if rr == r] + [x for x in ref["ms_h"]] + [x for x in ref["board_h"]])
+    start = ref["stage_h"][0][r]
+    def gaps_of(events):
+        pts = [start] + events + [start + h]
+        return [(b - a) * 60 for a, b in zip(pts, pts[1:])]
+    gaps = gaps_of(ev)
+    no_req = gaps_of(sorted([hh for rr, hh in ref["buy_h"] if rr == r] + list(ref["ms_h"])))
+    print(f"Longest gap between two bought items, milestones or board requests in the rung: {max(gaps):.0f} min (average {sum(gaps) / len(gaps):.1f} min over {len(ev)} events); "
+          f"without the requests: {max(no_req):.0f} min (average {sum(no_req) / len(no_req):.1f}). "
+          f"Milestones fire at {', '.join(f'{(x - start):.1f} h' for x in ref['ms_h'])} into the rung.")
+
+
+def report_long_g1():
+    """Gate G1 target: f of the customer calls alone (PR 1 has only calls), per rung, against all tasks (PR 2+)."""
+    print("\n### 9m. Gate G1: the task bonus f of the customer calls alone (typical / expert / bot) against all tasks, per rung (budget of the rung)")
+    print("| Rung | Hires | f calls only (PR 1 target) | f all tasks (PR 2+ target) |")
+    print("|---|---|---|---|")
+    calls = {k: (0 if k == "Customer call" else 99) for k in LONG_TASK_UNLOCK}
+    for r, (name, egg, cap, bud, target) in enumerate(LONG_RUNGS):
+        roster = [it[4] for it in LONG_ITEMS if it[1] == "hire" and it[0] <= r]
+        cells = [" / ".join(f"{active_factor(roster, r, 0, sk, (1, 2, 3), budget=bud, unlock_map=um)['f']:.2f}" for sk in ("typical", "expert", "bot")) for um in (calls, LONG_TASK_UNLOCK)]
+        print(f"| {name} | {len(roster)} | {cells[0]} | {cells[1]} |")
+
+
 def report_long(n):
     """Section 9: the long game. Only with --long."""
     print(f"\n## 9. LONG GAME (proposal, default OFF), median of {n} runs; hours are ENGAGED hours (a task answered and graded in the last {LONG_ENGAGED_WINDOW // 60} min)")
@@ -1419,7 +1511,7 @@ def report_long(n):
     h, _, day = _long_first(ex)
     print(f"| regular, expert at tasks | | | | | | {_fmt_h(h)} | {day / 7:.0f} | {med([r['shares'][0] for r in ex]):.0f} |")
 
-    print("\n### 9c. Macro and bots (24/7 online): engaged hours, hours online and days to IPO 1, the first draft (any input = engaged, no daily cap) against the fix (graded task, 4 h/day at 100% then 10%)")
+    print("\n### 9c. Macro and bots (24/7 online): engaged hours, hours online and days to IPO 1, the first draft (any input = engaged, no daily cap) against the fix (graded task, %d h/day at 100%% then %d%%, the day starts at %02d:00 UTC)" % (LONG_FULL_HOURS, round(LONG_OVER_CAP * 100), LONG_RESET_HOUR))
     print("| Player | Rule | Engaged h to IPO 1 | Online h | Days |")
     print("|---|---|---|---|---|")
     nb = max(4, n // 8)
@@ -1428,7 +1520,7 @@ def report_long(n):
             runs = _long_many(kind, nb, engaged_rule=rule, max_days=1100)
             h, oh, day = _long_first(runs)
             print(f"| {label} | {rl} | {_fmt_h(h)} | {_fmt_h(oh)} | {_fmt_d(day)} |")
-    for fh, oc, label in ((3, 0.05, "3 h/day then 5%"), (2, 0.05, "2 h/day then 5%")):
+    for fh, oc, label in ((4, 0.10, "the old draft: 4 h/day then 10%"), (2, 0.05, "2 h/day then 5%")):
         runs = _long_many("task-bot", nb, full_hours=fh, over_cap=oc, max_days=1100)
         h, oh, day = _long_first(runs)
         print(f"| task-bot at the budget cap | after, {label} | {_fmt_h(h)} | {_fmt_h(oh)} | {_fmt_d(day)} |")
@@ -1475,7 +1567,7 @@ def report_long(n):
     print("| Player | Prices and thresholds grow | Loop 1 | Loop 2 | Loop 3 | Shares IPO 1 / 2 / 3 (no pass) | with Shareholder pass |")
     print("|---|---|---|---|---|---|---|")
     for kind in ("dedicated", "regular"):
-        for growth in (0.0, 0.05, LONG_LOOP_GROWTH, 0.15):
+        for growth in (0.0, 0.05, 0.10, 0.15):
             runs = _long_many(kind, max(5, n // 2), loops=3, growth=growth)
             pr = _long_many(kind, max(5, n // 4), loops=3, growth=growth, shareholder=True)
 
@@ -1547,22 +1639,30 @@ def report_long(n):
 
     print("\n### 9l. Content per rung (from the item list and LONG_CONTENT): moments = things bought + tasks + task tiers + products + decor + titles + new egg tiers")
     print("(a task's tier 2 appears one rung after the task, tier 3 two rungs after: more options, tighter limits, same seconds-based reward)")
-    print("| Rung | Offices | Upgrades | Desks | Hires | Tasks | Task tiers | Products | Decor | Titles | New eggs | Moments | Hours | Minutes per moment |")
-    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
-    tot = [0] * 11
+    print("(Series C+D only: every upgrade is two levels, I and II, which count as two things bought; 4 valuation milestones at %s of the rung; board requests are repeated events, counted in the last two columns only)" %
+          "/".join(f"{m:.0%}" for m in LONG_MILESTONES))
+    print("| Rung | Offices | Upgrades (levels) | Desks | Hires | Tasks | Task tiers | Products | Decor | Titles | New eggs | Milestones | Moments | Hours | Minutes per moment | Board requests | Minutes per moment with requests |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    tot = [0] * 12
+    ref = long_ref_run(LONG_ITEMS)
     hours = long_hours(LONG_ITEMS)
+    n_board = len(ref["board_h"])
     for r, (name, *_rest) in enumerate(LONG_RUNGS):
         its = [it for it in LONG_ITEMS if it[0] == r]
         c = {k: sum(1 for it in its if it[1] == k and it[3] > 0) for k in ("office", "upgrade", "desk", "hire")}
         c["upgrade"] += sum(1 for it in its if it[1] == "upgrade" and it[3] == 0)
         tasks = sum(1 for tname, ur in LONG_TASK_UNLOCK.items() if ur == r) + len(LONG_CONTENT[r][0])
         tiers = sum(1 for ur in LONG_TASK_UNLOCK.values() if ur == r - 1) + sum(1 for ur in LONG_TASK_UNLOCK.values() if ur == r - 2)
-        row = [c["office"], c["upgrade"], c["desk"], c["hire"], tasks, tiers, LONG_CONTENT[r][1], LONG_CONTENT[r][2], LONG_CONTENT[r][3], LONG_CONTENT[r][4]]
+        row = [c["office"], c["upgrade"], c["desk"], c["hire"], tasks, tiers, LONG_CONTENT[r][1], LONG_CONTENT[r][2], LONG_CONTENT[r][3], LONG_CONTENT[r][4],
+               len(LONG_MILESTONES) if r == LONG_BOARD_RUNG else 0]
         moments = sum(row)
+        board = n_board if r == LONG_BOARD_RUNG else 0
         tot = [a + b for a, b in zip(tot, row + [moments])]
-        print(f"| {name} | " + " | ".join(str(x) for x in row) + f" | {moments} | {hours[r]:.1f} | {hours[r] * 60 / moments:.0f} |")
-    print("| Total | " + " | ".join(str(x) for x in tot[:10]) + f" | {tot[10]} | {sum(hours):.1f} | {sum(hours) * 60 / tot[10]:.0f} |")
+        print(f"| {name} | " + " | ".join(str(x) for x in row) + f" | {moments} | {hours[r]:.1f} | {hours[r] * 60 / moments:.0f} | {board} | {hours[r] * 60 / (moments + board):.0f} |")
+    print("| Total | " + " | ".join(str(x) for x in tot[:11]) + f" | {tot[11]} | {sum(hours):.1f} | {sum(hours) * 60 / tot[11]:.0f} | {n_board} | {sum(hours) * 60 / (tot[11] + n_board):.0f} |")
     print("(plus 2 tasks outside the 50 h path: paired demo and Investor Day, so 20 task types in all)")
+    report_long_g1()
+    report_long_cd(ref, hours, tot)
     early = [it for it in LONG_ITEMS if it[0] <= 1 and it[3] > 0]
     old_hires = {h[0] for h in LONG_HIRE_TYPES if h[4]}
     exists = sum(1 for it in early if (it[0] == 0 and it[1] == "upgrade") or (it[1] == "hire" and it[2] in old_hires))
