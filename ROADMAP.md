@@ -54,6 +54,7 @@ About $5,000/month in DevEx payouts. That needs about $19,000/month of player sp
   - (j) Answer "Yes, paid random items" in the age questionnaire.
   - (k) An egg bought under one restriction state and hatched under another follows the state at hatch time.
   - (l) The sandbox copy is archived, and the group payouts page showed "restricted" on 2 Oct 2026; check again after the first earnings.
+  - (m) **Delete `Workspace.PREVIEW_STAGES` before publishing** (the visuals-garage preview rooms at x = -600; Studio only, built from the command bar).
 - **Publishing:** use **Shut down all servers** (new save sections), and the rollback floor is M4: never restore an older version. See docs/PUBLISH_RULES.md.
 - Next steps: the by-hand checks above, then the store page, then the publish. M7 weekly events comes after launch.
 
