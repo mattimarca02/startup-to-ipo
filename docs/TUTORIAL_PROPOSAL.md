@@ -50,7 +50,11 @@ Notes:
 
 ## 4. What must be stored
 
-**A new save section is needed: `tutorial`** (rule A10). Reusing `onboarding` is not safe: older code keeps unknown top-level sections but drops unknown *fields inside* a known one, and `onboarding.goals` is checked against the goal list on load. So:
+**A new save section is needed: `tutorial`.** The reason is rule A10 in CLAUDE.md, which applies to every feature, whatever the section it could have shared:
+
+> **New saved data gets its own top-level section (rule A10).** Older code keeps unknown *top-level* sections, but it drops unknown *fields inside* a section it knows (`team`, `poach`, `ipo`, ...). So a new feature never adds a field to an existing section: it adds a new section (with its own `serialize`, an entry in `KNOWN_SECTIONS`, optional on load).
+
+So the tutorial's flags do not go into `onboarding`, even though `OnboardingServer` itself would not lose them: since M5 step 1 (`8fe325f`) it copies any field it doesn't know into `onboarding.unknown` and writes it back (`KNOWN_FIELDS`, OnboardingServer.lua lines 34, 241-245, 281-285), and it keeps every finished goal key that is a string, even keys its config doesn't list (lines 233-240). A10 is the project rule, not a gap in onboarding. The section:
 
 ```lua
 tutorial = {                -- TutorialServer.serialize (optional: older saves have none)
