@@ -213,6 +213,31 @@ Coordinates are measured from the **anchor**, the front-center of the floor (sec
 - **D9:** buildings and furniture are sold for Cash only in v1; anything sold for Robux later has fixed, listed contents. Sector text may not say odds, chance, luck or random (the TaskConfig word test, tools/daily_test.py:4344).
 - **Sector picker and Portfolio:** the picker is a 2 x 2 grid (portrait) or a row of 4 (landscape); the Portfolio is a scrolling list of cards in the IPO window.
 
+## 8. Economy risks and anti-exploit
+
+**What changes for balance:**
+- **IPO pace stays the same.** An IPO still needs the run's valuation, earned Cash only (IpoServer.lua:123-135, 192-195), and Shares and the multiplier still come from it (IpoConfig.lua:162-172). Companies add exactly two new Cash sources, both gifts that never touch the valuation: the **seed** (once per IPO, capped, 1.3) and **dividends** (capped at 10% of base Income, engaged seconds only, 1.4). They can only shorten the item-buying part of a rung.
+- **Four sectors are four economies.** A sector that is faster (or kinder to a casual or idle player) becomes the only choice, and the others become dead content. Every sector must reach each rung in the same engaged hours within 5%, for every LONG_GAME player profile.
+- **Income models are the riskiest part.** Fintech interest grows with Cash held (it rewards hoarding and idling), Biotech payouts are lumpy (long waits), Gaming launches multiply Income (passes and the IPO multiplier stack on top). Each is capped as a share of base Income, pays only while engaged, and has no random outcome (D9).
+- **Prices scale with the player's IPO count**, never per sector (`StageScale`, LONG_GAME section 5), so changing sector restarts nothing.
+
+**Anti-exploit:**
+- **Company hopping:** the only way to found a company is an IPO (IPO-ready valuation, the 60 s cooldown at IpoConfig.lua:45, 50+ h by LONG_GAME's design). There is no "start over" or "refound" action; a retired company pays nothing.
+- **Duplicate funding:** the seed is computed and written inside the IPO's one save transform (1.5); `ipoNumber == count + 1` refuses a repeat (IpoServer.lua:179); a held company's Cash is frozen (no transfer, no withdrawal, no second IPO); the A10 run check never pays a seed (1.5).
+- **Dividend farming:** paid only per engaged second (a server-graded task, LONG_GAME section 2), so macros and idling earn nothing; capped by the active company's own Income; base Income only (no passes), like away pay.
+- **Alt accounts:** companies cannot be given, traded or poached; poaching stays per employee with LONG_GAME's R1-R3.
+- **Rollback:** older code keeps `companies` frozen; its IPO pays no seed, and the run check repairs the record (1.5).
+
+**Simulate before any build (tools/economy_sim.py; the modes today are `--long`, `--active`, `--ipo`, `--daily`, :1682-1688). A new `--companies` mode adds the seed, dividends and per-sector ladders and income models:**
+
+| Sim | Question | Pass |
+|---|---|---|
+| S1 seed | `--long` with seed 0, 10% and the 25% cap: hours to IPO 1 and loop 2 | each loop at most 5% faster |
+| S2 dividends | 0, 1 and 4 held companies, cap 10%: hours per loop for loops 2-10 | at most 10% faster at IPO 10 |
+| S3 sector parity | each income model fitted to Software's hours per rung, for dedicated, regular and casual players (`LONG_PLAYERS`, :1183) | every rung within ±5% |
+| S4 bots | the macro and task-bot rows of LONG_GAME section 2, per sector | no sector faster for a bot |
+| S5 hopping | always picking the fastest sector against one fixed sector, 10 IPOs | under 3% apart |
+
 ## 9. Build plan: engine, sector format, Software slice, gate, three sectors
 
 Every PR: claim its scripts in CONTRIBUTING.md first, `python3 tools/daily_test.py` passes in the fake Roblox, a Studio playtest (F5) with no red errors, publish with **Shut down all servers**. Create new modules in Studio **before** pasting a script that requires them (a `WaitForChild` without a timeout hangs, PUBLISH_RULES 2b). PR 1-8 do not need LONG_GAME; PR 9-14 need its economy core (LONG_GAME PR 2: the engaged clock, `addEarnings(kind)`), because dividends and the sector income models are measured on it.
