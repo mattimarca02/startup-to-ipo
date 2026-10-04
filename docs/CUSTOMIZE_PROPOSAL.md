@@ -132,6 +132,37 @@ The baseline is the content bible (`docs/CONTENT_BIBLE.md` on `content-bible`): 
 
 **What is new.** For Software the names exist (bible, still to approve) and the art is partly done: 6 props of 17-24 parts each (PlotArt.lua:806-949) and 5 rooms to cut into shells and furniture. Fintech, Biotech and Gaming need everything sector-flavored from zero: about 3 times Software's names and about 4 times its remaining art **(estimate)**. Mechanics are reused (no new task action type, no new creature body), which is what keeps this possible.
 
+## 4. Plot space (checked in the code)
+
+**What is there:**
+- **Plots:** centers at x = -225, -135, -45, 45, 135, 225 and z = 150 (`plotCenter`, TycoonCore.lua:123-126, with `PLOT_SPACING = 90` and `MAX_PLOTS = 6` at :74 and :76). Each `Floor` is 60 x 60 (TycoonCore.lua:736), so it spans z 120-180 and leaves 30 studs between neighbors.
+- **Front = +Z:** the signs stand at +24 (TycoonCore.lua:75, IpoServer.lua:21) and the player spawns at +12 facing them (TycoonCore.lua:697-700). The building pass puts its door in the front wall (z 30.2-31, x -4.5 to 4.5; docs/BUILDING_PASS_PROPOSAL.md section 3 on `building-pass`). **So the anchor is the front-center of the floor: local (0, +30), world z 180.** The Garage's roll-up door is decor on the back wall (PlotArt.lua:221-235), not the anchor.
+- **VIP Lounge:** center (0, 70), 36 x 24, so x -18 to 18 and z 58-82, with its door in the +Z wall facing the plots (ShopServer.lua:35-36, 643-657). Players leaving it appear at z 88 (ShopServer.lua:839).
+- **Stage 5 skyline:** behind the back wall at local z -49 to -43, world z 101-107 (PlotArt.lua:699-707).
+- **Nothing else** is built in the world by a script (every `Instance.new("Part")` checked). The Baseplate's size, the SpawnLocation and any part placed by hand in Studio are **(unverified)**; docs/STUDIO_SYNC.md:37 records only the Baseplate's color.
+
+**How big a building can get.** It grows sideways (centered) and backward from the anchor. Each side adds the building pass's wall (0.8) and roof overhang (1.5), 2.3 studs.
+- **Width:** neighbors are 90 apart, so the gap between two roofs is 90 - width - 4.6. Keeping at least 6 studs to walk between plots **(estimate)** gives **width ≤ 79.4, so 78**.
+- **Depth:** at width 78, plots 3 and 4 span x -84 to -6 and 6 to 84, behind the lounge (x -18 to 18). Their roof must stay at least 10 studs from the lounge door at z 82 **(estimate)**: roof back ≥ z 92, so depth ≤ 180 - 92 - 2.3 = 85.7, so **84**. Plots 1, 2, 5 and 6 could go deeper, but one rule for every plot keeps one set of sector art.
+- **Height:** nothing in the code limits it; the building-pass roof underside is at 14.
+
+**So the largest building is 78 x 84 inside (today 60 x 60, area x1.8), with no plot moved.** Proposed nested sizes **(estimate)**:
+
+| Building | 1 Garage | 2 Seed | 3 Series A | 4 Series B | 5 IPO-ready |
+|---|---|---|---|---|---|
+| Inner width x depth | 60 x 60 | 64 x 66 | 68 x 72 | 74 x 78 | 78 x 84 |
+| Back wall, world z | 120 | 114 | 108 | 102 | 96 |
+
+With LONG_GAME's 7 rungs: widths 60 / 63 / 66 / 69 / 72 / 75 / 78 and depths 60 / 64 / 68 / 72 / 76 / 80 / 84.
+
+**What this changes:**
+1. **The skyline** (world z 101-107) ends up inside buildings 4 and 5, with no room left behind them before the lounge. It goes, or becomes a picture on the back wall.
+2. **The solid floor grows:** today one 60 x 60 `Floor` is the only solid part (TycoonCore.lua:736; CLAUDE.md). Each bigger building adds up to three flush `FloorExtension` strips (back, left, right); `PlotVisuals.check` already lets parts named `Floor` collide (PlotVisuals.lua:590-592).
+3. **The 60 x 60 assumptions go per building:** `PlotArt.Layout.floorSize` (PlotArt.lua:31), the floating check (PlotVisuals.lua:643), and the building pass's "inside 65 studs of the plot center" with roofs 25 studs apart (BUILDING_PASS_PROPOSAL section 3; it becomes 7.4).
+4. **Gameplay positions don't move** (D-A): the incubators at local z -25 (EmployeeServer.lua:37-40) end up in the middle of building 5, and their reserved zones stay.
+
+**If the owner wants a bigger last building** (for example 100 wide), `PLOT_SPACING` (TycoonCore.lua:74) must go to at least 100 + 4.6 + 6 = 110.6, so **112**. Every system takes positions from `plotCenter` (passed to IpoServer, EmployeeServer and PoachServer at TycoonCore.lua:601, 639, 650), so it is one constant. The row then spans about 670 studs, which fits a 2048-stud Baseplate **(Baseplate size unverified)**; the lounge at x 0 stays clear because the gap between plots 3 and 4 grows; walks and the onboarding arrow get longer; Max Players stays 6 (PUBLISH_RULES section 1). Going deeper than 84 also needs the plots moved toward +Z (the `150` in TycoonCore.lua:125), away from the lounge, which depends on what stands beyond z 180 **(unverified)**.
+
 ## 5. The office: what stands where, and what the server checks
 
 Coordinates are measured from the **anchor**, the front-center of the floor (section 4): `x` to the right, `z` negative toward the back. Today's plot-center offsets convert with `z_anchor = z - 30`; the world position stays the same.
