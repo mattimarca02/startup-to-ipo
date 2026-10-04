@@ -125,5 +125,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
-| docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
-| docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
+| docs/CUSTOMIZE_PROPOSAL.md | (repo only) | @mattimarca02 | design-customize | 2026-10-05 |
+| docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | @mattimarca02 | design-customize | 2026-10-05 |
+| docs/SECTORS_PROPOSAL.md | (repo only) | @mattimarca02 | design-customize | 2026-10-05 |
