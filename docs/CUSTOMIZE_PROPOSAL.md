@@ -127,23 +127,32 @@ Baseline: docs/CONTENT_BIBLE.md (`content-bible`), **168 names** for Software: u
 
 **New:** Software's names exist (to approve) and part of its art (6 props of 17-24 parts, PlotArt.lua:806-949; 5 rooms to cut). The other three need everything from zero: about 3x Software's names and 4x its remaining art **(estimate)**. Mechanics are reused (no new action type, no new creature body).
 
-## 4. Plot space (checked in the code)
+## 4. Plot space (re-verified in the code, recomputed)
 
-- **Plots:** centers x = -225, -135, -45, 45, 135, 225, z = 150 (`plotCenter`, TycoonCore.lua:123-126; `PLOT_SPACING = 90`, `MAX_PLOTS = 6`, :74, :76). `Floor` 60 x 60 (:736): z 120-180, 30 studs between neighbors.
-- **Front = +Z:** signs at +24 (TycoonCore.lua:75, IpoServer.lua:21), spawn at +12 facing them (TycoonCore.lua:697-700), the building-pass door in the front wall (x -4.5 to 4.5; BUILDING_PASS_PROPOSAL section 3). **Anchor = front-center of the floor: local (0, +30), world z 180.** The Garage's roll-up door is back-wall decor (PlotArt.lua:221-235).
-- **VIP Lounge:** x -18 to 18, z 58-82, door in its +Z wall facing the plots (ShopServer.lua:35-36, 643-657); leaving puts you at z 88 (:839).
-- **Skyline** (stage 5): world z 101-107 (PlotArt.lua:699-707).
-- No other script builds in the world (every `Instance.new("Part")` checked). Baseplate size, SpawnLocation and hand-placed parts **(unverified)**; docs/STUDIO_SYNC.md:37 has only the Baseplate's color.
+**What the code says** (read again for this revision, not copied):
+- **Plots:** `PLOT_SPACING = 90`, `MAX_PLOTS = 6` (TycoonCore.lua:74, 76); `plotCenter` = x -225 + 90 x (slot - 1), z 150 (:123-126): x -225, -135, -45, 45, 135, 225. `Floor` 60 x 1 x 60 at the center (:736): x ±30 around each center, z 120-180; 30 studs between floors. `PlotArt.Layout` copies it (`floorSize`, PlotArt.lua:31).
+- **Front = +Z:** BuySign at z +24 (TycoonCore.lua:75), IpoSign at (21, +24) (IpoServer.lua:21), spawn at +12 facing the sign (TycoonCore.lua:698-700); the layout map has the incubators at z -25, the hire rows at -10 / 2 / 14, `minAisle = 6`, `laneEnd = 30` (PlotArt.lua:33-69). **Anchor = front-center of the floor: local (0, +30), world z 180.**
+- **VIP Lounge:** center (0, 0.5, 70), floor 36 x 24, walls 10 high and 1 thick (ShopServer.lua:35-37, 636-650): outer faces x ±18.5, z 57.5-82.5. Its 8-wide door (:38, 653) is in the +Z wall, facing the plots; the door's `Touched` (:683) is the game's only one. A non-VIP inside is moved to **z 88** (:839). Its comment puts it "between the spawn and the garage plots" (:35), so the spawn is at z < 58 **(position unverified)**.
+- **Skyline** (IpoReady room): local z -49 to -43, x within ±29 (PlotArt.lua:699-707): world z 101-107.
+- **Nothing else is built by a script.** Parts come only from TycoonCore (`makePart`, :91: Floor, props, sign), PlotVisuals (:92, rooms), IpoServer (:293-300, sign), EmployeeServer (:69, incubators), ShopServer (:97, lounge), CreatureModels (bodies) and OnboardingClient (:60, an invisible client-only arrow target). PoachServer is given `plotCenter` (TycoonCore.lua:650) but never uses it: poaching needs no walk between plots.
+- **Building pass** (branch `building-pass`, BUILDING_PASS_PROPOSAL.md section 3): wall inner face 0.2 past the floor edge, wall 0.8, roof 1.5 past the wall: **2.3 per side beyond the inside size**.
+- **Not in the repo:** the Baseplate's size and position, the SpawnLocation, hand-placed parts, Terrain (docs/STUDIO_SYNC.md:37 records only the Baseplate's color).
 
-**Limits** (growing sideways, centered, and backward from the anchor; the building pass adds 2.3 per side: wall 0.8, overhang 1.5):
-- **Width:** roof gap = 90 - width - 4.6; with a 6-stud walking gap **(estimate)**, **width ≤ 79.4 → 78**.
-- **Depth:** at width 78, plots 3 and 4 reach x -6 / 6, behind the lounge. Keeping the roof 10 studs from the lounge door (z 82) **(estimate)**: depth ≤ 180 - 92 - 2.3 = 85.7 → **84**. One rule for all plots (one set of art).
+**Recomputed** (the building grows sideways, centered, and backward from the anchor, D-A):
+- **Width W:** the gap between two roofs = 90 - W - 4.6. Using the game's own aisle minimum (6 studs, PlotArt.lua:68) as the walking gap: W ≤ 79.4, **78** (even, so half-widths stay whole).
+- **Depth D:** once W > 48.4, plots 3 and 4 (x ∓45) stand behind the lounge (x ±18.5): at W = 78 they span x -84 to -6 and 6 to 84. Back roof edge = 180.2 - D - 2.3. Keeping the kick-out spot (z 88) plus the same 6-stud aisle clear: edge ≥ 94, so D ≤ 83.9, **82** (even). Plots 1, 2, 5, 6 could go deeper, but one rule keeps one set of art.
 
-**Largest building: 78 x 84 inside (area x1.8), no plot moved.** Nested sizes **(estimate)**: Garage 60 x 60, Seed 64 x 66, Series A 68 x 72, Series B 74 x 78, IPO-ready 78 x 84 (back walls at world z 120 / 114 / 108 / 102 / 96). With 7 rungs: widths 60-78 in steps of 3, depths 60-84 in steps of 4.
+**Largest building: 78 x 82 inside (1.78x the area), no plot moved.** **Difference from the earlier 78 x 84:** same width; 2 studs less depth, because the clearance now comes from two code numbers (kick-out z 88, ShopServer.lua:839; `minAisle` 6, PlotArt.lua:68) instead of an estimated 10 studs from the door. The outer roofs reach x ±266.3, past today's floors at ±255: **the Baseplate must be at least 534 wide (unverified)**. Nested sizes **(estimate)**: Garage 60 x 60, Seed 64 x 66, Series A 68 x 70, Series B 72 x 76, IPO-ready 78 x 82 (back walls at world z 120 / 114 / 110 / 104 / 98).
 
-**Changes:** (1) the skyline sits inside buildings 4-5 with no room behind: it goes, or becomes a back-wall picture. (2) The solid floor grows: up to three flush `FloorExtension` strips per building (CLAUDE.md's "the real Floor is the only solid" changes; `PlotVisuals.check` already lets `Floor` parts collide, PlotVisuals.lua:590-592). (3) 60 x 60 assumptions go per building: `PlotArt.Layout.floorSize` (PlotArt.lua:31), the floating check (PlotVisuals.lua:643), the building pass's "65 studs" and "25 apart" (now 7.4). (4) Gameplay positions don't move: incubators (EmployeeServer.lua:37-40) end up mid-building.
+**Changes:** (1) the skyline (z 101-107) sits inside buildings 4-5: it goes, or becomes a back-wall picture (`BACKDROP_Z`, PlotVisuals.lua:44). (2) The solid floor grows: flush `FloorExtension` strips (CLAUDE.md's "the real Floor is the only solid" changes; `PlotVisuals.check` already lets `Floor` parts collide, PlotVisuals.lua:590-592). (3) 60 x 60 assumptions go per building: `PlotArt.Layout.floorSize` (PlotArt.lua:31), `PlotVisuals.check`'s half-size and floating check (PlotVisuals.lua:544, 643), the building pass's 65 x 65 roof and "25 apart" (now 7.4). (4) Gameplay positions don't move: the incubators (EmployeeServer.lua:37-40) end up mid-building.
 
-**Bigger than 78 wide** needs `PLOT_SPACING` ≥ width + 10.6 (100 wide → **112**). One constant: every system takes `plotCenter` (TycoonCore.lua:601, 639, 650). The row becomes about 670 studs (fits a 2048 Baseplate, **size unverified**), walks and the onboarding arrow get longer, Max Players stays 6. Deeper than 84 also means moving the plots toward +Z (the `150`, TycoonCore.lua:125), depending on what stands past z 180 **(unverified)**.
+**Bigger** needs `PLOT_SPACING` ≥ W + 10.6 (100 wide: **112**), one constant that every system reads through `plotCenter` (TycoonCore.lua:601, 639, 650); the row grows to about 670 studs. Deeper than 82 means moving the plots toward +Z (the `150`, :125).
+
+**Studio by hand (owner, read only, nothing changed):**
+1. Workspace > Baseplate, Properties: **Size** and **Position**. Needed: x from -267 to 267 and z from 95 to 182, or more.
+2. Workspace's children: list everything except Baseplate, Terrain, Camera and the script folders (`<name>_Startup`, `VipLounge`, `OnboardingArrow`, `PREVIEW_STAGES`). For each: name, Position, Size. Especially the **SpawnLocation**, and anything at z 85-120 or beyond x ±225.
+3. Terrain near the plots (look from above in the editor).
+4. Workspace > **StreamingEnabled** (on or off: it changes what each phone loads, section 6).
 
 ## 5. The office: what stands where, what the server checks
 
