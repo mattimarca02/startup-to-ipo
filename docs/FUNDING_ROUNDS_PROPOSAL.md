@@ -9,10 +9,10 @@ Design only (2026-10-05, branch `design-customize`): owner decision **D-F**, spl
 Every number is a **placeholder** for S8 (section 6); nothing is random (D9).
 - **What opens a round:** the **valuation** (never Cash) reaching a stage after the first: Seed, Series A, Series B today (IpoConfig.lua:17-23), plus Series C+D and Pre-IPO with LONG_GAME's 7 stages. IPO-ready has no round: it is the IPO. The stage is `IpoConfig.stageIndex(ipo.valuation, ipo.count)` (IpoConfig.lua:151-159); it never falls during a run (IpoServer.lua:122-135).
 - **A round gives Cash and nothing else:** no building move, no Income change. The stage's building is buyable in SHOP > Office once the stage is reached, raised or not; the room follows the building owned (CUST 6). The Cash buys anything.
-- **Flow:** (1) stage reached: one message per stage per company (`told`); the valuation bar reads "Raise a round ›" while a round is open (section 5). (2) The **Funding window**: 3 choices (Small, Medium, Large), each with its Cash, the share given away, the IPO Shares after it and the stake left; a choice over the cap is locked. (3) **Raise** (pick, then confirm "Raise $X for Y%"): Cash at once. **Later** keeps the round open. **Skip this round** (with a confirm) closes it for this company.
+- **Flow:** (1) stage reached: one message per stage per company (`told`); the valuation bar reads "Raise a round ›" while a round is open (section 5). (2) The **Funding window**: 3 choices (Small, Medium, Large), each with its Cash, the share given away, the IPO Shares after it and the stake left; a choice that would take the total past the cap is locked. (3) **Raise** (pick, then confirm "Raise $X for Y%"): Cash at once. **Later** keeps the round open. **Skip this round** (with a confirm) closes it for this company.
 - **One round per stage per company,** settled in stage order; an open round stays open at the next stage; all close at IPO-ready (raised Cash could then only feed the seed). **Never raising** is a full path: no dilution, all the Shares, "Bootstrapped: 100% stake" on the card, no extra reward.
-- **Amount:** choice i gives `cashPct[i] x IpoConfig.stageValuation(stage, ipo.count)` (IpoConfig.lua:140-143): stage and IPO count only, never Cash, Income, passes or stamps. Placeholders: 10 / 20 / 30% for 3 / 7 / 12% dilution (convex); **total dilution capped at 40%** (`DilutionCap`). Income is untouched. Data: `CompanyConfig.Funding` (shared engine, keyed by `IpoConfig.Stages` keys), `Enabled`, `StudioOnly`.
-- **Saved** (`pokedex.active`): `told[stageKey]`; `rounds[stageKey]` = `s`, `c` (choice), `cash`, `bp` (dilution in basis points, whole, 0-10000, **as applied**, never recomputed from a later config), `at`, `studio`. `D = min(DilutionCap, Σ bp) / 10000`, derived on load. A round under an **unknown stage key** is kept and its valid `bp` still counts (a newer version's round dilutes an older version's IPO). A malformed record of a known stage counts as settled with `bp` 0 and a warning, never dropped (that would allow a second raise).
+- **Amount:** choice i gives `cashPct[i] x IpoConfig.stageValuation(stage, ipo.count)` (IpoConfig.lua:140-143): stage and IPO count only, never Cash, Income, passes or stamps. Placeholders: 10 / 20 / 30% of the stage's threshold; the dilution of each choice at each stage comes from section 3's curve (whole bp, a table); **total dilution capped at 4,000 bp** (`DilutionCap`): a raise that would take the total past it is refused. Income is untouched. Data: `CompanyConfig.Funding` (shared engine, keyed by `IpoConfig.Stages` keys), `Enabled`, `StudioOnly`.
+- **Saved** (`pokedex.active`): `told[stageKey]`; `rounds[stageKey]` = `s`, `c` (choice), `cash`, `bp` (dilution in basis points, whole, 0-10000, **as applied**, never recomputed from a later config), `at`, `studio`. `D = min(DilutionCap, Σ bp)` in whole bp, derived on load. A round under an **unknown stage key** is kept and its valid `bp` still counts (a newer version's round dilutes an older version's IPO). A malformed record of a known stage counts as settled with `bp` 0 and a warning, never dropped (that would allow a second raise).
 - **The card keeps** `rounds` as they were, `stake` (10000 - D in bp) and `shares` (paid after dilution and pass): "Founder stake 70% · 3 rounds · $X raised" or "Bootstrapped".
 
 ## 2. Cash, valuation, Shares
@@ -28,13 +28,53 @@ Every number is a **placeholder** for S8 (section 6); nothing is random (D9).
 
 ## 3. Shares and dilution
 
-- **Dilution:** `IpoConfig.sharesFor` (IpoConfig.lua:168-172) gains an optional `stake = 1 - D` (default 1: old calls and tests unchanged): `floor(SharesPerIpo x growth x ratio^0.5 x stake x pass)`, dilution **before** the pass. Callers: `preview` (IpoServer.lua:153-161) and IpoClient (:561, 564, 639, via a `CompanyStake` attribute). LONG_GAME (LG:86) becomes `20 x (1 + 0.25 x IPOs) x min(ratio, 1.5)^0.5 x (1 - D) x pass`: IPO 1 at D = 30% pays 14 (pass 28) instead of 20 (40). The ratio is unchanged.
-- **Interactions:** Shareholder (ShopConfig.lua:81-88): x2 after dilution, the same proportional loss. Perks: prices unchanged; fewer Shares only delays them, the one cross-run cost (the IPO multiplier counts IPOs). Daily Shares (`grantShares`, IpoServer.lua:140-148) and pitch Shares (LONG_GAME, undiluted base) are never diluted. Stamps never look at dilution, but rounds save engaged hours, so T is fitted with S8's typical raise (CUST 5.6 S6).
+**Why a fixed price fails.** A fixed 3 / 7 / 12% at every stage ignores that the Cash (`cashPct x stageValuation`) grows about 4,750 times from Seed ($197K) to Pre-IPO ($937M) on LONG_GAME's ladder (LG:42-47). Against the stage's **gap** (the valuation still to earn before the next stage), a Large round is worth 0.94% at Seed, 6.29% at Series A, 9.74% at Series B, 5.85% at C+D and 30.46% at Pre-IPO, always for 12%; today's 5 stages give 12.00 / 11.05 / 12.19%. Nobody should raise at Seed, everybody at Pre-IPO.
+
+**The curve: the price follows the time a round is worth** (every number a **placeholder** for S8):
+- `g` = the round's Cash / the stage's gap = `cashPct x stageValuation(s) / (stageValuation(s+1) - stageValuation(s))`. Both ladders scale every threshold by one factor per IPO (IpoConfig.lua:140-143; LG:88), so `g` doesn't depend on the IPO count.
+- `h` = the stage's share of the loop's engaged hours: data, `Funding.HoursShare[stageKey]`, from LONG_GAME's rung hours (LG:42-47, loop 59.8 h) or today's first run (Seed, Series A, Series B last 2, 1, 5 of 12 minutes; ECONOMY.md 3b) until S8 measures them.
+- `u = g x h`: the round's Cash in loop time at that stage's earning rate. An upper bound on the time saved: the Cash never counts toward the valuation, it only buys Income sooner.
+- `bp = max(1, floor(P x u x 10000))`, with `P` = 1.5 / 2.0 / 2.5 (Small / Medium / Large): % of Shares given per % of loop time.
+- The bp are **whole numbers in a table** in `CompanyConfig.Funding` (written from S8, never computed with floats at run time: today's Seed Large is exactly 500 bp, but floats give 499). A test recomputes the table with exact fractions.
+
+| LONG_GAME (7 stages) | Gap share S / M / L | Loop time (L) | bp S / M / L |
+|---|---|---|---|
+| Seed | 0.31 / 0.63 / 0.94% | 0.063% | 3 / 8 / 15 |
+| Series A | 2.10 / 4.19 / 6.29% | 0.684% | 34 / 91 / 170 |
+| Series B | 3.25 / 6.49 / 9.74% | 1.466% | 73 / 195 / 366 |
+| Series C+D | 1.95 / 3.90 / 5.85% | 2.330% | 116 / 310 / 582 |
+| Pre-IPO | 10.15 / 20.30 / 30.46% | 7.639% | 381 / 1,018 / 1,909 |
+| **Every round** | | **12.18%** | **607 / 1,622 / 3,042** |
+
+| Today (5 stages) | Gap share S / M / L | Loop time (L) | bp S / M / L |
+|---|---|---|---|
+| Seed | 4.00 / 8.00 / 12.00% | 2.000% | 100 / 266 / 500 |
+| Series A | 3.68 / 7.37 / 11.05% | 0.921% | 46 / 122 / 230 |
+| Series B | 4.06 / 8.12 / 12.19% | 5.078% | 253 / 677 / 1,269 |
+| **Every round** | | **8.00%** | **399 / 1,065 / 1,999** |
+
+*Worked:* Pre-IPO Large: `g = 0.30 x 937M / (1,860M - 937M) = 30.46%`, `h = 15.0 / 59.8 = 25.08%`, `u = 7.639%`, `bp = floor(2.5 x 763.9) = 1,909`. Today's Seed Large: `g = 540 / 4,500 = 12%`, `h = 2 / 12`, `u = 2%`, `bp = 500`. Large every round saves at most 12.18% / 8.00% of a loop (S8 mark: ≤ 15%) and costs 30.4% / 20.0%: under the cap.
+
+**No choice is dominated, at any stage.** The three choices give Cash 1 : 2 : 3 and cost 1.5 : 4.0 : 7.5 units, so each step up costs 1.5, then 2.5, then 3.5 per unit of time: strictly rising. Each choice is then the best one for some player: one who values 1% of loop time at under 1.5% of Shares skips; 1.5-2.5 picks Small; 2.5-3.5 Medium; above 3.5 Large. The stage multiplies all three by the same `u`, so this holds at every stage, and the price per hour saved is the same everywhere: no stage is a bargain. *Test (whole bp):* at every stage `0 < S < M - S < L - M` (LONG Seed 3 < 5 < 7; today's Series A 46 < 76 < 108).
+
+**Shares in whole basis points.** `D = min(DilutionCap, Σ bp)`, a whole number. `base` = today's `IpoConfig.sharesFor(valuation, count, pass)` (IpoConfig.lua:168-172, whole Shares, pass included, unchanged). Paid = `floor(base x (10000 - D) / 10000)` in whole numbers, never `1 - D` as a float: `floor(100 x (1 - 0.34)) = 65` (`1 - 0.34` is 0.65999...), `floor(100 x 6600 / 10000) = 66`. Dilution comes after the pass: the same proportional loss, at most 1 Share of rounding apart from "before the pass"; `D = 0` returns `base` exactly, so old calls and tests are unchanged.
+
+**The rounding case.** At IPO 1 today `base = 10`: `floor(10 x 9,700 / 10,000) = 9`, so a "3%" round costs 10%; a 3 bp LONG Seed round would cost 1 of 20 Shares. **Fix: round to the nearest Share and carry the rest.** `exact = base x (10000 - D) + dust` (dust in 1/10000 Share); paid = `floor((exact + 5000) / 10000)`; new `dust = exact - paid x 10000`, from -5000 to 4999, saved as `pokedex.dust` (player level, kept across IPOs; a bad value becomes 0 with a warning; written in the IPO transform's one save). IPO 1, base 10, D = 300: exact 97,000, paid 10, dust -3,000: the next IPO pays 0.3 Share less. Over a player's whole history the Shares paid stay within half a Share of exact: no round is free (its cost is carried) and none is overcharged. The window shows what this IPO really pays. *Alternative:* plain floor with the real loss shown ("-1 Share, 10%"): simpler, but small rounds overcharge.
+- **Code:** a new `IpoConfig.dilutedShares(base, D, dust)` returns `paid, dust`. Callers: `preview` (IpoServer.lua:153-161), the IPO transform, IpoClient (:561, 564, 639, reading `CompanyStake` and `CompanyDust` attributes).
+- **LONG_GAME (LG:86):** `dilutedShares(floor(20 x (1 + 0.25 x IPOs) x min(ratio, 1.5)^0.5 x pass), D, dust)`. IPO 1 after Large every round (D = 3,042): 20 becomes 14 (dust -840); with the pass 40 becomes 28 (dust -1,680).
+
+**Once the 750-Share shop is complete** (LG:86), Shares buy nothing: dilution costs nothing, and stamps and the board reward only speed, so every player raises Large every round. Options, **owner decision:**
+- **A. Accept it:** a reward for finishing the shop; Gold and Platinum (CUST 1.5) are fitted with "Large every round" for full-shop players.
+- **B. The stake counts for stamps (recommend):** Gold needs a final stake ≥ 80%, Platinum ≥ 90% (**placeholders**). Speed or the better stamp, forever. No new saved field: the card already keeps `stake`.
+- **C. Shares stay a score:** "Shares earned ever" breaks ties on the Collection board (CUST 1.6). Needs a new saved total.
+- **D. A Shares sink after the shop:** repeatable cosmetic prestige items. Content work only.
+
+**Interactions:** Shareholder (ShopConfig.lua:81-88): x2 is inside `base`, the same proportional loss. Perks: prices unchanged; fewer Shares only delay them (the IPO multiplier counts IPOs). Daily Shares (`grantShares`, IpoServer.lua:140-148) and pitch Shares (LONG_GAME, undiluted base) are never diluted. Stamps look at dilution only with option B; rounds save engaged hours, so T is fitted with S8's typical raise (CUST 5.6 S6).
 
 ## 4. Exploits (server check; test)
 
-- **Always raise the maximum:** a design risk. Convex dilution, the 40% cap; a choice past 4,000 bp is refused; S8.
-- **Raise, then reset.** (a) *The IPO:* round Cash spent on what an IPO keeps (employees, HR level, IpoConfig.lua:51-57). Fixed amounts, the dilution paid at that IPO (the record stays in `active` until the transform), LONG_GAME desk caps (R1, LG:108). Test: the transform pays `sharesFor(..., stake)`; S8's "converter" (round Cash on eggs and HR first) gains < 3% in loop 2. (b) *Debug IpoReset* (IpoServer.lua:423-433, Studio only) leaves `pokedex` alone; test: a settled round stays settled. (c) *A version rollback* to pre-funding code pays undiluted Shares at an IPO there: owner-only, inside the floor; noted in PUBLISH_RULES "2d".
+- **Always raise the maximum:** a design risk. The stage-scaled convex curve (section 3) and the cap: a raise that takes the total past 4,000 bp is refused; S8.
+- **Raise, then reset.** (a) *The IPO:* round Cash spent on what an IPO keeps (employees, HR level, IpoConfig.lua:51-57). Fixed amounts, the dilution paid at that IPO (the record stays in `active` until the transform), LONG_GAME desk caps (R1, LG:108). Test: the transform pays `dilutedShares(sharesFor(...), D, dust)`; S8's "converter" (round Cash on eggs and HR first) gains < 3% in loop 2. (b) *Debug IpoReset* (IpoServer.lua:423-433, Studio only) leaves `pokedex` alone; test: a settled round stays settled. (c) *A version rollback* to pre-funding code pays undiluted Shares at an IPO there: owner-only, inside the floor; noted in PUBLISH_RULES "2d".
 - **Raise on a throwaway, then IPO:** Cash never moves between accounts; hires do (poaching), and rounds make an alt's hires cheaper (LONG_GAME section 7). R2 (3 poach-ins per run) and R3 go live first. Test: an alt that raised the maximum feeds 4 hires, the 4th is refused; S8's alt-fed profile.
 - **Amount from the client:** only `round` and `choice` are read. Test (mutation): an extra amount is ignored; NaN, 0, 1.5, "1", 4 and a stale `round` are refused; a double tap grants once.
 - **Studio and live share the save key** (PUBLISH_RULES.md:46): a Studio raise sets `rounds[k].studio` and `pokedex.studio`; a live server applies saved dilution even with funding off. Test: a Studio-raised save on a fake live server: `Raise` refused, stake applied, no board write.
@@ -52,23 +92,24 @@ Every number is a **placeholder** for S8 (section 6); nothing is random (D9).
 
 **S8 round size** (tools/economy_sim.py `--rounds`, next to CUST 5.6's `--pokedex`; marks are **placeholders**): policies none / Small / Medium / Large-every-round / best-per-stage, per profile, loops 1-10: hours per IPO, Shares, perk timing. Is Large always best? Which dilution curve makes the choice real? Hours saved vs Shares lost. Marks: no one choice best for every profile; Large-every-round saves ≤ 15% of a loop; converter and alt-fed gain < 3% in loop 2; raising the last open round never beats skipping it.
 - *Can:* `--long` (`long_run`, economy_sim.py:1213-1379) has stage entry (:1346-1348), purchases that only fill the current rung (:1320-1339: a grant can't skip one), Shares with the pass (:1350-1352) and one speed perk, the only Shares sink and the only place dilution costs (:1362-1366). `--active` (`report_active`, :967) runs today's 5-stage economy (IPO in minutes): a smoke test only.
-- *Needs:* a grant at stage entry; `(1 - D)` before the pass at :1352; a `rounds` policy and a chooser; the converter profile; Cash left at the IPO and the seed (Cash resets at :1368); an S8 table.
+- *Needs:* a grant at stage entry; `dilutedShares` (whole bp, dust) after the pass at :1352; the bp table and `HoursShare` from the measured stage hours; a `rounds` policy and a chooser; the converter profile; Cash left at the IPO and the seed (Cash resets at :1368); an S8 table.
 
 ## 7. Build: PR 4b
 
 Same rules as CUST 6 (claim, daily_test passes, F5 clean, Shut down all servers).
-- **Valuation HUD / IpoClient:** `hudStage` and the bar's tap (IpoClient.lua:186-254), the Shares previews with the stake (:561, 564, 639), `sharesFor`'s `stake`, IpoServer's `preview`.
-- **PR 4b content:** `CompanyConfig.Funding` (`StudioOnly` on), `"Raise"`/`"SkipRound"`, `raiseRound`, the message, the Funding window, `stake`, the card's `rounds`/`stake`/`shares`, Debug rows. *Tests:* sections 2-5, phone sizes; `sharesFor` with `stake` 1 equals today's. **Live only after** S8, LONG_GAME PR 2 and PR 3 (R2, R3).
+- **Valuation HUD / IpoClient:** `hudStage` and the bar's tap (IpoClient.lua:186-254), the Shares previews with `dilutedShares` (:561, 564, 639), IpoServer's `preview`.
+- **PR 4b content:** `CompanyConfig.Funding` (`StudioOnly` on), `"Raise"`/`"SkipRound"`, `raiseRound`, the message, the Funding window, `dilutedShares` and `pokedex.dust`, the card's `rounds`/`stake`/`shares`, Debug rows. *Tests:* sections 2-5, phone sizes; `dilutedShares(base, 0, 0)` equals `base`; the bp table test (section 3). **Live only after** S8, LONG_GAME PR 2 and PR 3 (R2, R3).
 
 ## 8. Impact on other docs
 
-- **docs/LONG_GAME_PROPOSAL.md** (`LG:` = its line): **Principle (LG:5)** "Cash can only fill a rung" holds: round Cash only buys the current rung (economy_sim.py:1320). **Pacing (LG:6-18):** the 57 h fit assumes no round; S8 decides whether it uses the typical raise. **Shares and money (LG:86, 92-94):** Shares `x (1 - D)` before the pass; the base-Cash valuation never counts round Cash; the `addEarnings` list gains "(8) `CompanyServer` never calls it". **Section 7 (LG:97-108):** rounds cheapen alt feeding: R2, R3 first. **Section 8:** PR 4b needs its PR 2 and 3.
+- **docs/LONG_GAME_PROPOSAL.md** (`LG:` = its line): **Principle (LG:5)** "Cash can only fill a rung" holds: round Cash only buys the current rung (economy_sim.py:1320). **Pacing (LG:6-18):** the 57 h fit assumes no round; S8 decides whether it uses the typical raise. **Shares and money (LG:86, 92-94):** Shares through `dilutedShares` (section 3); the base-Cash valuation never counts round Cash; the `addEarnings` list gains "(8) `CompanyServer` never calls it". **Section 7 (LG:97-108):** rounds cheapen alt feeding: R2, R3 first. **Section 8:** PR 4b needs its PR 2 and 3.
 - **Tutorial step 8 "Funding"** (TUTORIAL_PROPOSAL.md:32, "open the IPO window") becomes: when the first round opens, open the Funding window; Raise, Later or Skip completes it; no reward, never forces a raise. Step 9's reset list adds rounds and dilution (a new company starts at 100%).
 - **CLAUDE.md, PUBLISH_RULES:** round Cash as a gift; "2d" (section 4's rollback note).
 
 ## 9. Open questions (unresolved, most important first)
 
-1. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
+1. **Shares once the shop is complete** (section 3): A accept, B stake counts for stamps (recommend), C Shares as a board tie-break, or D a Shares sink?
+2. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
 
 ## What I did not verify
 
