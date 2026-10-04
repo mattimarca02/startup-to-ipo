@@ -1,37 +1,54 @@
-# Companies, sectors and your office (proposal, design only)
+# Companies, sectors and the Pokedex (proposal, design only)
 
-Design only (2026-10-04, branch `design-customize`, revised from `2d91efd`). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for `2d91efd` (its `.lua`/`.py` files equal `7f5c141`). **(unverified)** = not checked in code; **(estimate)** = not measured; **(owner default)** = the owner may still veto.
+Design only (2026-10-04, branch `design-customize`, revised from `47f0fe8`). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for `47f0fe8`, whose `.lua`/`.py` files equal `visuals-garage` `7f5c141` (`main` has no PlotArt, PlotVisuals or Office tab yet). **(unverified)** = not checked in code; **(estimate)** = not measured; **(owner default)** = the owner may still veto; **(placeholder)** = a number the sims must size.
 
-**Fixed by the owner:** **D-A** a new building moves every owned object in by itself, same coordinates; each building is bigger and contains the previous footprint, positions measured from a fixed anchor on the door side. **D-B** an IPO keeps the old company (building, objects) and founds a new one, seeded with a percentage of the old company's money (money only, never items); several companies per player. **D-C** every founding starts with choosing a sector, before the garage; it may change after an IPO. **D-D** a sector is a full package (tasks, objects, names, building theme, office look, way of making money); the engine is built once; Software/SaaS (today), Fintech, Biotech, Gaming launch together; order: engine, Software end to end, then the other three. **D-E** free placement (drag, rotate), phone and PC.
+**Fixed by the owner:** **D-A** a new building moves every owned object in by itself, same coordinates; each building contains the previous footprint, positions measured from a fixed anchor on the door side. **D-B** an IPO founds a new company, seeded with a percentage of the old company's money (money only, never items). **D-C** every founding starts with choosing a sector. **D-D** a sector is a full package (tasks, objects, names, building theme, office look, way of making money); one engine; Software/SaaS (today), Fintech, Biotech, Gaming launch together; order: engine, Software end to end, then the other three. **D-E** free placement (drag, rotate), phone and PC. **P-1** the save holds one Pokedex entry per sector (not started / in progress / completed, a stamp tier, a replay count), not a list of companies. **P-2** an IPO completes the active company and stamps its sector entry; the old company is a stamped card, never a building (no held buildings, no 1 + 4 cap, no Portfolio of buildings); the player then picks the next sector. **P-3** completing all four sectors is the main goal (a Hall of Fame entry); the game continues, replays earn Gold and Platinum; a leaderboard ranks players. **P-4** old companies earn nothing; each stamp gives a small, capped, permanent collection bonus. **P-5** the seed stays, funding only; its numbers stay open until the sims pass. **P-6** see the defaults below.
 
-**Owner defaults:** held companies earn a small passive amount (1.4); hire desks fixed in v1; furniture earns nothing, a stored upgrade keeps earning; each new building has a free, fixed starter set (never random, D9); 45° rotation steps; the part budget stays open until a phone test with 6 full plots (section 6).
+**Owner defaults:** employees follow the player into the new company; creatures keep their bodies with a new name and job per sector; 5 buildings per sector, one per funding stage; working building size 78 x 84, re-checked in section 5 (result: 78 x 82); hire desks fixed in v1; furniture earns nothing; each new building has a free, fixed starter set (never random, D9); 45° rotation steps; the part budget stays open until a phone test with 6 full plots.
 
-**New names** (none exist: `grep` over every `.lua`/`.py`): `CompanyServer` (ServerScriptService), `CompanyConfig`, `SectorConfig`, one `Sector<Name>` per sector (ReplicatedStorage), one `SectorArt<Name>` per sector (ServerScriptService), `CompanyClient` (StarterPlayerScripts), `CompanyRemotes.CompanyAction`, save section `companies`. They replace the first draft's `OfficeServer` / `office`.
+**New names** (none exists: `grep` over every `.lua`/`.py`): `CompanyServer` (ServerScriptService, owns the `pokedex` section), `CompanyConfig`, `SectorConfig`, one `Sector<Name>` per sector (ReplicatedStorage), one `SectorArt<Name>` per sector (ServerScriptService), `CompanyClient` (StarterPlayerScripts), `CompanyRemotes.CompanyAction`, `BoardServer` (ServerScriptService, the cross-server board, no save section), save section `pokedex`, OrderedDataStores `Collection_v1` and `HallOfFame_v1`. They replace the previous revision's `companies` section.
 
 ## 1. Companies and sectors
 
 **1.1 A company** is one sector plus one run of the ladder: its building, placed objects, furniture, upgrades and Cash. **The player** keeps what is prestige or account-wide: IPO count and multiplier, Shares, perks, `lifetime`/`best`, passes, boosts, shields, daily streak, onboarding, task stats and employees (today's rule, IpoConfig.lua:8, 51; open question 1). Only the **active** company is played and built on the plot. Held companies are not built (part budget): a **Portfolio** tab in the IPO window (beside "IPO" and "Shares Shop", IpoClient.lua:879-943) shows a card each: name, sector, building, IPO number, valuation at the IPO, dividend.
 
-**1.2 Data model: new top-level section `companies` (rule A10).** The active company's live state stays where it is: `cash`, `owned`, `team`, `ipo.valuation` (TycoonCore.lua:421-433), so older code keeps playing it. The section holds what older code cannot know:
+**1.2 The `pokedex` save section (new top-level section, rule A10).** The active company's live state stays where it is: `cash`, `owned`, `team`, `ipo.valuation` (TycoonCore.lua:421-433), so older code keeps playing it. The section holds what older code cannot know:
 
 ```lua
-companies = {              -- CompanyServer.serialize (optional: written once a sector is picked or anything placed)
-  v = 1,                   -- format version; a higher one is kept unchanged, played as Software this session
-  run = number,            -- ipo.count the active record belongs to (A10 check, 1.5)
-  nextId = number,         -- company ids 1, 2, 3 ..., never reused
-  active = { id, sector = "Software", name,         -- name from the sector's fixed list: no free text, no filtering
-             foundedAt = os.time(), building = number,             -- buildings bought, 1 = Garage (D-A: the biggest is used)
-             decor = { [objectKey] = n },                          -- furniture owned (upgrades stay in `owned`)
-             objects = { { id = "Desk", x = -23, z = -40, r = 0 }, ... } }, -- one layout, anchor coordinates (section 4)
-  held = { { id, sector, name, foundedAt, ipoAt, ipoNumber, building, owned = {...}, decor, objects,
-             valuationAtIpo, baseIncomeAtIpo, dividend }, ... },  -- at most 4, newest first, frozen at their IPO
-  archive = { { sector, name, ipoNumber, valuationAtIpo }, ... },  -- retired companies, at most 50
+pokedex = {                  -- CompanyServer.serialize (optional: older saves have none)
+  v = 1,                     -- format version
+  run = number,              -- ipo.count the active company belongs to (A10 run check)
+  active = {                 -- the company being played: always exactly one
+    sector = "Software",     -- SectorConfig key: saved, never renamed or reused
+    picked = boolean,        -- false = the picker is open (new player, run check); PickSector allowed only then
+    name = string,           -- from the sector's fixed name list: no free text, no filtering
+    foundedAt = os.time(),
+    engaged = number,        -- engaged seconds in this company (stamp timing; 0 until LONG_GAME PR 2)
+    building = number,       -- buildings bought, 1 = Garage (D-A: the biggest is used)
+    decor = { [objectKey] = n },                                   -- furniture owned (upgrades stay in `owned`)
+    objects = { { id = "Desk", x = -23, z = -40, r = 0 }, ... },  -- the layout, anchor coordinates (section 4)
+  },
+  sectors = {                -- the Pokedex: one entry per sector key; no entry = not started
+    [sectorKey] = {
+      state = "progress" or "done",  -- "done" never goes back, a replay keeps it
+      stamp = 0 to 3,        -- best stamp: 0 none, 1 Bronze, 2 Gold, 3 Platinum (never goes down)
+      replays = number,      -- completions after the first
+      firstAt = os.time(),   -- first completion (0 = none)
+      bestEngaged = number,  -- fastest completion in engaged seconds (0 = unknown)
+      card = { name, ipoNumber, at, engaged, ratio, building, owned = {...}, decor, objects }, -- latest completion, frozen
+    },
+  },
+  hallAt = number,           -- os.time() all four were first completed (Hall of Fame); 0 = not yet
 }
 ```
 
-- **Object:** `id` = an upgrade name or `<objectKey>#<n>`; `x`, `z` = studs from the anchor, rounded to 0.5; `r` = 0-7. No `y` (nothing stacks). At most 40 per company. An upgrade without an entry stands at its default spot, so a save without `companies` looks like today. About 9 KB for active + 4 held **(estimate)**.
-- **Bad values** (type, NaN, infinite, out of bounds, unknown or duplicate id) are skipped with a warning. An **unknown sector** keeps the record unchanged, plays Software for the session and writes the record back (like `unknownSections`, TycoonCore.lua:434-438).
-- **Wiring:** `KNOWN_SECTIONS` (TycoonCore.lua:84), `buildPayload` (:421-433), save gate (:481); tools/daily_test.py:4269-4271 asserts the section list (same PR). `CompanyServer.setupPlayer` runs after `IpoServer` and `EmployeeServer`, before `TaskServer` (tasks read the sector) and `DailyServer` (last, TycoonCore.lua:793-799). Publish with Shut down all servers; rollback floor stays `V_launch` (code from M4 keeps unknown sections, TycoonCore.lua:773-777).
+- **Fields:** an object `id` is an upgrade name or `<objectKey>#<n>`; `x`, `z` studs from the anchor, rounded to 0.5; `r` 0-7; no `y`; at most 40 per company. An upgrade without an entry stands at its default spot. `ratio` = valuation at the IPO / IPO-ready valuation. Only the active sector may be `"progress"`. Size: active + 4 cards about 11 KB **(estimate)**.
+- **Versioning:** `v` rises only when a field changes meaning. A save with a higher `v` is written back unchanged, the session plays the active sector's look if known (Software if not), and `GoPublic`, `Place`, `BuyBuilding` and `PickSector` are refused with a message, so an older server never rewrites a newer format. An unknown sector key in `sectors` is kept and written back; while one exists, `BoardServer` writes nothing (section 1.6).
+- **Bad values** (type, NaN, infinite, negative, out of range, unknown or duplicate id) are skipped with a warning; `stamp` is clamped to 0-3; `"done"` with stamp 0 becomes 1; a `"progress"` entry that is not the active sector becomes `"done"` if it has a stamp, else is dropped.
+- **Wiring:** `KNOWN_SECTIONS` (TycoonCore.lua:84), `buildPayload` (:421-433), save gate (:481); tools/daily_test.py:4268-4270 asserts the section list and changes in the same PR. `CompanyServer.setupPlayer` runs after `IpoServer` (:793, it needs `ipo.count`) and `EmployeeServer` (:795), before `TaskServer` (:798, tasks read the sector) and `DailyServer` (:799, last).
+- **Publish:** new section, so **Shut down all servers** (PUBLISH_RULES section 3) and a "2d" note there. Rollback floor stays `V_launch`: code from M4 keeps a section it doesn't know (TycoonCore.lua:773-777, 434-438), so `pokedex` stays frozen and works again going forward.
+- **Existing saves** (no `pokedex`; only dev saves exist, LONG_GAME section 5): built on first load, written by the next save. `active` = Software, `picked = true` (never asked), `building` = today's funding stage (they keep the room they see, TycoonCore.lua:810), the layout empty (default spots). `sectors.Software = "progress"`, stamp 0. **IPOs done before the Pokedex stay prestige** (multiplier, Shares, perks, `StageScale`) and **give no stamp**: they were 10-15 minute runs (IpoConfig.lua:25-26), not sector completions.
+- **A10 run check:** `run ~= ipo.count` on load means an older version ran an IPO; it reset Cash, `owned` and eggs (TycoonCore.lua:549-559) and paid no seed. That IPO was valuation-gated in every version (IpoServer.lua:192-195), so the active sector gets what an IPO gives here: `"done"`, Bronze if it had none, a card from what the section knew (`engaged` 0: no Gold or Platinum). The new active company is in the same sector with `picked = false` (the picker opens on join), building 1, no decor or objects; no seed; `run = ipo.count`. Several missed IPOs count as one completion.
 
 **1.3 Cap and cost.** **At most 1 active + 4 held (owner default proposal).** At the cap the IPO window asks which held company to retire (oldest preselected); it moves to `archive` (a name card: no building, no dividend). Why 4: save size, one phone screen of cards, and the dividend is capped anyway. **Founding costs nothing extra:** the price is the IPO (the new company starts at the Garage, D-B); multiplier and Shares stay as today. **Seed (owner default proposal): 10% of the old company's Cash at the IPO, capped at 25% of the new company's first-rung prices** (today's six upgrades cost $7,025, TycoonCore.lua:65-72: cap $1,756; LONG_GAME's Garage items about $131K: cap about $33K **(estimate)**). A gift: never `addEarnings`, never valuation, paid once inside the IPO save.
 
