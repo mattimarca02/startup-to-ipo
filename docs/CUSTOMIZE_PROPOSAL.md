@@ -1,6 +1,6 @@
 # Companies, sectors and the Pokedex (proposal, design only)
 
-Design only (2026-10-04, branch `design-customize`, revised after an independent review and for owner decision D-F). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for this branch, whose `.lua`/`.py` files equal `visuals-garage` `7f5c141` (`main` has no PlotArt, PlotVisuals or Office tab; `visuals-garage` `37ea6b9` changed only daily_test.py since, moving its lines). **(unverified)** = not checked in code; **(estimate)** = not measured; **(owner default)** = the owner may still veto; **(placeholder)** = sized by the sims.
+Design only (2026-10-04, branch `design-customize`, revised after an independent review and for owner decision D-F). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for this branch, whose `.lua`/`.py` files equal `visuals-garage` `7f5c141` (`main` now has the same `.lua` files; only daily_test.py changed since, moving its lines). **(unverified)** = not checked in code; **(estimate)** = not measured; **(owner default)** = the owner may still veto; **(placeholder)** = sized by the sims.
 
 **Fixed by the owner:** **D-A** a bigger building contains the previous one; objects move in at the same coordinates from a door-side anchor. **D-B** an IPO founds a new company, seeded with some of the old one's money (never items). **D-C** every founding starts with picking a sector. **D-D** a sector is a full package on one engine; Software (today), Fintech, Biotech, Gaming launch together. **D-E** free placement, phone and PC. **P-1** one Pokedex entry per sector. **P-2** an IPO completes the company and stamps its sector; the old company is a card. **P-3** all four sectors = the main goal (Hall of Fame); replays earn Gold and Platinum; a leaderboard. **P-4** old companies earn nothing; stamps give a small capped bonus. **P-5** the seed stays. **CLAUDE.md:29 exception approved:** `BoardServer` alone may use the leaderboard OrderedDataStores (section 7). **Inventory:** a purchase goes to the inventory, with "Place now". **D-F funding rounds:** reaching a stage by valuation lets the player raise a round of a size they pick; it gives Cash only, costs dilution (fewer IPO Shares), and the room follows the building owned, not the stage (1.7).
 
@@ -69,7 +69,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 **1.6 Leaderboard.** Today in-server only (IpoServer.lua:46-63; IpoClient.lua:750-786); no OrderedDataStore exists (docs/reviews/FULL_REVIEW.md:126).
 - **Ranks:** **Collection** = `1000 x stamp points + min(IPO count, 999)` (Bronze 1, Gold 2, Platinum 3); **Hall of Fame** = earliest `hallAt`. `BoardServer` writes `Collection_v1`, `HallOfFame_v1` (in `pcall`, key UserId) from the loaded `pokedex` after the stamp's save; repairs a lower value on join; reads the top 50 every 10 minutes. No client sends a score.
 - **Studio never reaches the live board.** Studio and live share the save key (PUBLISH_RULES.md:46): every Studio save sets `pokedex.studio = true` (never cleared); a `studio` account is never written, repaired or shown; Studio writes only `_Studio` twins; a deny list (`BoardServer.REMOVED`) is never written or shown. *Test (fake stores):* a `studio` save with four Platinum joins live: no write.
-- **Names (FR-11):** `UserService:GetUserInfosByUserIdsAsync` (`pcall`, cached; **unverified limits**), "Player" on failure; the client escapes `& < > " '` (fixes IpoClient.lua:780).
+- **Names (FR-11):** `UserService:GetUserInfosByUserIdsAsync` (`pcall`, cached; **unverified limits**); the client escapes `& < > " '` (fixes IpoClient.lua:780).
 
 **1.7 Funding rounds (D-F, owner decision).** Every number is a **placeholder** for S8; nothing is random (D9).
 - **What opens a round:** the **valuation** (never Cash) reaching a stage after the first: Seed, Series A, Series B today (IpoConfig.lua:17-23), plus Series C+D and Pre-IPO with LONG_GAME's 7 stages. IPO-ready has no round: it is the IPO. The stage is `IpoConfig.stageIndex(ipo.valuation, ipo.count)` (IpoConfig.lua:151-159); it never falls during a run (IpoServer.lua:122-135).
@@ -166,35 +166,37 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 
 ## 7. Impact on other docs and branches
 
-**Merge order:** `design-customize` sits on top of `visuals-garage` (40 commits, 19 files ahead of `main` today): merge it only after `visuals-garage` lands.
+**Merge order:** `visuals-garage` is now in `main`; a PR from this branch changes only this doc and CONTRIBUTING.md.
 
 **docs/LONG_GAME_PROPOSAL.md** (`LG:` = its line):
 - **Principle (LG:5)** "Cash can only fill a rung" holds: round Cash only buys the current rung (economy_sim.py:1320). **Pacing (LG:6-18):** the 57 h fit assumes no round; S8 decides whether it uses the typical raise.
 - **Section 3 (LG:38, 53-60):** a building costs its office's fitted price; 7 offices on 5 footprints (Glass Tower and Global HQ become shell upgrades of building 5); each building adds hire spots for the 18 desks; R1 caps (LG:108) follow the 7 office purchases; furniture never enters `LONG_K`; S3 recounts the moments (LG:66-79) per sector.
-- **Decor (LG:78, 82, 86, 88, 92):** earned pieces are **kept**; bought copies reset; the Boardroom skin is a pass furniture set; the prestige wing stays perks; "industry skin per IPO" becomes "pick a sector".
+- **Decor (LG:78, 82, 86, 88, 92):** earned pieces are **kept**; bought copies reset; the Boardroom skin is a pass furniture set; the prestige wing stays perks.
 - **Shares and money (LG:86, 92-94):** Shares `x (1 - D)` before the pass; the base-Cash valuation never counts round Cash; the `addEarnings` list gains "(8) `CompanyServer` never calls it"; sector models ride entry (1). **Section 7 (LG:97-108):** rounds cheapen alt feeding: R2, R3 first. **Section 8 (LG:110-122):** its PR 4 = PR 1-7 here, its PR 7 = PR 8-13; 4b needs its PR 2 and 3.
 
 **Other docs:**
 - **`design-tutorial` collides:** both add a section and a module to TycoonCore (`KNOWN_SECTIONS` :84, payload, save gate :481) and daily_test.py:4269-4271. **`setupPlayer` order:** IpoServer (:793), fixedHires, EmployeeServer (:795), PoachServer, OnboardingServer (:797), **CompanyServer**, TaskServer (:798), **TutorialServer** (TUTORIAL_PROPOSAL.md:106), DailyServer (:799, last); `init` alike; BoardServer's repair runs after `data.ready` (TycoonCore.lua:831). **Tutorial PR A merges first**; Pokedex PR 1 rebases onto it.
 - **Tutorial steps** (TUTORIAL_PROPOSAL.md): 1 and 4 (:25, 28) become "own your sector's first upgrade" and "own 2 of this company's upgrades" (step 1 waits while `OpenPanel = "Sector"`). **Step 8 "Funding"** (:32, "open the IPO window") becomes: when the first round opens, open the Funding window; Raise, Later or Skip completes it; no reward, never forces a raise. **Step 9** (:33, notes 37-42): resets add buildings, bought furniture, rounds and dilution (a new company starts at 100%); keeps add stamps and kept decor. New step: "Arrange your office". The "?" and the strip (:53, 62) are untouched.
-- **`content-bible`:** sections 1-6 = Software's package; "Titles and cosmetics" (243-251) drops the industry skins; decision 9 (373) is answered.
-- **`building-pass`: park it.** Its patch and BuildingClient.lua are built for 60 x 60, and its roof would block the edit camera. Reused in PR 2 and 6: shell data, budgets, `BUILDINGMATH`, the `pcall` plug-in.
+- **`content-bible`:** sections 1-6 = Software's package; its industry skins (243-251) go.
+- **`building-pass`: park it.** Its patch and BuildingClient.lua are built for 60 x 60, and its roof would block the edit camera. Its shell data and `pcall` plug-in are reused.
 - **`visuals-garage`, PLOT_VISUALS.md (14, 37), CLAUDE.md "Plot visuals" (32):** "the plot stays 60 x 60", the skyline, "six props identical in every room", "the real Floor is the only solid" and "`PlotArt.Stages[i]` is the room of `IpoConfig.Stages[i]`" change.
-- **CLAUDE.md, README, ROADMAP, PUBLISH_RULES:** `pokedex` in the save block, new modules and order, `CompanyRemotes`, round Cash as a gift like daily Cash, PUBLISH_RULES "2d".
+- **CLAUDE.md, README, ROADMAP, PUBLISH_RULES:** `pokedex`, new modules and order, `CompanyRemotes`, round Cash as a gift, "2d".
 - **CLAUDE.md:29 (approved by the owner):** the build PR changes it to exactly: "Never add a second DataStore, save loop or PlayerAdded data owner. One exception: `BoardServer` (ServerScriptService) may use the OrderedDataStores `Collection_v1` and `HallOfFame_v1` (and their `_Studio` twins) for the leaderboard. It writes only values read from the loaded save after that save succeeded, never saves player data, and wraps every call in `pcall`. Every other store stays under this rule."
 
 ## 8. Open questions (unresolved, most important first)
 
-1. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened by the run's share with each pass (recommend), or pass-neutral rules?
-2. **Collection bonus:** a Cash multiplier, cap 10%, never valuation (recommend), or a cheaper first rung?
-3. **Income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech's interest rewards holding Cash, against the buy loop: keep it, or a model that pays for spending?
-4. **Earned decor:** which counts and milestones unlock which kept piece (content bible choice 5), and what Day 7 gives once its list is all kept?
-5. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
-6. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S.
+1. **Round Cash path:** a gift in `CompanyServer.raiseRound`, never `addEarnings`, pinned by daily_test (recommend, 5.4), or the brief's new `addEarnings` call site, which today raises the valuation (IpoServer.lua:129) and only works after LONG_GAME PR 2 with weight 0?
+2. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
+3. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened by the run's share with each pass and fitted with a typical raise (recommend), or pass-neutral rules?
+4. **Collection bonus:** a Cash multiplier, cap 10%, never valuation (recommend), or a cheaper first rung?
+5. **Income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech rewards holding Cash, against the buy loop: keep it?
+6. **Earned decor:** which milestones unlock which kept piece (content bible choice 5), and what Day 7 gives once its list is all kept?
+7. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
+8. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S.
 
 ## What I did not verify
 
 - The world outside scripts (Baseplate, SpawnLocation, hand-placed parts, Terrain, StreamingEnabled): no Studio or MCP was used.
 - "0 visits" and the privacy setting (Creator Hub only); OrderedDataStore and `UserService` limits; camera scale; phone frame rates; why `MAX_PARTS` is 260.
-- Every economy number and content estimate: placeholders or estimates.
+- Every economy number and content estimate: placeholders or estimates; S8 was not run. The Funding window sizes and Roblox's real top bar height are not measured.
 - Other branches were read with `git show`, not run; LONG_GAME PR 2 doesn't exist; `daily_test.py` was not run (docs only).
