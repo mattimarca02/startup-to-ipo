@@ -4109,13 +4109,49 @@ do
 	check("spam: still refused just under the interval", handleShopAction(p, "BuyUpgrade", 2) == false)
 	CLOCK += 0.02
 	check("spam: allowed again once the interval has passed", handleShopAction(p, "BuyUpgrade", 2) == true and d.owned["Coffee Machine"] == true)
-	local hundred = 0
-	for _ = 1, 100 do if handleShopAction(p, "BuyUpgrade", 3) then hundred += 1 end end
-	check("spam: 100 requests in one instant buy at most once", hundred <= 1, hundred)
-	check("a refused spam request does not push the next allowed time forward", (function()
-		CLOCK += BUY_MIN_INTERVAL + 0.01
-		return handleShopAction(p, "BuyUpgrade", 4) ~= nil
-	end)())
+	-- A refused request leaves the stamp (and so the next allowed time) exactly where the last looked-at request put it
+	CLOCK += 1
+	local stampedAt = CLOCK
+	check("spam: a request after the interval is looked at and stamps the time", handleShopAction(p, "BuyUpgrade", 3) == true and d.lastBuyAt == stampedAt, d.lastBuyAt)
+	local stampOk = true
+	for _ = 1, 5 do
+		CLOCK += 0.05
+		local ok, why = handleShopAction(p, "BuyUpgrade", 4)
+		if ok ~= false or why ~= "Too fast" or d.lastBuyAt ~= stampedAt then stampOk = false end
+	end
+	check("a refused spam request does not push the next allowed time forward (the stamp stays exactly the same)", stampOk and d.lastBuyAt == stampedAt, d.lastBuyAt)
+	CLOCK = stampedAt + BUY_MIN_INTERVAL + 0.05 -- 0.45 s after the last purchase, 0.2 s after the last refused request
+	check("spam: allowed once the interval from the last purchase has passed, even right after refused requests",
+		handleShopAction(p, "BuyUpgrade", 4) == true and d.owned["Server Rack"] == true and d.lastBuyAt == CLOCK, d.lastBuyAt)
+end
+
+-- 3b. 100 spammed requests on a moving clock: the exact purchases and the exact Cash --------------------------
+do
+	local p, d = newPlayer(100000)
+	d.owned.Desk = true -- the free one: every purchase below costs Cash
+	CLOCK += 10
+	local function nextId() -- what a spammed Buy button sends: the next upgrade's number
+		for i, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then return i end end
+		return 1
+	end
+	local bought, at = 0, {}
+	for request = 1, 100 do
+		if request == 42 then
+			CLOCK += 0.29 -- 0.45 s after the first purchase (outside the window)
+		elseif request == 100 then
+			CLOCK += 0.5 -- outside the window again
+		elseif request > 1 then
+			CLOCK += 0.004 -- inside the 0.4 s window
+		end
+		if handleShopAction(p, "BuyUpgrade", nextId()) then
+			bought += 1
+			table.insert(at, request)
+		end
+	end
+	check("spam: 100 requests on a moving clock buy exactly 3 times (requests 1, 42 and 100)", bought == 3 and table.concat(at, ",") == "1,42,100", table.concat(at, ","))
+	check("spam: 100 requests spend exactly $525 (Coffee Machine + Laptop + Server Rack)", d.cash.Value == 100000 - 525, 100000 - d.cash.Value)
+	check("spam: after 100 requests the next is the Whiteboard (nothing skipped, nothing doubled)",
+		d.owned["Server Rack"] == true and d.owned.Whiteboard == nil)
 end
 
 -- 4. Bad numbers and bad states --------------------------------------------------------------------------
@@ -4178,6 +4214,118 @@ do
 	check("HR: level 2 costs its own price", checkHrPurchase(levels, poach, 299, CLOCK) == nil and (function() CLOCK += 5 return checkHrPurchase(levels, poach, 300, CLOCK) == levels[2] end)())
 end
 
+-- 7. HR Department purchase: PoachServer's buyHr and the BuyHr action (lifted from the source) ---------------------
+local RULES = { HRDepartment = __HRLEVELS__ }
+local REAL_HR = RULES.HRDepartment
+local SAVES, PUBLISHED = {}, {}
+local task = { spawn = function(f, ...) f(...) end }
+core.save = function(player) table.insert(SAVES, player) return true end
+local function publish(player) table.insert(PUBLISHED, player) end
+local function percent(chance) return math.floor(chance * 100 + 0.5) .. "%" end
+local hrData = {}
+local function getPoach(player)
+	local data = hrData[player]
+	return data and data.poach, data
+end
+local IpoServer = { isBusy = function() return false end }
+local lastTargetsCall, TARGETS_MIN_INTERVAL = {}, 2
+local function targetsFor() return {} end
+local function start() return false, "start" end
+local function counterOffer() return false, "counter" end
+__BUYHR__
+__ONACTION__
+local function hrPlayer(cash, ready)
+	local player = {}
+	hrData[player] = { ready = ready ~= false, cash = { Value = cash }, poach = { hrLevel = 0 } }
+	return player, hrData[player]
+end
+local function hrBuy(player, ...) -- pcall: a broken rule may error, which must count as a failed test, not a crash
+	SAVES, PUBLISHED = {}, {}
+	local ran, ok, msg = pcall(buyHr, player, ...)
+	if not ran then return "error", tostring(ok) end
+	return ok, msg
+end
+do
+	CLOCK = 5000
+	local p, d = hrPlayer(1000000, false)
+	local ok, msg = hrBuy(p)
+	check("HR buy: not ready (loading or an IPO being saved) is refused, nothing changes",
+		ok == false and d.cash.Value == 1000000 and d.poach.hrLevel == 0 and #SAVES == 0 and d.poach.lastHrBuyAt == nil, msg)
+
+	p, d = hrPlayer(REAL_HR[1].cost - 1)
+	CLOCK += 2
+	ok, msg = hrBuy(p)
+	check("HR buy: one Cash short is refused with the price, nothing changes, no save",
+		ok == false and d.cash.Value == REAL_HR[1].cost - 1 and d.poach.hrLevel == 0 and #SAVES == 0
+		and string.find(msg, "$" .. REAL_HR[1].cost, 1, true) ~= nil, msg)
+
+	p, d = hrPlayer(REAL_HR[1].cost)
+	CLOCK += 2
+	ok, msg = hrBuy(p)
+	check("HR buy: exactly the price buys Lv 1, the exact cost is taken", ok == true and d.cash.Value == 0 and d.poach.hrLevel == 1, msg)
+	check("HR buy: a purchase saves once and publishes the new level", #SAVES == 1 and SAVES[1] == p and #PUBLISHED == 1, #SAVES)
+
+	-- every level, in order, at the server's own prices, then the cap
+	local total = 0
+	for _, level in ipairs(REAL_HR) do total += level.cost end
+	p, d = hrPlayer(total + 7)
+	local allOk = true
+	for i, level in ipairs(REAL_HR) do
+		CLOCK += 1.5
+		local before = d.cash.Value
+		ok, msg = hrBuy(p)
+		if not (ok == true and d.poach.hrLevel == i and before - d.cash.Value == level.cost and #SAVES == 1) then
+			allOk = false
+			check("HR buy: Lv " .. i .. " costs exactly " .. level.cost .. " and raises the level by 1", false, msg)
+		end
+	end
+	check("HR buy: every level costs exactly its server price and raises hrLevel by 1", allOk and d.cash.Value == 7 and d.poach.hrLevel == #REAL_HR, d.cash.Value)
+	d.cash.Value = 10 ^ 9
+	CLOCK += 1.5
+	ok, msg = hrBuy(p)
+	check("HR buy: past the last level is refused, nothing taken, no save",
+		ok == false and d.poach.hrLevel == #REAL_HR and d.cash.Value == 10 ^ 9 and #SAVES == 0 and string.find(tostring(msg), "fully", 1, true) ~= nil, msg)
+
+	-- the 1 s rate limit
+	p, d = hrPlayer(1000000)
+	CLOCK += 2
+	local boughtAt = CLOCK
+	ok = hrBuy(p)
+	CLOCK += 0.6
+	local ok2, msg2 = hrBuy(p)
+	check("HR buy: a second buy 0.6 s later is refused (Too fast), nothing taken, no save",
+		ok == true and ok2 == false and msg2 == "Too fast" and d.poach.hrLevel == 1 and d.cash.Value == 1000000 - REAL_HR[1].cost and #SAVES == 0, msg2)
+	check("HR buy: the refused request leaves the stamp exactly where the purchase put it", d.poach.lastHrBuyAt == boughtAt, d.poach.lastHrBuyAt)
+	CLOCK = boughtAt + 0.99
+	check("HR buy: still refused at 0.99 s", hrBuy(p) == false and d.poach.hrLevel == 1)
+	CLOCK = boughtAt + 1.05
+	ok = hrBuy(p)
+	check("HR buy: allowed again after 1 s, Lv 2 at its own price", ok == true and d.poach.hrLevel == 2
+		and d.cash.Value == 1000000 - REAL_HR[1].cost - REAL_HR[2].cost, d.cash.Value)
+
+	-- the price and the cap come from the server's rules only
+	RULES.HRDepartment = { { cost = 7, defense = 0.5 } }
+	p, d = hrPlayer(100)
+	CLOCK += 2
+	ok = hrBuy(p)
+	CLOCK += 2
+	ok2, msg2 = hrBuy(p)
+	check("HR buy: with other server rules, their price (7) and their cap (1 level) are used",
+		ok == true and d.cash.Value == 93 and d.poach.hrLevel == 1 and ok2 == false and d.cash.Value == 93, msg2)
+	RULES.HRDepartment = REAL_HR
+
+	-- the BuyHr action: whatever else the client sends is never read
+	p, d = hrPlayer(REAL_HR[1].cost)
+	CLOCK += 2
+	SAVES = {}
+	local ran, okA, msgA = pcall(onAction, p, "BuyHr", 0, { cost = 0, level = 5 })
+	check("BuyHr action: a price or level sent by the client is ignored, the real price is taken and the level goes up by 1",
+		ran and okA == true and d.cash.Value == 0 and d.poach.hrLevel == 1, msgA)
+	p, d = hrPlayer(1000000, false)
+	ran, okA = pcall(onAction, p, "BuyHr")
+	check("BuyHr action: refused while not ready", ran and okA == false and d.poach.hrLevel == 0 and d.cash.Value == 1000000)
+end
+
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -4204,32 +4352,93 @@ def upgrades_lua():
     return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s }' % row for row in rows) + " }"
 
 
+def hr_levels_lua():
+    """CreatureConfig.Poaching.HRDepartment as a Luau table (cost, defense: the real server rules)."""
+    import re
+    with open(os.path.join(ROOT, "CreatureConfig.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("HRDepartment = {"):]
+    block = block[:block.index("\n\t},")]
+    rows = re.findall(r"\{ cost = (\d+), defense = ([\d.]+) \}", block)
+    if len(rows) < 2:
+        raise SystemExit("CreatureConfig.Poaching.HRDepartment no longer has rows with cost and defense")
+    return "{ " + ", ".join("{ cost = %s, defense = %s }" % row for row in rows) + " }"
+
+
+def function_source(header, filename):
+    """One top-level Lua function, from its header line to its closing `end` at the start of a line."""
+    with open(os.path.join(ROOT, filename), encoding="utf-8") as f:
+        text = f.read()
+    if text.count(header) != 1:
+        raise SystemExit("%s: expected exactly one '%s'" % (filename, header))
+    start = text.index(header)
+    return text[start:text.index("\nend\n", start) + len("\nend\n")]
+
+
 def buy_source(mutation=None):
-    """The BUY_TESTS program, with the real regions. mutation = (old, new) breaks one rule in the TycoonCore or ShopServer region."""
-    core = marked_source("BUYUPGRADE")
-    shop = marked_source("SHOPACTION", "ShopServer.lua")
+    """The BUY_TESTS program, with the real regions. mutation = (old, new) breaks one rule: it is applied to the
+    first region that has `old` (TycoonCore, ShopServer, PoachServer's HRBUY region, buyHr, onAction)."""
+    parts = {
+        "__BUYUPGRADE__": marked_source("BUYUPGRADE"),
+        "__SHOPACTION__": marked_source("SHOPACTION", "ShopServer.lua"),
+        "__HRBUY__": marked_source("HRBUY", "PoachServer.lua"),
+        "__BUYHR__": function_source("local function buyHr(player)", "PoachServer.lua"),
+        "__ONACTION__": function_source("local function onAction(player, action, a, b)", "PoachServer.lua"),
+    }
     if mutation:
         old, new = mutation
-        if old in core:
-            core = core.replace(old, new, 1)
-        elif old in shop:
-            shop = shop.replace(old, new, 1)
+        for key, region in parts.items():
+            if old in region:
+                parts[key] = region.replace(old, new, 1)
+                break
         else:
             raise SystemExit("mutation target not found: " + old)
-    return (BUY_TESTS.replace("__UPGRADES__", upgrades_lua()).replace("__BUYUPGRADE__", core)
-            .replace("__SHOPACTION__", shop).replace("__HRBUY__", marked_source("HRBUY", "PoachServer.lua")))
+    source = BUY_TESTS.replace("__UPGRADES__", upgrades_lua()).replace("__HRLEVELS__", hr_levels_lua())
+    for key, region in parts.items():
+        source = source.replace(key, region)
+    return source
 
 
 # Each of these breaks one rule of the purchase; the tests must notice (a test that can't fail proves nothing).
+# A third element names a test that must be among the failures (proof that this test is the one that can fail).
 BUY_MUTATIONS = [
     ("the Cash check", ("if cash < upg.cost then", "if false then")),
     ("the already-owned check", ("if data.owned[upg.name] then", "if false then")),
     ("the order check", ("if i ~= id then", "if false then")),
-    ("the rate limit", ("if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then", "if false then")),
+    ("the rate limit", ("if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then", "if false then"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
+    ("the rate limit (a refused request also stamps the time)",
+     ("\tif data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n\tdata.lastBuyAt = now\n",
+      "\tlocal previous = data.lastBuyAt\n\tdata.lastBuyAt = now\n\tif previous and now - previous < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n"),
+     "a refused spam request does not push the next allowed time forward"),
+    ("the rate limit (a refused request also stamps the time, seen by the 100 requests)",
+     ("\tif data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n\tdata.lastBuyAt = now\n",
+      "\tlocal previous = data.lastBuyAt\n\tdata.lastBuyAt = now\n\tif previous and now - previous < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
+    ("the rate limit interval (0.4 s cut to 0.1 s)", ("local BUY_MIN_INTERVAL = 0.4", "local BUY_MIN_INTERVAL = 0.1"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
     ("the id range check", ("id < 1 or id > #upgrades", "false")),
     ("the whole-number check", ("id % 1 ~= 0 or ", "")),
     ("the ready check", ("if not data.ready then", "if false then")),
     ("the type check in ShopServer", ("if typeof(id) ~= \"number\" then", "if false then")),
+    ("the HR ready check in buyHr", ("if not poach or not data.ready then", "if not poach then"),
+     "HR buy: not ready (loading or an IPO being saved) is refused"),
+    ("the HR Cash check", ("if cash < nextLevel.cost then", "if false then"),
+     "HR buy: one Cash short is refused"),
+    ("the HR Cash deduction", ("data.cash.Value -= nextLevel.cost", "data.cash.Value -= 0"),
+     "HR buy: exactly the price buys Lv 1, the exact cost is taken"),
+    ("the HR level increase", ("poach.hrLevel += 1", "poach.hrLevel += 0"),
+     "HR buy: every level costs exactly its server price and raises hrLevel by 1"),
+    ("the HR save", ("task.spawn(core.save, player)", "-- no save"),
+     "HR buy: a purchase saves once and publishes the new level"),
+    ("the HR level cap (the last level sold again)", ("levels[poach.hrLevel + 1]", "levels[math.min(poach.hrLevel + 1, #levels)]"),
+     "HR buy: past the last level is refused"),
+    ("the HR rate limit", ("if poach.lastHrBuyAt and now - poach.lastHrBuyAt < HR_BUY_MIN_INTERVAL then", "if false then"),
+     "HR buy: a second buy 0.6 s later is refused"),
+    ("the HR rate limit interval (1 s cut to 0.5 s)", ("local HR_BUY_MIN_INTERVAL = 1", "local HR_BUY_MIN_INTERVAL = 0.5"),
+     "HR buy: a second buy 0.6 s later is refused"),
+    ("the HR price from the server rules (a hardcoded level list)", ("checkHrPurchase(RULES.HRDepartment,", "checkHrPurchase(" + "{ { cost = 2500, defense = 0.05 } },"),
+     "HR buy: with other server rules, their price (7) and their cap (1 level) are used"),
 ]
 
 
@@ -4636,13 +4845,18 @@ def main():
     if result19.returncode != 0 or " 0 failed" not in result19.stdout:
         code = 1
     caught = 0
-    for label, mutation in BUY_MUTATIONS:
+    for label, mutation, *expected in BUY_MUTATIONS:
         mutant = run_luau(luau, buy_source(mutation))
-        if "passed," in mutant.stdout and " 0 failed" not in mutant.stdout:
-            caught += 1  # the tests ran to the end and reported failures (a crash would not count)
-        else:
+        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
+        if "passed," not in mutant.stdout or " 0 failed" in mutant.stdout:
+            # the tests must run to the end and report failures (a crash would not count)
             print("FAIL: mutation not caught: the purchase tests do not notice a broken " + label)
             code = 1
+        elif expected and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
+            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+            code = 1
+        else:
+            caught += 1
     print("Office upgrade mutations: %d of %d broken rules caught" % (caught, len(BUY_MUTATIONS)))
     pads_passed, pads_failed = pads_gone_checks()
     print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
