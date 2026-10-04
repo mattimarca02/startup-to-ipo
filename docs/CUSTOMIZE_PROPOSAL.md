@@ -110,6 +110,28 @@ Today `goPublic` (IpoServer.lua:177-243) calls `commitIpo` (TycoonCore.lua:544-5
 - **Biotech (proposal):** lower Income per second, plus a fixed research payout every N engaged minutes (a trial phase on a visible timer, never a dice roll).
 - **Gaming (proposal):** Income per second, plus a launch: a graded Timing task that doubles Income for a few minutes, followed by a cooldown.
 
+## 3. Content volume
+
+The baseline is the content bible (`docs/CONTENT_BIBLE.md` on `content-bible`): **168 names** for Software over the LONG_GAME ladder, counted by type code: upgrades 42, decor 22, hires 18, desks 18, events 12, titles 9, skins 9, board requests 8, offices 7, products 6, eggs 6, caller groups 6 (8 lines each), hats 4, tag 1. Of these, skins, hats and the tag (14) are shared by every sector, and the 5 "industry skins" for IPO 2-6 are replaced by the sectors. The bible names no tasks; LONG_GAME section 4 plans 20.
+
+| Kind | In code today | Software target (bible) | Each new sector **(estimate)** | 3 new sectors **(estimate)** |
+|---|---|---|---|---|
+| Upgrades (name + prop art) | 6 (TycoonCore.lua:65-72) | 42 (30, and 12 with two levels) | 42 | 126 |
+| Buildings (name + shell) | 5 rooms (PlotArt.Stages) | 7 names (5 shells with today's stages) | 5-7 | 15-21 |
+| Furniture | stage decor, not cut into pieces | 22 | 22 | 66 |
+| Hire desks | 1 skin per room | 18 names | 18 names, 5-7 skins | 54 names, 15-21 skins |
+| Creatures (name, job, joke) | 12 (CreatureConfig.lua:53-104) | 18 (6 new) | 18 sets of texts, shared bodies | 54 |
+| Eggs | 3 (CreatureConfig.lua:23-41) | 6 | 6 names | 18 |
+| Tasks | 1 row (`Call`, TaskConfig.lua:49) | 20 | 20 rows: ~16 re-texted engine tasks + ~4 sector-only | 60 |
+| Caller lines | none | 48 | 48 | 144 |
+| Events / board requests / titles | none | 12 / 8 / 9 | 12 / 8 / 9 | 36 / 24 / 27 |
+| Products (fixed bundles) | none | 5 bundles + Night Guard | 5 bundles | 15 |
+| Company names | none | 12 (new) | 12 | 36 |
+| **Names** | | **153 + 20 tasks + 12 companies = 185** | **about 185 + 48 lines** | **about 555 + 144 lines** |
+| **Art builds** (props, furniture, shells, desk skins) | 6 props, 5 rooms | 36 props + about 22 furniture + 0-2 shells to add | about 75 | about 225 |
+
+**What is new.** For Software the names exist (bible, still to approve) and the art is partly done: 6 props of 17-24 parts each (PlotArt.lua:806-949) and 5 rooms to cut into shells and furniture. Fintech, Biotech and Gaming need everything sector-flavored from zero: about 3 times Software's names and about 4 times its remaining art **(estimate)**. Mechanics are reused (no new task action type, no new creature body), which is what keeps this possible.
+
 ## 5. The office: what stands where, and what the server checks
 
 Coordinates are measured from the **anchor**, the front-center of the floor (section 4): `x` to the right, `z` negative toward the back. Today's plot-center offsets convert with `z_anchor = z - 30`; the world position stays the same.
