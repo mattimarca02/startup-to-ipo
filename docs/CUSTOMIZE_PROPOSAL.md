@@ -4,7 +4,7 @@ Design only (2026-10-04, branch `design-customize`, revised from `47f0fe8`). No 
 
 **Fixed by the owner:** **D-A** a bigger building contains the previous one and moves every object in, same coordinates from a door-side anchor. **D-B** an IPO founds a new company, seeded with some of the old one's money (never items). **D-C** every founding starts with picking a sector. **D-D** a sector is a full package on one engine; Software (today), Fintech, Biotech, Gaming launch together, Software first. **D-E** free placement, phone and PC. **P-1** one Pokedex entry per sector (state, stamp, replays). **P-2** an IPO completes the company and stamps its sector; the old company is a card, never a building. **P-3** all four sectors = the main goal (Hall of Fame); replays earn Gold and Platinum; a leaderboard. **P-4** old companies earn nothing; stamps give a small capped bonus. **P-5** the seed stays, funding only, numbers open.
 
-**Owner defaults (P-6 and earlier):** employees follow the player; creatures keep their bodies, renamed per sector; 5 buildings per sector, one per funding stage; size 78 x 84, re-checked in section 3 (**78 x 82**); hire desks fixed in v1; furniture earns nothing; a free, fixed starter set per building (D9); 45° rotation; part budget open until a phone test.
+**Owner defaults (P-6 and earlier):** employees follow the player; creatures keep their bodies, renamed per sector; 5 buildings per sector (building 5 serves Series C+D, Pre-IPO and IPO-ready, section 7); any sector can be picked next; legacy IPOs get no stamp (moot: no legacy saves, 1.2); an unplaced item still earns (section 4); size 78 x 84, re-checked in section 3 (**78 x 82**); hire desks fixed in v1; furniture earns nothing; a free, fixed starter set per building (D9); 45° rotation; part budget open until a phone test.
 
 **New names** (none exists in any `.lua`/`.py`): `CompanyServer` (owns `pokedex`), `CompanyConfig`, `SectorConfig`, `Sector<Name>`, `SectorArt<Name>`, `CompanyClient`, `CompanyRemotes.CompanyAction`, `BoardServer` (no save section), OrderedDataStores `Collection_v1`, `HallOfFame_v1`. They replace the previous `companies` section.
 
@@ -55,7 +55,7 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
 - **A10 run check:** `run ~= ipo.count` means an older version ran an IPO (it reset Cash, `owned`, eggs, TycoonCore.lua:549-559, and paid no seed). Every version gates an IPO on valuation (IpoServer.lua:192-195), so the active sector gets `"done"`, Bronze if unstamped and a card (`engaged` 0: no Gold or Platinum); the new active company keeps the sector with `picked = false`, building 1, no seed. Several missed IPOs count as one.
 
 **1.3 Picking a sector, on every founding.** A window (`OpenPanel = "Sector"`), four cards: icon, name, how it makes money, stamp, "New". It opens for a new player before the Garage, in every IPO and after a run check. `CompanyAction("PickSector", key)` only while `picked == false`; purchases wait until then.
-- **Next sector (proposal): any enabled sector, the same included; none must be completed first.** Rewards steer instead: Bronze, the biggest bonus step, needs a new sector, and the picker preselects one. A forced order would lock a favourite away for 150+ h.
+- **Next sector (owner default): any enabled sector, the same included; none must be completed first.** Rewards steer instead: Bronze, the biggest bonus step, needs a new sector, and the picker preselects one. A forced order would lock a favourite away for 150+ h.
 - `SectorConfig.PickerEnabled = false` until all four exist: everyone is Software.
 
 **1.4 The IPO completes the company.** Today `goPublic` (IpoServer.lua:177-243) checks, then `commitIpo` (TycoonCore.lua:544-588) saves with a transform resetting Cash, `owned` and eggs (IpoConfig.lua:53-58). New:
@@ -219,13 +219,11 @@ Also: "the IPO is the last thing" (LG:1-3) holds per company; +5% per loop (LG:1
 
 ## 8. Open questions (unresolved, most important first)
 
-1. **5 buildings vs 7 stages:** P-6 gives one building per funding stage (5 today, IpoConfig.lua:17-23), but LONG_GAME section 5 adds `SeriesCD` and `PreIpo`. Recommend: building 5 serves Series C+D, Pre-IPO and IPO-ready.
-2. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened for pass owners (recommend), or pass-neutral rules instead?
-3. **Collection bonus:** a Cash multiplier, +1.5 / +0.5 / +0.5% per sector, cap 10%, never valuation (recommend), or a cheaper first rung?
-4. **Next sector:** any sector (recommend) or a not-yet-completed one first?
-6. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
-7. **Fintech, Biotech, Gaming income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech's interest rewards holding Cash, against the buy loop: keep it, or a model that pays for spending?
-8. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S, after the Studio checks.
+1. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened for pass owners (recommend), or pass-neutral rules instead?
+2. **Collection bonus:** a Cash multiplier, +1.5 / +0.5 / +0.5% per sector, cap 10%, never valuation (recommend), or a cheaper first rung?
+3. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
+4. **Fintech, Biotech, Gaming income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech's interest rewards holding Cash, against the buy loop: keep it, or a model that pays for spending?
+5. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S, after the Studio checks.
 
 ## What I did not verify
 
