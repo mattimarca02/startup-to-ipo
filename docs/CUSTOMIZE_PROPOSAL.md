@@ -1,160 +1,139 @@
-# Customize your office: buy a building, place what you own (proposal, design only)
+# Companies, sectors and your office (proposal, design only)
 
-Design only (2026-10-04, branch `design-customize`, from `visuals-garage` at `7f5c141`). No script, config or test was changed. Written for the owner and for the Claude sessions that will build it. Line numbers are for `7f5c141`. **(unverified)** marks anything I could not check in code; **(estimate)** marks a number I did not measure.
+Design only (2026-10-04, branch `design-customize`, revised from `2d91efd`). No script, config or test was changed. Written for the owner and for the Claude sessions that will build it. Line numbers are for `2d91efd`, whose `.lua` and `.py` files are identical to `7f5c141` (`git diff` is empty). **(unverified)** = not checked in code; **(estimate)** = a number I did not measure; **(owner default)** = a default the owner may still veto.
 
-**Product decision (fixed by the owner).** The Garage stays the starting room. At Seed, Series A, Series B and IPO-ready the Shop sells a new, **empty** building, buyable only once that stage is reached. The player fills it with objects they own: the six upgrades, earlier objects and new objects that unlock per stage. Placement is free (drag anywhere inside, rotate) on phone and PC. The art of PlotArt stages 2-5 becomes the building shells and the object catalog, no longer pre-built rooms.
+**Fixed by the owner (not re-opened here):**
+- **D-A Moving in.** Buying a new building moves every owned object in by itself, at the same coordinates. Each building is bigger than the last and contains its whole footprint. Positions are measured from a fixed anchor on the door side, so every position stays valid and the extra space is empty.
+- **D-B IPO = a new company.** The player keeps the old company (building, objects) and founds a new one, seeded with a percentage of the old company's money. The seed is money only, never items. A player can hold several companies.
+- **D-C Sector first.** Founding a company (the first one, and each one after an IPO) starts with choosing a sector, before the garage. After an IPO the sector may change.
+- **D-D Sector packages.** A sector brings its own tasks, objects, names, building theme, office look and way of making money, all drawn from the real field. The shared engine (buildings, placement, saves, shop, task engine) is built once. Launch sectors: Software/SaaS (today's game), Fintech, Biotech, Gaming, all four together. Build order: engine, then Software end to end, then the other three.
+- **D-E Free placement** (drag anywhere, rotate) on phone and PC.
 
-**Name used below:** `OfficeServer` (ModuleScript, ServerScriptService), `OfficeConfig` (ModuleScript, ReplicatedStorage), `OfficeClient` (LocalScript, StarterPlayerScripts), remotes `OfficeRemotes.OfficeAction`, save section `office`. None of these names exist in the repo today (checked with `grep`).
+**Owner defaults:** held companies earn a small passive amount (1.4); hire desks are not movable in v1; furniture earns nothing and a stored upgrade keeps earning; each new building comes with a free, fixed starter set (never random, D9); rotation in 45° steps; the part budget stays open until a phone test with 6 full plots (section 6).
 
-## 1. Data model
+**New names (none exist in the repo: `grep` over every `.lua` and `.py`):** `CompanyServer` (ModuleScript, ServerScriptService), `CompanyConfig` and `SectorConfig` (ModuleScripts, ReplicatedStorage), one `Sector<Name>` data module per sector (ReplicatedStorage) and one `SectorArt<Name>` (ServerScriptService), `CompanyClient` (LocalScript, StarterPlayerScripts), remote `CompanyRemotes.CompanyAction`, save section `companies`. They replace the first draft's `OfficeServer` / `office`.
 
-**A new top-level save section `office` (rule A10).** It cannot go in `owned`, `team` or `ipo`: older code drops unknown fields inside a section it knows.
+## 1. Companies and sectors
+
+### 1.1 What a company is
+
+A company is one sector plus one run of the ladder: its building, its placed objects and furniture, its upgrades and its Cash. **The player** keeps everything that is prestige or account-wide: IPO count and multiplier, Shares, perks, `lifetime` and `best`, passes, boosts and shields, the daily streak, onboarding and task stats, and employees (today's rule, IpoConfig.lua:8 and 51; open question 1).
+
+Only the **active** company is played and built on the plot. Held companies are not built in the world (part budget, section 6): a **Portfolio** tab in the IPO window (next to "IPO" and "Shares Shop", IpoClient.lua:879-943) shows each one as a card: name, sector, building, IPO number, valuation at the IPO, dividend.
+
+### 1.2 Data model: a new top-level section `companies` (rule A10)
+
+The active company's live state stays where it is today: `cash`, `owned`, `team` and `ipo.valuation` (TycoonCore.lua:421-433), so older code keeps playing it unchanged. The new section holds only what older code cannot know: the sector, the building and layout, and the held companies.
 
 ```lua
-office = {                       -- OfficeServer.serialize (optional: written only once a building is bought or something moved)
-  v = 1,                         -- format version (see below)
-  run = number,                  -- ipo.count this ownership belongs to (A10: per-run state is checked on load)
-  buildings = { "Seed", ... },   -- buildings bought this run (IpoConfig.Stages keys). "Garage" is always owned, never listed
-  active = "Seed",               -- the building shown: "Garage" or one of `buildings`
-  decor = { [objectKey] = n },   -- furniture owned (how many of each). Upgrades are NOT here: `owned` already saves them
-  layouts = {                    -- per building key, what stands where
-    [buildingKey] = { { id = "Desk", x = -23, z = -10, r = 0 }, { id = "Plant#2", x = 8.5, z = 20, r = 3 }, ... },
+companies = {                  -- CompanyServer.serialize (optional: written once a sector is chosen or anything is placed)
+  v = 1,                       -- format version; a higher one is kept unchanged and played as Software for the session
+  run = number,                -- ipo.count the active record belongs to (A10 check, 1.5)
+  nextId = number,             -- company ids 1, 2, 3 ... per player, never reused
+  active = {
+    id = number, sector = "Software", name = string, -- name: from the sector's fixed list (no free text, no filtering)
+    foundedAt = os.time(),
+    building = number,         -- buildings bought: 1 (Garage) .. #buildings of the sector (always the biggest one, D-A)
+    decor = { [objectKey] = n },                         -- furniture owned (upgrades stay in `owned`)
+    objects = { { id = "Desk", x = -23, z = -40, r = 0 }, ... }, -- one layout, anchor coordinates (section 4)
   },
+  held = {                     -- older companies, newest first, at most 4 (1.3), frozen at their IPO
+    { id, sector, name, foundedAt, ipoAt = os.time(), ipoNumber = number,
+      building = number, owned = { upgrade names }, decor = {...}, objects = {...},
+      valuationAtIpo = number, baseIncomeAtIpo = number, dividend = number }, -- dividend: Cash per engaged second (1.4)
+  },
+  archive = { { sector, name, ipoNumber, valuationAtIpo }, ... }, -- retired companies (1.3), at most 50
 }
 ```
 
-- **Per object:** `id` (an upgrade name from `TycoonCore` `UPGRADES`, TycoonCore.lua:65-72, or `<objectKey>#<n>` for the n-th copy of a furniture piece), `x`, `z` (studs from the building's floor-top center, rounded to 0.5), `r` (rotation step 0-7, 45° each). No `y`: everything stands on the floor, nothing stacks in v1.
-- **An object with no layout entry stands at its default spot.** For an upgrade that is today's slot, `itemOffset(i)` (TycoonCore.lua:131-135). So a save with no `office` section looks exactly like today's Garage, and nothing needs migrating.
-- **Limits:** at most **40 objects per building** and the part budget of section 4, whichever comes first. Size **(estimate)**: about 40 bytes per entry in JSON, 5 buildings x 40 = about 8 KB. Roblox's per-key limit (4 MB) is from Roblox's docs, **(unverified here)**.
-- **Versioning:** `v = 1`. A save with a higher `v` is treated like an unknown section: loaded as "Garage, default spots" for this session and **written back unchanged** (same rule as `unknownSections`, TycoonCore.lua:434-438). Bad entries (wrong type, NaN, infinite, outside bounds, unknown id, duplicate id) are skipped with a warning, never an error.
-- **A10 run check:** if `office.run ~= ipo.count` on load, an older server ran an IPO without knowing this section. Then `buildings` is cleared and `active = "Garage"`; `decor` and `layouts` are kept (section 7).
-- **`KNOWN_SECTIONS` impact:** add `office = true` (TycoonCore.lua:84); `office = OfficeServer.serialize(data)` in `buildPayload` (TycoonCore.lua:421-433); `data.office` in the save gate (TycoonCore.lua:481). `tools/daily_test.py:4269-4271` asserts the exact list of sections and **must be updated in the same PR** (it fails on purpose today).
-- **Publish:** needs **Shut down all servers** (a new section, like `daily`, `onboarding`, `tasks`; docs/PUBLISH_RULES.md section 3). **Rollback floor stays `V_launch`:** code from M4 on keeps `office` frozen (TycoonCore.lua:773-777); a rollback shows the old stage rooms again and loses nothing. A docs/PUBLISH_RULES.md "2d" note goes in PR 1.
-- **Module order:** `OfficeServer.setupPlayer` runs after `IpoServer` (run check) and `EmployeeServer`, before `TaskServer` and `DailyServer` (Daily stays last, TycoonCore.lua:793-799).
+- **Per object:** `id` (an upgrade name, or `<objectKey>#<n>` for the n-th copy of a furniture piece), `x`, `z` (studs from the anchor, rounded to 0.5), `r` (0-7, 45° steps). No `y`: nothing stacks in v1. At most 40 objects per company. An upgrade with no entry stands at its default spot, so a save without `companies` looks exactly like today.
+- **Size (estimate):** about 40 bytes per object in JSON; active + 4 held at 40 objects is about 9 KB.
+- **Bad values** (wrong type, NaN, infinite, outside the building, unknown id, duplicate id) are skipped with a warning. An **unknown sector** (newer save, or a sector removed) keeps the record unchanged and plays Software for that session, writing the record back as it was (like `unknownSections`, TycoonCore.lua:434-438).
+- **Wiring:** `companies = true` in `KNOWN_SECTIONS` (TycoonCore.lua:84), a `companies = CompanyServer.serialize(data)` line in `buildPayload` (:421-433), `data.companies` in the save gate (:481). tools/daily_test.py:4269-4271 asserts the exact section list and changes in the same PR. `CompanyServer.setupPlayer` runs after `IpoServer` (run check) and `EmployeeServer`, before `TaskServer` (tasks read the sector) and `DailyServer` (last, TycoonCore.lua:793-799).
+- **Publish:** Shut down all servers (a new section, docs/PUBLISH_RULES.md section 3). The rollback floor stays `V_launch`: code from M4 on keeps `companies` frozen (TycoonCore.lua:773-777).
 
-## 2. Gameplay positions today, and what may move
+### 1.3 Cap and cost (proposal)
 
-| Thing | Where it comes from | Today | Proposal |
-|---|---|---|---|
-| Floor (60 x 60, the only solid part) | TycoonCore.lua:736 | fixed | **fixed**. Every building is 60 x 60 on it (plots are 90 apart, TycoonCore.lua:74) |
-| Spawn (0, 12) and the lane | TycoonCore.lua:698; `PlotArt.Layout.spawn`, `reserve.spawnHalf`, `laneEnd` (PlotArt.lua:37, 66-68) | fixed | **fixed, reserved** (no object may stand there) |
-| BuySign (0, 24), IpoSign (21, 24) | TycoonCore.lua:75; IpoServer.lua:21 | fixed | **fixed, reserved** |
-| 5 incubators at z -25 | EmployeeServer.lua:37-40, with a Hatch ProximityPrompt (:531-544) | fixed | **fixed, reserved** with the space in front (`incubatorHalf`, `incubatorFront`) |
-| 11 hire spots (4 x 3 grid) | EmployeeServer.lua:31-35; `spotFor` (:172-175) | fixed | **fixed in v1** (open question 3) |
-| 11 hire desks | decor only: `PlotVisuals.buildRoom` puts one at every spot (PlotVisuals.lua:199-203) | fixed | fixed in v1, skin per building |
-| Six upgrade props | `itemOffset` (TycoonCore.lua:131-135), built by `spawnItem` (:189-201) | fixed | **movable** |
-| Founder's desk + DeskPhone | decor in rooms 2-5 (docs/PLOT_VISUALS.md line 24) | decor | furniture (nothing else references `DeskPhone`: `grep`) |
-| Furniture (sofas, plants, lamps, ...) | `PlotArt` stage decor lists | decor | **movable**, bought per stage |
+- **At most 5 companies: 1 active + 4 held (owner default proposal).** When an IPO would make a fifth held company, the IPO window asks which one to retire (preselected: the oldest). A retired company moves to `archive`: a name card with no building, no layout and no dividend. Why 4: save size, the Portfolio fits one phone screen, and the total dividend is capped anyway (1.4).
+- **Founding costs nothing extra.** The price is the IPO itself: the new company starts at the Garage with no upgrades, buildings or furniture (D-B). The IPO reward (multiplier, Shares) stays as today.
+- **Seed (owner default proposal):** **10% of the old company's Cash at the IPO, capped at 25% of the price of everything in the new company's first rung.** Today that rung is the six upgrades, $7,025 (TycoonCore.lua:65-72), so the cap is about $1,756; on the LONG_GAME ladder the Garage items total about $131K, so the cap is about $33K **(estimate, from LONG_GAME section 3)**. The seed is a gift: never through `addEarnings`, never valuation (like daily Cash). It is paid once, inside the IPO save (1.5).
 
-**Employees and desks: the rule.** Employees do not sit today. The server sets a `Home` point per employee (EmployeeServer.lua:185, 199), and EmployeeClient wanders each model up to 3 studs around it (EmployeeClient.lua:984-999). Nothing uses a `Seat` except the VIP Lounge (ShopServer.lua:672). Proposed rule: **employee i's `Home` stays the seat point of hire desk i.** In v1 the desk does not move, so nothing changes. If hire desks become movable (PR 5), the server sets `Home = desk CFrame * (0, 0, -3.3)` (the inverse of `PlotArt.Layout.desks`, PlotArt.lua:57-60), and the desk's footprint includes a 3-stud circle around that point (the wander radius), so no other object can stand where its hire walks. Only the server writes `Home`; the client keeps animating as now.
+### 1.4 Held companies pay a small dividend (owner default)
 
-## 3. Server validation (anti-exploit)
+- Each held company pays **1% of its base Income at the IPO** (no passes, no IPO multiplier) into the active company, **only per engaged second** (LONG_GAME section 2: a graded task in the last 180 s). Never offline, never away.
+- **All dividends together are capped at 10% of the active company's base Income** at that moment.
+- Gift Cash: not through `addEarnings`, never valuation. It can only buy items a little sooner inside a rung; it never moves the valuation clock (LONG_GAME principle: "Cash can only fill a rung, never skip it").
+- **Why this small:** a company that went public near the top of the LONG_GAME ladder earns up to 8,614/s, while a whole new Garage tops out at 194/s (LONG_GAME section 3). Even 1% is 86/s, half a Garage; two such companies uncapped would pay most of the first rung. The 10% cap ties the dividend to the new company: at the start (1/s) it is 0.1/s, a token, and it grows with the new company. Its upper bound acts like item Income x1.1; LONG_GAME's sensitivity table has x1.25 at 46 h against 57 h, so the effect is roughly 2-4 h less on a run **(estimate, interpolated; section 8 says what to simulate)**.
+- Until the engaged clock exists (LONG_GAME PR 2), dividends are 0.
 
-The client only asks. One remote, `OfficeRemotes.OfficeAction` (RemoteFunction made by `OfficeServer.init`): `"Place", id, x, z, r` · `"Store", id` · `"SetActive", buildingKey` · `"Sync"`. Purchases go through the existing `ShopAction` (section 6). On every request:
+### 1.5 What an IPO does now (replaces the old reset)
 
-- `data.ready` (false while loading and during an IPO save, IpoServer.lua:211-213) and `data.office` exist.
-- **Types and ranges:** `id` a string under 40 characters; `x`, `z` finite numbers, rounded to 0.5; `r` a whole number 0-7. Anything else: "Bad request", no warning per call.
-- **Ownership:** an upgrade id must be in `data.owned`; a `Plant#2` id needs `decor.Plant >= 2`; `SetActive` needs the building in `buildings` (or "Garage").
-- **Bounds:** the object's footprint (a rectangle turned by `r`) stays inside the active building's inner box. Footprints are data in `OfficeConfig` (the client needs them too, and `ReplicatedStorage` cannot require `PlotArt`); a test proves each covers its art's real part boxes (`PlotVisuals.boxOf`, PlotVisuals.lua:65-72).
-- **Overlap:** two footprints may not overlap by more than 0.1 stud (2D test on rotated rectangles). Floor marks (rugs: at most `PlotVisuals.FLAT` = 0.2 high, PlotVisuals.lua:38) may lie under anything. No footprint may enter a reserved zone from `PlotVisuals.zones` (PlotVisuals.lua:504-531): signs, spawn and lane, incubators and their front, hire spots and hire desks. The six upgrade slot zones stop being reserved.
-- **Height:** an object is at most 12 studs tall (today's back-wall cap, PlotVisuals.lua:42), so it stays under the building-pass roof (underside at 14).
-- **Budgets:** parts and PointLights (section 4) are counted by the server from the art, never sent by the client.
-- **Rate limit:** dragging happens on the client; only the drop is sent. 4 requests/s with a burst of 8, and 120 per minute (token bucket, like TaskServer's). Spam is refused, not queued.
-- **The validation is one pure function in `OfficeConfig`.** The client runs it for the red/green preview; the server runs it again and decides.
+Today `goPublic` (IpoServer.lua:177-243) calls `commitIpo` (TycoonCore.lua:544-588), whose save transform resets Cash, `owned` and incubator eggs (`IpoConfig.Resets`, IpoConfig.lua:53-58) and writes the new `ipo` section. The new IPO:
 
-**Income:** placement never changes income. `totalIncome` sums owned upgrades and employees (TycoonCore.lua:137-145) and reads no position. Buildings have **no Income**, the same rule as `LONG_ITEMS` in tools/economy_sim.py:1063 ("a desk and an office have no Income"). Furniture has no Income (open question 4). A stored upgrade still earns (open question 4). **No new `addEarnings` call:** buying spends Cash only. tools/daily_test.py:4327-4334 lists every call site and must stay as it is. Spending Cash does not lower the valuation (valuation = Cash earned, IpoConfig.lua:4).
+1. **The IPO window gets a step before Confirm:** pick the next company's sector (D-C: any enabled sector, the current one included) and, at the cap, the held company to retire.
+2. **Request:** `IpoAction("GoPublic", ipoNumber, sectorKey, retireId)`. The server checks the types, that the sector is enabled, that `retireId` is a held id exactly when the cap is reached, plus every check it makes today (`ipoNumber == count + 1` already makes a repeat impossible, IpoServer.lua:179).
+3. **One save, one transform (atomic):** snapshot the active company into `held` (owned list, decor, objects, building, valuation, base Income, dividend); write the new `active` (new id, the chosen sector, a name, `foundedAt`, `building = 1`, no decor, no objects); `companies.run = count + 1`; Cash = `StartingCash` + seed. Today's resets stay (Cash, `owned`, incubator eggs): they now mean "the old company's" and live on in its held record.
+4. **Only if that save worked** does the game change, as today (TycoonCore.lua:565-587): the plot rebuilds as the new sector's Garage, and the Office tab and tasks switch sector.
 
-**No `Touched` handler:** the drag is client input (a screen ray onto the floor plane, plain maths). Decor parts have `CanQuery` off (PlotVisuals.lua:105), so the client picks objects by testing the tap point against the footprints, not with a raycast. tools/daily_test.py:4254-4256 still allows only the VIP door.
+`IpoConfig.ResetNames` (IpoConfig.lua:60-65) and the IPO window's lists change wording: "Your company goes to your Portfolio. Your new company starts in a garage with $X of funding."
 
-## 4. Part budget
+**A10 run check:** if `companies.run ~= ipo.count` on load, an older version ran an IPO without knowing this section (and reset `owned`, TycoonCore.lua:552-554). The stale `active` then becomes a held entry with what it knew (sector, name, building, objects; dividend 0, its Income is unknown), and a new `active` of the same sector starts at the Garage with `run = ipo.count`. Nothing is lost that the older code had not already reset, and no seed is paid twice (only the new IPO pays one).
 
-**What exists:** `PlotVisuals.MAX_PARTS = 260` per room, props included, and `MAX_LIGHTS = 3` per plot (PlotVisuals.lua:39-40). Rooms with the six props use 256 / 244 / 254 / 253 / 257 parts (docs/PLOT_VISUALS.md table).
+### 1.6 Choosing a sector (D-C)
 
-**Why the limit exists:** the code and docs give the number but **no written reason**. It was 220 in the first commit (`1fba576`) and was raised to 260 (ROADMAP.md line 41). The likely reason **(inferred)**: server-built parts replicate to every player (PlotVisuals.lua:5-6), so each phone draws all 6 plots (`MAX_PLOTS = 6`, TycoonCore.lua:76). The place's StreamingEnabled setting and real frame rates are **(unverified)**.
+- **First founding:** a new player's first screen is the sector picker (window `OpenPanel = "Sector"`, four cards: icon, name, one line on how it makes money, then Confirm). The Garage is built in that sector's look after the pick; onboarding (free egg, arrow) starts then. `CompanyAction("PickSector", key)` is accepted only while `active.sector` is not set; after that the sector changes only through an IPO.
+- **Existing saves** (no `companies` section, every dev save) are Software, never asked.
+- **Until all four sectors exist** the picker is off and every company is Software (`SectorConfig.PickerEnabled = false`, the same pattern as `TaskConfig.StudioOnly`).
 
-**Per-object costs (counted in PlotArt.lua):**
+## 5. The office: what stands where, and what the server checks
 
-| Object | Parts | | Object | Parts |
-|---|---|---|---|---|
-| Desk (806-832) | 24 | | Hire desk Garage / Seed / A / B / IPO (369, 457, 568, 676, 789) | 2 / 5 / 5 / 5 / 6 |
-| Coffee Machine (834-853) | 17 | | Sofa, `sofaLeft` (164-172) | 5 |
-| Laptop (855-874) | 17 | | Plant, `plant` (156-161) | 2 |
-| Server Rack (876-903) | 24 | | Founder's desk, `founderDesk` (176-190) | 11 |
-| Whiteboard (905-927) | 19 | | **Six upgrades together** | **118** |
-| Neon Logo (929-949) | 17 | | | |
+Coordinates are measured from the **anchor**, the front-center of the floor (section 4): `x` to the right, `z` negative toward the back. Today's plot-center offsets convert with `z_anchor = z - 30`; the world position stays the same.
 
-Shell + decor of today's rooms = total - 118 - 11 desks: **116 / 71 / 81 / 80 / 73**. The split between shell and decor is **not measured**: there is no `luau` on this machine, so I did not build them.
-
-**The problem:** in a 260 budget, a shell **(estimate: 60 parts at most)** + 11 hire desks (up to 66) + the six upgrades (118) leaves **16 parts** for furniture: about 3 pieces. That is not a game.
-
-**Proposal:**
-1. **Draw only the hire desks the player has** (`maxEmployees`, 5 to 11): saves up to 36 parts at the start.
-2. **`MAX_PARTS` per plot = 320** (shell ≤ 60, hire desks ≤ 66, placed objects ≤ 194: the six upgrades + about 76 parts of furniture, 8-15 pieces). Lights: 3 per plot, counted over shell and objects. Lamps are refused once 3 are placed.
-3. **Server total:** 6 x 320 = **1,920 parts** (today at most 6 x 257 = 1,542, +25%). **Gate:** a phone test with 6 full plots before raising it. If it fails, stay at 260 and cut hire-desk skins to 2 parts.
-4. **The edit UI shows a budget bar** ("Space: 182 / 194"), so a refusal is never a surprise.
-
-**Building-pass 64-part budget: compatible.** It is a separate sibling Model with its own budget, not counted in the room's (docs/BUILDING_PASS_PROPOSAL.md on `building-pass`, D-1). With it: 384 per plot, 2,304 per server. Its roof underside (14) matches the 12-stud object cap, and its door (x -4.5 to 4.5) is inside the reserved lane. Only its key changes: it builds per building, not per stage (section 8).
-
-## 5. Phone and PC UX
-
-**Edit mode is a window.** It sets `OpenPanel = "Office"`, so every other window closes (e.g. ShopClient.lua:731-735) and the task tray hides (TaskClient.lua:28). Like the Shop, it hides the thumbstick and jump button (`GuiService.TouchControlsEnabled`, ShopClient.lua:725), so the character stands still. **The inventory can never cover the Shop header,** because the two are never open together: opening the Shop ends edit mode. "Get more" in the inventory first closes edit mode, then opens SHOP > Office.
-
-- **Entry:** an "Arrange your office" card at the top of SHOP > Office. **No new HUD slot**: slots 0-4 fill the landscape top row up to x 370 (10 + 5 x 72, ShopClient.lua:101-104), and the valuation bar and gift chip use the rest (IpoClient.lua:238-242).
-- **Camera:** a fixed top-down view of the whole 60 x 60 floor while editing (`Scriptable` camera, restored on exit). There is no camera gesture to fight with the drag. About 5 px per stud on a 667 x 339 GUI **(estimate)**.
-- **Touch:** tap an object to select it (outline on the client only), then drag **anywhere** on the screen to move it by the finger's offset, so small objects don't need precise taps. It snaps to 0.5 stud and turns red when the shared check (section 3) says no. Lifting the finger sends one `"Place"`; a refusal snaps it back with the reason in a toast.
-- **Buttons:** Rotate ⟳ (45°), Store 📦 (back to the inventory; it keeps earning), Done ✓. All 56 x 56 **(estimate, above the 44 px minimum)**.
-- **PC:** drag with the mouse, R rotates, Delete stores, Esc or E exits.
-- **Layout (GUI px; the GUI is the device minus Roblox's top bar, which `IgnoreGuiInset = false` keeps; the bar's size is not measured, TaskClient.lua:8-11; 36 px assumed below):**
-
-| | 667 x 375 landscape (GUI 667 x 339) | 320 x 568 portrait (GUI 320 x 532) |
+| Thing | Source | Rule |
 |---|---|---|
-| Kept clear | HUD row + valuation bar + chip, y 6-70 | HUD column x 12-88 (ShopClient.lua:106-108) and the bar at x 98, y 12-76 |
-| Inventory strip | x 10-591, y 257-329, tiles 64 x 64, scrolls sideways | x 98-310, y 450-522, 3 tiles visible |
-| Buttons | column x 601-657, y 82-266 | row x 98-310, y 386-442 |
-| Budget bar | above the strip, y 233-251 | above the buttons, y 362-380 |
+| Floor (60 x 60, today the only solid part) | TycoonCore.lua:736 | grows with the building (section 4) |
+| Spawn (0, 12) and the walking lane | TycoonCore.lua:698; PlotArt.lua:37, 66-68 | fixed, reserved |
+| BuySign (0, 24), IpoSign (21, 24) | TycoonCore.lua:75; IpoServer.lua:21 | fixed, reserved |
+| 5 incubators at z -25, Hatch prompt | EmployeeServer.lua:37-40, 531-544 | fixed, reserved with the space in front |
+| 11 hire spots and hire desks | EmployeeServer.lua:31-35, 172-175; PlotVisuals.lua:199-203 | fixed in v1 (owner default), a skin per building and sector |
+| Six upgrade props (Software) | `itemOffset` TycoonCore.lua:131-135, `spawnItem` :189-201 | movable; default spot = today's slot |
+| Furniture | PlotArt stage decor, cut into pieces | movable, bought |
 
-All rows are **(estimate)** until checked in Studio with Test > Device at 320x568 and 667x375, with a top bar of 0, 36 and 58 px, as `TRAY_TESTS` does. Pop-up toasts (bottom center) may cross the strip for a moment; the strip draws below them (DisplayOrder -2, like the tray).
+**Employees** do not sit: the server sets a `Home` point per hire (EmployeeServer.lua:185, 199) and the client wanders 3 studs around it (EmployeeClient.lua:984-999). Hire desks don't move in v1, so nothing changes.
 
-## 6. Shop changes
+**Moving in (D-A):** buying building n+1 keeps `objects` exactly as they are. Building n+1 contains building n and every reserved zone is the same, so every placed object stays valid without a check that could fail. The new area is empty except the building's **free starter set** (owner default): a fixed list in the sector data (its hire-desk skin and one furniture piece) at fixed spots in the new area, checked by the tests. If the budget is full, a starter piece goes to the inventory instead: never refused, never lost.
 
-- **No new tabs.** The window is 614 px wide at 667 x 339 and 294 px at 320 x 532 (0.92 of the GUI, max 640 x 470, 10 px padding: ShopClient.lua:133-150). Tabs share that width (ShopClient.lua:204). In portrait, 5 tabs (with Debug) are about 49 px each; 7 would be about 33 px, too narrow to read. So **SHOP > Office gets three sections** in its scrolling page: **Buildings**, **Upgrades** (the six, unchanged), **Furniture**, plus the "Arrange" card on top.
-- **Buildings section:** one card per building: Locked ("Reach Seed"), Buy ($), Owned / Move in / Active. `"Buildings"` and `"BuyBuilding", n` on the existing `ShopAction` (ShopServer.lua:701-715, 802-805), with the number only, like `"BuyUpgrade"`. One server function with the same checks as `checkUpgradePurchase` (TycoonCore.lua:243-270): ready, number, already owned, stage reached (`IpoConfig.stageIndex(valuation, count)`, IpoConfig.lua:151), Cash, 0.4 s rate.
-- **Furniture section:** cards unlock at their stage (`"Objects"`, `"BuyObject", n`). Bought furniture goes into the inventory, not straight into the room.
-- **Prices (an open table for the owner; the draft scales with the stage thresholds, IpoConfig.lua:19-22, x 2.5 per IPO, :27):**
+**Server checks.** One remote, `CompanyRemotes.CompanyAction` (a RemoteFunction made by `CompanyServer.init`): `"Place", id, x, z, r` · `"Store", id` · `"Sync"` · `"PickSector", key`. Purchases use the existing `ShopAction` (section 7). On every request:
+- `data.ready` (false while loading and during the IPO save, IpoServer.lua:211-213) and `data.companies` exist.
+- **Types:** `id` a string under 40 characters; `x`, `z` finite numbers, rounded to 0.5; `r` a whole number 0-7. Anything else: "Bad request".
+- **Ownership:** an upgrade id must be in `data.owned`; `Plant#2` needs `decor.Plant >= 2`.
+- **Bounds:** the footprint (a rectangle turned by `r`) stays inside the active building's inner box (section 4).
+- **Overlap:** footprints may not overlap by more than 0.1 stud; floor marks (at most `PlotVisuals.FLAT` = 0.2 high, PlotVisuals.lua:38) may lie under anything. No footprint enters a reserved zone of `PlotVisuals.zones` (PlotVisuals.lua:504-531); the six upgrade slot zones stop being reserved.
+- **Height:** at most 12 studs (PlotVisuals.lua:42), under the building-pass roof (underside 14).
+- **Budgets** (section 6) are counted by the server from the art, never sent by the client.
+- **Rate:** only the drop is sent; 4 per second, burst 8, 120 per minute. Spam is refused, not queued.
+- **One pure function in `CompanyConfig`** does the check: the client runs it for the red/green preview, the server runs it again and decides. Footprints are data in the sector module; a test proves each covers its art's part boxes (`PlotVisuals.boxOf`, PlotVisuals.lua:65-72).
 
-| Building | Unlocks at | Draft price, IPO 0 (50% of the threshold) | LONG_GAME office for reference |
-|---|---|---|---|
-| Garage | start | owned | Garage 0 |
-| Seed | Seed (1,800) | 900 | Co-working Loft 580K |
-| Series A | Series A (6,300) | 3,150 | Downtown Floor 2M |
-| Series B | Series B (23,400) | 11,700 | Campus Wing 7.8M |
-| IPO-ready | IPO-ready (81,000) | 40,500 | Global HQ 62M |
-| Furniture | its stage | 10-25% of its stage's threshold each | decor (LONG_GAME section 4) |
+**Income:** placement never changes it (`totalIncome` reads no position, TycoonCore.lua:137-145). Buildings and furniture have no Income (as `LONG_ITEMS`, tools/economy_sim.py:1063); a stored upgrade keeps earning (owner default). Buying spends Cash only: **no new `addEarnings` call** (tools/daily_test.py:4327-4334). **No `Touched` handler:** the drag is a screen ray onto the floor plane, and since decor has `CanQuery` off (PlotVisuals.lua:105) the client picks objects by testing the tap point against footprints (tools/daily_test.py:4254-4256 still allows only the VIP door).
 
-  Fit with `tools/economy_sim.py` before PR 2. LONG_GAME's numbers belong to its future economy, not today's.
-- **D9:** in v1, buildings and furniture are sold for **Cash only**. Anything sold for Robux later (LONG_GAME section 6 "decor bundles") has fixed, listed contents: never a random box, crate or "mystery" item. `OfficeConfig` text may not say odds, chance, luck or random (the same word test as TaskConfig, tools/daily_test.py:4344).
+## 6. Part budget
 
-## 7. Existing saves, IPO resets, the old rooms
+- **Today:** `MAX_PARTS = 260` per room (props included) and `MAX_LIGHTS = 3` per plot (PlotVisuals.lua:39-40); rooms use 256 / 244 / 254 / 253 / 257 (docs/PLOT_VISUALS.md). No written reason for 260 (it was 220 in `1fba576`, raised per ROADMAP.md:41). Likely reason **(inferred)**: server-built parts replicate to every player, and a server has 6 plots (TycoonCore.lua:76). StreamingEnabled and real frame rates are **(unverified)**.
+- **Costs (PlotArt.lua):** Desk 24 (806-832), Coffee Machine 17, Laptop 17, Server Rack 24, Whiteboard 19, Neon Logo 17: **118 for the six**. Hire desk 2 / 5 / 5 / 5 / 6 by stage; sofa 5 (164-172), plant 2 (156-161), founder's desk 11 (176-190).
+- **The problem:** shell **(estimate ≤ 60)** + 11 hire desks (≤ 66) + the six upgrades (118) leaves 16 of 260 parts for furniture: about 3 pieces.
+- **Proposal:** draw only the hire desks the player has (`maxEmployees`, 5 to 11, saves up to 36); `MAX_PARTS` per plot **320** (shell ≤ 60, hire desks ≤ 66, placed objects ≤ 194, enough for the six upgrades plus 8-15 furniture pieces); 3 lights per plot over everything; a budget bar in edit mode. A bigger building does not need more parts: a wall is one Part whatever its length. Server total 6 x 320 = 1,920 (today at most 1,542), 2,304 with the building pass's 64.
+- **Unresolved (owner default):** no budget change until the phone test with 6 full plots at the largest building (gate G-S, section 9). If it fails, stay at 260 and thin the hire desks to 2 parts.
 
-- **Existing saves:** no `office` section means the Garage, each owned upgrade at its old slot, no furniture. A dev save at Seed or higher sees the Garage until it buys the Seed building (the game is not launched: docs/PUBLISH_RULES.md section 2, so there are no player saves to migrate).
-- **IPO (recommended, open question 2):**
-  - **Resets:** Cash, upgrades, eggs (today, IpoConfig.lua:53-58), and **the buildings bought**. That is a new key `Buildings = true` in `IpoConfig.Resets`, plus a `ResetNames` entry "office buildings", so the IPO screen lists it by itself (`resetItems`, IpoConfig.lua:122-130). `commitIpo`'s transform (TycoonCore.lua:548-564) also sets `payload.office.buildings = {}`, `active = "Garage"` and `run = new count` in the same save, so the change is atomic.
-  - **Kept:** furniture owned and **every layout**. Rebuying a building next run puts everything back where it was, and the upgrades go back to their saved spots as they are rebought. The ladder replays, as LONG_GAME section 4 says ("Loops 2+ replay the ladder"), without making the player redo the layout.
-- **Old pre-built rooms:**
-  - Stage 1 Garage stays as it is: shell, decor, fingerprint test.
-  - Stages 2-5: `Shell` is already a separate group (PlotVisuals.lua:196) and becomes the building. Each `decor` list is cut into catalog objects (sofa, plants, lamps, meeting table, trophy shelf, ...), and each `desk` list becomes that building's hire-desk skin.
-  - `syncRoom` (TycoonCore.lua:182-186) stops swapping rooms by stage. The flash plays on "Move in" instead.
+## 7. Phone and PC, the Shop, the Portfolio
 
-## 8. Impact on other branches and docs
-
-| Branch / doc | What changes | Status |
-|---|---|---|
-| `visuals-garage` (PlotArt, PlotVisuals, docs/PLOT_VISUALS.md, CLAUDE.md "Plot visuals") | `newPlot`/`setStage` (PlotVisuals.lua:235-269) become per building; `buildProp` takes a position and a rotation instead of a slot; the stage 2-5 story tests and the rule "the six upgrade props are identical in every room and never move" are rewritten; stage 1, props and layout fingerprints stay | **must change** (base of this work) |
-| `building-pass` (PlotBuilding, PlotBuildingVisuals, BuildingClient, integration patch E2) | `sync(..., stageOf(data))` becomes the active building; per-stage keys stay valid as building keys; budget and fade unchanged | **small change**, not obsolete |
-| `design-tutorial` (docs/TUTORIAL_PROPOSAL.md) | Steps 1 and 4 stay valid (a bought upgrade appears at its default spot); the Office cards move down under "Buildings", so TutorialClient must find `Office1` by name and scroll to it (its plan already does); step 9's list gains "office buildings"; a later "Arrange your office" step | **must change** (small) |
-| docs/LONG_GAME_PROPOSAL.md | Its "Offices" (section 3) **are** these buildings (0 Income, economy_sim.py:1063); its 7 offices vs 5 stages (Series C+D has two) needs one rule; its "decor 20" is the Furniture catalog; its 18 priced desks fight the 11 spots and the part budget; PR 4 "Office framework" is replaced by this plan | **must change** |
-| `PlotArt` pre-built rooms 2-5 as rooms | replaced by shells + catalog | **obsolete** as rooms |
-| Onboarding arrow | points at incubators and the BuySign (OnboardingServer.lua:103-121), both fixed | unaffected |
+- **Edit mode is a window** (`OpenPanel = "Office"`): every other window closes, the task tray hides (TaskClient.lua:28) and the thumbstick and jump button hide (`GuiService.TouchControlsEnabled`, ShopClient.lua:725). Entry: an "Arrange your office" card at the top of SHOP > Office; no new HUD slot (slots 0-4 fill the landscape row to x 370, ShopClient.lua:101-104).
+- **Camera:** a scripted top-down view of the whole building. At 78 x 84 studs (section 4) that is about 3.5 px per stud on a 667 x 339 GUI **(estimate)**, so a Laptop (3 x 2 studs) is about 10 x 7 px: objects are also selected from the inventory strip, and two-finger pinch zooms.
+- **Touch:** tap or pick from the strip to select, then drag anywhere on the screen to move by the finger's offset; snap 0.5 stud; red when the shared check says no; lifting the finger sends one `"Place"`. Buttons Rotate (45°), Store, Done, 56 x 56 px **(estimate)**. **PC:** mouse drag, R rotates, Delete stores, Esc or E exits.
+- **Layout (estimate, GUI px):** landscape 667 x 339: strip x 10-591, y 257-329; buttons x 601-657, y 82-266; budget bar y 233-251. Portrait 320 x 532: strip x 98-310, y 450-522; buttons y 386-442; bar y 362-380. Checked in Studio with Test > Device and top bars of 0, 36 and 58 px, like `TRAY_TESTS`.
+- **Shop: no new tabs** (tabs share the window width, ShopClient.lua:133-150, 204). SHOP > Office gets three sections: **Buildings** (the next one: Locked "Reach Seed" or Buy; bought ones listed), **Upgrades** (the sector's six), **Furniture**. Requests `"Buildings"`, `"BuyBuilding", n`, `"Objects"`, `"BuyObject", n` on `ShopAction` (ShopServer.lua:701-715, 802-805), with the same checks as `checkUpgradePurchase` (TycoonCore.lua:243-270): ready, a number, not owned, stage reached (`IpoConfig.stageIndex`, IpoConfig.lua:151), building n-1 owned, Cash, 0.4 s rate.
+- **Draft prices:** a building costs 50% of its stage's threshold (Seed 900, Series A 3,150, Series B 11,700, IPO-ready 40,500 at IPO 0; IpoConfig.lua:19-22, x2.5 per IPO :27); furniture 10-25% of its stage's threshold. Fit with tools/economy_sim.py before the shop PR.
+- **D9:** buildings and furniture are sold for Cash only in v1; anything sold for Robux later has fixed, listed contents. Sector text may not say odds, chance, luck or random (the TaskConfig word test, tools/daily_test.py:4344).
+- **Sector picker and Portfolio:** the picker is a 2 x 2 grid (portrait) or a row of 4 (landscape); the Portfolio is a scrolling list of cards in the IPO window.
 
 ## 9. Build plan (each PR small, tested in the fake Roblox of `tools/daily_test.py`)
 
@@ -168,7 +147,18 @@ All rows are **(estimate)** until checked in Studio with Test > Device at 320x56
 
 Each PR: claim the scripts first, `python3 tools/daily_test.py` passes, publish with **Shut down all servers** (PR 1 adds the section).
 
-## 10. Open questions for the owner (most important first, with my recommendation)
+## 10. Impact on other branches and docs
+
+| Branch / doc | What changes | Status |
+|---|---|---|
+| `visuals-garage` (PlotArt, PlotVisuals, docs/PLOT_VISUALS.md, CLAUDE.md "Plot visuals") | `newPlot`/`setStage` (PlotVisuals.lua:235-269) become per building; `buildProp` takes a position and a rotation instead of a slot; the stage 2-5 story tests and the rule "the six upgrade props are identical in every room and never move" are rewritten; stage 1, props and layout fingerprints stay | **must change** (base of this work) |
+| `building-pass` (PlotBuilding, PlotBuildingVisuals, BuildingClient, integration patch E2) | `sync(..., stageOf(data))` becomes the active building; per-stage keys stay valid as building keys; budget and fade unchanged | **small change**, not obsolete |
+| `design-tutorial` (docs/TUTORIAL_PROPOSAL.md) | Steps 1 and 4 stay valid (a bought upgrade appears at its default spot); the Office cards move down under "Buildings", so TutorialClient must find `Office1` by name and scroll to it (its plan already does); step 9's list gains "office buildings"; a later "Arrange your office" step | **must change** (small) |
+| docs/LONG_GAME_PROPOSAL.md | Its "Offices" (section 3) **are** these buildings (0 Income, economy_sim.py:1063); its 7 offices vs 5 stages (Series C+D has two) needs one rule; its "decor 20" is the Furniture catalog; its 18 priced desks fight the 11 spots and the part budget; PR 4 "Office framework" is replaced by this plan | **must change** |
+| `PlotArt` pre-built rooms 2-5 as rooms | replaced by shells + catalog | **obsolete** as rooms |
+| Onboarding arrow | points at incubators and the BuySign (OnboardingServer.lua:103-121), both fixed | unaffected |
+
+## 11. Open questions for the owner (most important first, with my recommendation)
 
 1. **When you buy a new building, do owned objects move in by themselves, or does the player re-place them?** Recommend: by themselves, copying the current layout where it is valid in the new shell and using the default spot otherwise. The player can rearrange.
 2. **Does an IPO take the buildings away (rebuy each run) or keep them?** Recommend: take them away and keep the layouts (section 7).
@@ -182,7 +172,7 @@ Each PR: claim the scripts first, `python3 tools/daily_test.py` passes, publish 
 ## What I did not verify
 
 - No `luau` on this machine: I built no room. Shell-only part counts, the 60-part shell cap and every footprint are **not measured**.
-- Every UI size in section 5 except the ones cited from code; Roblox's top-bar height; the 5 px/stud camera estimate.
+- Every UI size in section 7 except the ones cited from code; Roblox's top-bar height; the camera scale.
 - Why `MAX_PARTS` is 260 (no written reason); phone frame rate with 1,920 parts; the place's StreamingEnabled setting.
 - Whether `TouchControlsEnabled = false` still allows the default touch camera (moot with the scripted camera, but not tested).
 - The 4 MB DataStore key limit (Roblox's docs, not checked here).
