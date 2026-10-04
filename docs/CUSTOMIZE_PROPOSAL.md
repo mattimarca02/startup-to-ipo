@@ -91,7 +91,11 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
 
 **Per sector** (`Sector<Name>` data, `SectorArt<Name>` art): identity (`key`, name, icon, palette, 12+ company names); 5 buildings (size, shell, desk skin, starter set); upgrades (key saved in `owned`, never reused; name, joke, price, Income, footprint, default spot; Software keeps today's six, TycoonCore.lua:65-72); furniture; tasks in `TaskConfig.Rows` format (TaskConfig.lua:49); per creature key a name, job (today's `role`, CreatureConfig.lua:56-104) and joke; egg names; one income model; bundles with fixed contents and `id = 0`. Art uses PlotArt's `P(...)` format (PlotArt.lua:9-23) and passes PlotVisuals' checks.
 
-**Income models** (deterministic, capped, engaged time only, fitted to Software ±5% per rung): **Software** steady Income (today); **Fintech** lower Income plus interest on Cash held; **Biotech** lower Income plus a fixed research payout every N engaged minutes (a visible timer, never a roll); **Gaming** Income plus a launch (a graded Timing task doubles Income for a few minutes, then a cooldown).
+**Income models** (deterministic, capped, engaged time only; every number a **placeholder** for S3). **Software:** steady Income (today). The other three are `Sector<Name>.extra(data, seconds)`, Cash computed from **base Income** (`baseIncome`, TycoonCore.lua:677-680: no passes or bonus), added to the amount of the **existing income-loop call** (TycoonCore.lua:866; from LONG_GAME PR 2 `kind = "engaged"`, so the 3 h/day weight applies) and only while engaged. **No new call site:** daily_test.py:4327-4334 counts calls per file and fails on a new one until reviewed. Never in offline pay (:825), the away bank or `baseIncome` itself (task rewards would double too).
+- **Fintech:** interest r per minute on Cash held, on at most H seconds of base Income (hoarding past H earns nothing).
+- **Biotech:** every N engaged minutes (a visible timer that pauses when not engaged, never a roll) P seconds of base Income, in that second's amount.
+- **Gaming:** a graded Timing task (a `TaskConfig` row; its own pay goes through TaskServer.lua:257 like every task) starts a launch: base Income x L for D minutes, then C minutes of cooldown; the extra (L - 1) rides the income loop.
+- **Parity:** each sector's item Incomes are lowered until item Income plus the model's average extra per engaged hour is within ±5% of Software on every rung for every `LONG_PLAYERS` profile (S3), with no bot or hopper gain (S4, S5). Passes multiply Cash afterwards, the same for all four. Whether a model ships at all, and whether Fintech may reward holding Cash, is the owner's (section 8).
 
 **Content:** the content bible (`content-bible`) names 168 things for Software (upgrades 42, decor 22, hires 18, desks 18, events 12, titles 9, skins 9, board requests 8, offices 7, products 6, eggs 6, caller groups 6). Per new sector **(estimate)**: about 185 names plus 48 caller lines and about 75 art builds (42 props, 22 furniture, 5 shells, desk skins); three sectors about 555 names and 225 builds. In code today: 6 props (118 parts, PLOT_VISUALS.md:34), 5 rooms, 12 creatures, 3 eggs (CreatureConfig.lua:23-41), 1 task (`Call`). Mechanics are reused: no new action type, no new body.
 
@@ -216,7 +220,7 @@ Also: "the IPO is the last thing" (LG:1-3) holds per company; +5% per loop (LG:1
 4. **Next sector:** any sector (recommend) or a not-yet-completed one first?
 5. **Legacy IPOs:** no stamp (recommend), or Bronze in Software for saves with `ipo.count ≥ 1`?
 6. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
-7. **Fintech, Biotech, Gaming income models:** the mechanics (only if S3-S4 pass) or today's Income with themed text?
+7. **Fintech, Biotech, Gaming income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech's interest rewards holding Cash, against the buy loop: keep it, or a model that pays for spending?
 8. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S, after the Studio checks.
 
 ## What I did not verify
