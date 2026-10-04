@@ -230,26 +230,28 @@ Duplicate seed is a test, not a sim: daily_test cases for a failed IPO save retr
 
 ## 9. Build plan
 
-Each PR: claim its scripts, `python3 tools/daily_test.py` passes (fake Roblox), F5 with no red errors, publish with **Shut down all servers**. Create new modules in Studio **before** pasting the script that requires them (`WaitForChild` without a timeout hangs, PUBLISH_RULES 2b). PR 1-8 don't need LONG_GAME; PR 9-14 need its economy core (PR 2), since dividends and income models are measured on the engaged clock.
+Each PR: claim its scripts, `python3 tools/daily_test.py` passes (fake Roblox), F5 with no red errors, publish with **Shut down all servers**. Create new modules in Studio **before** pasting the script that requires them (`WaitForChild` without a timeout hangs, PUBLISH_RULES 2b). **PR 1 ships the whole `pokedex` format** (every field of 1.2 loaded, checked and written back even while unused): code that knows a section drops the fields it doesn't know (A10), so a field added later would be lost on a rollback to PR 1-3. PR 1-7 don't need LONG_GAME; PR 8-14 need its economy core (PR 2: the engaged clock, base valuation).
 
 | PR | Content | Tests | Studio by hand |
 |---|---|---|---|
 | **Engine** | | | |
-| 1 | `companies` save: `CompanyServer`, `CompanyConfig` (the check), `SectorConfig` (Software, picker off); run check, anchor coordinates, `spawnItem` reads the layout; `"Place"`/`"Store"`/`"Sync"`; Debug "move Desk", "reset layout" | round trip; no section = today; `v = 2` and unknown sector kept; run mismatch; types, NaN, bounds, overlap, zones, rate, ownership; `addEarnings` count; section list | Create the 3 modules, then paste TycoonCore, ShopServer. Debug, rejoin: the Desk stayed moved |
-| 2 | Nested buildings (section 4 sizes), floor strips, move-in, starter set, `"BuyBuilding"`, Buildings section; Software shells cut from PlotArt 2-5 | nested; spots; objects unchanged on move-in; locked by stage; Cash; budgets; stage 1 fingerprints | Paste PlotArt, PlotVisuals, CompanyConfig, CompanyServer, TycoonCore, ShopServer, ShopClient. Buy Seed: the Desk didn't move, the new floor is walkable |
+| 1 | `pokedex` save (full format, legacy conversion, run check, versioning); `CompanyServer`, `CompanyConfig` (the placement check), `SectorConfig` (Software, picker off); anchor coordinates, `spawnItem` reads the layout; `"Place"`/`"Store"`/`"Sync"`; Debug "move Desk", "reset layout" | round trip; no section = today; legacy IPO count gives no stamp; `v = 2` and unknown sector kept, actions refused; run mismatch; types, NaN, bounds, overlap, zones, rate, ownership; `addEarnings` count; section list | Create the 3 modules, then paste TycoonCore, ShopServer. Debug, rejoin: the Desk stayed moved |
+| 2 | Nested buildings (section 4 sizes), floor strips, move-in, starter set, `"BuyBuilding"`; Software shells cut from PlotArt 2-5 | nested; spots; objects unchanged on move-in; locked by stage; Cash; budgets; stage 1 fingerprints | Paste PlotArt, PlotVisuals, CompanyConfig, CompanyServer, TycoonCore, ShopServer, ShopClient. Buy Seed: the Desk didn't move, the new floor is walkable |
 | 3 | `CompanyClient` edit mode: drag, rotate, store, camera, pinch, strip, budget bar | rectangles at 320x568 / 667x375, top bars 0/36/58; sends only id, x, z, r | Create `CompanyClient`; Test > Device both sizes, touch and mouse |
-| 4 | IPO to a new company: `held`, seed, retire, Portfolio, `"GoPublic"` + sector (Software), wording; dividends at 0 | atomic transform; seed cap; repeat refused; retire; frozen records; run check; `addEarnings` count | Paste IpoConfig, IpoServer, CompanyServer, TycoonCore, IpoClient. IPO twice: 2 cards; rejoin |
-| **Sector format** | | | |
-| 5 | `SectorSoftware` + `SectorArtSoftware` (today's content, keys unchanged); engine reads only `SectorConfig`; per-sector task rows and creature texts; income-model hook | no sector key in engine; fingerprints unchanged; every creature covered | Create both, paste the rest. F5: looks and earns as before |
-| 6 | Picker for the first founding, `"PickSector"`, `PickerEnabled` in Studio only; a 2nd sector only as a test fixture | only while unset; unknown/disabled refused; old saves never asked | Debug "Reset company", picker on: pick at phone size |
+| **Pokedex** | | | |
+| 4 | IPO completes the company: Bronze, card, seed (Studio only until S1), `"GoPublic"` + sector, Pokedex tab, wording; picker on every founding and the first, `"PickSector"`, `picked`; `PickerEnabled` in Studio only, a 2nd sector only as a test fixture | one transform; Bronze once; `"done"` never goes back; seed cap and exactly once; repeat refused; run check; picker only while `picked == false`; `addEarnings` count | Paste IpoConfig, IpoServer, CompanyServer, TycoonCore, IpoClient; create `CompanyClient`'s picker. IPO twice: two stamps or a replay; rejoin |
 | **Software slice** | | | |
-| 7 | Software buildings 2-5 at section 4 sizes, desk skins, starter sets, skyline handled | shell checks per building | Walk buildings 1-5 |
-| 8 | Software furniture (PlotArt + bible decor), `"BuyObject"`, light cap | footprints; budget and light refusals; D9 words | Buy, place, hit the budget, rejoin |
-| **G-S** | **Go / no-go.** (a) 6 accounts, every plot at building 5 with a full budget, on a real low-end phone: ≥ 30 fps **(estimate)**; pick 260 or 320. (b) Every building in budget. (c) 3+ players: found, buy 2 buildings, arrange on a phone unaided, IPO into a new company, rejoin. (d) Sims S1-S5 pass. **No-go: fix and repeat before any other sector** | | |
-| **Sectors** | | | |
-| 9-10 | Fintech: `SectorFintech` (texts, tasks, interest), then `SectorArtFintech` | parity ±5%, footprints, D9 words, `id = 0` | Found a Fintech company; walk 1-5 |
-| 11-12 / 13-14 | Biotech (research payout), Gaming (launch): the same | same | same |
-| 15 | Picker on for live servers; PUBLISH_RULES "2d" note | all four in the picker | Publish; pick each sector on a phone |
+| 5 | `SectorSoftware` + `SectorArtSoftware` (today's content, keys unchanged); the engine reads only `SectorConfig`; per-sector task rows and creature texts; income-model hook | no sector key in engine; fingerprints unchanged; every creature covered | Create both, paste the rest. F5: looks and earns as before |
+| 6 | Software buildings 2-5 at section 4 sizes, desk skins, starter sets, skyline handled | shell checks per building | Walk buildings 1-5 |
+| 7 | Software furniture (PlotArt + bible decor), `"BuyObject"`, light cap | footprints; budget and light refusals; D9 words | Buy, place, hit the budget, rejoin |
+| **G-S** | **Go / no-go.** (a) 6 accounts, every plot at building 5 with a full budget, on a real low-end phone: ≥ 30 fps **(estimate)**; pick 260 or 320. (b) Every building in budget. (c) 3+ players: pick, buy 2 buildings, arrange on a phone unaided, IPO into a new sector, find the card, rejoin. (d) Sims S1, S3, S5 pass. (e) The section 4 Studio checks are done. **No-go: fix and repeat before any other sector** | | |
+| **Sectors** (need LONG_GAME PR 2) | | | |
+| 8-9 | Fintech: `SectorFintech` (texts, tasks, interest), then `SectorArtFintech` | parity ±5%, footprints, D9 words, `id = 0` | Pick Fintech; walk buildings 1-5 |
+| 10-11 / 12-13 | Biotech (research payout), Gaming (launch): the same | same | same |
+| **Tiers and board** | | | |
+| 14 | Gold and Platinum (engaged clock, pass-adjusted targets), the stamp clock, the collection bonus switched on, Hall of Fame title. Needs S2, S4, S6 | tiers at the edges; stamp never down; bonus cap; bonus never in valuation; no Shares from a stamp | Debug "finish replay fast/slow"; check stamps and Income |
+| 15 | `BoardServer`: `Collection_v1`, `HallOfFame_v1`, `_Studio` names, second list in the Leaderboard tab, FR-11 fixed. Needs S7 | value from the save only; written after the save; capped; no write with unknown keys; Studio names | API Services on: earn a stamp in Studio, see the `_Studio` board |
+| 16 | Picker on for live servers; PUBLISH_RULES "2d" note | all four in the picker | Publish; pick each sector on a phone |
 
 ## 10. Impact on other docs and branches
 
