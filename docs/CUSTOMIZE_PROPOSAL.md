@@ -211,6 +211,7 @@ Also: "the IPO is the last thing" (LG:1-3) holds per company; +5% per loop (LG:1
 - **`building-pass`, BUILDING_PASS_PROPOSAL.md D-2 and section 3:** per-building sizes up to 78 x 82; "25 apart" becomes 7.4; four shell sets.
 - **`visuals-garage`, PLOT_VISUALS.md (14, 37) and CLAUDE.md "Plot visuals" (32):** "the plot stays 60 x 60", the skyline rule, "six props identical in every room" and "the real Floor is the only solid" change; `newPlot`/`setStage` (PlotVisuals.lua:235-269) per building and sector.
 - **CLAUDE.md, README, ROADMAP, PUBLISH_RULES:** `pokedex` in the save block, the new modules and their order, configs, `CompanyRemotes`, the file list, PUBLISH_RULES "2d".
+- **CLAUDE.md:29, the DataStore rule (owner default, awaiting owner approval):** the board's OrderedDataStores break "Never add a second DataStore". New wording: "Never add a second DataStore, save loop or PlayerAdded data owner. One exception: `BoardServer` (ServerScriptService) may use the OrderedDataStores `Collection_v1` and `HallOfFame_v1` (and their `_Studio` twins) for the leaderboard. It writes only values read from the loaded save after that save succeeded, never saves player data, and wraps every call in `pcall`. Every other store stays under this rule." No board code before approval.
 - **ShopConfig.lua:52 (Shareholder text):** unchanged; the IPO window says stamps aren't doubled.
 
 ## 8. Open questions (unresolved, most important first)
