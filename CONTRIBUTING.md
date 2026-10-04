@@ -118,10 +118,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | @mattimarca02 (Claude Code) | visuals-garage | 2026-10-04 |
+| ROADMAP.md | (repo only) | free | | |
 | CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
-| docs/STUDIO_SYNC.md | (repo only) | @mattimarca02 (Claude Code) | visuals-garage | 2026-10-04 |
+| docs/STUDIO_SYNC.md | (repo only) | free | | |
