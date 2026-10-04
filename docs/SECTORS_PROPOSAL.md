@@ -96,7 +96,7 @@ All **placeholders** (S3, S9). Updates restore the curve to 70 / 60 / 50% of the
 - **Team work:** routine rows can be taken by the team (`auto`, `AutoCap` 0.75, TaskConfig.lua:63-65); team-taken rows give points at the `teamPays` share, and only while the player is engaged.
 - **3 h/day:** Cash and project points are paid in full all day, as in Software; only the valuation is weighted (LG:23, inside `addEarnings(kind)`), so both sectors lose the same after 3 h. The live curve, the build and the engaged counter (`tasks.engagedDay`/`engagedSeconds`, TaskServer.lua:152-156) do not reset at 08:00 UTC; only the trending genre changes there.
 
-**2.6 Buildings and objects** (example names; the full list is a Gaming content bible, section 6).
+**2.6 Buildings and objects** (example names; the full list is a Gaming content bible, section 5).
 - **Buildings (5, CUST defaults):** Bedroom Studio (Garage), Indie Loft (Seed), Studio Floor (Series A), Game Campus (Series B), Mega Studio (Series C+D to IPO-ready), with Motion-Capture Stage and Global Publishing HQ as shell upgrades (the 7 LONG_GAME offices on 5 footprints, CUST 7).
 - **Upgrades, Garage:** Gaming PC (free, first), Drawing Tablet, Headset Mic, Dev Kit, Test Couch, Pixel Sign. Later examples: Dual Monitors, Sound Booth, Build Server (Seed); Mo-cap Suit, Render Farm, QA Lab (A); Esports Stage, Localization Desk (B); Motion-Capture Hall, Global Servers (C+D, levels I and II); Expo Booth, Golden Joystick Award (Pre-IPO).
 - **Desks:** Folding-Table Desk, Gamer-Chair Desk, Crunch Pod, Dev-Kit Bench. **Decor:** Retro Console Shelf, Mascot Cutout, Cartridge Wall, Arcade Cabinet, Pixel Plant.
@@ -172,6 +172,29 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 - **S10 cadence (new):** moments per hour per rung for both sectors (LG section 4's table): no gap over 45 engaged minutes; Gaming's longest wait between decisions under 15 minutes.
 - **S8** with both sectors (FUND 6).
 - *Can:* `--long` (`long_run`, economy_sim.py:1213) runs Software's ladder. *Needs:* a Gaming income path (base, curve, cap, catalog), titles and policies, the trend schedule, the task points.
+
+## 5. Impact on other docs (exact sections)
+
+**`design-tutorial`, docs/TUTORIAL_PROPOSAL.md** (`TUT:` = its line):
+- **Section 2, steps 1 and 4 (TUT:25, 28):** "own your sector's first upgrade" (Software Desk, Gaming Gaming PC) and "own 2 of this company's upgrades" (CUST 7).
+- **Step 5 (TUT:29):** "one task graded by `TaskServer`", any row of the active sector; the card text comes from the sector (Software: a call; Gaming: Bug Squash or Art Sprint, since Reviews arrive only while a title is live). Still skipped while tasks are off (TUT:43).
+- **New Gaming-only steps after step 5:** "Pitch your first game" (done when `sx.n` ≥ 1) and "Launch it" (done when a title is shipped), server-graded, no reward (a launch pays). `TutorialConfig` steps gain a `sector` field (none = every sector).
+- **Step 8 (TUT:32):** no sector change (FUND 8). **Step 9 (TUT:33, notes :37-42):** resets add Gaming's title in development and live title.
+- **Section 6 (TUT:106):** module order unchanged by sectors.
+
+**`content-bible`, docs/CONTENT_BIBLE.md** (`BIBLE:`):
+- **Sections 1-6 (BIBLE:12-241)** are Software's package; the industry skins (:247) go (CUST 7).
+- **"The first 5 hours" (:253-283), "What each rung adds" (:285-296), "Approve or rename" (:298-361)** are Software's. Gaming needs all three in a new section 7 (or its own file): **about 214 names (estimate)**: 7 offices, 42 upgrades, 18 desks, 18 creature names and jobs, 6 egg names, 22 decor, 5 bundles, 9 titles, 12 events, 8 publisher requests, 48 review lines, 6 genres, 36 game names, 7 task names, 12 company names; game names checked against real games.
+- **Choice 1 (:365):** creature keys stay locked; Gaming names are display strings, not a save migration. **Choice 9 (:373)** is replaced by sectors.
+
+**docs/LONG_GAME_PROPOSAL.md** (`LG:`):
+- **Section 1, pacing (LG:6-18):** the hours are Software's fit; Gaming's typical policy must match within ±5%, the others spread 54-74 h at IPO 1 (2.10, estimates).
+- **Section 2, clock (LG:20-34):** unchanged; Gaming's extra is engaged only and outside the away bank (LG:24).
+- **Section 3, ladder (LG:36-60):** one ladder for both; Gaming has its own item names and lower upgrade Incomes (S3); the hire list is shared.
+- **Section 4, content (LG:62-82):** the moments table per sector (S10); "an industry skin per IPO" (LG:82) becomes the sector picker.
+- **Section 5, Shares (LG:84-88):** Shares per IPO are sector-neutral. Stamps with two sectors: 6 grades (Bronze, Gold, Platinum each), Collection at most 6,000 + IPO count, bonus at most +5% (CUST 5.2); T (CUST 1.5) is the same 57 / 51.5 / 52 h while parity holds.
+- **Section 6, money (LG:90-95):** entry (1) of the `addEarnings` list (LG:94) carries Gaming's extra (no new entry); Gaming bundles join LG:95's product list.
+- **Section 8, PR plan (LG:110-122):** its PR 7 = PR 8-11 in CUST 6; Gaming needs its PR 2 (`kind`, engaged weights).
 
 ## What I did not verify
 
