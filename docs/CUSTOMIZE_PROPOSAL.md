@@ -257,26 +257,28 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes (fake Roblox), 
 
 **docs/LONG_GAME_PROPOSAL.md (must change):**
 
-| Section | Change |
+| Section (lines) | Change |
 |---|---|
-| Header, 1 Pacing (lines 3, 18) | "50+ h, every loop 50+ h" stays (a loop = a company); `StageScale` follows the IPO count, not the sector; add a seed + dividend sensitivity row |
-| 2 Clock (line 24) | Seed and dividends join the gifts that never count |
-| 3 Ladder (36-60) | "Offices" = these buildings; 7 rungs but two C+D offices: one per rung or 8; the 97 items become per-sector data; 18 desks vs 11 hire spots (EmployeeServer.lua:31-35) and the budget |
-| 4 Content (62-82) | "Loops 2+ replay the ladder (an industry skin per IPO)" (82) is replaced by the sector pick; content x4 (section 3) |
-| 5 Shares (84-88) | Formula unchanged; new `ResetNames` wording; Day 7's decor piece per sector or shared |
-| 6 Money (90-95) | Boardroom skin per sector or neutral; seed and dividends make no `addEarnings` call; income models pay inside the income-loop call (TycoonCore.lua:866) or TaskServer's, or each new site is reviewed (daily_test.py:4327-4334) |
-| 7 Exploits (97-108) | R1-R3 stand if employees follow the player (question 1) |
-| 8 PR plan (110-122) | PR 4 "Office framework" → this doc's PR 1-8; PR 7 "industry skin 1" → PR 9-14; `CompanyServer` before `TaskServer` |
-| 9 Decisions (128) | All stand; the 50+ h first IPO is unchanged; the picker adds a choice before play (section 8) |
+| Title, header (1, 3) | "The IPO is the last thing" stays **per company**: an IPO now completes a company and stamps a sector; the prestige loop is the Pokedex |
+| 1 Pacing (6-18) | "First IPO after 50+ engaged hours, every later loop 50+ h" stays: the first company's completion *is* the first IPO, and nothing in the Pokedex shortens it (seed and bonus never count toward valuation). **+5% per loop** (line 18) stays: `StageScale` follows the IPO count, never the sector or a stamp. Add: the Hall of Fame needs at least four loops, about 210 h for a regular player (57 + 51.5 + 52 + ~50, **estimate**); add seed and bonus rows to the sensitivity table |
+| 2 Clock (22-34) | Seed and the collection bonus join the gifts that never count; the engaged clock also times stamps (`pokedex.active.engaged`) |
+| 3 Ladder (36-60) | The "Offices" column becomes the 5 buildings (P-6), but section 5 makes `Stages` 7: which rungs share a building is open question 1; the 97 items become Software's data, and each sector needs its own; 18 desks vs 11 hire spots (EmployeeServer.lua:31-35) |
+| 4 Content (62-82) | "Loops 2+ replay the ladder (an industry skin per IPO)" (line 82) becomes: loops 2+ pick a sector; replays chase stamps |
+| 5 Shares (84-88) | **The formula is unchanged** (`20 x (1 + 0.25 x IPOs) x min(ratio, 1.5)^0.5`, line 86): stamps add no Shares. `ResetNames` gains buildings, furniture and stamps; Day 7's decor piece per sector or shared |
+| 6 Money (90-95) | **Shareholder pass (line 92): exactly 2x Shares stays; add "stamps and the collection bonus are not Shares and are never doubled".** 2x Cash (93): the bonus stacks on Cash, never on valuation. `addEarnings` list (94): seed and bonus add no call; income models pay inside an existing call or each new site is reviewed (daily_test.py:4327-4334) |
+| 7 Exploits (97-108) | R1-R3 stand (employees follow the player) |
+| 8 PR plan (110-122) | PR 4 "Office framework" becomes this doc's PR 1-7; PR 7 "industry skin 1" becomes PR 8-13; tiers and board (PR 14-15) come after LONG_GAME PR 2; `CompanyServer` loads before `TaskServer` |
+| 9 Decisions (128) | All stand |
 
-| Doc / branch | Change |
+| Doc / branch | Exact sections and change |
 |---|---|
-| `design-tutorial` (TUTORIAL_PROPOSAL.md section 2) | Step 1 comes after the picker (find `Office1` under "Upgrades" and scroll); step 9's text (IpoClient 519, 526-531) becomes "your company goes to the Portfolio"; new "Arrange your office" step; TutorialClient waits while `OpenPanel = "Sector"`. Small |
-| `building-pass` (BUILDING_PASS_PROPOSAL.md D-2, section 3, E2) | One 62 x 62 footprint → per-building sizes; "65 studs", "25 apart" → 7.4; `sync(..., stageOf(data))` → the active company's building, keyed by sector; 64 parts still fit, but 4 shell sets. Must change |
-| `visuals-garage` (PlotArt, PlotVisuals, PLOT_VISUALS.md, CLAUDE.md "Plot visuals") | "The plot stays 60 x 60" (PLOT_VISUALS.md:14) → nested buildings; skyline rule (:37) goes for buildings 4-5; "six props identical in every room" and "Floor the only solid" → per-sector movable props, Floor + extensions; `newPlot`/`setStage` (PlotVisuals.lua:235-269) per building and sector; `buildProp` takes position and rotation; PlotArt becomes Software's art (stage 1 fingerprint stays). Must change |
-| `content-bible` | Rungs 1-6 = the Software package; the 5 industry skins dropped (answers its decision 9); "Office" names = buildings; locked names stay Software keys; minute 0 of "The first 5 hours" is the pick; three more bibles. Must change |
-| CLAUDE.md, README, ROADMAP, PUBLISH_RULES | Save block (`companies`), modules and order, configs, remotes; file list; a "2d" note |
-| Onboarding | The arrow targets (OnboardingServer.lua:103-121) don't move; it starts after the pick |
+| `design-tutorial`, TUTORIAL_PROPOSAL.md section 2 | **Step 9 "Going public" (line 33) and its notes (39-41):** an IPO now *completes this company*: it gets a stamp and becomes a card in your Pokedex, then you pick the next sector. Resets: Cash, upgrades, buildings, furniture, eggs in incubators, valuation. Keeps: employees, HR, passes, boosts and shields, Shares, perks, IPO count, stamps. Step 1 comes after the picker; TutorialClient waits while `OpenPanel = "Sector"`; a new "Arrange your office" step; section 4 adds nothing per run (line 84 stands) |
+| `content-bible`, CONTENT_BIBLE.md | Rungs 1-6 (sections 1-6) = Software's package; "Titles and cosmetics" (243-247): the five industry skins (Snack Space ... Moon Zoo) are dropped, sectors replace them, and it gains stamp names, the Hall of Fame title and 12+ company names per sector; decision 9 "Loop skins" (373) is answered; "The first 5 hours" (253): minute 0 is the pick; three more bibles (Fintech, Biotech, Gaming) |
+| `building-pass`, BUILDING_PASS_PROPOSAL.md D-2 and section 3 (21, 32-46) | One 62 x 62 footprint becomes per-building sizes up to 78 x 82; "65 studs" and "25 apart" become 7.4; the building follows the active company's building and sector; four shell sets |
+| `visuals-garage`: PLOT_VISUALS.md (14, 37), CLAUDE.md "Plot visuals" (32) | "The plot stays 60 x 60" becomes nested buildings; the skyline rule goes for buildings 4-5; "six props identical in every room" and "the real Floor is the only solid" become per-sector movable props and Floor + extensions; `newPlot`/`setStage` (PlotVisuals.lua:235-269) per building and sector; PlotArt becomes Software's art (stage 1 fingerprint stays) |
+| CLAUDE.md (save block, feature modules, configs, clients), README, ROADMAP, PUBLISH_RULES | `pokedex` in the save block; `CompanyServer` and `BoardServer` and their order; `SectorConfig`, `CompanyConfig`; `CompanyRemotes`; the file list; PUBLISH_RULES "2d" (new section, Shut down all servers, rollback floor `V_launch`, `_Studio` board names) |
+| ShopConfig.lua:52 (Shareholder description) | No change needed ("2x Shares every time you go public"); the IPO window says stamps are not doubled |
+| Onboarding | The arrow targets (OnboardingServer.lua:102-121) don't move; it starts after the pick |
 
 ## 11. Open questions (unresolved, most important first)
 
