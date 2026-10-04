@@ -193,6 +193,8 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 with no red
 
 ## 7. Impact on other docs and branches
 
+**Merge order:** `design-customize` sits on top of `visuals-garage`: a PR from it to `main` today would carry 40 commits and 19 files. Merge it only after `visuals-garage` lands on `main`.
+
 **Clashes with docs/LONG_GAME_PROPOSAL.md** (`LG:` = its line):
 
 | Clash | LONG_GAME | This doc / code | Resolution | Sims |
