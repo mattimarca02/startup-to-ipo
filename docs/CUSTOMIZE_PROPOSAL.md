@@ -122,7 +122,7 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 - **Shop Office tab:** Buildings and `"BuyBuilding"` in PR 2 (Furniture in 5-7). Checks that pin the Office as upgrades-only change on purpose: daily_test.py:4278 (only `buyUpgrade`) and :4286 (only `"Upgrades"`, `"BuyUpgrade"`).
 - **Valuation HUD / IpoClient:** FUND 7 (PR 4b).
 
-**Tests that must hold:** the fingerprints of stage 1, the props and the layout (daily_test.py:3770, 3778, 3790) unchanged; new: building i draws exactly `PlotArt.Stages[i]`; the section list (:4269-4271) gains only `pokedex`, `expected` (:4328) only `CompanyServer.lua: 0`.
+**Tests that must hold:** the fingerprints of stage 1, the props and the layout (daily_test.py:3770, 3778, 3790) unchanged; new: building i draws exactly `PlotArt.Stages[i]`; the section list (:4269-4271) gains only `pokedex`; the `addEarnings` checks cover every `.lua` file and aliases (FUND 2).
 
 1. `pokedex` (full format, missing-section default, run check, versioning); `CompanyServer`, `CompanyConfig`, `SectorConfig` (Software, picker off); `"Place"`/`"Store"`/`"Sync"`. *Tests:* round trip; unknown fields kept at every level; `v = 2`; run mismatch; bad values; overlap, zones, rate, ownership.
 2. Room from building; nested buildings, move-in, starter set, `"BuyBuilding"`. *Tests:* the fingerprints; nesting; objects unchanged; budgets; a building before its stage is refused.
