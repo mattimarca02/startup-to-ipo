@@ -23,12 +23,12 @@ The files use `\n` line endings and end with one newline. Studio may add or drop
 
 ## (b) Studio-only settings (not in any script, not in the repo until now)
 
-These live only in the Team Create place. The values come from the visuals-garage owner's notes; the repo and the ROADMAP had no earlier record of them (searched for ClockTime, ColorCorrection, Atmosphere, Bloom and Baseplate).
+These live only in the Team Create place. The values come from the visuals-garage owner's notes, and the ColorCorrection values were read from Studio by the owner's sync session; the repo and the ROADMAP had no earlier record of them (searched for ClockTime, ColorCorrection, Atmosphere, Bloom and Baseplate).
 
 | Where | Property | Before | Now |
 |---|---|---|---|
 | Lighting | `ClockTime` | 14.5 | **14** |
-| Lighting | a `ColorCorrection` object | none | **added** (its own values were not recorded: open Lighting > ColorCorrection in Studio and write Brightness, Contrast, Saturation and TintColor here before anything is rebuilt) |
+| Lighting | a `ColorCorrection` object | none | **added**, `Enabled` true, `Brightness` 0.03, `Contrast` 0.08, `Saturation` 0.15, `TintColor` 255, 246, 232 (RGB; read from Studio by the owner's sync session) |
 | Lighting > Atmosphere | `Haze` | 0 | **1.2** |
 | Lighting > Atmosphere | `Glare` | 0 | **0.3** |
 | Lighting > Bloom | `Intensity` | 1 | **0.6** |
@@ -152,4 +152,4 @@ end
 
 ## What is not in Studio-only any more
 
-Everything above is now written down. What this file cannot capture: the `ColorCorrection` values (see (b)), and anything else changed in Studio by hand that nobody wrote down. If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").
+Everything above is now written down. What this file cannot capture: anything changed in Studio by hand that nobody wrote down (the `ColorCorrection` values are in (b)). If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").
