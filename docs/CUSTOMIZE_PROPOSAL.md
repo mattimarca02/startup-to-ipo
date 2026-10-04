@@ -237,16 +237,32 @@ Every PR: claim its scripts in CONTRIBUTING.md first, `python3 tools/daily_test.
 | 13-14 | Gaming: the same, with the launch model | same | same |
 | 15 | Launch: `PickerEnabled` on for live servers, all four sectors; PUBLISH_RULES gets a "2d" note for `companies` | all four in the picker; the full suite | Publish with Shut down all servers; join on a phone and pick each sector once |
 
-## 10. Impact on other branches and docs
+## 10. Impact on other docs and branches
 
-| Branch / doc | What changes | Status |
-|---|---|---|
-| `visuals-garage` (PlotArt, PlotVisuals, docs/PLOT_VISUALS.md, CLAUDE.md "Plot visuals") | `newPlot`/`setStage` (PlotVisuals.lua:235-269) become per building; `buildProp` takes a position and a rotation instead of a slot; the stage 2-5 story tests and the rule "the six upgrade props are identical in every room and never move" are rewritten; stage 1, props and layout fingerprints stay | **must change** (base of this work) |
-| `building-pass` (PlotBuilding, PlotBuildingVisuals, BuildingClient, integration patch E2) | `sync(..., stageOf(data))` becomes the active building; per-stage keys stay valid as building keys; budget and fade unchanged | **small change**, not obsolete |
-| `design-tutorial` (docs/TUTORIAL_PROPOSAL.md) | Steps 1 and 4 stay valid (a bought upgrade appears at its default spot); the Office cards move down under "Buildings", so TutorialClient must find `Office1` by name and scroll to it (its plan already does); step 9's list gains "office buildings"; a later "Arrange your office" step | **must change** (small) |
-| docs/LONG_GAME_PROPOSAL.md | Its "Offices" (section 3) **are** these buildings (0 Income, economy_sim.py:1063); its 7 offices vs 5 stages (Series C+D has two) needs one rule; its "decor 20" is the Furniture catalog; its 18 priced desks fight the 11 spots and the part budget; PR 4 "Office framework" is replaced by this plan | **must change** |
-| `PlotArt` pre-built rooms 2-5 as rooms | replaced by shells + catalog | **obsolete** as rooms |
-| Onboarding arrow | points at incubators and the BuySign (OnboardingServer.lua:103-121), both fixed | unaffected |
+**docs/LONG_GAME_PROPOSAL.md (must change; line numbers on `2d91efd`):**
+
+| Section | What changes |
+|---|---|
+| Header (line 3) and 1 Pacing (line 18) | "50+ h to the first IPO, every later loop 50+ h" stays: a loop is now one company. `StageScale` (+5% per loop) follows the player's IPO count, never the sector, so a new sector never restarts the prices. The sensitivity table needs a seed + dividend row |
+| 2 Clock rules (line 24) | Seed and dividends join "Cash packs and daily Cash never count": gifts, never valuation; dividends only per engaged second |
+| 3 Ladder (lines 36-60) | The "Offices" column is these buildings (0 Income, tools/economy_sim.py:1063). 7 rungs, but Series C+D has two offices (Tech Campus, Glass Tower): one building per rung, or 8 buildings. The 97-item ladder becomes per-sector data, each refitted to the same hours. Its 18 desks fight the 11 hire spots (EmployeeServer.lua:31-35) and the part budget |
+| 4 Content (lines 62-82) | "Loops 2+ replay the ladder (an industry skin per IPO)" (line 82) is replaced by the sector pick. The content table is per sector (x4: section 3 here); "decor 20" is one sector's furniture |
+| 5 Shares and shop (lines 84-88) | The Shares formula is unchanged (computed on the run's valuation). New `ResetNames` wording (1.5). Day 7's decor piece must exist in every sector, or be a shared piece |
+| 6 Money and passes (lines 90-95) | The Shareholder pass's Boardroom skin: one per sector, or one neutral skin. The `addEarnings` list gains: seed and dividends make **no** call; the sector income models must pay inside the existing income-loop call (TycoonCore.lua:866) or TaskServer's, or each new call site is reviewed in tools/daily_test.py:4327-4334 |
+| 7 Exploits (lines 97-108) | R1-R3 stand if employees follow the player (open question 1). Companies cannot be traded or poached |
+| 8 PR plan (lines 110-122) | PR 4 "Office framework, Seed, Daily decor piece" is replaced by this doc's PR 1-8; PR 7 "industry skin 1" by PR 9-14. Load order gains `CompanyServer` before `TaskServer` |
+| 9 Decisions (line 128) | All stand. The 50+ h first-IPO gate is unchanged for the first company; the picker puts one choice before the first minute of play (risk, section 8) |
+
+**Other docs and branches:**
+
+| Doc / branch | What changes |
+|---|---|
+| `design-tutorial` (docs/TUTORIAL_PROPOSAL.md) | Section 2: step 1 (SHOP > Office, buy the Desk) comes after the picker, and the upgrade cards sit under "Upgrades" (find `Office1` by name and scroll); step 9's resets and keeps text (it cites IpoClient lines 519 and 526-531) becomes "your company goes to the Portfolio, the new one starts in a garage with funding"; a new "Arrange your office" step after building 2. The picker is its own screen, not a card: TutorialClient waits while `OpenPanel = "Sector"`. **Small change** |
+| `building-pass` (docs/BUILDING_PASS_PROPOSAL.md) | D-2 and section 3 "same footprint for all five (62 x 62)", "inside 65 studs", roofs 25 apart: per-building sizes from section 4 here, roofs 7.4 apart at the largest. E2's `sync(..., stageOf(data))` becomes the active company's building, keyed by sector and building. The 64-part budget holds (a wall is one Part at any length), but there are 4 sets of shells. **Must change** |
+| `visuals-garage` (PlotArt, PlotVisuals, docs/PLOT_VISUALS.md, CLAUDE.md "Plot visuals") | "The plot stays 60 x 60" (PLOT_VISUALS.md:14) becomes nested buildings; the skyline rule (PLOT_VISUALS.md:37) goes for buildings 4-5; CLAUDE.md's "the six upgrade props ... identical in every room" and "the real Floor is the only solid" become per-sector, movable props and Floor + `FloorExtension`; `newPlot`/`setStage` (PlotVisuals.lua:235-269) become per building and sector; `buildProp` takes a position and a rotation; PlotArt becomes Software's art (stage 1 fingerprint stays). **Must change** (base of this work) |
+| `content-bible` (docs/CONTENT_BIBLE.md) | Rungs 1-6 become the Software package as written. The 5 industry skins for IPO 2-6 (Snack Space ... Moon Zoo) are dropped: sectors replace them (this answers its decision 9). "Office" names are building names. The locked names (its decision 1) stay Software keys. "The first 5 hours" starts with the sector pick at minute 0. Three more bibles are needed (section 3). **Must change** |
+| CLAUDE.md, README.md, ROADMAP.md, docs/PUBLISH_RULES.md | Save format block (`companies`), feature module list and order, configs, remotes; README file list; a PUBLISH_RULES "2d" note (PR 1 and PR 15) |
+| Onboarding | The arrow points at incubators and the BuySign (OnboardingServer.lua:103-121), which don't move; it starts after the pick |
 
 ## 11. Open questions for the owner (most important first, with my recommendation)
 
