@@ -39,6 +39,7 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
       card = { name, ipoNumber, at, engaged, ratio, building, owned = {...}, decor, objects }, -- latest completion
     },
   },
+  kept = { [objectKey] = n },  -- earned decor (milestones, Day 7): free in every company (section 7)
   hallAt = number,           -- when all four were first done (Hall of Fame); 0 = not yet
   studio = boolean,          -- a Studio server saved this account: never on the live board (1.6)
 }
@@ -123,7 +124,7 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
 - Placement never changes Income (`totalIncome` reads no position, TycoonCore.lua:137-145); buildings and furniture have none (economy_sim.py:1063); no new `addEarnings` call (daily_test.py:4327-4334); **no `Touched` handler** (taps hit footprints; decor has `CanQuery` off, PlotVisuals.lua:105; daily_test.py:4254-4256).
 - **Part budget:** `MAX_PARTS = 260` per room, `MAX_LIGHTS = 3` (PlotVisuals.lua:39-40), raised from 220 with no written reason (ROADMAP.md:41); rooms use 256 / 244 / 254 / 253 / 257 (ROADMAP.md:42); the props take 118 (daily_test.py:3858), leaving about 3 furniture pieces. **Proposal:** draw only owned desks, 320 per plot, a budget bar; bigger walls cost no parts. **No change before gate G-S's 6-plot phone test** (owner default); if it fails, 260 with 2-part desks.
 - **Phone and PC:** edit mode is a window (`OpenPanel = "Office"`): the tray and thumbstick hide (TaskClient.lua:28; ShopClient.lua:725); entry "Arrange your office" in SHOP > Office (tabs, ShopClient.lua:196; Office tab :496-541), no new HUD slot. Top-down camera, about 3.5 px per stud at 78 x 82 on 667 x 339 **(estimate)**, so objects can also be picked from a strip; pinch zooms; drag, snap 0.5, red when refused, one `"Place"` on lift; Rotate, Store, Done 56 px **(estimate)**; PC: drag, R, Delete, E. Checked with Test > Device and top bars 0 / 36 / 58, like `TRAY_TESTS`.
-- **Shop:** SHOP > Office gains Buildings and Furniture; `"BuyBuilding", n` and `"BuyObject", n` on `ShopAction` (ShopServer.lua:701-715, 803-804), checked like `checkUpgradePurchase` (TycoonCore.lua:243) plus "stage reached" and "building n-1 owned". Draft building price: 50% of the stage threshold (IpoConfig.lua:19-22). Cash only in v1; no odds words (daily_test.py:4343).
+- **Shop:** SHOP > Office gains Buildings and Furniture; `"BuyBuilding", n` and `"BuyObject", n` on `ShopAction` (ShopServer.lua:701-715, 803-804), checked like `checkUpgradePurchase` (TycoonCore.lua:243) plus "stage reached" and "building n-1 owned". A building costs its LONG_GAME office price (section 7). Cash only in v1; no odds words (daily_test.py:4343).
 
 ## 5. Economy: seed, collection bonus, risks, sims
 
@@ -186,15 +187,18 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 with no red
 
 ## 7. Impact on other docs and branches
 
-**docs/LONG_GAME_PROPOSAL.md (must change):**
-- **Title, header (1, 3):** "the IPO is the last thing" holds per company: an IPO completes a company and stamps a sector.
-- **Section 1 (6-18):** "first IPO after 50+ engaged hours, every loop 50+ h" stays: the first completion *is* the first IPO; seed and bonus never count. **+5% per loop** (18) stays: `StageScale` follows the IPO count only. Add: the Hall of Fame takes four loops, about 210 h for a regular player **(estimate)**.
-- **Section 2 (22-34):** seed and bonus join the gifts that never count; the engaged clock also times stamps.
-- **Section 3 (36-60):** "Offices" become the 5 buildings, but section 5 makes `Stages` 7 (open question 1).
-- **Section 4 (82):** "Loops 2+ replay the ladder (an industry skin per IPO)" becomes "loops 2+ pick a sector; replays chase stamps".
-- **Section 5 (86):** **the Shares formula is unchanged**: stamps add no Shares.
-- **Section 6 (92-94):** the Shareholder pass stays exactly 2x Shares, plus "stamps and the bonus are never doubled"; the bonus stacks on Cash, never valuation; seed and bonus add no `addEarnings` call.
-- **Section 8 (110-122):** PR 4 "Office framework" becomes this doc's PR 1-7; PR 7 "industry skin 1" becomes PR 8-13.
+**Clashes with docs/LONG_GAME_PROPOSAL.md** (`LG:` = its line):
+
+| Clash | LONG_GAME | This doc / code | Resolution | Sims |
+|---|---|---|---|---|
+| Building price | office = 0.7 x fit (LG:38), prices LG:53-58 | was "50% of the stage threshold" (section 4; IpoConfig.lua:19-22) | LONG_GAME wins: a building costs its office's fitted price | S1-S3: none (`LONG_ITEMS` as is) |
+| Office count | 7 offices, two in C+D (LG:53-58) | 5 buildings, one per stage (owner default) | 5 footprints, 7 purchases: Glass Tower and Global HQ become shell upgrades of building 5 (same price and order, no new size) | none: same items; S3 keeps 7 per sector |
+| Desks, caps | 18 desks (LG:60), R1 cap by office (LG:108) | 11 fixed spots (EmployeeServer.lua:31-35) | each building lists hire spots in the area it adds; building 5 holds 18 + 3 (Extra Slots) + Extra Desk levels; R1 caps follow the 7 office purchases | none (counts unchanged); G-S counts 21+ desks |
+| Earned decor | milestones (LG:78), Daily Day 7 piece (LG:88, 128), Boardroom skin (LG:92), prestige wing (LG:86) | furniture resets with the company (1.4) | earned pieces are **kept** (`pokedex.kept`): free in every new company's inventory; bought copies reset; Boardroom = a pass furniture set, not saved (pass re-checked on join); prestige wing = perks, kept in `ipo.perks` | S1: kept pieces free; a "decorator" (10% of Cash on furniture) ≤ 5% slower |
+| `addEarnings` list | 7 entries, none for sector models (LG:94) | 3 income models (section 2) | no new call site: models ride entry (1), the income loop | S3 fits each model |
+| Moments | per-rung table (LG:66-74) | sectors, bought furniture | per sector the same columns; furniture never enters `LONG_K` (LG:38) or thresholds | S3 recounts moments per sector; longest gap ≤ 45 min (LG:79) |
+
+Also: "the IPO is the last thing" (LG:1-3) holds per company; +5% per loop (LG:18) follows the IPO count only; seed, bonus and kept decor are gifts that never count (LG:22-34); LG:82 "an industry skin per IPO" becomes "loops 2+ pick a sector, replays chase stamps"; the Shares formula (LG:86) and the Shareholder's exact 2x (LG:92) are unchanged, stamps add no Shares; LONG_GAME PR 4 "Office framework" (LG:118) = this doc's PR 1-7, its PR 7 "industry skin 1" (LG:120) = PR 8-13.
 
 **Other docs:**
 - **`design-tutorial`, TUTORIAL_PROPOSAL.md step 9 "Going public" (line 33, notes 39-41):** an IPO now *completes this company*: it gets a stamp and becomes a Pokedex card, then you pick the next sector. Resets: Cash, upgrades, buildings, furniture, eggs, valuation. Keeps: employees, HR, passes, boosts and shields, Shares, perks, IPO count, stamps. Step 1 comes after the picker; TutorialClient waits while `OpenPanel = "Sector"`; a new "Arrange your office" step.
