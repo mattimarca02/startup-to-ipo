@@ -23,7 +23,8 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
     picked = boolean,        -- false = picker open (new player, run check); PickSector only then
     name = string,           -- from the sector's fixed list: no free text
     foundedAt = os.time(),
-    engaged = number,        -- engaged seconds in this company (stamp timing; 0 until LONG_GAME PR 2)
+    engaged = number,        -- weighted engaged seconds in this company (stamp clock; 0 until LONG_GAME PR 2)
+    passSeconds = { [passKey] = n },  -- of those, seconds while each Cash pass was owned (stamp targets)
     building = number,       -- buildings bought, 1 = Garage
     decor = { [objectKey] = n },                                   -- furniture owned
     objects = { { id = "Desk", x = -23, z = -40, r = 0 }, ... },  -- layout, anchor coordinates
@@ -39,6 +40,7 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
     },
   },
   hallAt = number,           -- when all four were first done (Hall of Fame); 0 = not yet
+  studio = boolean,          -- a Studio server saved this account: never on the live board (1.6)
 }
 ```
 
@@ -68,16 +70,19 @@ pokedex = {                  -- CompanyServer.serialize (optional: older saves h
 - **Gold:** a replay completed within **1.0 T** engaged hours. +0.5%.
 - **Platinum:** a replay within **0.8 T** and gone public at ratio **≥ 1.25**. +0.5%.
 - **T** = the loop's reference engaged hours for a regular player (LONG_GAME section 1: 57 / 51.5 / 52 h for loops 1-3); every T and ratio is a **placeholder** for S6. Engaged seconds come only from the server's engaged clock (graded tasks, LONG_GAME section 2): Gold and Platinum wait for LONG_GAME PR 2.
-- **Pass fairness:** 2x Cash makes a run about 15% shorter (48.7 vs 57.1 h, LONG_GAME section 6), so targets shrink by the sim's measured speed-up for the passes owned at founding (placeholder x0.85 with 2x Cash); otherwise stamps could be bought.
+- **Long sessions:** the stamp clock weighs engaged seconds like the valuation (100% for the first 3 engaged hours a day, 5% after, LONG_GAME_PROPOSAL.md:23), so playing past 3 h never makes Gold or Platinum harder.
+- **Pass fairness:** 2x Cash makes a run about 15% shorter (48.7 vs 57.1 h, LONG_GAME section 6), so a target shrinks by the measured speed-up times the **share of the run's engaged seconds with the pass** (`passSeconds`; placeholder x0.85 for a whole run with 2x Cash). Passes owned at founding would be an exploit: buy 2x Cash right after founding, keep the full target, run 15% faster.
 - **A replay** has the same content, priced by IPO count (`StageScale`), never by sector or stamp. Differences: a stamp clock in the IPO window (engaged hours against both targets), no repeated first-time hints, a stamp never goes down, `replays` counts it.
 - **Hall of Fame:** the first time all four are `"done"`: `hallAt`, a title (named in the content bible), a gold Pokedex frame, a board entry. The game goes on: replays, and IPOs keep paying Shares and multiplier.
 
 **1.6 Leaderboard.**
-- **Today:** in-server only: IpoServer copies `IpoCount` and `IpoBest` onto players (IpoServer.lua:46-63), IpoClient sorts them (IpoClient.lua:750-783). No OrderedDataStore or cross-server board exists (grep; docs/reviews/FULL_REVIEW.md:126). Fix FR-11 (names not escaped, IpoClient.lua:770) first.
+- **Today:** in-server only: IpoServer copies `IpoCount` and `IpoBest` onto players (IpoServer.lua:46-63), IpoClient sorts them (IpoClient.lua:750-786). No OrderedDataStore or cross-server board exists (grep; docs/reviews/FULL_REVIEW.md:126).
 - **Ranks:** **Collection** = `1000 x stamp points + min(IPO count, 999)`, per sector Bronze 1, Gold 2, Platinum 3; **Hall of Fame** = earliest `hallAt`.
 - **Storage:** `BoardServer` writes OrderedDataStores `Collection_v1`, `HallOfFame_v1` (in `pcall`), key UserId, from the loaded `pokedex` only, after the stamp's save succeeded; on join it repairs a lower stored value. It reads the top 50 every 10 minutes per server, as a second list in the Leaderboard tab.
-- **Anti-cheat:** no client sends a score; capped at 12,999; tiers use the server's clock; no write with unknown keys; Debug "grant stamp" Studio only; banned accounts removed by hand (`RemoveAsync`).
-- **Studio:** needs "Enable Studio Access to API Services" (CONTRIBUTING.md:41) and uses the live DataStores (PUBLISH_RULES.md:46), so Studio names get `_Studio`. Roblox's request budgets **(unverified here)**; one write per stamp and one read per 10 minutes is far below them **(estimate)**.
+- **Anti-cheat:** no client sends a score; capped at 12,999; tiers use the server's clock; no write with unknown keys.
+- **Studio never reaches the live board.** Studio and live servers share the save key (PUBLISH_RULES.md:46), so Debug valuation grants (`IpoGrantValuation`, `IpoJumpReady`, IpoServer.lua:400-411), a Debug stamp or a Studio pick are saved like real play, and the join repair would copy them to the live board. Rules, all in `BoardServer` on the server, from the loaded save only: (a) every save made by a Studio server (`RunService:IsStudio()`) sets `pokedex.studio = true`, and nothing clears it; (b) an account with `studio` is never written, repaired or shown; (c) in Studio, BoardServer touches only `Collection_v1_Studio` and `HallOfFame_v1_Studio`; (d) a deny list (`BoardServer.REMOVED`, UserIds, server only) is never written, repaired or shown: a removal is list + `RemoveAsync` on both boards + publish, otherwise the join repair re-adds the account. Per account, not per stamp: a per-stamp flag leaks the IPO-count tie-break and `hallAt`. Dev accounts (the owner's too) stay off the board. *Test (daily_test, fake stores):* a `studio` save with four Platinum joins live: no write; a Studio session saves `studio = true` and writes only `_Studio`; a listed UserId: no write, no repair, not in the top 50; only BoardServer calls `GetOrderedDataStore`.
+- **Names (FR-11):** the top 50 holds UserIds; the server looks names up (`UserService:GetUserInfosByUserIdsAsync`, in `pcall`, cached, with the 10-minute read; **unverified limits**), "Player" on failure; the client escapes `& < > " '` before rich text with one helper for both lists, which also fixes IpoClient.lua:780.
+- **Studio** also needs "Enable Studio Access to API Services" (CONTRIBUTING.md:41). Roblox's request budgets **(unverified)**; one write per stamp and one read per 10 minutes is far below them **(estimate)**.
 
 ## 2. The sector package and content
 
