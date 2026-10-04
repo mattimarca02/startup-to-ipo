@@ -201,4 +201,19 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 with no red
 
 ## 8. Open questions (unresolved, most important first)
 
+1. **5 buildings vs 7 stages:** P-6 gives one building per funding stage (5 today, IpoConfig.lua:17-23), but LONG_GAME section 5 adds `SeriesCD` and `PreIpo`. Recommend: building 5 serves Series C+D, Pre-IPO and IPO-ready.
+2. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened for pass owners (recommend), or pass-neutral rules instead?
+3. **Collection bonus:** a Cash multiplier, +1.5 / +0.5 / +0.5% per sector, cap 10%, never valuation (recommend), or a cheaper first rung?
+4. **Next sector:** any sector (recommend) or a not-yet-completed one first?
+5. **Legacy IPOs:** no stamp (recommend), or Bronze in Software for saves with `ipo.count ≥ 1`?
+6. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
+7. **Fintech, Biotech, Gaming income models:** the mechanics (only if S3-S4 pass) or today's Income with themed text?
+8. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S, after the Studio checks.
+
 ## What I did not verify
+
+- The world outside scripts (Baseplate, SpawnLocation, hand-placed parts, Terrain, StreamingEnabled): no Studio or MCP was used; section 3 lists the checks.
+- Roblox's OrderedDataStore budgets and limits; ViewportFrame cost; a fourth IPO-window tab at phone width; camera scale.
+- Why `MAX_PARTS` is 260; phone frame rates.
+- Every economy number (seed, bonus, T, ratio, pass factor, sim pass marks) and the content counts: placeholders or estimates.
+- Other branches were read with `git show`, not run; LONG_GAME PR 2 doesn't exist yet; `daily_test.py` was not run (docs only).
