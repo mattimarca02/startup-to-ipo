@@ -289,22 +289,24 @@ Every PR: claim its scripts in CONTRIBUTING.md first, `python3 tools/daily_test.
 | CLAUDE.md, README.md, ROADMAP.md, docs/PUBLISH_RULES.md | Save format block (`companies`), feature module list and order, configs, remotes; README file list; a PUBLISH_RULES "2d" note (PR 1 and PR 15) |
 | Onboarding | The arrow points at incubators and the BuySign (OnboardingServer.lua:103-121), which don't move; it starts after the pick |
 
-## 11. Open questions for the owner (most important first, with my recommendation)
+## 11. Open questions (still unresolved, most important first)
 
-1. **When you buy a new building, do owned objects move in by themselves, or does the player re-place them?** Recommend: by themselves, copying the current layout where it is valid in the new shell and using the default spot otherwise. The player can rearrange.
-2. **Does an IPO take the buildings away (rebuy each run) or keep them?** Recommend: take them away and keep the layouts (section 7).
-3. **Are hire desks placeable?** Recommend: not in v1 (fixed grid, skin per building); PR 5 later.
-4. **Do furniture items affect income, and does a stored upgrade still earn?** Recommend: furniture 0 Income; a stored upgrade keeps earning, so nobody loses income by tapping the wrong button on a phone.
-5. **Is there a free starter set in each new building?** Recommend: yes, its hire-desk skin plus one furniture piece of that stage, free and fixed (no random).
-6. **Can the player switch back to an older building they own?** Recommend: yes, "Move in" on any owned building card.
-7. **Raise the part budget to 320 per plot** (after a phone test), or stay at 260 with thinner hire desks?
-8. **Rotation: 45° steps, or free?** Recommend 45° (easy on touch, simple to check and save).
+1. **Employees at an IPO: do they follow the player into the new company (today's rule, IpoConfig.lua:8) or stay with the old one?** Recommend: follow the player. D-B's "never carries items" then covers upgrades, buildings and furniture. Otherwise every company restarts hiring from zero, and LONG_GAME's kept-hire refill and R1-R3 must be redone.
+2. **Creatures per sector: the same bodies with a per-sector name, job and joke, or new creature types per sector?** Recommend the same bodies. New types mean 18 models, `CreatureConfig` keys, odds tables and `fixedHire` orders per sector (D9 tests x4), and poaching between sectors gets complicated.
+3. **How many buildings per sector: 5 (today's stages) or one per LONG_GAME rung (7, or 8 with both C+D offices)?** This decides the shell count (x4 sectors) and the sizes in section 4. Recommend one per rung, 7.
+4. **Is 78 x 84 big enough for the last building, or do the plots move (`PLOT_SPACING` 112, section 4)?** Recommend 78 x 84, and judge it at gate G-S.
+5. **Seed and dividend numbers:** 10% seed capped at 25% of the first rung; 1% dividend per held company, capped at 10% of base Income. Confirm them before sims S1 and S2.
+6. **The income models for Fintech, Biotech and Gaming:** approve the three mechanics (2), or give every sector today's Income per second with themed text only? Recommend the mechanics, but only if S3 and S4 pass; otherwise fall back to themed text.
+7. **Cap: 1 active + 4 held, and the player picks which company to retire at the cap?**
+8. **Held companies: Portfolio cards only, or can a player visit an old building on their plot later?** Recommend cards only in v1 (visiting means rebuilding a second building and its budget).
 
 ## What I did not verify
 
-- No `luau` on this machine: I built no room. Shell-only part counts, the 60-part shell cap and every footprint are **not measured**.
-- Every UI size in section 7 except the ones cited from code; Roblox's top-bar height; the camera scale.
-- Why `MAX_PARTS` is 260 (no written reason); phone frame rate with 1,920 parts; the place's StreamingEnabled setting.
-- Whether `TouchControlsEnabled = false` still allows the default touch camera (moot with the scripted camera, but not tested).
-- The 4 MB DataStore key limit (Roblox's docs, not checked here).
-- The building-pass and design-tutorial details come from their branch docs (`git show`), not from running their code.
+- **World outside the scripts:** the Baseplate's size, the SpawnLocation, and anything placed by hand in Studio (no Studio or MCP used). The 6-stud walking gap and the 10-stud lounge clearance in section 4 are my estimates, not rules from the code.
+- **No `luau` here:** I built no room, shell or building. Shell part counts, the 60-part shell cap, every footprint and the nested sizes are **not measured**.
+- **Every UI size** in section 7 except the ones cited from code; Roblox's top-bar height; the camera scale; whether pinch-zoom fights the drag.
+- **Why `MAX_PARTS` is 260** (no written reason); phone frame rates; the StreamingEnabled setting.
+- **Every economy number** in sections 1.3, 1.4 and 8 (seed, dividend, the 2-4 h effect) is an estimate until the sims run. None of the three income models has been simulated.
+- **Content volume** (section 3) is counted from the content bible; the per-sector numbers are estimates.
+- **The 4 MB DataStore key limit** comes from Roblox's docs, not checked here.
+- **Other branches** (building-pass, design-tutorial, content-bible) were read with `git show`; I did not run their code.
