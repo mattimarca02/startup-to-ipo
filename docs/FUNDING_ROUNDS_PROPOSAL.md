@@ -125,6 +125,7 @@ Same rules as CUST 6 (claim, daily_test passes, F5 clean, Shut down all servers)
 ## 9. Open questions (unresolved, most important first)
 
 1. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
+2. **If a rung's hours differ by more than 5% between Software and Gaming:** refit Gaming so one `HoursShare` table serves both (recommend), or a per-sector table?
 
 ## What I did not verify
 

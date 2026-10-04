@@ -196,6 +196,15 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 - **Section 6, money (LG:90-95):** entry (1) of the `addEarnings` list (LG:94) carries Gaming's extra (no new entry); Gaming bundles join LG:95's product list.
 - **Section 8, PR plan (LG:110-122):** its PR 7 = PR 8-11 in CUST 6; Gaming needs its PR 2 (`kind`, engaged weights).
 
+## 6. Open questions (unresolved, most important first)
+
+1. **If G-G fails** (CUST 6): delay the launch until Gaming passes, or launch with Software alone and Gaming as the first update?
+2. **Is Software different enough** as today's reactive loop, or does it need a SaaS mechanic of its own (subscribers, uptime)? Recommend: keep it; ask the G-S players.
+3. **Where the Project window opens on a phone:** a sixth HUD slot shown only in Gaming (the top row grows from 370 to 442 px, IpoClient.lua:237-238; fit **unverified**), or a tray chip? Recommend the HUD slot.
+4. **A live game while away:** waits (designed) or loses players in real time (more real, punishes breaks)?
+5. **Words for kids:** "Flop" and "crunch" are real industry words; keep them, or "Quiet launch" and no crunch names?
+6. **Trend schedule:** a new trending genre every day (designed) or every week?
+
 ## What I did not verify
 
 - No sim was run: every Gaming number, the hours table and the titles count are placeholders or estimates by division. The fitted base (0.77) is an assumption.

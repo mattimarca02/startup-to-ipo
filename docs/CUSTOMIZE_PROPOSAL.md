@@ -193,11 +193,11 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 ## 8. Open questions (unresolved, most important first)
 
 1. **Tier rules:** Gold 1.0 T plus stake 55%, Platinum 0.8 T plus ratio 1.25 plus stake 70% (stake decided, numbers S8's), targets shortened by the run's share with each pass and fitted with a typical raise (recommend), or pass-neutral rules?
-2. **Collection bonus:** a Cash multiplier, cap 10%, never valuation (recommend), or a cheaper first rung?
-3. **Gaming's income model:** the launch cycle (SECT 2) only if S3 and S9 pass at G-G (recommend), or base Income with themed text?
+2. **Collection bonus:** a Cash multiplier, never valuation, cap 10% that two sectors reach only half of (recommend), or a cheaper first rung?
+3. **Leaderboard:** Collection plus the launch Hall of Fame (recommend), or also a fastest-Platinum board per sector, or a board per later goal (each a new named store, 1.5)?
 4. **Earned decor:** which milestones unlock which kept piece (content bible choice 5), and what Day 7 gives once its list is all kept?
-5. **Leaderboard:** Collection plus Hall of Fame (recommend), or also a fastest-Platinum board per sector?
-6. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S.
+5. **78 x 82 enough,** or move the plots (`PLOT_SPACING` 112)? Decide at G-S.
+6. **Gaming's own questions** (fallback if G-G fails, Project window, words): SECT 6.
 
 ## What I did not verify
 
