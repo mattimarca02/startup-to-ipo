@@ -2,7 +2,7 @@
 
 Design only (2026-10-05, branch `design-customize`): owner decision **D-F**, split out of docs/CUSTOMIZE_PROPOSAL.md (`CUST` below). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for this branch after merging `main` `9798388`. **(unverified)** = not checked in code; **(estimate)** = not measured; **(placeholder)** = sized by the sims. The saved fields (`pokedex.active.told`, `rounds`; `card.rounds`, `stake`, `shares`; `pokedex.dust`), the `pokedex` loader, versioning and the run check stay in CUST 1.2; the module names (`CompanyServer`, `CompanyConfig`, `CompanyClient`, `CompanyRemotes.CompanyAction`) in CUST's "New names".
 
-**Fixed by the owner:** **D-F** reaching a stage by valuation lets the player raise a round of a size they pick; it gives Cash only, costs dilution (fewer IPO Shares), and the room follows the building owned, not the stage (CUST 6). **Round Cash path (decided 2026-10-05):** paid like the daily gift: spendable Cash, valuation unchanged, never through `addEarnings` (DailyServer.lua:177-180; test daily_test.py:110).
+**Fixed by the owner:** **D-F** reaching a stage by valuation lets the player raise a round of a size they pick; it gives Cash only, costs dilution (fewer IPO Shares), and the room follows the building owned, not the stage (CUST 6). **Stake rule (decided 2026-10-05, option B):** the founder stake counts toward the stamp tiers, even after the Shares shop is complete (section 3). **Round Cash path (decided 2026-10-05):** paid like the daily gift: spendable Cash, valuation unchanged, never through `addEarnings` (DailyServer.lua:177-180; test daily_test.py:110).
 
 ## 1. The rules
 
@@ -63,13 +63,26 @@ Every number is a **placeholder** for S8 (section 6); nothing is random (D9).
 - **Code:** a new `IpoConfig.dilutedShares(base, D, dust)` returns `paid, dust`. Callers: `preview` (IpoServer.lua:153-161), the IPO transform, IpoClient (:561, 564, 639, reading `CompanyStake` and `CompanyDust` attributes).
 - **LONG_GAME (LG:86):** `dilutedShares(floor(20 x (1 + 0.25 x IPOs) x min(ratio, 1.5)^0.5 x pass), D, dust)`. IPO 1 after Large every round (D = 3,042): 20 becomes 14 (dust -840); with the pass 40 becomes 28 (dust -1,680).
 
-**Once the 750-Share shop is complete** (LG:86), Shares buy nothing: dilution costs nothing, and stamps and the board reward only speed, so every player raises Large every round. Options, **owner decision:**
-- **A. Accept it:** a reward for finishing the shop; Gold and Platinum (CUST 1.5) are fitted with "Large every round" for full-shop players.
-- **B. The stake counts for stamps (recommend):** Gold needs a final stake ≥ 80%, Platinum ≥ 90% (**placeholders**). Speed or the better stamp, forever. No new saved field: the card already keeps `stake`.
-- **C. Shares stay a score:** "Shares earned ever" breaks ties on the Collection board (CUST 1.6). Needs a new saved total.
-- **D. A Shares sink after the shop:** repeatable cosmetic prestige items. Content work only.
+**The founder stake counts for stamps (owner decision, option B, 2026-10-05).** Once the 750-Share shop is complete (LG:86) Shares buy nothing, so dilution would cost nothing. It still matters because the **founder stake** gates the stamp tiers: `stake = 10000 - D` in bp, `D = min(DilutionCap, Σ bp)` as in this section. Minimum stakes (**placeholders** for S8): **Platinum 7,000 bp (70%), Gold 5,500 bp (55%), Bronze none**. Speed or a better stamp, forever. The tier rules are in CUST 1.5.
+- **How the stake is read:** from `pokedex.active.rounds[k].bp` (section 1), the dilution already saved. **No new field**; the card's `stake` (CUST 1.2) is only the result kept. It is never recomputed from a later config, an unknown stage key's valid `bp` counts, and a malformed record counts as 0 bp (section 1).
+- **Where it is checked:** on the server, once, in the IPO transform that stamps (CUST 1.4 item 2; today's transform is `commitIpo`, TycoonCore.lua:544-564, called from `goPublic`, IpoServer.lua:177). The code that computes `D` for `dilutedShares` also gives `stake`; the tier = the highest one whose time, ratio and stake conditions all hold, and `stamp` and `card.stake` go into the same save. The client sends nothing: `GoPublic` carries only `ipoNumber` and the sector (CUST 1.4 item 1). The Funding window shows the stake left and the tier minimums from config, display only. No code for this exists yet (grep of the repo: no `pokedex`, `stake` or dilution, **verified**).
+- **Arithmetic (current curve, section 3's tables; a stake of 70% or more means `D ≤ 3,000` bp):**
 
-**Interactions:** Shareholder (ShopConfig.lua:81-88): x2 is inside `base`, the same proportional loss. Perks: prices unchanged; fewer Shares only delay them (the IPO multiplier counts IPOs). Daily Shares (`grantShares`, IpoServer.lua:140-148) and pitch Shares (LONG_GAME, undiluted base) are never diluted. Stamps look at dilution only with option B; rounds save engaged hours, so T is fitted with S8's typical raise (CUST 5.5 S6).
+| Rounds | Total D (bp) | Stake | Platinum | Gold |
+|---|---|---|---|---|
+| LONG_GAME, Large every round | 3,042 | 69.58% | **lost by 42 bp** | kept |
+| LONG, Seed skipped, Large in the other four | 3,027 | 69.73% | **lost** | kept |
+| LONG, Large in A, B, C+D; Medium at Pre-IPO | 2,151 | 78.49% | kept | kept |
+| LONG, Medium every round | 1,622 | 83.78% | kept | kept |
+| LONG, Large in Seed to C+D, Pre-IPO skipped | 1,133 | 88.67% | kept | kept |
+| Today (3 rounds), Large every round | 1,999 | 80.01% | kept | kept |
+| Today, Medium every round | 1,065 | 89.35% | kept | kept |
+
+All 4^5 = 1,024 LONG sequences (none, Small, Medium, Large at 5 rounds) were enumerated: **1,020 keep Platinum, 4 lose it**, and all 4 are Large at Series A, B, C+D **and** Pre-IPO (Seed any choice: 3,027 / 3,030 / 3,035 / 3,042 bp). Today's 3 rounds (64 sequences) all keep it: the worst is 1,999 bp. Order doesn't matter, only the total. A run that loses Platinum on stake falls to Gold if it meets Gold's conditions (time 1.0 T, which 0.8 T implies).
+- **Does the 4,000 bp cap conflict with the 70% minimum? No, but they overlap.** The cap alone guarantees a stake of 60% or more, so **Gold's 55% can never fail while the cap holds**: as a placeholder it is a dead rule. Platinum's 70% is the only minimum that bites. With this curve **the cap never binds either** (the largest total is 3,042 < 4,000, so no raise is ever refused for it); the 70% line is the real limit. Options for S8: keep both (the cap is a safety net if the table grows), raise Gold's minimum above 60%, or lower the cap to 3,000 so no Platinum is ever lost to stake (the choice then disappears). Only 4 of 1,024 sequences lose Platinum, so at these numbers the minimum prices only "Large in every late round"; S8 must say if that is enough.
+- **Tests (plan; not written, docs only):** (1) a run that meets the time target (≤ 0.8 T) and ratio but ends with a stake under 7,000 bp gets Gold, not Platinum; one under the Gold minimum (with a cap above 4,500) gets Bronze. (2) The tier uses the stake **at the IPO**: after the transform, changing `CompanyConfig` (cap, minimums, bp table), Debug "clear rounds", or a rejoin or run check never regrades the saved stamp, and `card.stake` equals the stake at that IPO. (3) **Bronze never requires a stake:** a first completion at stake 4,000 bp, or the cap ignored, still gets Bronze. (4) The boundary: exactly 7,000 bp keeps Platinum, 6,999 does not (a table test with whole bp). (5) Mutation: an extra `stake` argument in `GoPublic` is ignored.
+
+**Interactions:** Shareholder (ShopConfig.lua:81-88): x2 is inside `base`, the same proportional loss. Perks: prices unchanged; fewer Shares only delay them (the IPO multiplier counts IPOs). Daily Shares (`grantShares`, IpoServer.lua:140-148) and pitch Shares (LONG_GAME, undiluted base) are never diluted. Stamps read the stake (above); rounds save engaged hours, so T is fitted with S8's typical raise (CUST 5.5 S6).
 
 ## 4. Exploits (server check; test)
 
@@ -91,9 +104,9 @@ Every number is a **placeholder** for S8 (section 6); nothing is random (D9).
 
 ## 6. Simulate before any build: S8
 
-**S8 round size** (tools/economy_sim.py `--rounds`, next to CUST 5.5's `--pokedex`; marks are **placeholders**): policies none / Small / Medium / Large-every-round / best-per-stage, per profile, loops 1-10: hours per IPO, Shares, perk timing. Is Large always best? Which dilution curve makes the choice real? Hours saved vs Shares lost. Marks: no one choice best for every profile; Large-every-round saves ≤ 15% of a loop; converter and alt-fed gain < 3% in loop 2; raising the last open round never beats skipping it.
+**S8 round size** (tools/economy_sim.py `--rounds`, next to CUST 5.5's `--pokedex`; marks are **placeholders**): policies none / Small / Medium / Large-every-round / best-per-stage, per profile, loops 1-10: hours per IPO, Shares, perk timing. Is Large always best? Which dilution curve makes the choice real? Hours saved vs Shares lost. **It must now also measure speed versus tier lost** (the stake minimums, section 3): per policy, the hours per IPO against the share of runs that lose Platinum or Gold on stake, **for a player with the 750-Share shop complete** (Shares worth nothing, only the tier left to protect). Marks (**placeholders**): the stake minimum prices Large-every-round (it loses Platinum at LONG's numbers) without taking Platinum from most runs; the cap and the minimums are not redundant (today the cap never binds). Other marks: no one choice best for every profile; Large-every-round saves ≤ 15% of a loop; converter and alt-fed gain < 3% in loop 2; raising the last open round never beats skipping it.
 - *Can:* `--long` (`long_run`, economy_sim.py:1213-1379) has stage entry (:1346-1348), purchases that only fill the current rung (:1320-1339: a grant can't skip one), Shares with the pass (:1350-1352) and one speed perk, the only Shares sink and the only place dilution costs (:1362-1366). `--active` (`report_active`, :967) runs today's 5-stage economy (IPO in minutes): a smoke test only.
-- *Needs:* a grant at stage entry; `dilutedShares` (whole bp, dust) after the pass at :1352; the bp table and `HoursShare` from the measured stage hours; a `rounds` policy and a chooser; the converter profile; Cash left at the IPO and the seed (Cash resets at :1368); an S8 table.
+- *Needs:* a grant at stage entry; `dilutedShares` (whole bp, dust) after the pass at :1352; the bp table and `HoursShare` from the measured stage hours; a `rounds` policy and a chooser; the converter profile; Cash left at the IPO and the seed (Cash resets at :1368); the stake and the tier of each run (time, ratio, stake) with the minimums as parameters, a profile with the shop complete; an S8 table.
 
 ## 7. Build: PR 4b
 
@@ -109,11 +122,11 @@ Same rules as CUST 6 (claim, daily_test passes, F5 clean, Shut down all servers)
 
 ## 9. Open questions (unresolved, most important first)
 
-1. **Shares once the shop is complete** (section 3): A accept, B stake counts for stamps (recommend), C Shares as a board tie-break, or D a Shares sink?
-2. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
+1. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
 
 ## What I did not verify
 
 - S8 was not run; every round number is a placeholder. The bp tables use LONG_GAME's fitted rung hours and ECONOMY.md 3b's first-run minutes (one behaviour), not a new sim run. "Hours saved" is an upper bound, not measured.
 - The Funding window sizes, the toast overlap and Roblox's real top bar height come from the source, not from a device; the DisplayOrder layering was read in code, not seen in Studio.
+- The stake arithmetic comes from section 3's whole-bp tables by a script enumeration, not from the code or the sim; the 70% and 55% minimums and the 4,000 bp cap are placeholders. No stake, tier or `pokedex` code exists to check against. The IPO transform lines cited are today's code, not the future one.
 - TUTORIAL_PROPOSAL.md lives on another branch (read with `git show` for CUST); LONG_GAME PR 2 doesn't exist; `daily_test.py` was not run (docs only).

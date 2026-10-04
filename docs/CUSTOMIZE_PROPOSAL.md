@@ -65,7 +65,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 **The card** is in a new **Pokedex** tab of the IPO window (IpoClient.lua:354): sector, name, stamp, IPO number, date, engaged hours, ratio, founder stake and a **top-down map** (Frames per footprint). `ResetNames` (IpoConfig.lua:60-65) and the keep list (IpoClient.lua:524-533) add buildings, furniture, stamps, rounds.
 
 **1.5 Stamps, replays, Hall of Fame.**
-- **Bronze:** first completion, bonus +1.5%. **Gold:** a replay within **1.0 T** engaged hours, +0.5%. **Platinum:** within **0.8 T** at ratio **≥ 1.25**, +0.5%. **T** = the loop's reference hours for a regular player (LONG_GAME section 1: 57 / 51.5 / 52 h); **placeholders** (S6). The clock is the server's, weighted like the valuation (LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2. If the owner picks FUND 3's option B, Gold and Platinum also need a final stake floor.
+- **Bronze:** first completion, bonus +1.5%; **no time, ratio or stake condition**. **Gold:** a replay within **1.0 T** engaged hours (ratio ≥ 1, which any IPO has) **and a founder stake of at least 55%**, +0.5%. **Platinum:** within **0.8 T** at ratio **≥ 1.25** **and a stake of at least 70%**, +0.5%. **Stake** = 10,000 bp minus the total dilution, as of the IPO (decided, owner, 2026-10-05; the rule, the arithmetic and the cap are in FUND 3, "The founder stake counts for stamps"). **T** = the loop's reference hours for a regular player (LONG_GAME section 1: 57 / 51.5 / 52 h); every number here is a **placeholder** (S6, S8). The clock is the server's, weighted like the valuation (LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2. The tier is the highest whose conditions all hold, graded **once, in the IPO transform** (1.4), from the saved `rounds`' `bp`; the client sends nothing, and the saved stamp is never regraded. A run that is fast enough for Platinum but under 70% gets Gold. With FUND's 4,000 bp cap the stake is always at least 60%, so Gold's 55% cannot fail today (FUND 3).
 - **Pass fairness:** 2x Cash shortens a run about 15% (LONG_GAME section 6), so a target shrinks by that times the **share of the run's engaged seconds with the pass** (`passSeconds`), never by passes owned at founding (an exploit). A replay is priced by IPO count only. **Hall of Fame:** all four `"done"`: `hallAt`, a title, a gold frame, a board entry.
 
 **1.6 Leaderboard.** Today in-server only (IpoServer.lua:46-63; IpoClient.lua:750-786); no OrderedDataStore exists (docs/reviews/FULL_REVIEW.md:126).
@@ -111,8 +111,8 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 **5.4 Funding rounds:** Cash, valuation, Shares, dilution and exploits are in FUND 2-4.
 
 **5.5 Simulate before any build** (tools/economy_sim.py, new `--pokedex` mode; marks are **placeholders**):
-- **S1 seed:** 0 / 10 / 25% cap: ≤ 5% faster per loop; a "decorator" ≤ 5% slower. **S2 bonus:** 0-12 points x pass sets: at the cap ≥ 95% of no-bonus hours. **S3 parity:** every model, profile and rung ±5%. **S4 bots:** no sector faster for a bot. **S5 hopping:** fastest sector vs one, 10 IPOs: < 3%. **S6 tiers:** Gold on ≥ 50% of regular replays, Platinum on ≥ 20% of dedicated ones, pass owners within ±5 points. **S7 board:** new-sector vs replays within 10%; the task-bot never above a dedicated human.
-- **S8 round size:** FUND 6.
+- **S1 seed:** 0 / 10 / 25% cap: ≤ 5% faster per loop; a "decorator" ≤ 5% slower. **S2 bonus:** 0-12 points x pass sets: at the cap ≥ 95% of no-bonus hours. **S3 parity:** every model, profile and rung ±5%. **S4 bots:** no sector faster for a bot. **S5 hopping:** fastest sector vs one, 10 IPOs: < 3%. **S6 tiers:** (time, ratio and stake) Gold on ≥ 50% of regular replays, Platinum on ≥ 20% of dedicated ones, pass owners within ±5 points. **S7 board:** new-sector vs replays within 10%; the task-bot never above a dedicated human.
+- **S8 round size:** FUND 6; it also measures speed versus tier lost on stake.
 
 ## 6. Build plan
 
@@ -142,7 +142,7 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 **G-S, go / no-go:** (a) 6 plots at building 5, full budgets, low-end phone ≥ 30 fps **(estimate)**; (b) 3+ players pick, build, arrange, raise or skip, IPO into a new sector, find the card, unaided; (c) S1, S3, S5, S8 pass; (d) section 3's Studio checks. **No-go: fix before any other sector.**
 
 8-13. Fintech, Biotech, Gaming. *Tests:* parity ±5%, no new `addEarnings` site, D9 words, `id = 0`.
-14. Gold, Platinum, stamp clock, pass-share targets, bonus on, Hall of Fame; needs S2, S4, S6.
+14. Gold, Platinum, stamp clock, pass-share targets, stake minimums, bonus on, Hall of Fame; needs S2, S4, S6, S8. *Tests:* a run at the time target but under the stake minimum does not get the tier; the tier uses the stake at the IPO, never a later one (config change, Debug, rejoin); Bronze never requires a stake; exactly 7,000 bp keeps Platinum, 6,999 does not (FUND 3).
 15. `BoardServer` (exception approved, section 7), FR-11; needs S7.
 16. Picker and funding on for live servers; PUBLISH_RULES "2d" (with FUND 4's rollback note); publish.
 
@@ -167,7 +167,7 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 
 ## 8. Open questions (unresolved, most important first)
 
-1. **Tier rules:** Gold 1.0 T, Platinum 0.8 T plus ratio 1.25, targets shortened by the run's share with each pass and fitted with a typical raise (recommend), or pass-neutral rules?
+1. **Tier rules:** Gold 1.0 T plus stake 55%, Platinum 0.8 T plus ratio 1.25 plus stake 70% (stake decided, numbers S8's), targets shortened by the run's share with each pass and fitted with a typical raise (recommend), or pass-neutral rules?
 2. **Collection bonus:** a Cash multiplier, cap 10%, never valuation (recommend), or a cheaper first rung?
 3. **Income models:** the mechanics (only if S3-S5 pass) or today's Income with themed text? Fintech rewards holding Cash, against the buy loop: keep it?
 4. **Earned decor:** which milestones unlock which kept piece (content bible choice 5), and what Day 7 gives once its list is all kept?
@@ -178,5 +178,5 @@ Each PR: claim its scripts, `python3 tools/daily_test.py` passes, F5 without red
 
 - The world outside scripts (Baseplate, SpawnLocation, hand-placed parts, Terrain, StreamingEnabled): no Studio or MCP was used.
 - "0 visits" and the privacy setting (Creator Hub only); OrderedDataStore and `UserService` limits; camera scale; phone frame rates; why `MAX_PARTS` is 260.
-- Every economy number and content estimate: placeholders or estimates; no sim was run. Roblox's real top bar height is not measured.
+- The stake minimums (55% / 70%) are the owner's placeholders; no tier code exists and no sim was run (FUND 3, 6). Every economy number and content estimate: placeholders or estimates; no sim was run. Roblox's real top bar height is not measured.
 - Other branches were read with `git show`, not run; LONG_GAME PR 2 doesn't exist; `daily_test.py` was not run (docs only).
