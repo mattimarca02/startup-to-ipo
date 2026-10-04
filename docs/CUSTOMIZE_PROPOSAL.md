@@ -135,11 +135,14 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 
 **5.3 Risks.** IPO pace is unchanged: an IPO needs earned valuation (IpoServer.lua:123-135, 192-195). Switched on before PR 2, the bonus would shorten every IPO. A faster sector becomes the only choice (S3-S5). Only an IPO founds a company (cooldown, IpoConfig.lua:45). **Duplicate seed:** paid only inside the one transform; `ipoNumber` blocks a repeat (IpoServer.lua:179); a failed save changes nothing (TycoonCore.lua:565-567); the run check pays none. Stamps can't be traded or poached; older code keeps `pokedex` frozen.
 
-**5.4 Simulate before any build** (tools/economy_sim.py, new `--pokedex` mode; pass marks are **placeholders**):
+**5.4 Simulate before any build** (tools/economy_sim.py, new `--pokedex` mode with `--rounds`; pass marks are **placeholders**):
 - **S1 seed:** 0 / 10 / 25% cap: ≤ 5% faster per loop; a "decorator" (10% of Cash on furniture): ≤ 5% slower.
 - **S2 bonus:** 0-12 points x pass sets, loops 2-12: at the cap ≥ 95% of no-bonus hours; both passes gain ≤ 2 points more.
 - **S3 parity:** each model per `LONG_PLAYERS` profile: every rung ±5%; moments recounted. **S4 bots:** no sector faster for a bot. **S5 hopping:** fastest sector vs one, 10 IPOs: < 3%.
 - **S6 tiers:** Gold on ≥ 50% of regular replays, Platinum on ≥ 20% of dedicated ones, pass owners within ±5 points. **S7 board:** new-sector vs replays, IPO-ready vs 1.25: within 10%; the task-bot never above a dedicated human.
+- **S8 round size:** policies none / Small / Medium / Large-every-round / best-per-stage, per `LONG_PLAYERS` profile, loops 1-10: engaged hours per IPO, Shares, perk timing. Questions: is Large always best? which dilution curve makes the choice real? hours saved vs Shares lost. Marks: no one choice best for every profile; Large-every-round saves ≤ 15% of a loop; the converter and alt-fed profiles (5.6) gain < 3% in loop 2; raising the last open round never beats skipping it.
+  - *Today's modes:* `--long` (`long_run`, economy_sim.py:1213-1379) has the ladder, stage entry (:1346-1348), purchases that only fill the current rung (:1320-1339: a grant can't skip a rung; Cash above the rung's prices waits), Shares with the pass (:1350-1352) and one speed perk as the only Shares sink (:1362-1366, the only place dilution's cost shows). `--active` (`report_active`, :967) runs today's 5-stage economy (IPO in minutes): a smoke test only, it can't show hours saved over a 50 h run.
+  - *To add:* a grant at stage entry (`cashPct x threshold x scale`); `(1 - D)` before the pass at :1352; a `rounds` policy argument and a chooser (hours saved vs Shares lost); the converter profile; Cash left at the IPO and the seed (Cash resets to 0 at :1368); an S8 table.
 - **Duplicate seed** test: a retried save, a repeated `GoPublic` and a run mismatch pay it once.
 
 **5.5 Funding rounds: Cash, valuation, Shares.**
