@@ -42,6 +42,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
   },
   kept = { [objectKey] = n },  -- earned decor: free in every company
   hallAt = number,           -- all four first done (0 = not yet)
+  dust = number,             -- Shares remainder in 1/10000 Share, -5000 to 4999 (FUND 3)
   studio = boolean,          -- saved by a Studio server: never on the live board
 }
 ```
@@ -64,7 +65,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 **The card** is in a new **Pokedex** tab of the IPO window (IpoClient.lua:354): sector, name, stamp, IPO number, date, engaged hours, ratio, founder stake and a **top-down map** (Frames per footprint). `ResetNames` (IpoConfig.lua:60-65) and the keep list (IpoClient.lua:524-533) add buildings, furniture, stamps, rounds.
 
 **1.5 Stamps, replays, Hall of Fame.**
-- **Bronze:** first completion, bonus +1.5%. **Gold:** a replay within **1.0 T** engaged hours, +0.5%. **Platinum:** within **0.8 T** at ratio **≥ 1.25**, +0.5%. **T** = the loop's reference hours for a regular player (LONG_GAME section 1: 57 / 51.5 / 52 h); **placeholders** (S6). The clock is the server's, weighted like the valuation (LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2.
+- **Bronze:** first completion, bonus +1.5%. **Gold:** a replay within **1.0 T** engaged hours, +0.5%. **Platinum:** within **0.8 T** at ratio **≥ 1.25**, +0.5%. **T** = the loop's reference hours for a regular player (LONG_GAME section 1: 57 / 51.5 / 52 h); **placeholders** (S6). The clock is the server's, weighted like the valuation (LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2. If the owner picks FUND 3's option B, Gold and Platinum also need a final stake floor.
 - **Pass fairness:** 2x Cash shortens a run about 15% (LONG_GAME section 6), so a target shrinks by that times the **share of the run's engaged seconds with the pass** (`passSeconds`), never by passes owned at founding (an exploit). A replay is priced by IPO count only. **Hall of Fame:** all four `"done"`: `hallAt`, a title, a gold frame, a board entry.
 
 **1.6 Leaderboard.** Today in-server only (IpoServer.lua:46-63; IpoClient.lua:750-786); no OrderedDataStore exists (docs/reviews/FULL_REVIEW.md:126).
@@ -109,7 +110,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 
 **5.4 Funding rounds:** Cash, valuation, Shares, dilution and exploits are in FUND 2-4.
 
-**5.6 Simulate before any build** (tools/economy_sim.py, new `--pokedex` mode; marks are **placeholders**):
+**5.5 Simulate before any build** (tools/economy_sim.py, new `--pokedex` mode; marks are **placeholders**):
 - **S1 seed:** 0 / 10 / 25% cap: ≤ 5% faster per loop; a "decorator" ≤ 5% slower. **S2 bonus:** 0-12 points x pass sets: at the cap ≥ 95% of no-bonus hours. **S3 parity:** every model, profile and rung ±5%. **S4 bots:** no sector faster for a bot. **S5 hopping:** fastest sector vs one, 10 IPOs: < 3%. **S6 tiers:** Gold on ≥ 50% of regular replays, Platinum on ≥ 20% of dedicated ones, pass owners within ±5 points. **S7 board:** new-sector vs replays within 10%; the task-bot never above a dedicated human.
 - **S8 round size:** FUND 6.
 
