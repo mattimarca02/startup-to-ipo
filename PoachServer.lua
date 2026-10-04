@@ -21,9 +21,6 @@ local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 
 local RULES = CreatureConfig.Poaching
-local HR_PAD_OFFSET = Vector3.new(-21, 0.6, 24) -- front-left of the plot, next to the green pad
-local HR_COLOR = Color3.fromRGB(150, 90, 255)
-local WHITE = Color3.new(1, 1, 1)
 local LOST_NOTE_SECONDS = 30 * 24 * 60 * 60 -- how long a save remembers who took its employees
 local MAX_LOST_NOTES = 50
 local SAVE_TRIES = 5
@@ -42,20 +39,6 @@ local lastTargetsCall = {} -- player -> os.clock()
 local dummy -- Studio Debug tab only: a fake player to poach from (never saved)
 
 -- Helpers ---------------------------------------------------------------
-
-local function makePart(parent, name, size, position, color, material)
-	local p = Instance.new("Part")
-	p.Name = name
-	p.Size = size
-	p.Position = position
-	p.Color = color
-	p.Material = material or Enum.Material.SmoothPlastic
-	p.Anchored = true
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Parent = parent
-	return p
-end
 
 local function percent(chance)
 	return math.floor(chance * 100 + 0.5) .. "%"
@@ -580,6 +563,49 @@ local function targetsFor(player)
 	}
 end
 
+-- HR Department ----------------------------------------------------------------
+
+-- Buying the next level happens in the Poach window (Defense tab): it sends "BuyHr" and nothing
+-- else, the server decides. (It used to be a purple pad in the garage; nothing there reacts to
+-- touch any more.)
+-- HRBUY-START
+-- (tools/daily_test.py runs the code between the HRBUY markers.)
+local HR_BUY_MIN_INTERVAL = 1 -- seconds between two requests from one player (spam is refused)
+
+-- Returns the next level's rules when the player may buy it now, or nil and the reason. Stamps
+-- poach.lastHrBuyAt on every request it looks at, so a spammed button is only looked at once per interval.
+local function checkHrPurchase(levels, poach, cash, now)
+	if poach.lastHrBuyAt and now - poach.lastHrBuyAt < HR_BUY_MIN_INTERVAL then
+		return nil, "Too fast"
+	end
+	poach.lastHrBuyAt = now
+	local nextLevel = levels[poach.hrLevel + 1]
+	if not nextLevel then
+		return nil, "The HR Department is fully upgraded"
+	end
+	if cash < nextLevel.cost then
+		return nil, "HR Department Lv " .. (poach.hrLevel + 1) .. " costs " .. ShopConfig.formatCash(nextLevel.cost)
+	end
+	return nextLevel
+end
+-- HRBUY-END
+
+local function buyHr(player)
+	local poach, data = getPoach(player)
+	if not poach or not data.ready then
+		return false, "Still loading, try again in a moment"
+	end
+	local nextLevel, reason = checkHrPurchase(RULES.HRDepartment, poach, data.cash.Value, os.clock())
+	if not nextLevel then
+		return false, reason
+	end
+	data.cash.Value -= nextLevel.cost
+	poach.hrLevel += 1
+	publish(player)
+	task.spawn(core.save, player) -- the Cash is spent: save it now
+	return true, "HR Department Lv " .. poach.hrLevel .. ": poachers get -" .. percent(nextLevel.defense) .. " chance"
+end
+
 local function onAction(player, action, a, b)
 	if typeof(action) ~= "string" then return false, "Bad request" end
 	local poach, data = getPoach(player)
@@ -597,60 +623,10 @@ local function onAction(player, action, a, b)
 		return start(player, a, b)
 	elseif action == "CounterOffer" then
 		return counterOffer(player)
+	elseif action == "BuyHr" then
+		return buyHr(player)
 	end
 	return false, "Unknown action"
-end
-
--- HR Department pad ----------------------------------------------------------
-
-local function hrLabelText(level)
-	local nextLevel = RULES.HRDepartment[level + 1]
-	if not nextLevel then
-		return "HR Department MAX\n-" .. percent(CreatureConfig.hrDefense(level)) .. " poach chance"
-	end
-	return string.format("HR Department Lv %d\nLv %d: %s (-%s poach chance)", level, level + 1,
-		ShopConfig.formatCash(nextLevel.cost), percent(nextLevel.defense))
-end
-
--- A purple pad next to the green one. Step on it to buy the next level (like the green pad).
-local function buildHrPad(player, data)
-	local pad = makePart(data.folder, "HRPad", Vector3.new(8, 0.2, 8), core.plotCenter(data.slot) + HR_PAD_OFFSET, HR_COLOR, Enum.Material.Neon)
-	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(10, 2.6) -- in studs, like the incubator labels
-	gui.StudsOffset = Vector3.new(0, 4, 0)
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = 90
-	gui.Parent = pad
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
-	label.TextColor3 = WHITE
-	label.TextStrokeTransparency = 0
-	label.Text = hrLabelText(data.poach.hrLevel)
-	label.Parent = gui
-	data.poach.hrLabel = label -- for resetHrDepartment
-
-	local lastTouch = 0
-	pad.Touched:Connect(function(hit)
-		if Players:GetPlayerFromCharacter(hit.Parent) ~= player or not data.ready then return end
-		if os.clock() - lastTouch < 2 then return end
-		local poach = data.poach
-		local nextLevel = RULES.HRDepartment[poach.hrLevel + 1]
-		if not nextLevel then return end
-		lastTouch = os.clock()
-		if data.cash.Value < nextLevel.cost then
-			send(player, "Notice", { text = "HR Department Lv " .. (poach.hrLevel + 1) .. " costs " .. ShopConfig.formatCash(nextLevel.cost) })
-			return
-		end
-		data.cash.Value -= nextLevel.cost
-		poach.hrLevel += 1
-		label.Text = hrLabelText(poach.hrLevel)
-		publish(player)
-		task.spawn(core.save, player) -- the Cash is spent: save it now
-		send(player, "Notice", { text = "HR Department Lv " .. poach.hrLevel .. ": poachers get -" .. percent(nextLevel.defense) .. " chance" })
-	end)
 end
 
 -- IPO (IpoServer and TycoonCore call these) ---------------------------------------
@@ -696,9 +672,6 @@ function PoachServer.resetHrDepartment(player)
 	local poach = getPoach(player)
 	if not poach then return end
 	poach.hrLevel = 0
-	if poach.hrLabel then
-		poach.hrLabel.Text = hrLabelText(0)
-	end
 	publish(player)
 end
 
@@ -754,7 +727,6 @@ function PoachServer.setupPlayer(player, data, savedPoach, isNew)
 	end
 	data.poach = poach
 	reconcile(player, data, notes)
-	buildHrPad(player, data)
 	publish(player)
 end
 

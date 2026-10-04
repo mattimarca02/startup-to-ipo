@@ -120,3 +120,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
 | CLAUDE.md | (repo only) | free | | |
+| PlotVisuals | ServerScriptService | free | | |
+| PlotArt | ServerScriptService | free | | |
+| README.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| docs/STUDIO_SYNC.md | (repo only) | free | | |

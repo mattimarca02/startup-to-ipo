@@ -1,6 +1,7 @@
 -- ShopClient: the Shop button and shop window (milestone 3).
 -- Put this LocalScript in StarterPlayer > StarterPlayerScripts. It builds the screen by itself.
 -- It only opens Roblox's purchase prompts. Everything is granted by ShopServer on the server.
+-- The Office tab buys the garage upgrades: it sends only the upgrade's number, and the server decides.
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -35,6 +36,7 @@ local pending = {} -- item key -> token while its Roblox purchase prompt is open
 local cards = {} -- refresh functions, one per card
 local cardParts = {} -- the pieces of every card, resized by applyLayout on small screens
 local incomeValue -- leaderstats.Income, used to preview cash pack sizes
+local cashValue -- leaderstats.Cash, to show which upgrade you can afford
 
 -- UI helpers ------------------------------------------------------------
 
@@ -191,7 +193,7 @@ local pages = make("Frame", {
 	Parent = window,
 })
 
-local tabNames = { "Passes", "Boosts", "Cash" }
+local tabNames = { "Office", "Passes", "Boosts", "Cash" }
 if debugRemote then
 	table.insert(tabNames, "Debug")
 end
@@ -491,6 +493,85 @@ for i, product in ipairs(ShopConfig.Products) do
 	end
 end
 
+-- Office tab: the six garage upgrades, bought in order. The list (name, price, income) comes from the
+-- server, and a Buy tap sends only the upgrade's number: the server checks the order, the Cash and
+-- everything else, and answers with a short message.
+local officeBusy = false
+local function buyOffice(actionRemote, index)
+	if officeBusy then return end
+	officeBusy = true
+	local ok, _, message = pcall(function()
+		return actionRemote:InvokeServer("BuyUpgrade", index)
+	end)
+	officeBusy = false
+	showToast(ok and message or "Couldn't buy that. Please try again.")
+	refreshAll()
+end
+
+task.spawn(function()
+	local page = tabPages.Office
+	local actionRemote = remotes:WaitForChild("ShopAction", 10)
+	local list
+	for _ = 1, 5 do
+		if not actionRemote then break end
+		local ok, fine, result = pcall(function()
+			return actionRemote:InvokeServer("Upgrades")
+		end)
+		if ok and fine and typeof(result) == "table" then
+			list = result
+			break
+		end
+		task.wait(2)
+	end
+	if not list then
+		make("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 52),
+			BackgroundTransparency = 1,
+			Font = Enum.Font.GothamBold,
+			Text = "The office upgrades aren't available right now.",
+			TextColor3 = COLORS.subtext,
+			TextWrapped = true,
+			Parent = page,
+		})
+		return
+	end
+	for i, upg in ipairs(list) do
+		local desc, button = makeCard(page, i, upg.icon or "🏢", upg.name)
+		button.Activated:Connect(function()
+			buyOffice(actionRemote, i)
+		end)
+		table.insert(cards, function()
+			local function owned(n)
+				return player:GetAttribute("Upgrade" .. n) == true
+			end
+			local nextIndex = #list + 1
+			for n = 1, #list do
+				if not owned(n) then
+					nextIndex = n
+					break
+				end
+			end
+			local price = upg.cost == 0 and "Free" or ShopConfig.formatCash(upg.cost)
+			if owned(i) then
+				desc.Text = "In your garage. Earns +" .. ShopConfig.formatCash(upg.income) .. " every second."
+				setButton(button, "Owned", COLORS.owned, false)
+			elseif i == nextIndex then
+				desc.Text = "Earns +" .. ShopConfig.formatCash(upg.income) .. " every second. Price: " .. price .. "."
+				if (cashValue and cashValue.Value or 0) >= upg.cost then
+					setButton(button, "Buy\n" .. price, COLORS.buy, true)
+				else
+					setButton(button, price, COLORS.disabled, false)
+				end
+			else
+				desc.Text = "Earns +" .. ShopConfig.formatCash(upg.income) .. " every second. Buy " .. list[nextIndex].name .. " first."
+				setButton(button, "Locked", COLORS.disabled, false)
+			end
+		end)
+	end
+	applyLayout()
+	refreshAll()
+end)
+
 -- Studio-only Debug tab: pretend to own passes and push fake receipts through the real server code
 if debugRemote then
 	local page = tabPages.Debug
@@ -660,7 +741,7 @@ closeButton.Activated:Connect(function()
 	setOpen(false)
 end)
 
-showTab("Passes")
+showTab("Office")
 refreshAll()
 applyLayout()
 window:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
@@ -692,7 +773,9 @@ end)
 notifyEvent.OnClientEvent:Connect(showToast)
 
 task.spawn(function()
-	incomeValue = player:WaitForChild("leaderstats"):WaitForChild("Income")
+	local stats = player:WaitForChild("leaderstats")
+	incomeValue = stats:WaitForChild("Income")
+	cashValue = stats:WaitForChild("Cash")
 	refreshAll()
 end)
 

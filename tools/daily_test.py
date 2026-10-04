@@ -3274,6 +3274,1061 @@ end
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
+VISUALS_TESTS = r"""-- Tests for the plot visuals: the real PlotArt and PlotVisuals with a fake Roblox (visuals-garage) ----
+-- The fake has real 3D math (Vector3, CFrame with rotations) and Instances with parents, so the
+-- builder makes the same parts it makes in Studio, and PlotVisuals.check measures them.
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local function warn() end
+local SPAWNED = {}
+local task = { spawn = function(f, ...) table.insert(SPAWNED, f) end, wait = function() end }
+local CLOCK = 0
+local os = { clock = function() CLOCK += 0.05; return CLOCK end, time = function() return 0 end }
+
+-- Vector3
+local V = {}
+local function vec(x, y, z) return setmetatable({ X = x, Y = y, Z = z }, V) end
+V.__index = V
+V.__add = function(a, b) return vec(a.X + b.X, a.Y + b.Y, a.Z + b.Z) end
+V.__sub = function(a, b) return vec(a.X - b.X, a.Y - b.Y, a.Z - b.Z) end
+V.__mul = function(a, b)
+	if type(a) == "number" then return vec(a * b.X, a * b.Y, a * b.Z) end
+	return vec(a.X * b, a.Y * b, a.Z * b)
+end
+local Vector3 = { new = function(x, y, z) return vec(x or 0, y or 0, z or 0) end }
+
+-- CFrame: position + row-major rotation matrix, composed like Roblox's
+local CF = {}
+local function cf(x, y, z, r) return setmetatable({ x = x, y = y, z = z, r = r or { 1, 0, 0, 0, 1, 0, 0, 0, 1 } }, CF) end
+local function matmul(a, b)
+	local m = {}
+	for i = 0, 2 do
+		for j = 0, 2 do
+			m[i * 3 + j + 1] = a[i * 3 + 1] * b[j + 1] + a[i * 3 + 2] * b[j + 4] + a[i * 3 + 3] * b[j + 7]
+		end
+	end
+	return m
+end
+CF.__index = function(t, k)
+	if k == "Position" then return vec(t.x, t.y, t.z) end
+	return CF[k]
+end
+CF.__mul = function(a, b)
+	local r = a.r
+	if getmetatable(b) == V then
+		return vec(r[1] * b.X + r[2] * b.Y + r[3] * b.Z + a.x, r[4] * b.X + r[5] * b.Y + r[6] * b.Z + a.y, r[7] * b.X + r[8] * b.Y + r[9] * b.Z + a.z)
+	end
+	return cf(r[1] * b.x + r[2] * b.y + r[3] * b.z + a.x, r[4] * b.x + r[5] * b.y + r[6] * b.z + a.y, r[7] * b.x + r[8] * b.y + r[9] * b.z + a.z, matmul(r, b.r))
+end
+function CF.GetComponents(t) local r = t.r return t.x, t.y, t.z, r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9] end
+local function rx(a) local c, s = math.cos(a), math.sin(a) return { 1, 0, 0, 0, c, -s, 0, s, c } end
+local function ry(a) local c, s = math.cos(a), math.sin(a) return { c, 0, s, 0, 1, 0, -s, 0, c } end
+local function rz(a) local c, s = math.cos(a), math.sin(a) return { c, -s, 0, s, c, 0, 0, 0, 1 } end
+local CFrame = {
+	new = function(x, y, z) return cf(x or 0, y or 0, z or 0) end,
+	Angles = function(a, b, c) return cf(0, 0, 0, matmul(matmul(rx(a), ry(b)), rz(c))) end,
+	fromEulerAnglesYXZ = function(a, b, c) return cf(0, 0, 0, matmul(matmul(ry(b), rx(a)), rz(c))) end,
+}
+
+-- Enums: an unknown name errors, like Roblox
+local function enumType(names)
+	local t = {}
+	for _, n in ipairs(names) do t[n] = { Name = n } end
+	return setmetatable(t, { __index = function(_, k) error("not a valid enum item: " .. tostring(k)) end })
+end
+local Enum = {
+	Material = enumType({ "Plastic", "SmoothPlastic", "Neon", "Wood", "WoodPlanks", "Marble", "Slate", "Concrete", "Granite", "Brick",
+		"Pebble", "Cobblestone", "CorrodedMetal", "DiamondPlate", "Foil", "Metal", "Grass", "Sand", "Fabric", "Ice", "Glass" }),
+	PartType = enumType({ "Block", "Cylinder", "Ball", "Wedge", "CornerWedge" }),
+	SurfaceType = enumType({ "Smooth" }),
+	NormalId = enumType({ "Top", "Bottom", "Left", "Right", "Front", "Back" }),
+	Font = enumType({ "GothamBold", "PermanentMarker", "IndieFlower", "LuckiestGuy", "FredokaOne" }),
+	SurfaceGuiSizingMode = enumType({ "PixelsPerStud" }),
+}
+local Color3 = { fromRGB = function(r, g, b) return { R = r / 255, G = g / 255, B = b / 255, rgb = { r, g, b } } end }
+local UDim2 = { fromScale = function(x, y) return { x, y } end }
+local NumberRange = { new = function(a, b) return { a, b } end }
+local NumberSequence = { new = function(a, b) return { a, b } end }
+local ColorSequence = { new = function(a, b) return { a, b } end }
+local Vector2 = { new = function(x, y) return { x, y } end }
+
+-- Instances with parents and children
+local IS_A = { Part = { BasePart = true }, PointLight = { Light = true } }
+local Methods = {}
+local Mt = {}
+Mt.__index = function(t, k)
+	if k == "Parent" then return rawget(t, "_parent") end
+	return Methods[k]
+end
+Mt.__newindex = function(t, k, v)
+	if k == "Parent" then
+		local old = rawget(t, "_parent")
+		if old then
+			for i, c in ipairs(old._children) do if c == t then table.remove(old._children, i) break end end
+		end
+		rawset(t, "_parent", v)
+		if v then table.insert(v._children, t) end
+	else
+		rawset(t, k, v)
+	end
+end
+local function newInstance(class)
+	local i = setmetatable({ ClassName = class, Name = class, _children = {}, _attrs = {} }, Mt)
+	if class == "Part" then
+		rawset(i, "Anchored", false); rawset(i, "CanCollide", true); rawset(i, "CanTouch", true)
+		rawset(i, "CanQuery", true); rawset(i, "CastShadow", true); rawset(i, "Transparency", 0)
+	end
+	return i
+end
+local Instance = { new = newInstance }
+function Methods.GetChildren(t) return table.clone(t._children) end
+function Methods.GetDescendants(t)
+	local out = {}
+	local function walk(n) for _, c in ipairs(n._children) do table.insert(out, c); walk(c) end end
+	walk(t)
+	return out
+end
+function Methods.FindFirstChild(t, name) for _, c in ipairs(t._children) do if c.Name == name then return c end end return nil end
+function Methods.IsA(t, class) return t.ClassName == class or (IS_A[t.ClassName] ~= nil and IS_A[t.ClassName][class] == true) end
+function Methods.SetAttribute(t, k, v) t._attrs[k] = v end
+function Methods.GetAttribute(t, k) return t._attrs[k] end
+function Methods.Destroy(t) t.Parent = nil; rawset(t, "destroyed", true) end
+function Methods.GetFullName(t) local p = t.Parent return (p and p ~= ROOT and (p:GetFullName() .. ".") or "") .. t.Name end
+function Methods.ScaleTo(t, s) rawset(t, "scale", s) end
+ROOT = nil
+
+local PlotArt = (function()
+__PLOTART__
+end)()
+local PlotVisuals = (function()
+__PLOTVISUALS__
+end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+local EXPECTED = __EXPECTED__
+
+-- 1. The data -------------------------------------------------------------------
+local problems = PlotVisuals.validate(PlotArt)
+check("PlotVisuals.validate finds no problem in PlotArt (shapes, sizes > 0, colors 0-255, materials, Neon names, fonts)", #problems == 0, problems[1])
+check("PlotArt has at least one room and never more rooms than IpoConfig has funding stages",
+	#PlotArt.Stages >= 1 and #PlotArt.Stages <= #IpoConfig.Stages, #PlotArt.Stages)
+if __ALL_STAGES__ then
+	check("PlotArt has exactly one room per IpoConfig funding stage", #PlotArt.Stages == #IpoConfig.Stages, #PlotArt.Stages)
+end
+for i, room in ipairs(PlotArt.Stages) do
+	check("room " .. i .. " is keyed to IpoConfig stage " .. i .. " (" .. tostring(IpoConfig.Stages[i] and IpoConfig.Stages[i].key) .. ")",
+		IpoConfig.Stages[i] ~= nil and room.key == IpoConfig.Stages[i].key, room.key)
+end
+for _, name in ipairs(EXPECTED.upgrades) do
+	check("upgrade '" .. name .. "' has a prop", type(PlotArt.Props[name]) == "table" and #PlotArt.Props[name] > 0)
+end
+local known = {}
+for _, name in ipairs(EXPECTED.upgrades) do known[name] = true end
+for name in pairs(PlotArt.Props) do
+	check("prop '" .. tostring(name) .. "' belongs to a real upgrade (UPGRADES in TycoonCore)", known[name] == true)
+end
+
+-- 2. The layout map matches the scripts ----------------------------------------------
+local L = PlotArt.Layout
+check("layout: Floor size and top match TycoonCore", L.floorSize[1] == EXPECTED.floor[1] and L.floorSize[2] == EXPECTED.floor[2]
+	and L.floorSize[3] == EXPECTED.floor[3] and L.floorTop == EXPECTED.floorTop)
+for _, sign in ipairs(L.signs) do
+	local e = EXPECTED.signs[sign.name]
+	check("layout: " .. sign.name .. " offset matches its script", e ~= nil and sign.x == e[1] and sign.z == e[2])
+end
+check("layout: two signs and no pad (the walk-on pads are gone)", #L.signs == 2 and L.pads == nil and L.padSize == nil)
+check("layout: spawn landing matches teleportToPlot", L.spawn.x == EXPECTED.spawn[1] and L.spawn.z == EXPECTED.spawn[2])
+check("layout: one item slot per upgrade", #L.itemSlots == #EXPECTED.upgrades)
+for i, slot in ipairs(L.itemSlots) do
+	local e = EXPECTED.slots[i]
+	check("layout: slot " .. i .. " is " .. tostring(EXPECTED.upgrades[i]) .. " at itemOffset(" .. i .. ")",
+		e ~= nil and slot.name == EXPECTED.upgrades[i] and slot.x == e[1] and slot.z == e[2])
+end
+local function sameSpots(a, b)
+	if #a ~= #b then return false end
+	for i = 1, #a do if a[i][1] ~= b[i][1] or a[i][2] ~= b[i][2] then return false end end
+	return true
+end
+check("layout: EMPLOYEE_SPOTS match EmployeeServer", sameSpots(L.employeeSpots, EXPECTED.spots))
+check("layout: INCUBATOR_SPOTS match EmployeeServer", sameSpots(L.incubators, EXPECTED.incubators))
+check("layout: one desk per employee spot", #L.desks == #L.employeeSpots)
+
+-- 2b. The tidy startup-studio layout: an even grid, desks all one way, aisles of 6+ studs --------------------
+do
+	local R = L.reserve
+	local xs, zs, seenX, seenZ = {}, {}, {}, {}
+	for _, spot in ipairs(L.employeeSpots) do
+		if not seenX[spot[1]] then seenX[spot[1]] = true table.insert(xs, spot[1]) end
+		if not seenZ[spot[2]] then seenZ[spot[2]] = true table.insert(zs, spot[2]) end
+	end
+	table.sort(xs) table.sort(zs)
+	check("layout: 11 hire spots in a grid of 4 columns and 3 rows", #L.employeeSpots == 11 and #xs == 4 and #zs == 3, #xs .. " columns, " .. #zs .. " rows")
+	local evenX, evenZ = true, true
+	for i = 3, #xs do if math.abs((xs[i] - xs[i - 1]) - (xs[2] - xs[1])) > 1e-9 then evenX = false end end
+	for i = 3, #zs do if math.abs((zs[i] - zs[i - 1]) - (zs[2] - zs[1])) > 1e-9 then evenZ = false end end
+	check("layout: equal spacing between columns and between rows", evenX and evenZ)
+	local filled = {}
+	local aligned = true
+	for _, spot in ipairs(L.employeeSpots) do
+		local key = spot[1] .. "," .. spot[2]
+		if filled[key] then aligned = false end
+		filled[key] = true
+	end
+	check("layout: no two hires share a spot", aligned)
+	local sameWay = true
+	for _, desk in ipairs(L.desks) do
+		if desk[1] ~= 0 or desk[2] ~= L.desks[1][2] or desk[3] ~= 0 then sameWay = false end
+	end
+	check("layout: every desk is in front of its hire and faces the same way", sameWay)
+	local rowsFilledInOrder = true
+	for i = 2, #L.employeeSpots do
+		if L.employeeSpots[i][2] < L.employeeSpots[i - 1][2] then rowsFilledInOrder = false end
+	end
+	check("layout: spots fill row by row from the back", rowsFilledInOrder)
+	local symmetricStart = L.employeeSpots[1][1] == -L.employeeSpots[2][1] and L.employeeSpots[3][1] == -L.employeeSpots[4][1]
+	check("layout: a small team fills the middle first and stays symmetric", symmetricStart)
+	local aisles = PlotVisuals.aisles(L)
+	check("layout: an aisle in front of the first row and one between every two rows", #aisles == #zs, #aisles)
+	for i, a in ipairs(aisles) do
+		check("layout: aisle " .. i .. " is at least " .. R.minAisle .. " studs deep (" .. (a[4] - a[3]) .. ")", a[4] - a[3] >= R.minAisle)
+	end
+	local lastIncubator = -math.huge
+	for _, s in ipairs(L.incubators) do lastIncubator = math.max(lastIncubator, s[2]) end
+	check("layout: at least 6 studs from the door side (incubators) to the first row of hires",
+		(zs[1] - R.hireHalf) - (lastIncubator + R.incubatorFront) >= R.minAisle)
+	check("layout: the walking lane is clear of every hire column (the spawn stays in it)",
+		(function()
+			for _, spot in ipairs(L.employeeSpots) do
+				if spot[1] - R.hireHalf < L.spawn.x + R.spawnHalf and spot[1] + R.hireHalf > L.spawn.x - R.spawnHalf then return false end
+			end
+			return true
+		end)())
+	-- No two reserved zones overlap, except the ones meant to sit inside another
+	local zones = PlotVisuals.zones(L)
+	local allowed = { ["spawn|lane"] = true, ["spawn|aisle"] = true, ["sign|lane"] = true, ["aisle|lane"] = true }
+	local overlapping
+	for i = 1, #zones do
+		for j = i + 1, #zones do
+			local a, b = zones[i], zones[j]
+			local key1, key2 = a.kind .. "|" .. b.kind, b.kind .. "|" .. a.kind
+			local ab, bb = a.box, b.box
+			local hit = ab[1] < bb[2] - 1e-6 and bb[1] < ab[2] - 1e-6 and ab[5] < bb[6] - 1e-6 and bb[5] < ab[6] - 1e-6
+			if hit and not allowed[key1] and not allowed[key2] then overlapping = overlapping or (a.name .. " / " .. b.name) end
+		end
+	end
+	check("layout: the reserved zones (hires, desks, props, incubators, signs, aisles, lane) never overlap each other", overlapping == nil, overlapping)
+	local inside = true
+	for _, z in ipairs(zones) do
+		local b = z.box
+		if b[1] < -L.floorSize[1] / 2 or b[2] > L.floorSize[1] / 2 or b[5] < -L.floorSize[3] / 2 or b[6] > L.floorSize[3] / 2 then inside = false end
+	end
+	check("layout: every reserved zone is inside the 60 x 60 floor", inside)
+	local walls = true
+	for _, slot in ipairs(L.itemSlots) do
+		if math.abs(slot.x) - R.slotHalfX < 17 then walls = false end
+	end
+	check("layout: the upgrade stations stand on the two side strips, clear of the hire grid", walls)
+end
+
+-- 3. Every room, with every prop in it ----------------------------------------------------
+local center = Vector3.new(-135, 0.5, 150) -- a real plot center (slot 2)
+local function slotVec(slot) return Vector3.new(slot.x, 0, slot.z) end
+local function fullRoom(art, stage)
+	local room = PlotVisuals.buildRoom(nil, center, art, stage)
+	for _, slot in ipairs(art.Layout.itemSlots) do
+		PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, art, slot.name, slotVec(slot))
+	end
+	return room
+end
+local ALLOWED = { Concrete = true, CorrodedMetal = true, Metal = true, DiamondPlate = true, Wood = true, WoodPlanks = true,
+	Brick = true, Fabric = true, Plastic = true, SmoothPlastic = true, Glass = true, Neon = true }
+for i = 1, #PlotArt.Stages do
+	local room = fullRoom(PlotArt, i)
+	local probs = PlotVisuals.check(room, center, PlotArt)
+	check("room " .. i .. ": no part in a reserved zone, no floating part, walls and flags right (PlotVisuals.check)", #probs == 0,
+		#probs .. " problem(s), first: " .. tostring(probs[1]))
+	local parts, lights, badFlags, badMaterial, tinyShadow = 0, 0, nil, nil, nil
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("BasePart") then
+			parts += 1
+			local floorish = string.find(d.Name, "Floor", 1, true) ~= nil
+			if not d.Anchored or d.CanTouch or (d.CanCollide and not floorish) or d.CanQuery ~= d.CanCollide then badFlags = badFlags or d:GetFullName() end
+			if not ALLOWED[d.Material.Name] then badMaterial = badMaterial or d:GetFullName() end
+			if math.max(d.Size.X, d.Size.Y, d.Size.Z) < 2 and d.CastShadow then tinyShadow = tinyShadow or d:GetFullName() end
+		elseif d:IsA("PointLight") then
+			lights += 1
+		end
+	end
+	check("room " .. i .. ": at most 260 parts with all 6 props (" .. parts .. ")", parts <= 260 and parts > 0, parts)
+	check("room " .. i .. ": at most 3 PointLights (" .. lights .. ")", lights <= 3, lights)
+	check("room " .. i .. ": decor anchored, no touch, no query, only floors collide", badFlags == nil, badFlags)
+	check("room " .. i .. ": allowed materials only", badMaterial == nil, badMaterial)
+	check("room " .. i .. ": tiny parts cast no shadow", tinyShadow == nil, tinyShadow)
+	check("room " .. i .. ": grouped in Shell, Decor and UpgradeProps", room:FindFirstChild("Shell") and room:FindFirstChild("Decor")
+		and room:FindFirstChild("UpgradeProps") and #room:FindFirstChild("UpgradeProps"):GetChildren() == #EXPECTED.upgrades)
+	check("room " .. i .. ": named PlotRoom with its stage", room.Name == "PlotRoom" and room:GetAttribute("Stage") == i
+		and room:GetAttribute("StageKey") == PlotArt.Stages[i].key)
+	local decor = room:FindFirstChild("Decor")
+	local phone = decor:FindFirstChild("DeskPhone")
+	check("room " .. i .. ": has the DeskPhone (a later step makes it ring)", phone ~= nil)
+	local desksOk = true
+	for s, spot in ipairs(L.employeeSpots) do
+		local desk = decor:FindFirstChild("HireDesk" .. s)
+		if not desk or #desk:GetChildren() == 0 then desksOk = false else
+			for _, p in ipairs(desk:GetChildren()) do
+				local dx, dz = p.CFrame.x - (center.X + spot[1]), p.CFrame.z - (center.Z + spot[2])
+				if math.sqrt(dx * dx + dz * dz) > 5 then desksOk = false end
+			end
+		end
+	end
+	check("room " .. i .. ": every hire spot has its own desk next to it (within 5 studs)", desksOk)
+	local unnamed = nil
+	for _, d in ipairs(room:GetDescendants()) do if d.Name == "" or d.Name == d.ClassName and d:IsA("BasePart") then unnamed = d end end
+	check("room " .. i .. ": every part is named", unnamed == nil)
+end
+
+-- 3b. Clearer props: bigger, with small distinct parts (screen glow, keyboard, mug, handset, rack LEDs, marker tray, sign bracket) ----
+do
+	local DETAILS = {
+		["Desk"] = { "MonitorScreen", "Keyboard", "Mug", "HandleLeft", "LampShade", "DeskLip" },
+		["Coffee Machine"] = { "PanelLED", "Cup2", "SteamWand", "BeanHopper", "MachineCap" },
+		["Laptop"] = { "LaptopScreen", "Mouse", "Mug", "StandGlowStrip", "LaptopLid" },
+		["Server Rack"] = { "ServerLED1", "ServerLED4", "PatchPanel", "CableBlue", "RackTop" },
+		["Whiteboard"] = { "MarkerTray", "MarkerRed", "ChartBar3", "StickyYellow", "FrameTop" },
+		["Neon Logo"] = { "SignBracketLeft", "SignBracketRight", "SignGlow", "LogoRocket", "SignCapTop" },
+	}
+	local total = 0
+	for name, details in pairs(DETAILS) do
+		local have = {}
+		for _, spec in ipairs(PlotArt.Props[name]) do have[spec.name] = spec end
+		local missing
+		for _, d in ipairs(details) do if not have[d] then missing = d end end
+		check("prop " .. name .. ": has its small distinct parts", missing == nil, missing)
+		total += #PlotArt.Props[name]
+		local lit = false
+		for _, spec in ipairs(PlotArt.Props[name]) do if spec.material == "Neon" then lit = true end end
+		check("prop " .. name .. ": has one glowing accent (a Neon screen, LED or sign; the whiteboard's accent is its blue chart)", lit or name == "Whiteboard")
+		check("prop " .. name .. ": 14 to 30 parts (readable, not a pile)", #PlotArt.Props[name] >= 14 and #PlotArt.Props[name] <= 30, #PlotArt.Props[name])
+		-- It is bigger than the old one: the tallest edge of every prop at least 1.2 x its old design's
+		local top = 0
+		for _, spec in ipairs(PlotArt.Props[name]) do top = math.max(top, spec.offset[2] + spec.size[2] / 2) end
+		check("prop " .. name .. ": tall enough to read from the camera (top at " .. string.format("%.1f", top) .. " studs)", top >= 5.5, top)
+	end
+	check("the six props use at most 135 parts together (" .. total .. ")", total <= 135, total)
+	local names = {}
+	for _, spec in ipairs(PlotArt.Stages[1].decor) do names[spec.name] = true end
+	check("the old PC has its bezel, keys, floppy slot and stand; the phone its keypad and handset ear",
+		names.CRTBezel and names.KeyboardKeys and names.TowerFloppy and names.CRTStand and names.PhoneKeypad and names.HandsetEar and names.DeskPhoneHandset)
+end
+
+-- 4. The garage story: the only tech is an old PC and a desk phone -------------------------
+do
+	local room = PlotVisuals.buildRoom(nil, center, PlotArt, 1)
+	local neon, texts, techWords = {}, {}, nil
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("BasePart") and d.Material.Name == "Neon" then table.insert(neon, d.Name) end
+		if d.ClassName == "TextLabel" then texts[d.Text] = true end
+		if d:IsA("BasePart") then
+			for _, word in ipairs({ "Monitor", "Laptop", "Server", "Screen" }) do
+				if string.find(d.Name, word, 1, true) and d.Name ~= "ComputerScreen" then techWords = d.Name end
+			end
+		end
+	end
+	table.sort(neon)
+	check("garage: the only lights are the bare bulb and the old PC's screen", #neon == 2 and neon[1] == "Bulb" and neon[2] == "ComputerScreen", table.concat(neon, ","))
+	check("garage: no monitor, laptop or server in the room (they are upgrades)", techWords == nil, techWords)
+	check("garage: the cardboard OFFICE sign", texts["OFFICE"] == true)
+	check("garage: the 'WIFI: ask mom' sticky note", texts["WIFI:\nask mom"] == true)
+	check("garage: the old PC and the phone are there", room:FindFirstChild("Decor"):FindFirstChild("ComputerCRT") ~= nil
+		and room:FindFirstChild("Decor"):FindFirstChild("DeskPhoneHandset") ~= nil)
+	check("garage: hire desks are crates (no tech)", room:FindFirstChild("Decor"):FindFirstChild("HireDesk1"):FindFirstChild("Crate") ~= nil)
+end
+
+-- 5. One player's plot: stage swaps keep the props, the floor follows, effects ----------------
+do
+	ROOT = newInstance("Folder")
+	local folder = newInstance("Folder")
+	folder.Parent = ROOT
+	local floor = newInstance("Part")
+	floor.Name = "Floor"
+	floor.Size = Vector3.new(60, 1, 60)
+	floor.Parent = folder
+	SPAWNED = {}
+	local plot = PlotVisuals.newPlot(folder, center, PlotArt, floor, 1)
+	check("newPlot: the stage-1 room is in the folder, no flash on join", plot.room.Parent == folder and plot.stage == 1 and #SPAWNED == 0)
+	check("newPlot: the Floor keeps its name and size, gets the stage's color and material",
+		floor.Name == "Floor" and floor.Size.X == 60 and floor.Material.Name == PlotArt.Stages[1].floor.material
+		and floor.Color.rgb[1] == PlotArt.Stages[1].floor.color[1])
+	local desk = PlotVisuals.addProp(plot, "Desk", Vector3.new(-18, 0, -14), false)
+	local laptop = PlotVisuals.addProp(plot, "Laptop", Vector3.new(18, 0, -14), true)
+	check("addProp: builds the prop in the room's UpgradeProps", desk and desk.Parent == plot.room:FindFirstChild("UpgradeProps") and desk:GetAttribute("Upgrade") == "Desk")
+	check("addProp: a purchase pops in (one effect started), a load does not", #SPAWNED == 1 and SPAWNED[1] == PlotVisuals.popIn)
+	check("addProp: an upgrade without art gives nil (TycoonCore shows its old block)", PlotVisuals.addProp(plot, "Rocket Ship", Vector3.new(0, 0, 0), true) == nil)
+	PlotVisuals.popIn(laptop)
+	check("popIn: ends at full size", laptop.scale == 1, laptop.scale)
+	local old = plot.room
+	SPAWNED = {}
+	local last = #PlotArt.Stages
+	PlotVisuals.setStage(plot, 2, true)
+	check("setStage: the old room is destroyed and a new one is in the folder", old.destroyed == true and plot.room ~= old and plot.room.Parent == folder)
+	check("setStage: the bought props move into the new room (same Models)", desk.Parent == plot.room:FindFirstChild("UpgradeProps") and laptop.Parent == desk.Parent)
+	check("setStage: a stage change flashes", #SPAWNED == 1 and SPAWNED[1] == PlotVisuals.flash)
+	check("setStage: remembers the stage asked for", plot.stage == 2)
+	check("setStage: shows the room of that stage, or the last room when there are fewer", plot.room:GetAttribute("Stage") == math.min(2, last))
+	PlotVisuals.setStage(plot, 99, false)
+	check("setStage: a stage past the last room shows the last room", plot.room:GetAttribute("Stage") == last and plot.stage == 99)
+	PlotVisuals.setStage(plot, 1, true)
+	check("setStage: back to the Garage after an IPO (stage 1), props kept for TycoonCore to clear", plot.room:GetAttribute("Stage") == 1 and desk.Parent ~= nil)
+	check("setStage: the floor is restyled for the Garage again", floor.Material.Name == PlotArt.Stages[1].floor.material)
+	PlotVisuals.flash(plot)
+	check("flash: its part is gone afterwards", folder:FindFirstChild("StageFlash") == nil)
+	local rooms = 0
+	for _, c in ipairs(folder:GetChildren()) do if c.Name == "PlotRoom" then rooms += 1 end end
+	check("only one room in the plot folder after all swaps", rooms == 1)
+end
+
+-- 6. Mutations: the checks catch broken art -------------------------------------------------
+local function deepCopy(t)
+	if type(t) ~= "table" then return t end
+	local c = {}
+	for k, v in pairs(t) do c[deepCopy(k)] = deepCopy(v) end
+	return c
+end
+local function find(list, name) for _, s in ipairs(list) do if s.name == name then return s end end end
+local function anyMatch(list, word) for _, p in ipairs(list) do if string.find(p, word, 1, true) then return true end end return false end
+do
+	local art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Tire1").offset = { 0, 0.45, 24 }
+	check("mutation: a tire on the next-upgrade sign is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "sign zone BuySign"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Tire1").offset = { 0, 0.45, 3 }
+	check("mutation: a tire in the walking lane down the middle is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "lane zone WalkingLane"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Tire1").offset = { 10, 0.45, -3 }
+	check("mutation: a tire in the aisle between two rows is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "aisle zone RowAisle1"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { 4.5, 0.9, -15 }
+	check("mutation: a box in the aisle in front of the incubators is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "aisle zone DoorAisle"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { -13.5, 0.9, 14 }
+	check("mutation: a box where a hire stands is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "hire zone Hire"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").offset = { -4.5, 0.9, 16.3 }
+	check("mutation: a box on a hire's desk is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "desk zone HireDesk"))
+	art = deepCopy(PlotArt)
+	table.insert(art.Stages[1].decor, { name = "Floater", shape = "Block", size = { 2, 2, 2 }, offset = { 8, 20, -8 }, color = { 1, 2, 3 }, material = "Wood" })
+	check("mutation: a floating part is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "Floater is floating"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].shell, "SideSheetL2").size = { 0.6, 8, 20 }
+	check("mutation: a side wall over 6 studs is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "SideSheetL2: taller than 6"))
+	art = deepCopy(PlotArt)
+	art.Props["Desk"][1].offset = { 8, 2.85, 0.4 }
+	check("mutation: a prop leaving its slot is caught", anyMatch(PlotVisuals.check(fullRoom(art, 1), center, art), "must stay inside its own slot"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box1").material = "Grass"
+	check("mutation: a material outside the list is caught", anyMatch(PlotVisuals.validate(art), "material not allowed: Grass"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Box2").material = "Neon"
+	check("mutation: Neon on a box (not a light or a sign) is caught", anyMatch(PlotVisuals.validate(art), "Neon is only for lights"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "TrashBag1").size = { 1.6, 1, 1.6 }
+	check("mutation: a squashed Ball is caught", anyMatch(PlotVisuals.validate(art), "a Ball needs 3 equal sides"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Crack1").color = { 300, 0, 0 }
+	check("mutation: a color over 255 is caught", anyMatch(PlotVisuals.validate(art), "color must be"))
+	art = deepCopy(PlotArt)
+	find(art.Stages[1].decor, "Crack1").size = { 0, 0.03, 0.14 }
+	check("mutation: a size of 0 is caught", anyMatch(PlotVisuals.validate(art), "size must be"))
+end
+
+-- 7. Stages 2 to 5 (visuals-garage): same builder, same rules, new shells and decor --------------------
+-- The fingerprints below were taken from the commit before stages 2-5 (cb326d8). If one fails, stage 1, the
+-- six props or the layout changed: that is only allowed on purpose, by hand.
+local function num(n) return string.format("%.4f", n) end
+local function triple(t) if not t then return "-" end return num(t[1]) .. "," .. num(t[2]) .. "," .. num(t[3]) end
+local function specString(s)
+	local tr = s.text and (s.text.value .. s.text.font) or ""
+	local lt = s.light and (s.light.brightness .. "/" .. s.light.range) or ""
+	return table.concat({ s.name, s.shape, triple(s.size), triple(s.offset), triple(s.rot), triple(s.color), s.material, num(s.transparency or 0), tostring(s.collide), tr, lt }, "|")
+end
+local function listString(list)
+	local out = {}
+	for _, s in ipairs(list) do table.insert(out, specString(s)) end
+	return table.concat(out, ";")
+end
+local function hash(str)
+	local h = 5381
+	for i = 1, #str do h = (h * 33 + string.byte(str, i)) % 4294967291 end
+	return h
+end
+do
+	local g = PlotArt.Stages[1]
+	check("stage 1 is unchanged (fingerprint of its shell, decor, desks, floor and key)",
+		hash(listString(g.shell) .. "#" .. listString(g.decor) .. "#" .. listString(g.desk) .. g.floor.material .. triple(g.floor.color) .. g.key) == 2156961517
+		and #g.shell == 35 and #g.decor == 81 and #g.desk == 2)
+	local names = {}
+	for n in pairs(PlotArt.Props) do table.insert(names, n) end
+	table.sort(names)
+	local ps = {}
+	for _, n in ipairs(names) do table.insert(ps, n .. "=" .. listString(PlotArt.Props[n])) end
+	check("the six upgrade props are unchanged (fingerprint of every part)", hash(table.concat(ps, "##")) == 893633666)
+	local L2 = PlotArt.Layout
+	local ls = {}
+	for _, s in ipairs(L2.employeeSpots) do table.insert(ls, s[1] .. "," .. s[2]) end
+	for _, s in ipairs(L2.incubators) do table.insert(ls, s[1] .. "," .. s[2]) end
+	for _, s in ipairs(L2.itemSlots) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
+	for _, s in ipairs(L2.signs) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
+	for _, s in ipairs(L2.desks) do table.insert(ls, s[1] .. "," .. s[2] .. "," .. s[3]) end
+	table.insert(ls, L2.spawn.x .. "," .. L2.spawn.z)
+	local rs = {}
+	for k, v in pairs(L2.reserve) do table.insert(rs, k .. "=" .. v) end
+	table.sort(rs)
+	check("every gameplay position is unchanged: hire grid, incubators, upgrade stations, signs, spawn, desk offsets, reserved zones (fingerprint)",
+		hash(table.concat(ls, ";") .. table.concat(rs, ";")) == 1471280708)
+	for i, look in ipairs(PlotArt.Stages) do
+		check("stage " .. i .. ": no stage owns props (the six props are one shared list)", look.props == nil and look.Props == nil)
+	end
+end
+
+-- What each later room must show: the parts that tell its story (a name each), and the rules it keeps
+local STORY = {
+	[2] = { shell = { "BackWall", "DoorPanel1", "DoorPanel4", "DoorGlassBand", "WindowGlassL", "WindowGlassR" },
+		decor = { "StringBulbL0", "StringBulbR5", "StringCordL", "RugBase", "RugInner", "SofaBase", "SofaBack", "CornerPlant" .. "Pot", "FounderTop", "DeskPhone", "DoorSign" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wall = { 170, 226, 204 }, lights = 3 },
+	[3] = { shell = { "BackWall", "BayLShutter", "BayRShutter", "BayLDark", "PartitionLGlass", "PartitionRGlass", "WallBoard", "WallNote1", "WallBoardTray" },
+		decor = { "WallLampBulbL", "WallLampBulbM", "WallLampBulbR", "BayLineL", "BayLineR", "CabinetA", "SofaBase", "FounderTop", "DeskPhone", "RugBase" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wall = { 172, 94, 76 }, lights = 3 },
+	[4] = { shell = { "BackLower", "BackGlass", "BackMullion1", "BackMullion5", "SideGlassL", "SideGlassR", "SideRailL", "SideMullionR3" },
+		decor = { "FloorTileX1", "FloorTileZ5", "MeetGlassBack", "MeetGlassSide", "MeetTableTop", "MeetChairA1", "MeetScreen", "GapPlantLPot", "CornerPlantPot",
+			"FounderTop", "DeskPhone", "FloorLampShadeA" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen" }, wallPart = "BackLower", wall = { 240, 242, 244 }, lights = 3 },
+	[5] = { shell = { "BackLower", "WindowA", "WindowB", "WindowC", "WindowD", "MullionL", "MullionR", "LogoWall", "LogoWallGlow", "LogoWallSign", "LogoWallUnderline",
+			"SideGlassL", "SideGlassR", "Skyline1", "Skyline9" },
+		decor = { "ShelfBack", "ShelfBoard3", "Trophy1", "Trophy5", "RugBase", "LoungeTable", "ArmchairA", "ArmchairB", "FounderTop", "DeskPhone", "GapPlantLPot", "FloorLampShadeA" },
+		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen", "Keyboard" }, wallPart = "BackLower", wall = { 246, 247, 248 }, lights = 3 },
+}
+local function has(list, name) for _, s in ipairs(list) do if s.name == name then return s end end return nil end
+local function countPrefix(list, prefix) local n = 0 for _, s in ipairs(list) do if string.find(s.name, prefix, 1, true) == 1 then n += 1 end end return n end
+for i = 2, #PlotArt.Stages do
+	local look = PlotArt.Stages[i]
+	local room = fullRoom(PlotArt, i)
+	local story = STORY[i]
+	check("stage " .. i .. ": has a story entry in this test (add one when a stage is added)", story ~= nil)
+	if story then
+		for _, group in ipairs({ "shell", "decor", "desk" }) do
+			local missing
+			for _, name in ipairs(story[group]) do if not has(look[group], name) then missing = name end end
+			check("stage " .. i .. ": its " .. group .. " has the parts of its story", missing == nil, missing)
+		end
+		local wall = has(look.shell, story.wallPart or "BackWall")
+		check("stage " .. i .. ": the back wall has its color", wall ~= nil and wall.color[1] == story.wall[1] and wall.color[2] == story.wall[2] and wall.color[3] == story.wall[3])
+		local lights = 0
+		for _, d in ipairs(room:GetDescendants()) do if d:IsA("PointLight") then lights += 1 end end
+		check("stage " .. i .. ": uses " .. story.lights .. " of its 3 PointLights", lights == story.lights, lights)
+	end
+	check("stage " .. i .. ": a different floor from every earlier stage", (function()
+		for j = 1, i - 1 do
+			local f = PlotArt.Stages[j].floor
+			if f.material == look.floor.material and f.color[1] == look.floor.color[1] and f.color[2] == look.floor.color[2] and f.color[3] == look.floor.color[3] then return false end
+		end
+		return true
+	end)())
+	-- Only walls, floors and decor: nothing collides, nothing is a roof or a facade, the front stays open
+	local solid, roof, front, parts = 0, nil, nil, 0
+	local tall = 0
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("BasePart") then
+			parts += 1
+			if d.CanCollide then solid += 1 end
+			local oy, hy = d.CFrame.y - center.Y - 0.5, d.Size.Y / 2
+			local lowest = oy - hy
+			if d.Size.X > 20 and d.Size.Z > 20 and lowest > 5 and string.find(d.Name, "Skyline", 1, true) ~= 1 then roof = roof or d:GetFullName() end
+			if d.Size.X > 30 and d.CFrame.z - center.Z > 20 and string.find(d.Name, "Floor", 1, true) == nil and d.Size.Y > 0.3 then front = front or d:GetFullName() end
+		end
+	end
+	check("stage " .. i .. ": nothing collides (walls and floors are looks; the real Floor is the only solid)", solid == 0, solid)
+	check("stage " .. i .. ": no roof", roof == nil, roof)
+	check("stage " .. i .. ": the front is open (no long wall or facade along the front)", front == nil, front)
+	local desks = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
+	check("stage " .. i .. ": hire desks are not the garage crate", desks ~= nil and desks:FindFirstChild("Crate") == nil and #desks:GetChildren() >= 3)
+	check("stage " .. i .. ": shell, decor and 11 desks use at most 142 parts so the six props (118) always fit (" .. (parts - 118) .. ")", parts - 118 <= 142, parts)
+	-- The six props are the same in every room
+	local propsOf = function(r)
+		local out = {}
+		for _, m in ipairs(r:FindFirstChild("UpgradeProps"):GetChildren()) do
+			for _, p in ipairs(m:GetChildren()) do
+				table.insert(out, string.format("%s.%s %.3f,%.3f,%.3f %.3f,%.3f,%.3f", m.Name, p.Name, p.Size.X, p.Size.Y, p.Size.Z, p.CFrame.x, p.CFrame.y, p.CFrame.z))
+			end
+		end
+		return table.concat(out, ";")
+	end
+	check("stage " .. i .. ": the six props are exactly the same parts in the same places as in the Garage", propsOf(room) == propsOf(fullRoom(PlotArt, 1)))
+	-- Every part of this room outside the props: nothing in the six slots but the prop itself
+	local slotClear = true
+	for _, d in ipairs(room:FindFirstChild("Decor"):GetDescendants()) do
+		if d:IsA("BasePart") and string.find(d:GetFullName(), "HireDesk", 1, true) == nil then
+			for _, slot in ipairs(L.itemSlots) do
+				local x, z = d.CFrame.x - center.X - slot.x, d.CFrame.z - center.Z - slot.z
+				if math.abs(x) < 4 and z > -3.5 and z < 2.5 and d.Size.Y > 0.3 then slotClear = false end
+			end
+		end
+	end
+	check("stage " .. i .. ": no decor stands in an upgrade station", slotClear)
+	-- The skyline stays behind the back wall and the plot's own width
+	for _, group in ipairs({ look.shell, look.decor }) do
+		for _, s in ipairs(group) do
+			if string.find(s.name, "Skyline", 1, true) == 1 then
+				check("stage " .. i .. ": " .. s.name .. " stays behind the back wall inside the plot's width", s.offset[3] + s.size[3] / 2 <= PlotVisuals.BACKDROP_Z and math.abs(s.offset[1]) + s.size[1] / 2 <= 30, s.name)
+			end
+		end
+	end
+end
+
+-- 7a. What makes each room different, measured on the parts (not only named)
+do
+	local function room(i) return fullRoom(PlotArt, i) end
+	local function find(r, name)
+		for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") and d.Name == name then return d end end
+		return nil
+	end
+	local function count(r, prefix, material)
+		local n = 0
+		for _, d in ipairs(r:GetDescendants()) do
+			if d:IsA("BasePart") and string.find(d.Name, prefix, 1, true) == 1 and (material == nil or d.Material.Name == material) then n += 1 end
+		end
+		return n
+	end
+	if PlotArt.Stages[2] then
+		local r = room(2)
+		check("stage 2: twelve warm string-light bulbs, all glowing (Neon), on two cords", count(r, "StringBulb", "Neon") == 12 and count(r, "StringCord") == 2)
+		check("stage 2: a new door of four panels with a smoked glass band", count(r, "DoorPanel") == 4 and find(r, "DoorGlassBand").Material.Name == "Glass")
+		check("stage 2: fresh paint is smooth (SmoothPlastic), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "SmoothPlastic" and count(r, "SideWall", "CorrodedMetal") == 0)
+		check("stage 2: a rug of two layers and a sofa of five parts", count(r, "Rug") == 2 and count(r, "Sofa") == 5)
+		check("stage 2: every hire desk has an oak top, two legs and a monitor (5 parts)", #PlotArt.Stages[2].desk == 5)
+	end
+	if PlotArt.Stages[3] then
+		local r = room(3)
+		check("stage 3: brick walls (Brick material) on the back and the sides", find(r, "BackWall").Material.Name == "Brick" and find(r, "SideWallL").Material.Name == "Brick")
+		check("stage 3: a second bay: two roll-up doors, each with a dark opening, a frame, a header and a shutter; two safety lines", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				for _, part in ipairs({ "Dark", "FrameL", "FrameR", "Header", "Shutter" }) do
+					if not find(r, "Bay" .. side .. part) then return false end
+				end
+			end
+			return count(r, "BayLine") == 2
+		end)())
+		check("stage 3: two glass partitions (see-through) that stand 5 studs high or more", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				local g = find(r, "Partition" .. side .. "Glass")
+				if not g or g.Material.Name ~= "Glass" or g.Transparency < 0.3 or g.Size.Y < 5 then return false end
+			end
+			return true
+		end)())
+		check("stage 3: a whiteboard wall at least 15 studs wide with sticky notes and a tray", find(r, "WallBoard").Size.X >= 15 and count(r, "WallNote") == 5 and find(r, "WallBoardTray") ~= nil)
+		check("stage 3: three wall lamps, each with a bulb", count(r, "WallLampBulb", "Neon") == 3)
+	end
+	if PlotArt.Stages[4] then
+		local r = room(4)
+		check("stage 4: carpet tiles: a Fabric floor and a grid of tile lines (10)", PlotArt.Stages[4].floor.material == "Fabric" and count(r, "FloorTile") == 10)
+		check("stage 4: glass walls on both sides, nearly the whole length (55 studs or more)", (function()
+			for _, side in ipairs({ "L", "R" }) do
+				local g = find(r, "SideGlass" .. side)
+				if not g or g.Material.Name ~= "Glass" or g.Size.Z < 55 then return false end
+			end
+			return true
+		end)())
+		check("stage 4: a ribbon of glass along the back wall in navy mullions", find(r, "BackGlass").Material.Name == "Glass" and count(r, "BackMullion") == 5)
+		check("stage 4: a glass-walled meeting room: two glass walls, a table, four chairs and a wall screen", count(r, "MeetGlass", "Glass") == 2
+			and find(r, "MeetTableTop") ~= nil and count(r, "MeetChairA") + count(r, "MeetChairB") >= 4 and find(r, "MeetScreen") ~= nil)
+		check("stage 4: three plants", count(r, "GapPlantLPot") + count(r, "GapPlantRPot") + count(r, "CornerPlantPot") == 3)
+	end
+	if PlotArt.Stages[5] then
+		local r = room(5)
+		check("stage 5: a polished light floor (SmoothPlastic, bright)", PlotArt.Stages[5].floor.material == "SmoothPlastic" and PlotArt.Stages[5].floor.color[1] >= 200)
+		check("stage 5: big windows: four glass panes at least 7 studs tall on the back wall", count(r, "Window", "Glass") == 4 and find(r, "WindowA").Size.Y >= 7)
+		check("stage 5: a simple block skyline: 9 towers behind the back wall, none over 30 studs", count(r, "Skyline") == 9)
+		check("stage 5: the skyline is inside the plot's width (it never reaches a neighbour)", (function()
+			for _, d in ipairs(r:GetDescendants()) do
+				if d:IsA("BasePart") and string.find(d.Name, "Skyline", 1, true) == 1 then
+					local x = d.CFrame.x - center.X
+					if math.abs(x) + d.Size.X / 2 > 30 or d.CFrame.z - center.Z + d.Size.Z / 2 > -43 then return false end
+				end
+			end
+			return true
+		end)())
+		check("stage 5: a neon logo wall (a Neon rim and underline, a sign saying HQ)", find(r, "LogoWallGlow").Material.Name == "Neon" and find(r, "LogoWallUnderline").Material.Name == "Neon"
+			and (function() for _, d in ipairs(r:GetDescendants()) do if d.ClassName == "TextLabel" and d.Text == "HQ" then return true end end return false end)())
+		check("stage 5: a trophy shelf with three shelves and five gold cups", count(r, "ShelfBoard") == 3 and count(r, "Trophy", "Metal") == 5)
+		check("stage 5: no text in the room claims odds, chances or prices (D9)", (function()
+			for _, d in ipairs(r:GetDescendants()) do
+				if d.ClassName == "TextLabel" then
+					local text = string.lower(d.Text)
+					for _, word in ipairs({ "odds", "chance", "%", "$", "r$", "robux", "free", "win", "lucky" }) do
+						if string.find(text, word, 1, true) then return false end
+					end
+				end
+			end
+			return true
+		end)())
+	end
+end
+
+-- 7b. Mutations on every later room: the same checks catch a bad part in stages 2 to 5 too
+for i = 2, #PlotArt.Stages do
+	local function extra(part)
+		local art = deepCopy(PlotArt)
+		table.insert(art.Stages[i].decor, part)
+		return PlotVisuals.check(fullRoom(art, i), center, art)
+	end
+	local box = { name = "TestBox", shape = "Block", size = { 2, 2, 2 }, color = { 1, 2, 3 }, material = "Wood" }
+	local function at(x, y, z, more)
+		local part = deepCopy(box)
+		part.offset = { x, y, z }
+		for k, v in pairs(more or {}) do part[k] = v end
+		return part
+	end
+	check("mutation (stage " .. i .. "): a box where a hire stands is caught", anyMatch(extra(at(-4.5, 1, 14)), "hire zone"))
+	check("mutation (stage " .. i .. "): a box in the walking lane is caught", anyMatch(extra(at(0, 1, 20)), "lane zone WalkingLane"))
+	check("mutation (stage " .. i .. "): a box inside an upgrade station is caught", anyMatch(extra(at(-23, 1, 2)), "slot zone Coffee Machine"))
+	check("mutation (stage " .. i .. "): a box on a hire's desk is caught", anyMatch(extra(at(4.5, 1, 5.3)), "desk zone HireDesk"))
+	check("mutation (stage " .. i .. "): a box on the BuySign is caught", anyMatch(extra(at(0, 1, 24)), "sign zone BuySign"))
+	check("mutation (stage " .. i .. "): a floating box is caught", anyMatch(extra(at(8, 20, 26)), "TestBox is floating"))
+	check("mutation (stage " .. i .. "): a collidable box is caught", anyMatch(extra(at(-8, 1, 26, { collide = true })), "only floors and low walls may collide"))
+	check("mutation (stage " .. i .. "): four extra PointLights are caught", (function()
+		local art = deepCopy(PlotArt)
+		for k = 1, 4 do
+			table.insert(art.Stages[i].decor, at(-8 + k, 1, 26, { name = "TestLight" .. k, material = "Neon", light = { color = { 255, 255, 255 }, brightness = 1, range = 10 } }))
+		end
+		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "lights (budget 3)")
+	end)())
+	check("mutation (stage " .. i .. "): a tall wall on the side is caught", anyMatch(extra({ name = "TestWall", shape = "Block", size = { 0.6, 9, 6 }, offset = { -29.7, 4.5, 24 }, color = { 1, 2, 3 }, material = "Wood" }), "taller than 6"))
+	check("mutation (stage " .. i .. "): too many parts is caught", (function()
+		local art = deepCopy(PlotArt)
+		for k = 1, 60 do
+			table.insert(art.Stages[i].decor, at(-8 + (k % 10) * 0.5, 0.2 + math.floor(k / 10) * 0.1, 27, { name = "Extra" .. k, size = { 0.4, 0.2, 0.4 } }))
+		end
+		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "parts (budget 260)")
+	end)())
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+BUY_TESTS = r"""-- Tests for buying an office upgrade: TycoonCore's checkUpgradePurchase and buyUpgrade (BUYUPGRADE markers),
+-- ShopServer's handleShopAction (SHOPACTION markers) and PoachServer's checkHrPurchase (HRBUY markers) ----
+local print_real = print
+local function typeof(v) return type(v) end
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local CLOCK = 100
+local os = { clock = function() return CLOCK end }
+local UPGRADES = __UPGRADES__
+local playerData = {}
+local CALLS = {}
+local function updateIncome(player) table.insert(CALLS, "income") end
+local function spawnItem(data, i, upg, popIn) table.insert(CALLS, "spawn:" .. i .. ":" .. upg.name .. ":" .. tostring(popIn)) end
+local function refreshSign(player) table.insert(CALLS, "sign") end
+__BUYUPGRADE__
+local function upgradeList()
+	local list = {}
+	for _, upg in ipairs(UPGRADES) do table.insert(list, { name = upg.name, cost = upg.cost, income = upg.income }) end
+	return list
+end
+local core = { buyUpgrade = buyUpgrade, upgradeList = upgradeList }
+__SHOPACTION__
+
+local function newPlayer(cash, ready)
+	local player = {}
+	playerData[player] = { ready = ready ~= false, owned = {}, cash = { Value = cash } }
+	return player, playerData[player]
+end
+local function buy(player, id)
+	CALLS = {}
+	CLOCK += 1 -- a new second: the rate limit is not what is being tested, unless a test says so
+	return handleShopAction(player, "BuyUpgrade", id)
+end
+
+-- 1. The purchase, in the same order and with the same rules as the old pad -------------------------
+do
+	local p, d = newPlayer(1000)
+	local ok, msg = buy(p, 1)
+	check("Desk (free): bought, no Cash taken", ok == true and d.owned.Desk == true and d.cash.Value == 1000, msg)
+	check("a purchase pops its prop in, updates the income and the sign",
+		table.concat(CALLS, ",") == "income,spawn:1:Desk:true,sign", table.concat(CALLS, ","))
+	ok, msg = buy(p, 2)
+	check("Coffee Machine ($25): bought, exactly its price taken", ok == true and d.owned["Coffee Machine"] == true and d.cash.Value == 975, d.cash.Value)
+	ok, msg = buy(p, 3)
+	check("Laptop ($100)", ok == true and d.cash.Value == 875)
+	ok = buy(p, 4); check("Server Rack ($400)", ok == true and d.cash.Value == 475)
+	ok = buy(p, 5); check("Whiteboard ($1500): not enough Cash, refused", ok == false and d.owned.Whiteboard == nil and d.cash.Value == 475)
+	d.cash.Value = 1500
+	ok = buy(p, 5); check("Whiteboard with exactly $1500: bought, Cash is 0 (never negative)", ok == true and d.cash.Value == 0)
+	d.cash.Value = 5000
+	ok = buy(p, 6); check("Neon Logo ($5000): the last one", ok == true and d.cash.Value == 0)
+	local all = true
+	for _, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then all = false end end
+	check("all six owned after buying in order", all)
+	ok, msg = buy(p, 6)
+	check("everything bought: another request is refused", ok == false)
+end
+
+-- 2. Refusals change nothing ----------------------------------------------------------------------
+do
+	local p, d = newPlayer(24)
+	buy(p, 1)
+	local ok, msg = buy(p, 2)
+	check("insufficient Cash ($24 for $25): refused with the price", ok == false and d.cash.Value == 24 and d.owned["Coffee Machine"] == nil
+		and string.find(msg, "$25", 1, true) ~= nil, msg)
+	check("insufficient Cash: no prop, no income change, no sign refresh", #CALLS == 0, table.concat(CALLS, ","))
+	ok, msg = buy(p, 1)
+	check("already owned: refused, nothing taken", ok == false and d.cash.Value == 24 and string.find(msg, "already", 1, true) ~= nil, msg)
+	d.cash.Value = 100000
+	ok, msg = buy(p, 4)
+	check("wrong order (Server Rack before Coffee Machine): refused, says what to buy first", ok == false and d.owned["Server Rack"] == nil
+		and d.cash.Value == 100000 and string.find(msg, "Coffee Machine first", 1, true) ~= nil, msg)
+	ok = buy(p, 6)
+	check("wrong order (Neon Logo with the Desk only): refused", ok == false and d.owned["Neon Logo"] == nil)
+	check("a refused request never spawns a prop", #CALLS == 0)
+end
+
+-- 3. Spam is refused, not queued -----------------------------------------------------------------------
+do
+	local p, d = newPlayer(100000)
+	CLOCK += 10
+	local first = handleShopAction(p, "BuyUpgrade", 1)
+	local second, msg = handleShopAction(p, "BuyUpgrade", 2) -- the same instant
+	check("spam: the second request in the same instant is refused", first == true and second == false and msg == "Too fast" and d.owned["Coffee Machine"] == nil, msg)
+	CLOCK += BUY_MIN_INTERVAL - 0.01
+	check("spam: still refused just under the interval", handleShopAction(p, "BuyUpgrade", 2) == false)
+	CLOCK += 0.02
+	check("spam: allowed again once the interval has passed", handleShopAction(p, "BuyUpgrade", 2) == true and d.owned["Coffee Machine"] == true)
+	-- A refused request leaves the stamp (and so the next allowed time) exactly where the last looked-at request put it
+	CLOCK += 1
+	local stampedAt = CLOCK
+	check("spam: a request after the interval is looked at and stamps the time", handleShopAction(p, "BuyUpgrade", 3) == true and d.lastBuyAt == stampedAt, d.lastBuyAt)
+	local stampOk = true
+	for _ = 1, 5 do
+		CLOCK += 0.05
+		local ok, why = handleShopAction(p, "BuyUpgrade", 4)
+		if ok ~= false or why ~= "Too fast" or d.lastBuyAt ~= stampedAt then stampOk = false end
+	end
+	check("a refused spam request does not push the next allowed time forward (the stamp stays exactly the same)", stampOk and d.lastBuyAt == stampedAt, d.lastBuyAt)
+	CLOCK = stampedAt + BUY_MIN_INTERVAL + 0.05 -- 0.45 s after the last purchase, 0.2 s after the last refused request
+	check("spam: allowed once the interval from the last purchase has passed, even right after refused requests",
+		handleShopAction(p, "BuyUpgrade", 4) == true and d.owned["Server Rack"] == true and d.lastBuyAt == CLOCK, d.lastBuyAt)
+end
+
+-- 3b. 100 spammed requests on a moving clock: the exact purchases and the exact Cash --------------------------
+do
+	local p, d = newPlayer(100000)
+	d.owned.Desk = true -- the free one: every purchase below costs Cash
+	CLOCK += 10
+	local function nextId() -- what a spammed Buy button sends: the next upgrade's number
+		for i, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then return i end end
+		return 1
+	end
+	local bought, at = 0, {}
+	for request = 1, 100 do
+		if request == 42 then
+			CLOCK += 0.29 -- 0.45 s after the first purchase (outside the window)
+		elseif request == 100 then
+			CLOCK += 0.5 -- outside the window again
+		elseif request > 1 then
+			CLOCK += 0.004 -- inside the 0.4 s window
+		end
+		if handleShopAction(p, "BuyUpgrade", nextId()) then
+			bought += 1
+			table.insert(at, request)
+		end
+	end
+	check("spam: 100 requests on a moving clock buy exactly 3 times (requests 1, 42 and 100)", bought == 3 and table.concat(at, ",") == "1,42,100", table.concat(at, ","))
+	check("spam: 100 requests spend exactly $525 (Coffee Machine + Laptop + Server Rack)", d.cash.Value == 100000 - 525, 100000 - d.cash.Value)
+	check("spam: after 100 requests the next is the Whiteboard (nothing skipped, nothing doubled)",
+		d.owned["Server Rack"] == true and d.owned.Whiteboard == nil)
+end
+
+-- 4. Bad numbers and bad states --------------------------------------------------------------------------
+do
+	local p, d = newPlayer(100000)
+	for _, bad in ipairs({ "1", "2", true, {}, 0, -1, 7, 1.5, 2.0000001, 0 / 0, math.huge, -math.huge, 1e300 }) do
+		local ran, ok, msg = pcall(buy, p, bad)
+		check("bad id " .. tostring(bad) .. " (" .. type(bad) .. "): refused cleanly (no error), nothing changed", ran and ok == false and next(d.owned) == nil and d.cash.Value == 100000, msg)
+	end
+	local ok, msg = buy(p, nil)
+	check("no id at all: refused", ok == false and msg == "Bad request" and next(d.owned) == nil, msg)
+	check("a bad action name is refused", handleShopAction(p, "GiveCash", 1) == false and handleShopAction(p, 5, 1) == false and handleShopAction(p, nil, 1) == false)
+	local loading, ld = newPlayer(1000, false)
+	ok, msg = buy(loading, 1)
+	check("data.ready is false (loading, or an IPO being saved): refused", ok == false and ld.owned.Desk == nil and #CALLS == 0, msg)
+	ok, msg = buy({}, 1)
+	check("a player with no data: refused", ok == false, msg)
+	local before = CLOCK
+	check("a bad id never moves the rate limit stamp", d.lastBuyAt == nil, d.lastBuyAt)
+end
+
+-- 5. The client chooses the upgrade, never the price ---------------------------------------------------------
+do
+	local p, d = newPlayer(25)
+	buy(p, 1)
+	CALLS = {}
+	CLOCK += 1
+	local ok = handleShopAction(p, "BuyUpgrade", 2, 0, 1, "cost", { cost = 0 }) -- a client sending a price of 0 and more
+	check("a price sent by the client is ignored: the real $25 is taken", ok == true and d.cash.Value == 0, d.cash.Value)
+	local seen
+	core.buyUpgrade = function(...) seen = { ... } return false, "x" end
+	handleShopAction(p, "BuyUpgrade", 3, 0, 99)
+	check("ShopServer passes only (player, id) on: nothing else the client sent reaches the buy", seen ~= nil and #seen == 2 and seen[1] == p and seen[2] == 3, seen and #seen)
+	core.buyUpgrade = buyUpgrade
+	local ok2, list = handleShopAction(p, "Upgrades", 5, 6)
+	check("Upgrades: the six, in order, with name, price and income", ok2 == true and #list == #UPGRADES and list[1].name == "Desk" and list[2].cost == 25 and list[6].income == 120)
+end
+
+-- 6. HR Department purchase (PoachServer's HRBUY) ------------------------------------------------------------------
+local ShopConfig = { formatCash = function(n) return "$" .. n end }
+__HRBUY__
+do
+	local levels = { { cost = 100, defense = 0.1 }, { cost = 300, defense = 0.2 } }
+	local poach = { hrLevel = 0 }
+	CLOCK = 1000
+	local nextLevel, msg = checkHrPurchase(levels, poach, 99, CLOCK)
+	check("HR: not enough Cash is refused with the price", nextLevel == nil and string.find(msg, "$100", 1, true) ~= nil, msg)
+	CLOCK += 1
+	nextLevel = checkHrPurchase(levels, poach, 100, CLOCK)
+	check("HR: exactly the price is enough, the next level's rules come back", nextLevel == levels[1])
+	CLOCK += 0.1
+	nextLevel, msg = checkHrPurchase(levels, poach, 100000, CLOCK)
+	check("HR: spam within a second is refused", nextLevel == nil and msg == "Too fast", msg)
+	poach.hrLevel = 2
+	CLOCK += 5
+	nextLevel, msg = checkHrPurchase(levels, poach, 100000, CLOCK)
+	check("HR: past the last level there is nothing to buy", nextLevel == nil and string.find(msg, "fully", 1, true) ~= nil, msg)
+	poach.hrLevel = 1
+	CLOCK += 5
+	check("HR: level 2 costs its own price", checkHrPurchase(levels, poach, 299, CLOCK) == nil and (function() CLOCK += 5 return checkHrPurchase(levels, poach, 300, CLOCK) == levels[2] end)())
+end
+
+-- 7. HR Department purchase: PoachServer's buyHr and the BuyHr action (lifted from the source) ---------------------
+local RULES = { HRDepartment = __HRLEVELS__ }
+local REAL_HR = RULES.HRDepartment
+local SAVES, PUBLISHED = {}, {}
+local task = { spawn = function(f, ...) f(...) end }
+core.save = function(player) table.insert(SAVES, player) return true end
+local function publish(player) table.insert(PUBLISHED, player) end
+local function percent(chance) return math.floor(chance * 100 + 0.5) .. "%" end
+local hrData = {}
+local function getPoach(player)
+	local data = hrData[player]
+	return data and data.poach, data
+end
+local IpoServer = { isBusy = function() return false end }
+local lastTargetsCall, TARGETS_MIN_INTERVAL = {}, 2
+local function targetsFor() return {} end
+local function start() return false, "start" end
+local function counterOffer() return false, "counter" end
+__BUYHR__
+__ONACTION__
+local function hrPlayer(cash, ready)
+	local player = {}
+	hrData[player] = { ready = ready ~= false, cash = { Value = cash }, poach = { hrLevel = 0 } }
+	return player, hrData[player]
+end
+local function hrBuy(player, ...) -- pcall: a broken rule may error, which must count as a failed test, not a crash
+	SAVES, PUBLISHED = {}, {}
+	local ran, ok, msg = pcall(buyHr, player, ...)
+	if not ran then return "error", tostring(ok) end
+	return ok, msg
+end
+do
+	CLOCK = 5000
+	local p, d = hrPlayer(1000000, false)
+	local ok, msg = hrBuy(p)
+	check("HR buy: not ready (loading or an IPO being saved) is refused, nothing changes",
+		ok == false and d.cash.Value == 1000000 and d.poach.hrLevel == 0 and #SAVES == 0 and d.poach.lastHrBuyAt == nil, msg)
+
+	p, d = hrPlayer(REAL_HR[1].cost - 1)
+	CLOCK += 2
+	ok, msg = hrBuy(p)
+	check("HR buy: one Cash short is refused with the price, nothing changes, no save",
+		ok == false and d.cash.Value == REAL_HR[1].cost - 1 and d.poach.hrLevel == 0 and #SAVES == 0
+		and string.find(msg, "$" .. REAL_HR[1].cost, 1, true) ~= nil, msg)
+
+	p, d = hrPlayer(REAL_HR[1].cost)
+	CLOCK += 2
+	ok, msg = hrBuy(p)
+	check("HR buy: exactly the price buys Lv 1, the exact cost is taken", ok == true and d.cash.Value == 0 and d.poach.hrLevel == 1, msg)
+	check("HR buy: a purchase saves once and publishes the new level", #SAVES == 1 and SAVES[1] == p and #PUBLISHED == 1, #SAVES)
+
+	-- every level, in order, at the server's own prices, then the cap
+	local total = 0
+	for _, level in ipairs(REAL_HR) do total += level.cost end
+	p, d = hrPlayer(total + 7)
+	local allOk = true
+	for i, level in ipairs(REAL_HR) do
+		CLOCK += 1.5
+		local before = d.cash.Value
+		ok, msg = hrBuy(p)
+		if not (ok == true and d.poach.hrLevel == i and before - d.cash.Value == level.cost and #SAVES == 1) then
+			allOk = false
+			check("HR buy: Lv " .. i .. " costs exactly " .. level.cost .. " and raises the level by 1", false, msg)
+		end
+	end
+	check("HR buy: every level costs exactly its server price and raises hrLevel by 1", allOk and d.cash.Value == 7 and d.poach.hrLevel == #REAL_HR, d.cash.Value)
+	d.cash.Value = 10 ^ 9
+	CLOCK += 1.5
+	ok, msg = hrBuy(p)
+	check("HR buy: past the last level is refused, nothing taken, no save",
+		ok == false and d.poach.hrLevel == #REAL_HR and d.cash.Value == 10 ^ 9 and #SAVES == 0 and string.find(tostring(msg), "fully", 1, true) ~= nil, msg)
+
+	-- the 1 s rate limit
+	p, d = hrPlayer(1000000)
+	CLOCK += 2
+	local boughtAt = CLOCK
+	ok = hrBuy(p)
+	CLOCK += 0.6
+	local ok2, msg2 = hrBuy(p)
+	check("HR buy: a second buy 0.6 s later is refused (Too fast), nothing taken, no save",
+		ok == true and ok2 == false and msg2 == "Too fast" and d.poach.hrLevel == 1 and d.cash.Value == 1000000 - REAL_HR[1].cost and #SAVES == 0, msg2)
+	check("HR buy: the refused request leaves the stamp exactly where the purchase put it", d.poach.lastHrBuyAt == boughtAt, d.poach.lastHrBuyAt)
+	CLOCK = boughtAt + 0.99
+	check("HR buy: still refused at 0.99 s", hrBuy(p) == false and d.poach.hrLevel == 1)
+	CLOCK = boughtAt + 1.05
+	ok = hrBuy(p)
+	check("HR buy: allowed again after 1 s, Lv 2 at its own price", ok == true and d.poach.hrLevel == 2
+		and d.cash.Value == 1000000 - REAL_HR[1].cost - REAL_HR[2].cost, d.cash.Value)
+
+	-- the price and the cap come from the server's rules only
+	RULES.HRDepartment = { { cost = 7, defense = 0.5 } }
+	p, d = hrPlayer(100)
+	CLOCK += 2
+	ok = hrBuy(p)
+	CLOCK += 2
+	ok2, msg2 = hrBuy(p)
+	check("HR buy: with other server rules, their price (7) and their cap (1 level) are used",
+		ok == true and d.cash.Value == 93 and d.poach.hrLevel == 1 and ok2 == false and d.cash.Value == 93, msg2)
+	RULES.HRDepartment = REAL_HR
+
+	-- the BuyHr action: whatever else the client sends is never read
+	p, d = hrPlayer(REAL_HR[1].cost)
+	CLOCK += 2
+	SAVES = {}
+	local ran, okA, msgA = pcall(onAction, p, "BuyHr", 0, { cost = 0, level = 5 })
+	check("BuyHr action: a price or level sent by the client is ignored, the real price is taken and the level goes up by 1",
+		ran and okA == true and d.cash.Value == 0 and d.poach.hrLevel == 1, msgA)
+	p, d = hrPlayer(1000000, false)
+	ran, okA = pcall(onAction, p, "BuyHr")
+	check("BuyHr action: refused while not ready", ran and okA == false and d.poach.hrLevel == 0 and d.cash.Value == 1000000)
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
 
 def code_only(text):
     """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
@@ -3282,6 +4337,173 @@ def code_only(text):
         cut = line.find("--")
         lines.append(line if cut < 0 else line[:cut])
     return "\n".join(lines)
+
+
+def upgrades_lua():
+    """UPGRADES from TycoonCore.lua as a Luau table (name, cost, income: the real prices)."""
+    import re
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("local UPGRADES = {"):]
+    block = block[:block.index("\n}")]
+    rows = re.findall(r'name = "([^"]+)",\s*cost = (\d+),\s*income = (\d+)', block)
+    if len(rows) != 6:
+        raise SystemExit("UPGRADES in TycoonCore.lua no longer has 6 rows with name, cost and income")
+    return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s }' % row for row in rows) + " }"
+
+
+def hr_levels_lua():
+    """CreatureConfig.Poaching.HRDepartment as a Luau table (cost, defense: the real server rules)."""
+    import re
+    with open(os.path.join(ROOT, "CreatureConfig.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("HRDepartment = {"):]
+    block = block[:block.index("\n\t},")]
+    rows = re.findall(r"\{ cost = (\d+), defense = ([\d.]+) \}", block)
+    if len(rows) < 2:
+        raise SystemExit("CreatureConfig.Poaching.HRDepartment no longer has rows with cost and defense")
+    return "{ " + ", ".join("{ cost = %s, defense = %s }" % row for row in rows) + " }"
+
+
+def function_source(header, filename):
+    """One top-level Lua function, from its header line to its closing `end` at the start of a line."""
+    with open(os.path.join(ROOT, filename), encoding="utf-8") as f:
+        text = f.read()
+    if text.count(header) != 1:
+        raise SystemExit("%s: expected exactly one '%s'" % (filename, header))
+    start = text.index(header)
+    return text[start:text.index("\nend\n", start) + len("\nend\n")]
+
+
+def buy_source(mutation=None):
+    """The BUY_TESTS program, with the real regions. mutation = (old, new) breaks one rule: it is applied to the
+    first region that has `old` (TycoonCore, ShopServer, PoachServer's HRBUY region, buyHr, onAction)."""
+    parts = {
+        "__BUYUPGRADE__": marked_source("BUYUPGRADE"),
+        "__SHOPACTION__": marked_source("SHOPACTION", "ShopServer.lua"),
+        "__HRBUY__": marked_source("HRBUY", "PoachServer.lua"),
+        "__BUYHR__": function_source("local function buyHr(player)", "PoachServer.lua"),
+        "__ONACTION__": function_source("local function onAction(player, action, a, b)", "PoachServer.lua"),
+    }
+    if mutation:
+        old, new = mutation
+        for key, region in parts.items():
+            if old in region:
+                parts[key] = region.replace(old, new, 1)
+                break
+        else:
+            raise SystemExit("mutation target not found: " + old)
+    source = BUY_TESTS.replace("__UPGRADES__", upgrades_lua()).replace("__HRLEVELS__", hr_levels_lua())
+    for key, region in parts.items():
+        source = source.replace(key, region)
+    return source
+
+
+# Each of these breaks one rule of the purchase; the tests must notice (a test that can't fail proves nothing).
+# A third element names a test that must be among the failures (proof that this test is the one that can fail).
+BUY_MUTATIONS = [
+    ("the Cash check", ("if cash < upg.cost then", "if false then")),
+    ("the already-owned check", ("if data.owned[upg.name] then", "if false then")),
+    ("the order check", ("if i ~= id then", "if false then")),
+    ("the rate limit", ("if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then", "if false then"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
+    ("the rate limit (a refused request also stamps the time)",
+     ("\tif data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n\tdata.lastBuyAt = now\n",
+      "\tlocal previous = data.lastBuyAt\n\tdata.lastBuyAt = now\n\tif previous and now - previous < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n"),
+     "a refused spam request does not push the next allowed time forward"),
+    ("the rate limit (a refused request also stamps the time, seen by the 100 requests)",
+     ("\tif data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n\tdata.lastBuyAt = now\n",
+      "\tlocal previous = data.lastBuyAt\n\tdata.lastBuyAt = now\n\tif previous and now - previous < BUY_MIN_INTERVAL then\n\t\treturn nil, \"Too fast\"\n\tend\n"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
+    ("the rate limit interval (0.4 s cut to 0.1 s)", ("local BUY_MIN_INTERVAL = 0.4", "local BUY_MIN_INTERVAL = 0.1"),
+     "spam: 100 requests on a moving clock buy exactly 3 times"),
+    ("the id range check", ("id < 1 or id > #upgrades", "false")),
+    ("the whole-number check", ("id % 1 ~= 0 or ", "")),
+    ("the ready check", ("if not data.ready then", "if false then")),
+    ("the type check in ShopServer", ("if typeof(id) ~= \"number\" then", "if false then")),
+    ("the HR ready check in buyHr", ("if not poach or not data.ready then", "if not poach then"),
+     "HR buy: not ready (loading or an IPO being saved) is refused"),
+    ("the HR Cash check", ("if cash < nextLevel.cost then", "if false then"),
+     "HR buy: one Cash short is refused"),
+    ("the HR Cash deduction", ("data.cash.Value -= nextLevel.cost", "data.cash.Value -= 0"),
+     "HR buy: exactly the price buys Lv 1, the exact cost is taken"),
+    ("the HR level increase", ("poach.hrLevel += 1", "poach.hrLevel += 0"),
+     "HR buy: every level costs exactly its server price and raises hrLevel by 1"),
+    ("the HR save", ("task.spawn(core.save, player)", "-- no save"),
+     "HR buy: a purchase saves once and publishes the new level"),
+    ("the HR level cap (the last level sold again)", ("levels[poach.hrLevel + 1]", "levels[math.min(poach.hrLevel + 1, #levels)]"),
+     "HR buy: past the last level is refused"),
+    ("the HR rate limit", ("if poach.lastHrBuyAt and now - poach.lastHrBuyAt < HR_BUY_MIN_INTERVAL then", "if false then"),
+     "HR buy: a second buy 0.6 s later is refused"),
+    ("the HR rate limit interval (1 s cut to 0.5 s)", ("local HR_BUY_MIN_INTERVAL = 1", "local HR_BUY_MIN_INTERVAL = 0.5"),
+     "HR buy: a second buy 0.6 s later is refused"),
+    ("the HR price from the server rules (a hardcoded level list)", ("checkHrPurchase(RULES.HRDepartment,", "checkHrPurchase(" + "{ { cost = 2500, defense = 0.05 } },"),
+     "HR buy: with other server rules, their price (7) and their cap (1 level) are used"),
+]
+
+
+def pads_gone_checks():
+    """Source checks: no walk-on pad, no Touched buy or trigger, the Office tab sends only an upgrade number, no new save section."""
+    import re
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    lua_files = [n for n in sorted(os.listdir(ROOT)) if n.endswith(".lua")]
+    touched = {n: len(re.findall(r"\.Touched\b", code_only(read(n)))) for n in lua_files}
+    touched = {n: c for n, c in touched.items() if c}
+    check("the only Touched handler in the game is the VIP Lounge door in ShopServer (it opens Roblox's own confirm prompt)", touched == {"ShopServer.lua": 1}, touched)
+    for name in lua_files:
+        code = code_only(read(name))
+        for word in ("BuyPad", "HRPad", "IpoPad", "HR_PAD_OFFSET", "buildHrPad", "refreshPad", "hrLabel", "padLabel"):
+            check("%s has no %s (the pads are gone)" % (name, word), word not in code)
+
+    core = read("TycoonCore.lua")
+    code = code_only(core)
+    check("TycoonCore: one purchase function, and the shop gets it", "buyUpgrade = buyUpgrade," in code and code.count("local function buyUpgrade(") == 1)
+    check("TycoonCore: the sign has no touch, collision or query", "post.CanCollide, post.CanTouch, post.CanQuery = false, false, false" in code
+          and "board.CanCollide, board.CanTouch, board.CanQuery = false, false, false" in code)
+    check("TycoonCore: a join and an IPO reset refresh the sign and the Office state", code.count("refreshSign(player)") >= 3)
+    check("TycoonCore: spawning on a plot buys nothing (the character only lands and faces the sign)", "auto-buy" not in core and "Touched" not in core)
+    sections = re.search(r"local KNOWN_SECTIONS = \{([^}]*)\}", core).group(1)
+    check("TycoonCore: no new save section (the Office tab saves nothing: owned already is)",
+          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks".split()), sections)
+    check("TycoonCore: nothing new is written to the save for the Office (no lastBuyAt or Upgrade attribute in the payload)",
+          "lastBuyAt" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
+
+    shop = code_only(read("ShopServer.lua"))
+    region = shop[shop.index("local function handleShopAction"):shop.index("function ShopServer.addDebugAction") if "function ShopServer.addDebugAction" in shop else len(shop)]
+    handler = region[:region.index("return false, \"Unknown action\"")]
+    check("ShopServer: the Office action only calls core.buyUpgrade(player, id) (no price, no Cash, no save of its own)",
+          handler.count("core.buyUpgrade(player, id)") == 1 and "cash" not in handler.lower() and "cost" not in handler.lower())
+    check("ShopServer: ShopAction is created on live servers too (not behind the Studio debug check)",
+          shop.index('actionRemote.Name = "ShopAction"') < shop.index("if RunService:IsStudio() and ShopConfig.DebugInStudio then", shop.index('actionRemote.Name = "ShopAction"') - 400))
+
+    client = code_only(read("ShopClient.lua"))
+    invokes = re.findall(r"actionRemote:InvokeServer\(([^)]*)\)", client)
+    check("ShopClient: the Office tab asks only for the list and sends the upgrade number (no price)",
+          sorted(invokes) == ['"BuyUpgrade", index', '"Upgrades"'], invokes)
+    check("ShopClient: an Office tab, first and the one shown when the shop opens",
+          'local tabNames = { "Office",' in client and 'showTab("Office")' in client)
+    check("ShopClient: Buy is only offered for the next upgrade when the Cash is there (the server decides anyway)",
+          'setButton(button, "Locked", COLORS.disabled, false)' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
+
+    poach = code_only(read("PoachClient.lua"))
+    check("PoachClient: Buy HR sends only the action", 'request("BuyHr")' in poach and 'request("BuyHr",' not in poach)
+    check("PoachClient: the HR card no longer sends players to a pad", "pad" not in poach.lower().replace("padding", ""))
+    poach_server = code_only(read("PoachServer.lua"))
+    check("PoachServer: BuyHr is an action of the existing PoachAction remote (no new remote)", 'action == "BuyHr"' in poach_server and poach_server.count("Instance.new(\"Remote") == 2)
+    return passed, failed
 
 
 def task_wiring_checks():
@@ -3352,6 +4574,101 @@ def task_wiring_checks():
 
     shop = read("ShopClient.lua")
     check("ShopClient: the task Debug rows are inside the Studio-only Debug block", shop.index("TaskSpawn") > shop.index("if debugRemote then") and shop.index("TaskSpawn") < shop.index("-- Tabs, opening and closing"))
+    return passed, failed
+
+
+# Rooms were built one stage at a time (visuals-garage); all 5 exist now, one per IpoConfig funding stage.
+VISUALS_ALL_STAGES = True
+
+
+def visuals_expected_lua():
+    """The layout map read from the real scripts, as a Luau table (PlotArt.Layout must match it)."""
+    import re
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    def num(text):
+        return float(text) if "." in text else int(text)
+
+    def spots(text, name):
+        block = text[text.index("local %s = {" % name):]
+        block = block[:block.index("\n}")]
+        return [(num(x), num(z)) for x, z in re.findall(r"Vector3\.new\((-?[\d.]+), 0, (-?[\d.]+)\)", block)]
+
+    core = read("TycoonCore.lua")
+    upgrades_block = core[core.index("local UPGRADES = {"):]
+    upgrades_block = upgrades_block[:upgrades_block.index("\n}")]
+    upgrades = re.findall(r'name = "([^"]+)"', upgrades_block)
+    item = re.search(r"local function itemOffset\(i\)\s*local col = \(i - 1\) // 3\s*local row = \(i - 1\) % 3\s*return Vector3\.new\((-?[\d.]+) \+ col \* (-?[\d.]+), 0, (-?[\d.]+) \+ row \* (-?[\d.]+)\)", core)
+    if not item:
+        raise SystemExit("itemOffset changed in TycoonCore.lua: update visuals_expected_lua and PlotArt.Layout")
+    x0, dx, z0, dz = (num(item.group(k)) for k in (1, 2, 3, 4))
+    slots = [(x0 + ((i - 1) // 3) * dx, z0 + ((i - 1) % 3) * dz) for i in range(1, len(upgrades) + 1)]
+    spawn = re.search(r"local spawnPos = plotCenter\(slot\) \+ Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
+    floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotCenter\(slot\)', core)
+    center_y = re.search(r"return Vector3\.new\(startX \+ \(slot - 1\) \* PLOT_SPACING, ([\d.]+), 150\)", core)
+    buy = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core)
+    ipo = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", read("IpoServer.lua"))
+    employee = read("EmployeeServer.lua")
+    if not all((buy, spawn, floor, center_y, ipo)):
+        raise SystemExit("A sign, the spawn or the Floor moved in the scripts: update visuals_expected_lua and PlotArt.Layout")
+    floor_top = float(floor.group(2)) / 2  # the Floor is centered on plotCenter
+
+    def pairs(points):
+        return "{ " + ", ".join("{ %s, %s }" % p for p in points) + " }"
+
+    return ("{ upgrades = { %s }, slots = %s, spots = %s, incubators = %s, floor = { %s, %s, %s }, floorTop = %s, "
+            "signs = { BuySign = { %s, %s }, IpoSign = { %s, %s } }, spawn = { %s, %s } }") % (
+        ", ".join('"%s"' % u for u in upgrades), pairs(slots), pairs(spots(employee, "EMPLOYEE_SPOTS")),
+        pairs(spots(employee, "INCUBATOR_SPOTS")), floor.group(1), floor.group(2), floor.group(3), floor_top,
+        buy.group(1), buy.group(2), ipo.group(1), ipo.group(2), spawn.group(1), spawn.group(2))
+
+
+def visuals_wiring_checks():
+    """Checks on the source text of PlotArt, PlotVisuals and TycoonCore's hooks (looks only, never gameplay)."""
+    import re
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    for name in ("PlotArt.lua", "PlotVisuals.lua"):
+        size = len(read(name).encode("utf-8"))
+        check("%s stays under 120 KB (%d bytes)" % (name, size), size < 120 * 1024, size)
+        code = code_only(read(name))
+        for word in ("GetService", "RemoteEvent", "RemoteFunction", "DataStore", "SetAsync", "addEarnings", "Random", "math.random",
+                     "rbxasset", "http", "Texture =", "MeshId", "Decal", "require("):
+            check("%s never uses %s (pure looks: no services, remotes, saves, assets or randomness)" % (name, word), word not in code)
+    art = code_only(read("PlotArt.lua"))
+    check("PlotArt: every Instance comes from PlotVisuals (no Instance.new in the data)", "Instance.new" not in art)
+
+    core = read("TycoonCore.lua")
+    code = code_only(core)
+    check("TycoonCore: PlotVisuals and PlotArt are required inside pcall (an art bug can never stop the game)",
+          re.search(r'pcall\(require, script\.Parent:WaitForChild\("PlotVisuals", \d+\)\)', code) is not None
+          and re.search(r'pcall\(require, script\.Parent:WaitForChild\("PlotArt", \d+\)\)', code) is not None)
+    calls = re.findall(r"PlotVisuals\.\w+", code)
+    wrapped = re.findall(r'looks\("[^"]*"[^,]*, PlotVisuals\.\w+', code)
+    check("TycoonCore: every PlotVisuals call goes through looks() (pcall + warn)", len(calls) == len(wrapped) and len(calls) >= 3, (len(calls), len(wrapped)))
+    spawn_item = core[core.index("local function spawnItem("):core.index("-- Which upgrades the player owns")]
+    check("TycoonCore: spawnItem falls back to the plain block when there is no prop", 'makePart(data.folder, upg.name, upg.size' in spawn_item)
+    loop = core[core.index("-- Passive income every second"):core.index("-- Autosave every minute")]
+    check("TycoonCore: the income loop keeps the room on the current funding stage", "syncRoom(data)" in loop)
+    check("TycoonCore: the stage comes from IpoConfig.stageIndex (the same rule as the IPO sign)", "IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count)" in code)
+    check("TycoonCore: a purchase pops its prop in", re.search(r"spawnItem\(data, i, upg, true\)", code) is not None)
+    check("TycoonCore: no new remote, DataStore or save field for the looks",
+          code.count('Instance.new("Remote') == 0 and code.count("GetDataStore(") == 1 and "looks =" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
     return passed, failed
 
 
@@ -3508,6 +4825,42 @@ def main():
     wiring_passed, wiring_failed = task_wiring_checks()
     print("TaskServer wiring check: %d passed, %d failed" % (wiring_passed, wiring_failed))
     if wiring_failed:
+        code = 1
+    with open(os.path.join(ROOT, "PlotArt.lua"), encoding="utf-8") as f:
+        plot_art = f.read()
+    with open(os.path.join(ROOT, "PlotVisuals.lua"), encoding="utf-8") as f:
+        plot_visuals = f.read()
+    result18 = run_luau(luau, VISUALS_TESTS.replace("__PLOTART__", plot_art).replace("__PLOTVISUALS__", plot_visuals)
+                        .replace("__IPOCONFIG__", ipo_config).replace("__EXPECTED__", visuals_expected_lua())
+                        .replace("__ALL_STAGES__", "true" if VISUALS_ALL_STAGES else "false"))
+    print("Plot visuals check (PlotArt + PlotVisuals): " + (result18.stdout.strip() or result18.stderr.strip()))
+    if result18.returncode != 0 or " 0 failed" not in result18.stdout:
+        code = 1
+    visuals_passed, visuals_failed = visuals_wiring_checks()
+    print("Plot visuals wiring check: %d passed, %d failed" % (visuals_passed, visuals_failed))
+    if visuals_failed:
+        code = 1
+    result19 = run_luau(luau, buy_source())
+    print("Office upgrade and HR purchase check: " + (result19.stdout.strip() or result19.stderr.strip()))
+    if result19.returncode != 0 or " 0 failed" not in result19.stdout:
+        code = 1
+    caught = 0
+    for label, mutation, *expected in BUY_MUTATIONS:
+        mutant = run_luau(luau, buy_source(mutation))
+        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
+        if "passed," not in mutant.stdout or " 0 failed" in mutant.stdout:
+            # the tests must run to the end and report failures (a crash would not count)
+            print("FAIL: mutation not caught: the purchase tests do not notice a broken " + label)
+            code = 1
+        elif expected and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
+            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+            code = 1
+        else:
+            caught += 1
+    print("Office upgrade mutations: %d of %d broken rules caught" % (caught, len(BUY_MUTATIONS)))
+    pads_passed, pads_failed = pads_gone_checks()
+    print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
+    if pads_failed:
         code = 1
     return code
 
