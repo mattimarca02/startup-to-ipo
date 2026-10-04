@@ -177,25 +177,47 @@ Placement never changes Income (`totalIncome` reads no position, TycoonCore.lua:
 - **Shop, no new tab** (ShopClient.lua:133-150, 204): SHOP > Office gets **Buildings** (next one: Locked or Buy), **Upgrades**, **Furniture**. `"Buildings"`, `"BuyBuilding", n`, `"Objects"`, `"BuyObject", n` on `ShopAction` (ShopServer.lua:701-715, 802-805), checked like `checkUpgradePurchase` (TycoonCore.lua:243-270) plus "stage reached" (IpoConfig.lua:151) and "building n-1 owned". Draft price: 50% of the stage threshold (900 / 3,150 / 11,700 / 40,500 at IPO 0, IpoConfig.lua:19-22, x2.5 per IPO); furniture 10-25%. Cash only in v1; later Robux bundles have fixed contents; no odds words (daily_test.py:4344).
 - **Picker:** 2 x 2 (portrait) or a row of 4. **Portfolio:** scrolling cards.
 
-## 8. Economy risks and anti-exploit
+## 8. Economy: seed, collection bonus, risks, sims
 
-- **IPO pace is unchanged:** an IPO still needs earned valuation (IpoServer.lua:123-135, 192-195); Shares and the multiplier still come from it (IpoConfig.lua:162-172). Companies add two gift sources that never touch valuation, seed (1.3) and dividends (1.4): they only shorten the buying part of a rung.
-- **Four sectors are four economies.** A faster sector, or one kinder to idle or casual players, becomes the only choice and the others dead content. Each must hit every rung within ±5% of Software for every LONG_GAME player profile.
-- **Income models are the main risk:** Fintech interest rewards hoarding and idling, Biotech payouts are lumpy, Gaming launches stack with passes and the multiplier. All capped, engaged-only, no random outcome.
-- **Prices follow the player's IPO count**, never the sector (`StageScale`, LONG_GAME section 5): a new sector restarts nothing.
-- **Hopping:** only an IPO founds a company (IPO-ready valuation, 60 s cooldown at IpoConfig.lua:45, 50+ h by design); no "refound"; retiring pays nothing.
-- **Duplicate funding:** the seed lives inside the one IPO transform; `ipoNumber` blocks a repeat (IpoServer.lua:179); held Cash is frozen (no transfer, no second IPO); the run check never pays a seed.
-- **Dividend farming:** engaged seconds only (server-graded), capped by the active Income, base Income only. **Alts:** companies can't be given, traded or poached; LONG_GAME's R1-R3 stand. **Rollback:** older code keeps `companies` frozen and pays no seed.
+**8.1 Seed (P-5): funding only.** The new company starts with `StartingCash` (0, IpoConfig.lua:44) plus a seed of **s% of the old company's Cash at the IPO, capped at c% of the new company's first-rung prices**. s = 10 and c = 25 are **open placeholders** until S1 passes (today's six upgrades cost $7,025, TycoonCore.lua:65-72: cap $1,756; LONG_GAME's Garage items about $131K: about $33K **(estimate)**). Cash only, never an item; a gift (no `addEarnings`, never valuation); paid once, inside the IPO transform (1.4). **The dividend is removed:** it was passive income from held companies, which P-4 forbids and P-2 removes.
 
-**Simulate before any build** (tools/economy_sim.py has `--long`, `--active`, `--ipo`, `--daily`, :1682-1688; a new `--companies` mode adds seed, dividends, per-sector ladders and models):
+**8.2 Collection bonus (P-4).** Proposal: a **Cash multiplier on Income**: +1.5% per Bronze, +0.5% more for Gold, +0.5% more for Platinum, at most 2.5% per sector, **capped at +10% in all** (four Platinum) **(placeholders, S2)**. It is applied with the passes (`updateIncome`, TycoonCore.lua:148-152: Income x pass multipliers x IPO multiplier) but is **never valuation**: from LONG_GAME PR 2 the valuation counts base Income only (LONG_GAME section 6), so the bonus buys sooner and never moves the clock ("Cash can only fill a rung, never skip it"). **It stays 0 until PR 2**: today the income loop adds the whole Income, passes included, to the valuation (TycoonCore.lua:865-866). Size: a tenth of the 2x Cash pass, which saves about 15% of a run (LONG_GAME section 6): roughly 1-2% **(estimate)**. **Fallback** if S2 fails: a cheaper first rung per stamp (the Garage is 1.5 of 57 h, LONG_GAME section 3), which multiplies nothing.
+
+| Pass, product, perk, system | With the bonus | Risk and rule |
+|---|---|---|
+| 2x Cash x2 (ShopConfig.lua:41), VIP x1.5 (:50) | multiplies: x3.3 at most, then the IPO multiplier (IpoConfig.lua:162-165) | Cash only; valuation at base after PR 2, so the stack never shortens the clock |
+| Shareholder 2x Shares (:88; `sharesFor`, IpoConfig.lua:168-172) | none | **No stamp ever pays Shares**: the pass would double a permanent reward on every replay |
+| Cash packs (Income minutes, ShopServer.lua:537-541) | up to +10% per pack | fixed contents (D9 safe); a gift once PR 2 deletes its `addEarnings` call |
+| Daily Cash (Income minutes, DailyServer.lua:177) | up to +10% | already a gift; daily Shares are never doubled |
+| Tasks (seconds of Income, TaskConfig) | up to +10% Cash | valuation at base after PR 2 |
+| Away bank, Night Shift (10% of base Income, LONG_GAME section 2) | excluded | |
+| Extra Slots, Auto-Hatch, Headhunter, Instant Hatch, Poach Shield; Faster Recruiting, Extra Incubator, Extra Desk, Recruiter Network | none | |
+| Luck Boost (`changesOdds`, ShopConfig.lua:134), Talent Scouts (IpoConfig.lua:97-102) | none | **D9:** a stamp never changes odds; stamps and the bonus are earned only, never sold, never random |
+| Seed (8.1) | the old company's Cash was raised by it | bounded by the seed cap |
+
+**8.3 Risks.**
+- **IPO pace is unchanged:** an IPO still needs earned valuation (IpoServer.lua:123-135, 192-195); Shares and the multiplier come from it (IpoConfig.lua:162-172). Seed and bonus never touch valuation.
+- **Compounding:** the bonus multiplies with both Cash passes and the IPO multiplier; the Shareholder pass doubles nothing of it while stamps pay no Shares. A bonus switched on before LONG_GAME PR 2 would shorten every IPO, most for pass owners.
+- **Tiers and passes:** without pass-adjusted targets (1.5), Gold and Platinum are about 15% easier with 2x Cash: a paid edge on the board.
+- **Four sectors are four economies:** a faster sector, or one kinder to idle players, becomes the only choice. Each must hit every rung within ±5% of Software for every LONG_GAME player profile. **Income models** are the main risk (Fintech interest rewards hoarding, Biotech payouts are lumpy, Gaming launches stack with passes): all capped, engaged only, never random.
+- **Prices follow the IPO count**, never the sector or stamps (`StageScale`, LONG_GAME section 5).
+- **Hopping and farming the first rung:** only an IPO founds a company (IPO-ready valuation, 60 s cooldown, IpoConfig.lua:45; 50+ h by design). A stamp needs a whole ladder, so the first rung can't be farmed; what a founding gives (seed, starter set) is capped and bounded by the IPO rate.
+- **Duplicate seed:** paid only in the one IPO transform; `ipoNumber` blocks a repeat (IpoServer.lua:179); a failed save changes nothing (TycoonCore.lua:565-567); the run check pays none.
+- **Alts:** stamps and cards can't be given, traded or poached; LONG_GAME's R1-R3 stand (employees follow the player). **Rollback:** older code keeps `pokedex` frozen and pays no seed (1.2).
+
+**8.4 Simulate before any build** (tools/economy_sim.py has `--long`, `--active`, `--ipo`, `--daily`, :1684-1687; a new `--pokedex` mode adds seed, bonus, tiers, per-sector ladders and models). Pass marks are **placeholders** too:
 
 | Sim | Question | Pass |
 |---|---|---|
-| S1 seed | `--long` with seed 0 / 10% / 25% cap: hours to IPO 1 and loop 2 | ≤ 5% faster per loop |
-| S2 dividends | 0, 1, 4 held companies: hours per loop, loops 2-10 | ≤ 10% faster at IPO 10 |
+| S1 seed | `--long`, seed 0 / 10% / 25% cap: hours to IPO 1 and loop 2 | ≤ 5% faster per loop |
+| S2 bonus | 0 / 1 / 4 / 8 / 12 stamp points x passes none / 2x Cash / VIP / both, loops 2-12 | at the cap ≥ 95% of the no-bonus hours for every pass set; both passes gain ≤ 2 points more than none |
 | S3 parity | each model fitted to Software, dedicated / regular / casual (`LONG_PLAYERS`, :1183) | every rung ±5% |
 | S4 bots | LONG_GAME section 2's macro and task-bot, per sector | no sector faster for a bot |
-| S5 hopping | always the fastest sector vs one fixed sector, 10 IPOs | < 3% apart |
+| S5 sector hopping | always the fastest sector vs one fixed sector, 10 IPOs | < 3% apart |
+| S6 tier targets | replay hours per profile and pass set against T_gold, T_plat, ratio 1.25 | Gold on ≥ 50% of regular replays, Platinum on ≥ 20% of dedicated ones; pass owners within ±5 points of others |
+| S7 board exploits | stamp points per 100 engaged hours: (a) always a new sector vs replays, (b) IPO at IPO-ready vs waiting for 1.25, (c) the task-bot | (a), (b) within 10% of normal play; (c) never above the dedicated human |
+
+Duplicate seed is a test, not a sim: daily_test cases for a failed IPO save retried, a repeated `GoPublic` and a run mismatch pay the seed exactly once.
 
 ## 9. Build plan
 
