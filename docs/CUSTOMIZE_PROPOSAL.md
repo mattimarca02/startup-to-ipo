@@ -85,6 +85,31 @@ Today `goPublic` (IpoServer.lua:177-243) calls `commitIpo` (TycoonCore.lua:544-5
 - **Existing saves** (no `companies` section, every dev save) are Software, never asked.
 - **Until all four sectors exist** the picker is off and every company is Software (`SectorConfig.PickerEnabled = false`, the same pattern as `TaskConfig.StudioOnly`).
 
+## 2. The sector package
+
+**Shared engine (built once, never names a sector):** the `companies` section, the IPO-to-new-company flow, seed and dividends; nested buildings, moving in, placement and its check, budgets; the Shop's Office tab and every purchase check; the task engine and its four action types (Answer, Choose, Timing, Targets: the content bible's "What each rung adds"); creatures, eggs, odds, `fixedHire` (D9) and poaching; daily, onboarding, HUD; the economy clock (engaged, away, caps); the sim. A test fails if a sector key appears in an engine `.lua` file.
+
+**Per sector: two modules and some config rows.**
+
+| What | Where | Content | Checked by tests |
+|---|---|---|---|
+| Identity | `Sector<Name>` (ReplicatedStorage) | `key` (saved: never renamed), name, one-line pitch, icon, UI palette, 12+ company names | key unique; names unique |
+| Buildings | `Sector<Name>` + `SectorArt<Name>` | one per stage: inner size (within section 4), shell art key, hire-desk skin, starter set (fixed list and spots) | nested sizes; starter spots valid; shell budget |
+| Upgrades | `Sector<Name>` | per stage: key (saved in `owned`, never renamed or reused), display name, joke, price, Income, footprint, prop art key, default spot. Software keeps today's six (TycoonCore.lua:65-72) | footprint covers the art; prices rise |
+| Furniture | `Sector<Name>` + `SectorArt<Name>` | key, name, joke, stage, price, footprint, parts, lights | footprint covers the art; parts and lights counted |
+| Tasks | `Sector<Name>` | rows in `TaskConfig.Rows` format (TaskConfig.lua:49): the engine's action type, texts, reward in seconds of Income, stage; caller lines (8 per stage), surprise events, board requests | only engine action types; no D9 words |
+| Creatures and eggs | `Sector<Name>` | display name, job title (today's `role`, CreatureConfig.lua:56-104) and joke per shared creature key; egg display names | every key of `CreatureConfig` covered |
+| Way of making money | `Sector<Name>` | one of the engine's income models plus its numbers (below) | sim parity (section 8) |
+| Art | `SectorArt<Name>` (ServerScriptService) | shells, props, furniture, hire desks: the `P(...)` part format of PlotArt.lua:9-23 | the PlotVisuals checks and fingerprints |
+| Shop | `ShopConfig` | furniture bundles (fixed contents) with `id = 0`; the owner runs the sync | D9; `id = 0` |
+| Registration | `SectorConfig` | the list of sectors, `Enabled`, `PickerEnabled` | every listed module exists |
+
+**Ways of making money (engine models, sector numbers).** Every model pays through `core.addEarnings`, has no random outcome (D9) and is fitted so the hours per rung match Software within 5% (section 8):
+- **Software (today):** steady Income per second.
+- **Fintech (proposal):** lower Income per second, plus interest on the Cash held, paid per engaged second and capped at a share of base Income, so a full bank cannot outrun the ladder.
+- **Biotech (proposal):** lower Income per second, plus a fixed research payout every N engaged minutes (a trial phase on a visible timer, never a dice roll).
+- **Gaming (proposal):** Income per second, plus a launch: a graded Timing task that doubles Income for a few minutes, followed by a cooldown.
+
 ## 5. The office: what stands where, and what the server checks
 
 Coordinates are measured from the **anchor**, the front-center of the floor (section 4): `x` to the right, `z` negative toward the back. Today's plot-center offsets convert with `z_anchor = z - 30`; the world position stays the same.
