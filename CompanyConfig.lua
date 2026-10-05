@@ -680,6 +680,10 @@ local function readRounds(ctx, where, raw, key)
 	return out
 end
 
+-- The upgrade names on a card: a list of strings. Names this version has no upgrade for are kept. So is anything under a
+-- key that isn't the list's 1, 2, 3 ... in a row (`future = "GamingRig"`, or [5] after a gap): it is written back as it was,
+-- the way the maps keep unknown keys (a newer version's data must come back unchanged). Only a value inside the list that
+-- isn't a name (not a string, empty, over 39 characters) or a name past the limit is skipped, with a warning.
 local function readOwnedNames(ctx, where, raw, key)
 	local value = raw[key]
 	local out = {}
@@ -690,12 +694,21 @@ local function readOwnedNames(ctx, where, raw, key)
 		note(ctx, "a bad " .. where .. "." .. key)
 		return out
 	end
-	for i = 1, #value do
+	local listed = 0 -- the list is 1 .. listed (the first gap ends it; `#` is not exact for a table with gaps)
+	while value[listed + 1] ~= nil do
+		listed += 1
+	end
+	for i = 1, listed do
 		local name = value[i]
 		if typeof(name) == "string" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then
 			table.insert(out, name)
 		else
 			note(ctx, "a bad name in " .. where .. "." .. key)
+		end
+	end
+	for index, inner in pairs(value) do
+		if not (isWhole(index, 1) and index <= listed) then
+			out[index] = deepCopy(inner) -- never collides with the list: the key after `listed` is empty, and `out` has at most `listed` names
 		end
 	end
 	return out

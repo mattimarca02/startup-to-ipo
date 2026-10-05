@@ -4494,7 +4494,7 @@ local FULL = {
 			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
 			card = {
 				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
-				owned = { "Desk", "Laptop", "Gaming PC" },
+				owned = { "Desk", "Laptop", "Gaming PC", future = "GamingRig", [5] = "Neon Logo" },
 				decor = { Chair = 1, Future = 3 },
 				objects = objectsList("card object"),
 				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
@@ -4536,6 +4536,8 @@ local keptAt = {
 	["sectors[k] unknown field"] = function() return out.sectors.Software.futureSector.y == 2 end,
 	["card unknown field"] = function() return out.sectors.Software.card.futureCard == "keep" end,
 	["card.owned unknown upgrade name"] = function() return out.sectors.Software.card.owned[3] == "Gaming PC" end,
+	["card.owned name under a key"] = function() return out.sectors.Software.card.owned.future == "GamingRig" end,
+	["card.owned entry after a gap"] = function() return out.sectors.Software.card.owned[5] == "Neon Logo" and out.sectors.Software.card.owned[4] == nil end,
 	["card.decor unknown key"] = function() return out.sectors.Software.card.decor.Future == 3 end,
 	["card.objects[i] unknown field"] = function() return out.sectors.Software.card.objects[1].futureObj == "card object" end,
 	["card.rounds[k] unknown field"] = function() return out.sectors.Software.card.rounds.Seed.extra == 1 end,
@@ -4777,6 +4779,62 @@ sec, warned = loaded(function(d) d.sectors.Software.card = "text" end)
 check("sectors: a card that isn't a table is skipped", sec.sectors.Software.card == nil and warned == 1)
 sec, warned = loaded(function(d) d.sectors.Software.card.stake = 20000; d.sectors.Software.card.ipoNumber = -1; d.sectors.Software.card.owned = { "Desk", 5 } end)
 check("card: a bad stake, ipoNumber and owned name are skipped", sec.sectors.Software.card.stake == 10000 and sec.sectors.Software.card.ipoNumber == 0 and #sec.sectors.Software.card.owned == 1 and warned == 3, warned)
+-- card.owned (KEEP rule, docs/CUSTOMIZE_PROPOSAL.md): names are kept, and so is anything under a key that isn't the list's 1, 2, 3 ... in
+-- a row. Only what is really dropped (a value that isn't a name, a name past the limit, a number above 3) is dropped, with a warning.
+do
+	local function ownedWith(owned)
+		local saved = good()
+		saved.sectors.Software.card.owned = owned
+		local copy = deepCopy(saved)
+		local st = load(saved, 2)
+		return st, copy, #WARNINGS, saved
+	end
+	local extras = { "Desk", "Laptop", future = "GamingRig", [5] = "Neon Logo" }
+	local st, copy, nWarned = ownedWith(extras)
+	local out = save(st, false)
+	local owned = out.sectors.Software.card.owned
+	check("card.owned: keys outside the list (a name under a key, an entry after a gap) are kept and written back unchanged",
+		nWarned == 0 and st.locked == false and deepEqual(out, copy) and owned[1] == "Desk" and owned[2] == "Laptop" and owned[3] == nil and owned[4] == nil
+		and owned.future == "GamingRig" and owned[5] == "Neon Logo", nWarned)
+	check("card.owned: ... and loading what was saved changes nothing", (function()
+		local second = load(deepCopy(out), 2)
+		return #WARNINGS == 0 and deepEqual(save(second, false), out)
+	end)())
+	local inputTable
+	st, copy, nWarned, inputTable = ownedWith({ "Desk", future = { tier = 2, tags = { "a" } } })
+	check("card.owned: a record of a newer version under a key is kept whole, as a copy, with no warning",
+		nWarned == 0 and deepEqual(save(st, false), copy) and st.section.sectors.Software.card.owned.future ~= inputTable.sectors.Software.card.owned.future)
+	st, copy, nWarned = ownedWith({ future = "x" })
+	check("card.owned: a dictionary with no list at all is kept as it was", nWarned == 0 and deepEqual(save(st, false), copy))
+	st, copy, nWarned = ownedWith({ [2] = "Laptop", [3] = "Desk" })
+	check("card.owned: entries that start after a gap (no [1]) are kept as they were", nWarned == 0 and deepEqual(save(st, false), copy))
+	st, copy, nWarned = ownedWith({ "Desk", "Laptop", [0] = "Zero", [-1] = "Minus", [1.5] = "Half" })
+	check("card.owned: keys 0, -1 and 1.5 are kept as they were", nWarned == 0 and deepEqual(save(st, false), copy))
+	st, copy, nWarned = ownedWith({ "Desk", 5, "Laptop" })
+	owned = st.section.sectors.Software.card.owned
+	check("card.owned: a value inside the list that is not a name is skipped, with a warning", #owned == 2 and owned[1] == "Desk" and owned[2] == "Laptop" and nWarned == 1, nWarned)
+	st, copy, nWarned = ownedWith({ "Desk", { tier = 2 }, "", string.rep("x", 40), false, "Laptop", future = "k" })
+	owned = st.section.sectors.Software.card.owned
+	check("card.owned: a table, an empty or too long name and a false in the list are each skipped with a warning, the extra key stays",
+		#owned == 2 and owned.future == "k" and nWarned == 4, nWarned)
+	local many = {}
+	for i = 1, 205 do many[i] = "Name" .. i end
+	st, copy, nWarned = ownedWith(many)
+	check("card.owned: names past 200 are skipped, with a warning for each", #st.section.sectors.Software.card.owned == 200 and nWarned == 5, nWarned)
+	st, copy, nWarned = ownedWith("Desk")
+	check("card.owned: a value that isn't a table is skipped, with a warning", next(st.section.sectors.Software.card.owned) == nil and nWarned == 1, nWarned)
+	-- a number above 3 and the other scalar values of a sector entry and its card: changed or skipped only with a warning
+	for _, case in ipairs({ { 7, 3 }, { 3.5, 3 }, { 2.5, 2 }, { -2, 1 }, { 9e9, 3 } }) do
+		sec, warned = loaded(function(d) d.sectors.Software.stamp = case[1] end)
+		check("sectors: a stamp of " .. tostring(case[1]) .. " is clamped to " .. case[2] .. " with a warning", sec.sectors.Software.stamp == case[2] and warned == 1, warned)
+	end
+	sec, warned = loaded(function(d) d.sectors.Software.stamp = 3 end)
+	check("sectors: a stamp of 3 (Platinum) is kept with no warning", sec.sectors.Software.stamp == 3 and warned == 0, warned)
+	for _, field in ipairs({ "name", "ipoNumber", "at", "engaged", "ratio", "building", "stake", "shares" }) do
+		sec, warned = loaded(function(d) d.sectors.Software.card[field] = { whatever = 1 } end)
+		check("card: a table where card." .. field .. " should be a plain value is replaced by its default, with a warning", warned == 1, warned)
+	end
+end
 sec, warned = loaded(function(d) d.sectors = "x" end)
 check("sectors that isn't a table is skipped", next(sec.sectors) == nil and warned == 1)
 sec, warned = loaded(function(d) d.dust = 6000 end)
@@ -4856,6 +4914,55 @@ for _, path in ipairs(allPaths) do
 end
 check("fuzz: " .. ran .. " bad values (every field x " .. #WEIRD .. " kinds) never throw", bad == 0 and ran > 500, ran)
 check("fuzz: loading what was saved again never changes it", unstable == 0)
+-- Never silent: an unknown key added to any table of the section (and to the section itself) is written back unchanged, or a warning says
+-- why not. A string key is kept everywhere; a number key is kept in a list (card.owned) and in the maps it is skipped with a warning.
+do
+	local tablePaths = { {} }
+	for _, path in ipairs(paths(FULL, {}, {})) do
+		local node = FULL
+		for _, k in ipairs(path) do node = node[k] end
+		if typeof(node) == "table" then table.insert(tablePaths, path) end
+	end
+	local silent, tried, kept, warnedOnly = {}, 0, 0, 0
+	for _, path in ipairs(tablePaths) do
+		for _, key in ipairs({ "futureKey", 99, 0, -3 }) do
+			local data = deepCopy(FULL)
+			local node = data
+			for _, k in ipairs(path) do node = node[k] end
+			node[key] = { z = 1 }
+			local expected = deepCopy(data)
+			WARNINGS = {}
+			local ok, result = pcall(CC.load, data, ctx(2))
+			tried += 1
+			if not ok then
+				table.insert(silent, "throws: ." .. table.concat(path, ".") .. "[" .. tostring(key) .. "]")
+			elseif deepEqual(CC.toSave(result, false), expected) then
+				kept += 1
+			elseif #WARNINGS > 0 then
+				warnedOnly += 1
+			else
+				table.insert(silent, "." .. table.concat(path, ".") .. "[" .. tostring(key) .. "]")
+			end
+		end
+	end
+	check("never silent: an unknown key added to any table is written back unchanged or warned about (" .. tried .. " tried)", #silent == 0 and tried > 100 and kept > warnedOnly, silent[1])
+	check("never silent: a string key is written back unchanged everywhere, with no warning (a list of placed items locks the section instead, with one)", (function()
+		for _, path in ipairs(tablePaths) do
+			local data = deepCopy(FULL)
+			local node = data
+			for _, k in ipairs(path) do node = node[k] end
+			node.futureKey = { z = 1 }
+			local expected = deepCopy(data)
+			WARNINGS = {}
+			local ok, result = pcall(CC.load, data, ctx(2))
+			if not (ok and deepEqual(CC.toSave(result, false), expected) and (#WARNINGS == 0 or (result.locked and #WARNINGS == 1))) then
+				print_real("a string key under ." .. table.concat(path, ".") .. " is not kept")
+				return false
+			end
+		end
+		return true
+	end)())
+end
 
 -- 8. Placement ------------------------------------------------------------------------------------
 local zones = CC.anchorZones(PlotVisuals.zones(PlotArt.Layout), PlotArt.Layout.floorSize[3])
@@ -5352,6 +5459,19 @@ COMPANY_MUTATIONS = [
      "round trip: v = 1 is written"),
     ("the Desk footprint too small for its prop", ("[\"Desk\"] = { w = 8.4, d = 7.6 },", "[\"Desk\"] = { w = 6, d = 4 },"),
      "every upgrade's footprint holds every part of its PlotArt prop (turned by its own yaw)"),
+    # card.owned keeps what it can't read as names, and nothing is dropped without a warning (review fix)
+    ("card.owned drops the keys outside its list", ("\t\t\tout[index] = deepCopy(inner) -- never collides with the list: the key after `listed` is empty, and `out` has at most `listed` names\n", ""),
+     "card.owned: keys outside the list (a name under a key, an entry after a gap) are kept and written back unchanged"),
+    ("card.owned keeps its extra keys as the same table (not a copy)", ("out[index] = deepCopy(inner)", "out[index] = inner"),
+     "card.owned: a record of a newer version under a key is kept whole, as a copy, with no warning"),
+    ("card.owned skips a bad name without a warning", ("\t\t\tnote(ctx, \"a bad name in \" .. where .. \".\" .. key)\n", ""),
+     "card.owned: a value inside the list that is not a name is skipped, with a warning"),
+    ("card.owned keeps 400 names (the limit is 200)", ("local MAX_OWNED_NAMES = 200", "local MAX_OWNED_NAMES = 400"),
+     "card.owned: names past 200 are skipped, with a warning for each"),
+    ("a stamp above 3 is clamped without a warning", ("\t\t\tnote(ctx, \"a \" .. where .. \".stamp out of range (\" .. tostring(stamp) .. \")\")\n", ""),
+     "sectors: a stamp of 7 is clamped to 3 with a warning"),
+    ("a number key in a map is skipped without a warning", ("\t\tif typeof(name) ~= \"string\" then\n\t\t\tnote(ctx, \"a bad key in \" .. where .. \".\" .. key)\n\t\telseif isKnown(name) then", "\t\tif typeof(name) ~= \"string\" then\n\t\telseif isKnown(name) then"),
+     "never silent: an unknown key added to any table is written back unchanged or warned about"),
 ]
 
 
@@ -5874,7 +5994,7 @@ FAT_POKEDEX_LUA = r"""{
 			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
 			card = {
 				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
-				owned = { "Desk", "Laptop", "Gaming PC" },
+				owned = { "Desk", "Laptop", "Gaming PC", future = "GamingRig", [5] = "Neon Logo" },
 				decor = { Chair = 1, Future = 3 },
 				objects = { { id = "Desk", x = -23, z = -40, r = 0, futureObj = "card object" }, { id = "Laptop", x = -25.5, z = -30, r = 3 } },
 				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
