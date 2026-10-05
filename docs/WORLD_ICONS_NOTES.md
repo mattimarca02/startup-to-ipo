@@ -14,7 +14,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 1.1 `docs/SHOP_UX_PROPOSAL.md` (3,409 words; 6 open questions)
 
 **Phase 2: world pass**
-- [ ] 2.1 `docs/WORLD_PASS_PROPOSAL.md`
+- [x] 2.1 `docs/WORLD_PASS_PROPOSAL.md` (2,481 words; numbers re-checked after the build in 2.4)
 - [ ] 2.2 `WorldArt.lua` (pure data)
 - [ ] 2.3 `WorldVisuals.lua` (builder, named checks, pure geometry)
 - [ ] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep)
