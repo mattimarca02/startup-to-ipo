@@ -28,7 +28,7 @@ The engine and the package are CUST section 2's split (the engine never names a 
 
 **1.7 Shop.** Shared: passes and products (ShopConfig.lua:35-155). Software's own: BIBLE's five decor bundles (Loft, Downtown, Campus, Tower, Golden Bell), fixed contents, `id = 0`. Night Guard is shared (an engine item, LG:95).
 
-**1.8 Anti-exploit.** Today's engine rules, unchanged: reward budget (TaskConfig.lua:78-83), minimum reaction and flags (:88, 97), rate limits (:100), engaged only from graded answers.
+**1.8 Anti-exploit.** Today's engine rules, unchanged: reward budget (TaskConfig.lua:78-83), minimum reaction and flags (:88, 97), rate limits (:100), engaged only from graded answers (no movement, no client report). Software adds no new rule.
 
 ## 2. Gaming studio
 
@@ -43,7 +43,7 @@ The engine and the package are CUST section 2's split (the engine never names a 
 6. **Launch:** the tier (section 2.3) sets the live game's revenue peak. **Review** messages start arriving.
 7. **Live:** revenue falls as players move on (a half-life in engaged minutes). A **Live Update** (Content Patch, Seasonal Event or Balance Patch) lifts it back; each later update lifts less. When the next title launches, the old one joins the **back catalog** (a small, capped, permanent share). A Hit adds **fans** to its genre: a sequel starts with more wishlists.
 
-**2.3 The launch outcome: deterministic (D9).** Nothing in a launch is random, and nothing about it is sold for Robux.
+**2.3 The launch outcome: deterministic (D9).** Nothing in a launch is random or sold (2.8).
 - **Quality** Q (0-100) = 50 x min(1, Fun / FunTarget) + 50 x min(1, Polish / PolishTarget), plus the Playtest fix. Targets come from the scope (data).
 - **Wishlists** H (0-35) = trend match +15, fans +5 per earlier Hit in the genre this company (at most +10), Trailer up to +10. **(placeholders)**
 - **Score** = Q + H. **Tiers** (data): **Flop** under 50, **Solid** 50-69, **Hit** 70-89, **Smash Hit** 90+. The Forecast shows Score, tier and what is missing ("+6 Polish for Hit"). The server computes the same function when Launch is pressed; the client sends no number.
