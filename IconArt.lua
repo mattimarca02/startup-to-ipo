@@ -78,7 +78,6 @@ IconArt.Palette = {
 	shieldBlue = { 70, 130, 222 }, shieldLight = { 152, 198, 246 },
 	-- HUD (light icons on the colored buttons)
 	hudWhite = { 250, 250, 250 }, hudSoft = { 210, 220, 236 }, hudSpot = { 150, 200, 255 }, hudGold = { 255, 214, 90 },
-	magnetRed = { 232, 72, 62 },
 }
 
 -- Helpers -----------------------------------------------------------------------------------------------------
@@ -410,12 +409,13 @@ IconArt.Hud = {
 		S("circle", "HeadFront", 22, 22, 28, 28, "hudWhite", { outline = true, shade = true }),
 		S("pill", "BodyFront", 12, 52, 48, 38, "hudWhite", { outline = true, shade = true }),
 	} },
+	-- A magnet (poaching pulls employees over): white, so it stands out on the red-orange POACH button
 	Poach = { name = "HudMagnet", kind = "ui", shapes = {
-		S("rect", "MagnetLeft", 16, 22, 22, 46, "magnetRed", { outline = true, shade = true }),
-		S("rect", "MagnetRight", 62, 22, 22, 46, "magnetRed", { outline = true, shade = true }),
-		S("rect", "MagnetBottom", 16, 58, 68, 26, "magnetRed", { outline = true, shade = true }),
-		S("rect", "TipLeft", 16, 12, 22, 14, "hudWhite", { outline = true }),
-		S("rect", "TipRight", 62, 12, 22, 14, "hudWhite", { outline = true }),
+		S("rect", "MagnetLeft", 16, 22, 22, 46, "hudWhite", { outline = true, shade = true }),
+		S("rect", "MagnetRight", 62, 22, 22, 46, "hudWhite", { outline = true, shade = true }),
+		S("rect", "MagnetBottom", 16, 58, 68, 26, "hudWhite", { outline = true, shade = true }),
+		S("rect", "TipLeft", 16, 12, 22, 14, "hudSoft", { outline = true }),
+		S("rect", "TipRight", 62, 12, 22, 14, "hudSoft", { outline = true }),
 	} },
 	Ipo = { name = "HudChart", kind = "ui", shapes = {
 		S("rect", "BarLow", 14, 58, 18, 28, "hudWhite", { outline = true, shade = true }),
