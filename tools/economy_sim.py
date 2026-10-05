@@ -2585,10 +2585,11 @@ def sim_s4(n):
     n = max(6, n // 4)
     print(f"Time to IPO 1 for a player who is online 24/7 (task-bot: answers every task perfectly, so the reward budget is its ceiling; pulse-bot: 3 minutes of tasks every 2 hours; macro: input only, answers no task), "
           f"{n} seeds. Valuation weights: 3 engaged hours a day at 100%, then 5% (day starts 08:00 UTC). In Gaming a bot may choose the best launch policy; its sector verbs (Pitch, Launch, Update) never make it engaged, "
-          "so a macro has no work, no revenue and no engaged clock. 'Edge' = how much faster than the same bot in Software (positive = Gaming is faster for the bot); the mark is that no sector gives a bot more than 5%.\n")
+          "so a macro has no work, no revenue and no engaged clock. 'Edge' = how much faster than the same bot in Software (positive = Gaming is faster for the bot). "
+          "The doc's mark is 'no sector faster for a bot' (CUSTOMIZE 5.5 = CUST:122, SECTORS 4 = SECT:158) with NO tolerance; the 5% that earlier versions of this file used (and the check below) is an INVENTED tolerance of this sim, not the doc's, so the result gives both readings.\n")
     print("| Player | Sector / policy | Engaged hours to IPO 1 | Days to IPO 1 | Edge over Software (days) |")
     print("|---|---|---|---|---|")
-    edges = {}
+    edges, seed_edges = {}, {}
     for kind, label in (("task-bot", "task-bot (24/7, perfect)"), ("pulse-bot", "pulse-bot (3 min every 2 h)"), ("macro", "macro (input only)"), ("dedicated", "dedicated human, typical (scale)")):
         base_days = None
         for sector, gkw, glabel in (("Software", None, "Software"),) + tuple(("Gaming", kw, lab) for lab, kw in PK_GAM_VARIANTS):
@@ -2601,11 +2602,18 @@ def sim_s4(n):
             hrs = _pq([r["ipo_h"][0] for r in done], 50)
             if base_days is None:
                 base_days = days
+                base_per_seed = [r["ipo_day"][0] if r["ipo_h"] else None for r in outs]
             edge = (1 - days / base_days) * 100
             edges.setdefault(kind, []).append(edge)
+            seed_edges.setdefault(kind, []).append((label, glabel, [(1 - r["ipo_day"][0] / b0) * 100 for r, b0 in zip(outs, base_per_seed) if r["ipo_h"] and b0]))
             print(f"| {label} | {glabel} | {hrs:.1f} | {days:.1f} | {'-' if glabel == 'Software' else f'{edge:+.1f}%'} |")
-    bot_edge = max([e for k in ("task-bot", "pulse-bot") for e in edges.get(k, [])[1:]] or [0.0])
-    print(f"\n**Result.** The best edge any sector gives a bot is {bot_edge:+.1f}% (mark: at most 5%): {'PASS' if bot_edge <= 5 else 'FAIL'}. "
+    best = max(((e, k, sd[1], sd[2]) for k in ("task-bot", "pulse-bot") for e, sd in zip(edges.get(k, [])[1:], seed_edges.get(k, [])[1:])), key=lambda x: x[0], default=(0.0, "", "", []))
+    bot_edge = best[0]
+    TOL = 5.0      # INVENTED (the doc gives no tolerance); kept only as the second reading
+    strict = "FAIL" if bot_edge > 0 else "PASS"
+    print(f"\n**Result.** The best edge any sector gives a bot is {bot_edge:+.2f}% ({best[1]}, {best[2]}; per seed {_pdist(best[3], '{:+.2f}%')}). Two verdicts: "
+          f"(1) the doc's mark read strictly, 'no sector faster for a bot' with no tolerance: {strict}" + (" (by a tiny margin)" if strict == "FAIL" and bot_edge <= TOL else "") + "; "
+          f"(2) within an invented {TOL:.0f}% tolerance (not in the doc): {'PASS' if bot_edge <= TOL else 'FAIL'}. "
           "A macro never reaches the IPO in either sector (graded answers are the only engaged clock; verbs never set it). "
           "What the bot gets in Gaming over a human is the S9 spread between launch policies, not a new exploit: it pays nothing without graded answers.")
     return {"s4": bot_edge}
