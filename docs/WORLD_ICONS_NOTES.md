@@ -11,7 +11,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 0.2 This notes file with the checklist
 
 **Phase 1: shop UX (docs only)**
-- [ ] 1.1 `docs/SHOP_UX_PROPOSAL.md`
+- [x] 1.1 `docs/SHOP_UX_PROPOSAL.md` (3,409 words; 6 open questions)
 
 **Phase 2: world pass**
 - [ ] 2.1 `docs/WORLD_PASS_PROPOSAL.md`
@@ -54,7 +54,9 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 
 ## Judgment calls
 
-(Filled in as the work goes.)
+- **Shop proposal (phase 1):** the phone numbers use a 36 px Roblox top bar (GUI 667 x 339 and 320 x 532), the same assumption as TUTORIAL_PROPOSAL section 3; portrait's window is capped at 470 px tall, so the shop looks the same with a 0 px bar. Text widths (characters per line) are marked as estimates.
+- **Shop proposal:** its future tests go in a new `tools/shop_ux_test.py`, not in `tools/daily_test.py` (other branches own that file).
+- **Shop proposal:** Robux buys keep Roblox's own prompt as their only confirmation; the two-tap confirm is proposed for Cash buys above a threshold (open question 2).
 
 ## OWNER CHOICE
 
