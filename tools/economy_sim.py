@@ -3613,7 +3613,106 @@ def sim_robust(n):
     return {"rows": out}
 
 
-PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3", 4: "sim_s4", 5: "sim_s5", 6: "sim_s6", 7: "sim_s7", 8: "sim_s8", 9: "sim_s9", 10: "sim_s10", 12: "sim_robust"}   # filled in as the sims are written; the name of each sim function
+def pk_save_table(seeds):
+    """Hours a single round saves (% of the loop, median), per (stage, choice index): the measured side of S8's table B."""
+    base0 = pk_many("regular", seeds, 1, PkOpt(shop_done=True))
+    return {(st, ci): _pq(pk_rel(pk_many("regular", seeds, 1, PkOpt(rounds={st: ci + 1}, shop_done=True)), base0, 0), 50) for st in range(1, 6) for ci in range(3)}
+
+
+def sim_combined(n):
+    """Review of tip e08fd72, item 8: what happens when the fixes of S3, S6, S7, S8 and S9 are all applied at once. Each line says what the engine reproduces."""
+    print("\n## Combined fixes (all the proposed fixes applied at the same time)")
+    n9 = max(8, n // 2)
+    base = PkGam()
+    gB = pk_fix_b()
+    print("Every fix proposed in docs/SIMS_RESULTS.md section 4, together: S3 fix B (launch peaks x0.6) and the away fix, S9's per-title bound k = 0.4 and / or proportional half-lives, S7's raw stamp clock, S6's Platinum 1.0 T / ratio 1.20 and 6% pass shrink, S8's Pre-IPO refit. "
+          "Each part below reproduces one claim of the review and says what it measures.\n")
+
+    # ---- a. launch-spam ----
+    print(f"### a. Launch-spam with the fixes combined (Game Jam Hit spam against the typical Hit player, regular typical, IPO 1, {n9} seeds; beta refitted for each row so the typical player equals Software; mark: gain at most 1%)")
+    print("| Fixes | typical Hit vs Software | Jam Hit spam: gain over the typical Hit player | mark |")
+    print("|---|---|---|---|")
+    combos = (("S3 fix B alone", gB), ("S3 fix B + k = 0.4", replace(gB, title_cap_k=0.4)), ("S3 fix B + proportional half-lives", replace(gB, half_lives=PK_HALF_LIVES)),
+              ("S3 fix B + k = 0.4 + half-lives", replace(gB, title_cap_k=0.4, half_lives=PK_HALF_LIVES)), ("k = 0.4 alone (S9, no fix B)", replace(base, title_cap_k=0.4)))
+    sw_typ = pk_sw_ipo1("regular", dict(skill="typical"), n9)
+    spam_res = {}
+    for label, gc in combos:
+        b2 = pk_fit_beta(gc)
+        typ = pk_gam_ipo1("regular", dict(skill="typical"), gc, b2, n9, away_fix=True)
+        spam = pk_gam_ipo1("regular", dict(skill="typical"), replace(gc, force_scope=0), b2, n9, away_fix=True)
+        gain = _pq([(b / a - 1) * 100 for a, b in zip(spam, typ) if a and b], 50)
+        spam_res[label] = gain
+        print(f"| {label} (with the away fix) | {_pdist(_pk_pct(typ, sw_typ), '{:+.1f}%')} | {gain:+.2f}% | {'PASS' if gain <= 1 else 'FAIL'} |")
+
+    # ---- b. the hunter's Collection under the raw clock and a shared 1.0 T limit ----
+    print("\n### b. The dedicated hunter's Collection under the raw clock and one 1.0 T limit for Gold and Platinum (dedicated, fast, hunting, alternating sectors, 16 players, 4 IPOs)")
+    T = pk_T(PK_T_POP)
+    gam_beta = pk_fit_beta(PkGam())
+    base7 = dict(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta)
+    o_h = dict(T=T, rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1], skill="expert", ipo_mode="hunt")
+    print("| Rules | Collection after 4 IPOs, median (p10 to p90) | Gold or better %, real replays | Platinum %, real replays |")
+    print("|---|---|---|---|")
+    bres = {}
+    for label, kind, tier in (("doc rules, weighted clock (S7 table)", "dedicated", PK_TIER), ("raw clock (S7 fix)", "dedicated", dict(PK_TIER, clock="raw")),
+                              ("weighted clock + Platinum 1.0 T / 1.20 (S6 fix)", "dedicated", dict(PK_TIER, plat_frac=1.0, plat_ratio=1.20)),
+                              ("raw clock + Platinum 1.0 T / 1.20: all fixes", "dedicated", dict(PK_TIER, clock="raw", plat_frac=1.0, plat_ratio=1.20)),
+                              ("weighted clock + Platinum 1.1 T / 1.25 (section 4's recommendation after the review)", "dedicated", dict(PK_TIER, plat_frac=1.1, plat_ratio=1.25)),
+                              ("raw clock + Platinum 1.1 T / 1.25", "dedicated", dict(PK_TIER, clock="raw", plat_frac=1.1, plat_ratio=1.25)),
+                              ("heavy human (5 h a day), doc rules", "heavy", PK_TIER), ("heavy human, raw clock + Platinum 1.0 T / 1.20: all fixes", "heavy", dict(PK_TIER, clock="raw", plat_frac=1.0, plat_ratio=1.20))):
+        outs = pk_pop(kind, 16, 4, PkOpt(**base7, **{**o_h, "tier": tier}))
+        cols = [pk_collection(r["loops"], 4) for r in outs if len(r["loops"]) >= 4]
+        g_real, pl_real, _k = pk_replay_rates(outs)
+        bres[label] = (_pq(cols, 50), g_real, pl_real)
+        print(f"| {label} | {_pdist(cols, '{:.0f}')} | {g_real:.0f} | {pl_real:.0f} |")
+
+    # ---- c. T after the Pre-IPO refit ----
+    seeds = max(8, n // 4)
+    sv = pk_save_table(seeds)
+    fit1 = {st: tuple(max(1, int(PK_FUND_P[ci] * max(sv[(st, ci)], 0.0) * 100)) for ci in range(3)) for st in range(1, 6)}
+    print(f"\n### c. T measured again after the Pre-IPO refit (the table of S8 section I at P: Small / Medium / Large {' | '.join(f'{k}: {v[0]}/{v[1]}/{v[2]}' for k, v in fit1.items())} bp)")
+    T_doc = pk_T(PK_T_POP)
+    outs = pk_pop("regular", PK_T_POP, 6, PkOpt(rounds=2, round_bp=fit1, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1]))
+    T_fit = tuple(_pq([r["loops"][i]["stamp_h"] for r in outs if len(r["loops"]) > i], 50) for i in range(6))
+    print("| IPO | T with the doc's funding table (h) | T with the refit table (h) | change |")
+    print("|---|---|---|---|")
+    for i in range(6):
+        print(f"| {i + 1} | {T_doc[i]:.2f} | {T_fit[i]:.2f} | {(T_fit[i] / T_doc[i] - 1) * 100:+.2f}% |")
+
+    # ---- d. the stake line under the refit ----
+    cnt, lose_p, lose_g, over, mx = pk_enum(fit1)
+    one = pk_many("regular", seeds, 1, PkOpt(rounds=3, round_bp=fit1))
+    d_large = one[0]["loops"][0]["D"]
+    stake = one[0]["loops"][0]["stake"]
+    print(f"\n### d. The stake line under the refit table\nLarge every round costs {d_large} bp in the engine (the table's largest total over all {cnt} sequences is {mx} bp), so the founder stake is {stake / 100:.2f}% against the 70% Platinum line; "
+          f"{lose_p} of {cnt} sequences lose Platinum on stake and {lose_g} lose Gold. {'The stake line no longer prices Large-every-round (no sequence goes over 3,000 bp).' if lose_p == 0 else 'Some sequences still lose Platinum.'}")
+
+    # ---- e. the pulse-bot ----
+    nb = max(5, n // 4)
+    print(f"\n### e. The bots in Gaming under the fixes (time to IPO 1 of a bot against the same bot in Software, {nb} seeds; positive = Gaming faster; the doc's mark is 'no sector faster for a bot', no tolerance)")
+    print("| Bot | Gaming variant | doc numbers (fit 1) | fix B + away fix + half-lives (refitted) |")
+    print("|---|---|---|---|")
+    gB2 = replace(gB, half_lives=PK_HALF_LIVES)
+    bB = pk_fit_beta(gB2)
+    edges = {}
+    for kind in ("task-bot", "pulse-bot"):
+        sw = pk_many(kind, nb, 1, PkOpt())
+        d_sw = _pq([r["ipo_day"][0] for r in sw if r["ipo_h"]], 50)
+        for lab, kw in PK_GAM_VARIANTS:
+            cells = []
+            for gc, bt, extra in ((replace(PkGam(), **kw), pk_fit_beta(PkGam()), {}), (replace(gB2, **kw), bB, dict(away_fix=True))):
+                g = pk_many(kind, nb, 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=bt, **extra))
+                d_g = _pq([r["ipo_day"][0] for r in g if r["ipo_h"]], 50)
+                e = (1 - d_g / d_sw) * 100
+                cells.append(e)
+                edges.setdefault((kind, len(cells)), []).append(e)
+            print(f"| {kind} | {lab} | {cells[0]:+.2f}% | {cells[1]:+.2f}% |")
+    pb = edges[("pulse-bot", 2)]
+    print(f"\nThe pulse-bot with the fixes: {min(pb):+.2f}% to {max(pb):+.2f}% across the three Gaming variants (positive = faster in Gaming); the strict mark ({'FAIL' if max(pb) > 0 else 'PASS'}).")
+    print("\n**Result.** " + "; ".join(f"{k}: spam gain {v:+.2f}% ({'PASS' if v <= 1 else 'FAIL'})" for k, v in spam_res.items()) + ".")
+    return {"spam": spam_res, "collection": bres}
+
+
+PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3", 4: "sim_s4", 5: "sim_s5", 6: "sim_s6", 7: "sim_s7", 8: "sim_s8", 9: "sim_s9", 10: "sim_s10", 11: "sim_combined", 12: "sim_robust"}   # filled in as the sims are written; the name of each sim function
 
 
 def pk_selected(args):
@@ -3625,6 +3724,8 @@ def pk_selected(args):
         want.add(8)
     if args.gaming:
         want |= {3, 9, 10}
+    if args.combined:
+        want.add(11)
     if args.robust:
         want.add(12)
     if args.pk_check and not want:
@@ -3658,6 +3759,7 @@ def main():
     ap.add_argument("--rounds", action="store_true", help="sim S8, funding round size (docs/FUNDING_ROUNDS_PROPOSAL.md 6; default OFF)")
     ap.add_argument("--gaming", action="store_true", help="sims S3, S9 and S10 (docs/SECTORS_PROPOSAL.md 4; default OFF)")
     ap.add_argument("--robust", action="store_true", help="the review of tip e08fd72, item 7: which results survive a change of assumption (default OFF)")
+    ap.add_argument("--combined", action="store_true", help="the review of tip e08fd72, item 8: every proposed fix applied at once (default OFF)")
     ap.add_argument("--pk-check", action="store_true", help="only check that the S1-S10 engine equals long_run when every hook is off")
     args = ap.parse_args()
     n = args.runs

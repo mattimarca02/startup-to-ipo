@@ -48,6 +48,8 @@ Checks the docs ask for inside these sims, all covered below: round Cash is a gi
 | S10 cadence | `--s10` | **FAIL (cycle gap)** | Gaming has no gap over 45 min but its own cycle leaves 45-minute waits (mark: under 15); a 12-minute checkpoint verb gives 12. Software outside Series C+D cannot be confirmed (untimed content). |
 
 
+**Review of tip `e08fd72`:** section 8 says which results are robust and which depend on an assumption (`--robust`), section 9 applies every proposed fix at once (`--combined`); S3, S4, S6, S7 and S8 below were corrected after it (see the commits `Sims review 1` to `Sims review 9`).
+
 ## 3. Results
 
 (Summary table of all ten sims: the summary above; the placeholder numbers that must change: section 4 below.)
@@ -730,7 +732,7 @@ Always-engaged reference player, IPO 1 (the engaged hours of each event come fro
 | SECTORS 2.4 Gaming upgrade Incomes | "fitted base 0.77" | upgrade factor per rung **0.72 / 0.66 / 0.65 / 0.59 / 0.61 / 0.41** (0.74-0.83 of Software's *total* base, so 0.77 is right as a total); with fix B **0.81 / 0.78 / 0.78 / 0.73 / 0.75 / 0.61** | S3 |
 | SECTORS 2.4 peaks, cap, catalog | 0.15 / 0.35 / 0.6 / 0.8, cap 0.8, catalog 10% | **x0.6**: 0.09 / 0.21 / 0.36 / 0.48, cap 0.48, catalog 6% (optional: halves the skill spread of S3; policies matter less) | S3, S9 |
 | SECTORS 2.4 away bank | 10% of Gaming's base | 10% of the base the same purchases give in Software (`SectorGaming` data) | S3 (check-in +26% -> +7-12%) |
-| SECTORS 2.4 per-title bound `k` | unset | **k = 0.4** x build seconds x base Income (or half-lives 20 / 40 / 60 / 80 / 120 min) | S9 (spam +1.7% -> +0.4% / 0.0%) |
+| SECTORS 2.4 per-title bound `k` | unset | **k = 0.4** x build seconds x base Income if fix B is NOT adopted; **with fix B only the half-lives 20 / 40 / 60 / 80 / 120 min work** (k = 0.4 + fix B is +1.14%, FAIL; half-lives +0.03%) | S9, section 9 (spam +1.7% -> +0.4% / 0.0%) |
 | SECTORS 2.10 Smash | "5% faster, 54 h" | Smash with 'every update' is slower than Hit (58.5 h against 57.5 h), with 'update under half' it is 1.1% faster; Hit 57.5, Solid 61.8, Flop 65.5, never 71.6 h. To make Smash matter: cap above 0.8 | S9 |
 | SECTORS 2.10 titles to IPO 1 | about 40 | **49** (4 / 7 / 8 / 7 / 14 / 9) | S3 |
 | SECTORS 2.2 cycle | decisions at Pitch, Playtest, Launch | add a **checkpoint verb every 12 engaged minutes** while a title is in development | S10 |
@@ -855,4 +857,71 @@ Each row is run with 8 seeds (the S3 parity rows 20, because a rung's median nee
 | S10 | longest gap between any timed moments in Gaming, minutes (mark: no gap over 45) | ASSUMPTION-DEPENDENT | 44.67 min (pass) | - | - | 35.67 | 53.67 | - | - | - | - | - | - | Gaming work time +20% | ASSUMPTION-DEPENDENT |
 
 **Result.** 20 of 26 rows are classified as the review says. Different: S3 'fast skill, worst rung deviation (mark: within 5%; the review: about 6% off)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming work time +20%); S8 'hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves 9.0 to 22.4); S9 'Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves -1.9 to 1.0); S9 'Solid vs Software, beta NOT refitted (mark: at most +12%)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming task bonus x0.8); S9 'Flop vs Software, beta NOT refitted (mark: at most +25%)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming task bonus x0.8); S9 'Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves 1.7 to 3.1). Rows whose verdict holds but whose value moves by more than 30%: S5 'alternating gain over the faster sector, 6 IPOs (mark: under 3%)' (the verdict holds, the value moves -4.2 to -0.0); S7 'new sector against a replay, hours (mark: within 10%)' (the verdict holds, the value moves 0.4 to 8.0); S9 'update timing, best against worst, beta refitted (mark: at most 5 points)' (the verdict holds, the value moves 0.6 to 2.2); S8 'hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%)' (the verdict holds, the value moves 9.0 to 22.4); S9 'Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5)' (the verdict holds, the value moves -1.9 to 1.0); S9 'Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL)' (the verdict holds, the value moves 1.7 to 3.1).
+
+## 9. Combined fixes
+
+Section 4 lists the fixes one by one, each tested alone. The independent review of tip `e08fd72` asked what happens when they are all applied at once. `--combined` does that, and each claim of the review is reproduced (or not) with the engine; the sim's own output is at the end of this section.
+
+| Claim of the review | Reproduced? | What the engine gives |
+|---|---|---|
+| Launch-spam is +1.17% again (FAIL) with fix B + k = 0.4, and passes only with half-lives | **Yes** (+1.14%, 0.03 point from the review's number) | fix B alone **+1.12%** FAIL; fix B + k = 0.4 **+1.14%** FAIL; fix B + proportional half-lives **+0.03%** PASS; all three **+0.05%** PASS; k = 0.4 without fix B **+0.43%** PASS. Why: fix B scales the launch peaks down by 0.6, so the per-title bound k x build seconds x base Income rarely binds any more; with fix B the half-lives are the only fix that works, so SECTORS 2.4's `k` and S3's fix B should not be adopted together. |
+| The dedicated hunter's Collection halves (4004 -> 2004) under the raw clock and a shared 1.0 T limit | **Yes, but the cause is the Platinum limit, not the clock** | doc rules 4004 (p10 to p90 2004 to 4004), Gold on 81% of real replays; **raw clock alone: 4004, 81% (unchanged: a dedicated player plays 2 h a day, under the 3 h rule)**; **Platinum 1.0 T / 1.20: Collection 2004 (2004 to 6004), Gold 25%, Platinum 25%**, with or without the raw clock. Why: with Platinum's time limit equal to Gold's (1.0 T) a hunter who misses the ratio at 1.0 T goes public after Gold's deadline too, and loses both. With the doc's 0.8 T the hunter has a margin of 0.2 T and keeps Gold (81%). |
+| (the same with this review's own S6 recommendation, 1.1 T / ratio 1.25) | new | Collection **6004 (2004 to 6004)**, Platinum **69%**, Gold or better 69%: **31% of the hunters end with neither** (they were at Gold 81% under the doc's rule). Platinum's limit above Gold's makes hunting all-or-nothing: the rule should say what a player who misses Platinum's ratio by the time limit gets (for example: a tier is graded at the moment of the IPO against every condition, and the player can stop earlier), or Platinum's time limit should stay under Gold's. **A decision for the owner; I did not change the placeholder.** |
+| Heavy players get 0% Gold | **Yes** | heavy human (5 h a day), doc rules: Gold 100% of real replays, Collection 4004; **raw clock + Platinum 1.0 T / 1.20: Gold 0%, Platinum 0%, Collection 2004** (S7 shows the same, 0% Gold, under the raw clock alone). |
+| T must be re-measured after the Pre-IPO refit | **Yes** | T with the refit table (S8 section I at P, Pre-IPO 56 / 109 / 150 bp) against the doc's table: IPO 1 +0.00%, **IPO 2 -0.17%, IPO 3 -0.50%, IPO 4 -0.85%, IPO 5 -1.37%, IPO 6 -1.56%** (fewer Shares are paid, so the speed perk arrives sooner). Under 1% for the first four IPOs, but Gold is graded at 1.0 T and the Gold rate is hypersensitive to T (S6: 0.2% moves Gaming from 50% to 69%), so T has to be measured again with the final table. |
+| Under the refit table the stake line no longer prices Large-every-round (worst case 1,344 bp, stake 86.56%, no sequence over 3,000 bp) | **Yes, exactly** | Large every round costs **1,344 bp**, the founder stake is **86.56%** against the 70% line; **0 of 1,024** sequences lose Platinum on stake, 0 lose Gold; the largest total of any sequence is 1,344 bp. |
+| The pulse-bot becomes +0.3 to +1.6% faster in Gaming | **Yes** (+0.26% to +1.58%) | with fix B + the away fix + half-lives (refitted) the pulse-bot is **+0.26% (Hit), +1.58% (Smash, update under half), +0.73% (Smash, every update)** faster in Gaming, against -3.7% / -2.9% / -5.4% with the doc's numbers. The task-bot is +0.08% / +0.43% / +0.24%. Under the doc's strict mark ("no sector faster for a bot", S4) the fixes turn a pulse-bot PASS into a FAIL. |
+
+**What I could not reproduce in this section:** nothing. The review's +1.17% is +1.14% here (a different seed set: 20 seeds, fixed at 0-19); the other numbers match to the digit or to 0.1 point. The numbers that did not reproduce are in sections 6 and 8 (the pass-owner row of the S6 distribution is in multiples of the unshrunk T; the S6 33% for the fast hunter is 25% here; the S9 Smash flip at task bonus x0.8).
+
+### The sim's output (`python tools/economy_sim.py --combined`)
+Every fix proposed in docs/SIMS_RESULTS.md section 4, together: S3 fix B (launch peaks x0.6) and the away fix, S9's per-title bound k = 0.4 and / or proportional half-lives, S7's raw stamp clock, S6's Platinum 1.0 T / ratio 1.20 and 6% pass shrink, S8's Pre-IPO refit. Each part below reproduces one claim of the review and says what it measures.
+
+### a. Launch-spam with the fixes combined (Game Jam Hit spam against the typical Hit player, regular typical, IPO 1, 20 seeds; beta refitted for each row so the typical player equals Software; mark: gain at most 1%)
+| Fixes | typical Hit vs Software | Jam Hit spam: gain over the typical Hit player | mark |
+|---|---|---|---|
+| S3 fix B alone (with the away fix) | -0.2% (-0.2% to -0.2%) | +1.12% | FAIL |
+| S3 fix B + k = 0.4 (with the away fix) | -0.2% (-0.2% to -0.2%) | +1.14% | FAIL |
+| S3 fix B + proportional half-lives (with the away fix) | -0.2% (-0.2% to -0.2%) | +0.03% | PASS |
+| S3 fix B + k = 0.4 + half-lives (with the away fix) | -0.2% (-0.2% to -0.2%) | +0.05% | PASS |
+| k = 0.4 alone (S9, no fix B) (with the away fix) | -0.3% (-0.3% to -0.2%) | +0.43% | PASS |
+
+### b. The dedicated hunter's Collection under the raw clock and one 1.0 T limit for Gold and Platinum (dedicated, fast, hunting, alternating sectors, 16 players, 4 IPOs)
+| Rules | Collection after 4 IPOs, median (p10 to p90) | Gold or better %, real replays | Platinum %, real replays |
+|---|---|---|---|
+| doc rules, weighted clock (S7 table) | 4004 (2004 to 4004) | 81 | 0 |
+| raw clock (S7 fix) | 4004 (2004 to 4004) | 81 | 0 |
+| weighted clock + Platinum 1.0 T / 1.20 (S6 fix) | 2004 (2004 to 6004) | 25 | 25 |
+| raw clock + Platinum 1.0 T / 1.20: all fixes | 2004 (2004 to 6004) | 25 | 25 |
+| weighted clock + Platinum 1.1 T / 1.25 (section 4's recommendation after the review) | 6004 (2004 to 6004) | 69 | 69 |
+| raw clock + Platinum 1.1 T / 1.25 | 6004 (2004 to 6004) | 69 | 69 |
+| heavy human (5 h a day), doc rules | 4004 (4004 to 4004) | 100 | 0 |
+| heavy human, raw clock + Platinum 1.0 T / 1.20: all fixes | 2004 (2004 to 2004) | 0 | 0 |
+
+### c. T measured again after the Pre-IPO refit (the table of S8 section I at P: Small / Medium / Large 1: 3/9/21 | 2: 51/136/248 | 3: 87/221/399 | 4: 112/293/526 | 5: 56/109/150 bp)
+| IPO | T with the doc's funding table (h) | T with the refit table (h) | change |
+|---|---|---|---|
+| 1 | 55.53 | 55.53 | +0.00% |
+| 2 | 50.42 | 50.33 | -0.17% |
+| 3 | 51.15 | 50.90 | -0.50% |
+| 4 | 51.57 | 51.13 | -0.85% |
+| 5 | 51.76 | 51.05 | -1.37% |
+| 6 | 52.12 | 51.31 | -1.56% |
+
+### d. The stake line under the refit table
+Large every round costs 1344 bp in the engine (the table's largest total over all 1024 sequences is 1344 bp), so the founder stake is 86.56% against the 70% Platinum line; 0 of 1024 sequences lose Platinum on stake and 0 lose Gold. The stake line no longer prices Large-every-round (no sequence goes over 3,000 bp).
+
+### e. The bots in Gaming under the fixes (time to IPO 1 of a bot against the same bot in Software, 10 seeds; positive = Gaming faster; the doc's mark is 'no sector faster for a bot', no tolerance)
+| Bot | Gaming variant | doc numbers (fit 1) | fix B + away fix + half-lives (refitted) |
+|---|---|---|---|
+| task-bot | Gaming, Hit (typical) | +0.15% | +0.08% |
+| task-bot | Gaming, Smash, update under half | +0.38% | +0.43% |
+| task-bot | Gaming, Smash, every update | -0.17% | +0.24% |
+| pulse-bot | Gaming, Hit (typical) | -3.70% | +0.26% |
+| pulse-bot | Gaming, Smash, update under half | -2.90% | +1.58% |
+| pulse-bot | Gaming, Smash, every update | -5.41% | +0.73% |
+
+The pulse-bot with the fixes: +0.26% to +1.58% across the three Gaming variants (positive = faster in Gaming); the strict mark (FAIL).
+
+**Result.** S3 fix B alone: spam gain +1.12% (FAIL); S3 fix B + k = 0.4: spam gain +1.14% (FAIL); S3 fix B + proportional half-lives: spam gain +0.03% (PASS); S3 fix B + k = 0.4 + half-lives: spam gain +0.05% (PASS); k = 0.4 alone (S9, no fix B): spam gain +0.43% (PASS).
 
