@@ -45,3 +45,86 @@ While this work was running, **another session (the sims session) switched the s
 - **PR 3: saved layouts over the part budget.** PR 1 saves up to 40 placed items and can't measure parts (nothing is drawn yet). When PR 3 draws objects and enforces the budget (260 parts per room today, 320 proposed), it must decide what happens to a saved layout that is already over it (draw what fits and keep the rest in storage is the safe candidate; never delete).
 - **IPO message for a locked section.** The generic "The IPO couldn't be saved. Nothing changed: try again in a moment" stays for a locked pokedex (the reason is only in the server log) until `IpoServer` can show its own message; `IpoServer` was not touched in PR 1 or in this fix.
 - **Run follows the count only until PR 4.** `CompanyServer.writeIpoRun` / `onIpo` are replaced by PR 4's IPO transform (which completes the company, stamps and writes the card). Remove them there, together with their tests.
+
+## Review fix B notes (branch `customize-pr1-fix-b`, Opus review of `customize-pr1` at `64ff17d`)
+
+**Owner defaults recorded (accepted by the owner).**
+- **(a) An IPO on `main` after a rollback.** If a player who already has a `pokedex` section goes public on a version without PR 1 (for example `main` after a rollback), their `ipo.count` rises and `pokedex.run` stays frozen. At the next join with PR 1 the run check completes the company: Bronze for its sector (if it had none) and a card, once. Accepted. (`run < count` means only that.)
+- **(b) A locked player on a live server.** A player whose `pokedex` is locked (a newer `v`, an unknown sector, placed items that are not a plain list, or a section that failed to load) can't go public on this version. They see IpoServer's generic "The IPO couldn't be saved. Nothing changed: try again in a moment." until IpoServer has its own message; the reason is in the server log ("Not going public for <name>: their pokedex is kept as it is ..."). Accepted. **The lock is not Studio-only:** it applies on live servers too (only the three office requests `Place`, `Store`, `Sync` are Studio-only). `tools/daily_test.py` now proves it at runtime (an IPO with a locked section returns false, changes nothing, saves nothing).
+- **(c) `card.owned` keeps its extras.** The list is read up to its first gap and every other key (a name under a key such as `future`, or an entry after a gap such as `[5]`) is kept as a copy and written back unchanged, like the other maps. Only a value inside the list that is not a name (not a string, empty, over 39 characters) or a name past 200 is skipped, with a warning.
+
+**What this fix changed.** (1) `commitIpo` is tested at runtime with the real `save()`, a fake DataStore and the real `CompanyServer` (markers `SAVEFN` and `COMMITIPO` in `TycoonCore`: comments only). (2) An IPO by this version with unknown fields in the section (top level and every level below it) still writes `run`, moves it in memory and writes every unknown field back unchanged. (3) `card.owned` as in (c). (4) `CLAUDE.md`'s pokedex exception says what is really dropped.
+
+**Loops that drop silently (item 3's check).** In the Pokedex code only `readOwnedNames` did (fixed). `readObjects` also loops `1..#value`, but a key outside the list sets `ctx.foreign` and keeps the whole section as it was (locked, with a warning), so nothing is lost; every other reader uses `pairs` and either keeps unknown keys or warns (a non-string key in a map, a bad value of a known key). A new test adds an unknown key (a string, `99`, `0`, `-3`) to every table of the section: it comes back unchanged or a warning says why (156 cases; the number keys in the maps are skipped with a warning). The older modules read their saved lists with `ipairs`, which stops at the first gap and ignores other keys without a warning: `TycoonCore.sanitizeSave` (`owned`), `ShopServer` (`receipts`), `EmployeeServer` (`employees`, `incubators`), `PoachServer` (`losses`), `OnboardingServer` (`goals`). These are plain lists written only by this code, they predate PR 1 and CLAUDE.md's A10 rule already says older code drops unknown fields inside a section it knows, so **nothing was changed there** (not in PR 1's files); they are listed here for a later pass.
+
+**Open question: what does DataStore `SetAsync` do with mixed or holed tables?** Item (c) writes a `card.owned` like `{ "Desk", "Laptop", future = "GamingRig", [5] = "Neon Logo" }` back exactly as it was loaded. That is only safe if whatever `GetAsync` returns can be written again by `SetAsync`. If `SetAsync` refuses such a table, a save carrying one would fail every time, and the owner must decide between locking the section (like `objects`) or dropping the keys with a warning. The answer also says whether such a table can ever come out of a DataStore (if `SetAsync` refuses mixed tables, no version could have written one). **Nothing was run.** Paste this block into Studio's command bar (needs Game Settings > Security > Enable Studio Access to API Services, and the place published) when you want the answer. It uses a throwaway DataStore name and throwaway keys (never `StartupTycoon_v1` or `player_*`), writes each case under its own key (the same key can only be written once every 6 seconds), prints the error or what `GetAsync` returned with every key and its type, compares with `HttpService:JSONEncode`, and deletes every key at the end.
+
+```lua
+local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
+
+local STORE_NAME = "ThrowawayMixedTables_DeleteMe" -- a throwaway name: NEVER StartupTycoon_v1
+local KEY_PREFIX = "throwaway_mixed_" -- NEVER player_<UserId>
+assert(STORE_NAME ~= "StartupTycoon_v1" and not string.find(KEY_PREFIX, "^player_"), "use a throwaway store and key")
+local store = DataStoreService:GetDataStore(STORE_NAME)
+
+local CASES = {
+	{ "list plus a string key", { 1, 2, 3, foo = "x" } },
+	{ "list with a hole", { [1] = "a", [2] = "b", [5] = "c" } },
+	{ "only [2]", { [2] = "a" } },
+	{ "key 1.5", { [1.5] = "a" } },
+	{ "key \"1\" (a string)", { ["1"] = "a" } },
+}
+
+local function dump(value, indent)
+	indent = indent or "    "
+	if typeof(value) ~= "table" then
+		return tostring(value)
+	end
+	local lines = {}
+	for key, inner in pairs(value) do
+		local shown = typeof(inner) == "table" and ("\n" .. dump(inner, indent .. "    ")) or (" = " .. tostring(inner) .. " (" .. typeof(inner) .. ")")
+		table.insert(lines, indent .. typeof(key) .. " key " .. tostring(key) .. (typeof(inner) == "table" and (" = table:" .. shown) or shown))
+	end
+	table.sort(lines)
+	return table.concat(lines, "\n")
+end
+
+local written = {}
+local function run(label, value, index)
+	local key = KEY_PREFIX .. index
+	print("== " .. label)
+	local okJson, json = pcall(function() return HttpService:JSONEncode(value) end)
+	print("  JSONEncode: " .. (okJson and json or ("ERROR " .. tostring(json))))
+	local okSet, setError = pcall(function() store:SetAsync(key, value) end)
+	if not okSet then
+		print("  SetAsync: ERROR " .. tostring(setError))
+		return
+	end
+	table.insert(written, key)
+	local okGet, got = pcall(function() return store:GetAsync(key) end)
+	if not okGet then
+		print("  GetAsync: ERROR " .. tostring(got))
+		return
+	end
+	print("  GetAsync returned (" .. typeof(got) .. "), every key from pairs:\n" .. dump(got))
+	local okBack, back = pcall(function() return HttpService:JSONEncode(got) end)
+	print("  JSONEncode of what came back: " .. (okBack and back or ("ERROR " .. tostring(back))))
+end
+
+local index = 0
+for _, case in ipairs(CASES) do
+	index += 1
+	run(case[1], case[2], index)
+	task.wait(1)
+	index += 1
+	run(case[1] .. ", nested under a string key", { wrapper = case[2] }, index)
+	task.wait(1)
+end
+
+for _, key in ipairs(written) do -- delete every throwaway key
+	local okRemove, removeError = pcall(function() store:RemoveAsync(key) end)
+	print("removed " .. key .. ": " .. (okRemove and "ok" or tostring(removeError)))
+end
+print("done: " .. #written .. " keys written and removed from the throwaway store " .. STORE_NAME)
+```
