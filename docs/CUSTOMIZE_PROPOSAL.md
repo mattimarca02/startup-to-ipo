@@ -124,10 +124,10 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 | Number (where) | Measure in Studio | Gate |
 |---|---|---|
 | T (1.5) | task reward per engaged second, then rung hours | LG:115, G-S (c) |
-| Tier limits (1.5) | players' speed spread (sims: ±7%) | G-S, S6 |
+| Gold 1.30 T (not simulated), Platinum 1.0 T (1.5) | players' speed spread (sims: ±7%) | G-S, S6 re-run |
 | Shareholder 6% (1.5) | perk timing with and without the pass | G-S |
-| Gaming upgrade factors, base 0.77 (SECT 2.4) | rung hours against Software's | G-G (a) |
-| Peaks, `k`, policy hours, 49 titles (SECT 2.4, 2.10) | build times, tiers reached, titles per rung | G-G (b) |
+| Gaming upgrade factors, base 0.77 (SECT 2.4, 2.10) | rung hours against Software's | G-G (a) |
+| Scope table (work, half-lives, peaks), `k`, policy hours, 49 titles (SECT 2.4, 2.10) | build times, tiers reached, titles per rung | G-G (b) |
 | Sprint Review 12 min, `awayIncome` (SECT 2.2, 2.4) | longest wait (C+D, Pre-IPO); check-in bank | G-G |
 
 ## 6. Build plan

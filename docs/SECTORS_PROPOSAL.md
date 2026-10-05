@@ -115,7 +115,7 @@ CoffeeCapybara: Crunch Capybara, Studio Intern (snacks for the team); CodingCat:
 - **Studio:** Debug rows "Gaming: finish build", "Gaming: set day" only through `ShopServer.addDebugAction` inside `RunService:IsStudio()`, and they set `pokedex.studio`.
 - **Rollback:** older code keeps `pokedex` whole (CUST 1.2) and Gaming upgrades in `owned` (section 0); it pays no extra.
 
-**2.10 Garage to IPO, and how long.** The valuation ladder, thresholds, rounds and IPO are the shared engine's (IpoConfig.lua:17-23; LONG_GAME's 7 stages). Valuation rises from base Income plus live revenue, so it climbs in waves after each launch. Titles per rung at the typical cycle **(estimate)**: Garage 4, Seed 5, Series A 6, Series B 6, Series C+D 14, Pre-IPO 7; the sims count **about 49 titles to IPO 1** (G1). At the IPO the title in development and the live title end (no refund), `sx` starts empty, and the card keeps titles shipped, Hits and the best tier.
+**2.10 Garage to IPO, and how long.** The valuation ladder, thresholds, rounds and IPO are the shared engine's (IpoConfig.lua:17-23; LONG_GAME's 7 stages). Valuation rises from base Income plus live revenue, so it climbs in waves after each launch. Titles per rung at the typical cycle (S3, measured): Garage 4, Seed 7, Series A 8, Series B 7, Series C+D 14, Pre-IPO 9: **49 titles to IPO 1** (G1). At the IPO the title in development and the live title end (no refund), `sx` starts empty, and the card keeps titles shipped, Hits and the best tier.
 
 **Length versus Software** (regular player, IPO 1; Software 57 h, LG:7). Fit target: the "Hit" policy equals Software ±5% (S3); the others follow by division from rates relative to Software (fitted base 0.77, extra 0.08-0.36); hours **G1**:
 
