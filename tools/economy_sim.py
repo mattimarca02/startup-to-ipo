@@ -2423,10 +2423,18 @@ def sim_s3(n):
     print(f"### Parity with fix B and the away fix (median over {n} seeds; mark 95 to 105)")
     wb, atb, badb = pk_parity_table(n, gB, betaB, ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in"), away_fix=True)
     print(f"\nWorst deviation with fix B and the away fix: {wb:.1f}% ({atb}). Outside +-5%: {', '.join(badb) if badb else 'none'}.")
-    ok_typ = all(not b.split("/")[1].startswith(("fast", "slow")) and not b.startswith("check-in") for b in bad1)
-    print("\n**Result.** " + (f"Fit 1 (the doc's rule): every rung of every schedule at the typical skill is inside +-5% except the profiles named above. "
-          f"Worst {w1:.1f}% ({at1}): " + ("PASS." if w1 <= 5 else "FAIL (check-in, which pays only the away bank; the fast and slow skills are marginal at +-6%).")
-          + f" With fix B and the away fix the worst is {wb:.1f}% ({atb}): " + ("PASS." if wb <= 5 else "marginal.")))
+    def kinds_of(bad):
+        """Offenders split by what they are: the check-in profile, the fast / slow skills, anything else."""
+        ci = [b for b in bad if b.startswith("check-in")]
+        sk = [b for b in bad if b.split("/")[1].split(" ")[0] in ("fast", "slow") and not b.startswith("check-in")]
+        ot = [b for b in bad if b not in ci and b not in sk]
+        return ci, sk, ot
+    ci1, sk1, ot1 = kinds_of(bad1)
+    ciB, skB, otB = kinds_of(badb)
+    print("\n**Result.** " + f"Fit 1 (the doc's rule): worst {w1:.1f}% ({at1}): " + ("PASS." if w1 <= 5 else
+          f"FAIL. Outside +-5%: check-in, which pays only the away bank: {', '.join(ci1) or 'none'}; the fast and slow skills: {', '.join(sk1) or 'none'}; any other profile: {', '.join(ot1) or 'none'}.")
+          + f" With fix B and the away fix the worst is {wb:.1f}% ({atb}): " + ("PASS." if wb <= 5 else
+          f"marginal. Outside +-5%: check-in: {', '.join(ciB) or 'none'}; fast / slow skills: {', '.join(skB) or 'none'}; any other: {', '.join(otB) or 'none'}."))
     return {"s3": w1, "s3_fixed": wb, "beta": beta, "betaB": betaB, "bad": bad1, "badB": badb}
 
 PK_POLICIES = (    # SECTORS 2.10 policy table: (label, PkGam changes, the doc's estimate of the IPO 1 hours of a regular player)
@@ -3137,16 +3145,22 @@ def sim_s8(n):
     large_gm = l_save["Large every round"]["Gaming"][0]
     print(f"\nLarge every round saves {large_sw:.1f}% of IPO 1 in Software and {large_gm:.1f}% in Gaming (FUNDING's upper bound is 12.18%, mark: at most 15%).")
     marks["large_saves"] = max(large_sw, large_gm)
+    marks["large_sw_gm"] = (large_sw, large_gm)
     marks["sector_diff"] = sg_diff
-    extra = []
+    marks["hit_diffs"] = [abs(l_save[k]["Gaming"][2] / l_save[k]["Software"][2] - 1) * 100 for k in l_save]       # Hit: Small / Medium / Large every round
+    marks["hit_hours"] = (l_save["Large every round"]["Software"][2], l_save["Large every round"]["Gaming"][2])    # hours Large every round saves at IPO 1, Software / Gaming
+    marks["loop_hours"] = _pq(pk_loop_h(ref["Software"], 0), 50)
+    extra, other_diffs = [], {}
     sw_hours = l_save["Large every round"]["Software"][2]
     for lab, kw in (("Solid", dict(policy="solid", update_rule="none")), ("Flop", dict(policy="rush", update_rule="none"))):
         a = pk_many("regular", seeds, 1, pk_opts("Gaming", kw, shop_done=True))
         b = pk_many("regular", seeds, 1, pk_opts("Gaming", kw, shop_done=True, rounds=3))
         sv = _pq([x - y for x, y in zip(pk_loop_h(a, 0), pk_loop_h(b, 0))], 50)
         extra.append(f"{lab} {abs(sv / sw_hours - 1) * 100:.1f}%")
+        other_diffs[lab] = abs(sv / sw_hours - 1) * 100
         marks["sector_diff"] = max(marks["sector_diff"], abs(sv / sw_hours - 1) * 100)
     print("Gaming with the other launch policies saves the same hours as Software (Large every round) within " + ", ".join(extra) + ".")
+    marks["other_diffs"] = other_diffs
 
     # ---- D. who picks what ----
     print(f"\n### D. Is the maximum always best? Engaged hours to IPO 3, the shop NOT complete (Shares buy the speed perk), per profile and policy ({seeds} seeds; cell = hours saved against no round; the best cell is bold)")
@@ -3155,6 +3169,7 @@ def sim_s8(n):
     print("| Profile | Small | Medium | Large | best |")
     print("|---|---|---|---|---|")
     best_set = set()
+    dtab = {}
     for label, kind, kw in profs:
         b0 = pk_many(kind, seeds, 3, PkOpt(**kw))
         vals = []
@@ -3163,10 +3178,12 @@ def sim_s8(n):
             vals.append(_pq([(1 - r["ipo_h"][2] / b["ipo_h"][2]) * 100 for r, b in zip(o, b0) if len(r["ipo_h"]) >= 3 and len(b["ipo_h"]) >= 3], 50))
         top = max(range(3), key=lambda i: vals[i])
         best_set.add(top)
+        dtab[label] = (vals, top)
         print(f"| {label} | " + " | ".join(("**" if i == top else "") + f"{v:+.2f}%" + ("**" if i == top else "") for i, v in enumerate(vals)) + f" | {ch_names[top]} |")
-    print("\nThe only Share sink in the model is the speed lump (154 Shares for +25% Income), so the Shares a round costs delay a +25% perk by only a few percent of a loop: "
+    print(f"\nThe only Share sink in the model is the speed lump ({LONG_SPEED_PERKS[0]} Shares for +{LONG_SPEED_PERKS[1]:.0%} Income), so the Shares a round costs delay a +{LONG_SPEED_PERKS[1]:.0%} perk by only a few percent of a loop: "
           f"the best policy is {', '.join(ch_names[i] for i in sorted(best_set))} in every profile.")
     marks["best_set"] = best_set
+    marks["dtab"] = dtab
     print("\n**What curve makes the choice real?** The same table with every basis-point price multiplied (the 4,000 cap stays); cell = the best policy by hours to IPO 3 for a player who values Shares (shop not complete), "
           "for a player with the shop complete who protects Platinum (total dilution at most 3,000 bp), and for a casual player:")
     print("| price multiplier | total of Large every round | regular, Shares valued: best | regular, shop complete, Platinum protected: best | casual, Shares valued: best |")
@@ -3206,9 +3223,11 @@ def sim_s8(n):
         print(f"| {label} | {a:.1f} | {b:.1f} | {o_:.0f} |")
     r0, rL, rA, rAL = (rows[k][1] for k in ("no rounds, no alt", "Large every round", "alt-fed, no rounds", "alt-fed + Large every round"))
     gain_plain, gain_alt = (1 - rL / r0) * 100, (1 - rAL / rA) * 100
-    print(f"\nIn loop 2 Large every round saves a plain player {gain_plain:.1f}% and an alt-fed player {gain_alt:.1f}%: rounds give the alt-fed player {gain_alt - gain_plain:+.1f} points more than a plain one (mark: under 3). "
+    print(f"\nIn loop 2 Large every round saves a plain player {gain_plain:.1f}% and an alt-fed player {gain_alt:.1f}%. FUNDING 6 says 'converter and alt-fed gain < 3% in loop 2' (FUND:107), which can be read two ways: "
+          f"(A) what the alt adds over a plain player: {gain_alt - gain_plain:+.1f} points: {'PASS' if gain_alt - gain_plain < 3 else 'FAIL'}; (B) the alt-fed player's absolute gain from rounds: {gain_alt:.1f}%: {'PASS' if gain_alt < 3 else 'FAIL by ' + format(gain_alt - 3, '.1f') + ' point'} (a plain player gets {gain_plain:.1f}% too, so it is not an alt exploit). "
           f"The converter cannot gain either: every one of the {len(LONG_ITEMS)} items is already owned at the IPO in every case (the IPO threshold is 1.5 x the price of everything), so round Cash has no kept employee left to buy. Not modeled: eggs and HR levels.")
     marks["altfed"] = abs(gain_alt - gain_plain)
+    marks["altfed_readings"] = (gain_alt - gain_plain, gain_alt, gain_plain)
     print("\n**Raising the last open round, late** (Pre-IPO round, Large, raised this far through the stage; regular typical, shop complete):")
     print("| Raised at | hours saved, % of the loop | dilution bp | bp per 1% of time saved |")
     print("|---|---|---|---|")
@@ -3223,20 +3242,24 @@ def sim_s8(n):
     pop = max(12, seeds)
     T = pk_T(PK_T_POP, shop_done=True)
     print(f"\n### F. Speed against the stamp tier lost on stake (dedicated, fast, hunting for Platinum; shop complete; replays IPO 2-4; population {pop})")
-    print(f"Platinum rule for this table: within 1.0 T and ratio 1.10 (S6's relaxed rule; the doc's 0.8 T / 1.25 gives no Platinum to anyone, see S6), stake at least 70%; Gold: 1.0 T, stake 55%. "
-          f"T is refitted for a player whose shop is complete (Medium raise, the +25% speed perk from the start): {', '.join(f'{x:.1f}' for x in T[:4])} h.")
-    print("| Policy | total dilution bp | hours per IPO (stamp clock) | Platinum on time and ratio % | Platinum kept after the stake rule % | Gold or better % |")
-    print("|---|---|---|---|---|---|")
-    tcfg = dict(PK_TIER, plat_frac=1.0, plat_ratio=1.10)
-    for label, ch in (("no round", 0), ("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
-        kw = dict(T=T, rounds=ch, skill="expert", ipo_mode="hunt", shop_done=True)
-        ro = pk_pop("dedicated", pop, 4, PkOpt(tier=tcfg, **kw))
-        rn = pk_pop("dedicated", pop, 4, PkOpt(tier=dict(tcfg, plat_stake=0), **kw))
-        g, pl, _k = pk_tier_rates(ro)
-        _g, pl_t, _k = pk_tier_rates(rn)
-        D = sum(PK_FUND_LONG_BP[st][ch - 1] for st in PK_FUND_LONG_BP) if ch else 0
-        hrs = _pq([lp["stamp_h"] for r in ro for lp in r["loops"][1:]], 50)
-        print(f"| {label} | {D} | {hrs:.1f} | {pl_t:.0f} | {pl:.0f} | {g:.0f} |")
+    print(f"Three Platinum rules, because the doc's gives Platinum to nobody (S6): **the doc's 0.8 T and ratio 1.25**, **the S6 fix 1.0 T and ratio 1.20**, and **the relaxed 1.0 T and ratio 1.10** (the only rule the first version of this table used; its marks were measured under it, not under the doc's). "
+          f"Stake at least 70% for Platinum in every rule; Gold: 1.0 T, stake 55%. T is refitted for a player whose shop is complete (Medium raise, the +25% speed perk from the start): {', '.join(f'{x:.1f}' for x in T[:4])} h.")
+    print("| Platinum rule | Policy | total dilution bp | hours per IPO (stamp clock) | Platinum on time and ratio % | Platinum kept after the stake rule % | Gold or better % |")
+    print("|---|---|---|---|---|---|---|")
+    ftab = {}
+    for rlabel, pf, pr_ in (("the doc: 0.8 T, ratio 1.25", 0.8, 1.25), ("S6 fix: 1.0 T, ratio 1.20", 1.0, 1.20), ("relaxed: 1.0 T, ratio 1.10", 1.0, 1.10)):
+        tcfg = dict(PK_TIER, plat_frac=pf, plat_ratio=pr_)
+        for label, ch in (("no round", 0), ("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
+            kw = dict(T=T, rounds=ch, skill="expert", ipo_mode="hunt", shop_done=True)
+            ro = pk_pop("dedicated", pop, 4, PkOpt(tier=tcfg, **kw))
+            rn = pk_pop("dedicated", pop, 4, PkOpt(tier=dict(tcfg, plat_stake=0), **kw))
+            g, pl, _k = pk_tier_rates(ro)
+            _g, pl_t, _k = pk_tier_rates(rn)
+            D = sum(PK_FUND_LONG_BP[st][ch - 1] for st in PK_FUND_LONG_BP) if ch else 0
+            hrs = _pq([lp["stamp_h"] for r in ro for lp in r["loops"][1:]], 50)
+            ftab[(rlabel, ch)] = (pl_t, pl, g, hrs, D)
+            print(f"| {rlabel} | {label} | {D} | {hrs:.1f} | {pl_t:.0f} | {pl:.0f} | {g:.0f} |")
+    marks["ftab"] = ftab
 
     # ---- I. the table fitted to what the sim measured ----
     print("\n### I. The table refitted to the measured savings (bp = P x measured % of the loop saved x 100; P = 1.5 / 2.0 / 2.5, and the same x2.3 so that Large every round again costs about 3,000 bp)")
@@ -3257,7 +3280,7 @@ def sim_s8(n):
 
     # ---- G. loops 1-10 ----
     ns = max(5, seeds // 2)
-    print(f"\n### G. Ten loops (regular typical, the shop not complete, {ns} seeds): hours of each IPO, Shares, and when the speed lump (154 Shares) is complete")
+    print(f"\n### G. Ten loops (regular typical, the shop not complete, {ns} seeds): hours of each IPO, Shares, and when the speed lump ({LONG_SPEED_PERKS[0]} Shares) is complete")
     print("| Policy | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares paid, 10 IPOs | IPO at which the lump is complete |")
     print("|---|---|---|---|---|---|---|---|")
     for label, ch in (("no round", 0), ("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
@@ -3298,17 +3321,40 @@ def sim_s8(n):
     pre_p = [PK_FUND_LONG_BP[5][ci] / 100 / max(sm[(5, ci)], 1e-9) for ci in range(3)]                   # the Pre-IPO row: the measured price (% of Shares per 1% of loop time) ...
     pre_x = [pre_p[ci] / PK_FUND_P[ci] for ci in range(3)]                                                 # ... and as a multiple of FUNDING's P (the multiple is not the price)
     print("\n**Result.**")
-    print(f"- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. {lose_p} of {cnt} LONG sequences lose Platinum on stake and {marks['today'][0]} of {marks['today'][1]} of today's; "
-          f"the cap never binds (largest total {mx} bp and {marks['today'][2]} bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.")
-    print(f"- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays {mid_price:.1f}% of Shares per 1% of loop time at Series B and {pre_price:.0f}% at Pre-IPO, against FUNDING's 2.5 (that is {pre_price / PK_FUND_P[2]:.1f} times too dear for Large; the Pre-IPO row as a whole is {pre_x[0]:.1f} / {pre_x[1]:.1f} / {pre_x[2]:.1f} times too dear for Small / Medium / Large, "
-          f"and the prices themselves are {pre_p[0]:.1f} / {pre_p[1]:.1f} / {pre_p[2]:.1f} against {PK_FUND_P[0]} / {PK_FUND_P[1]} / {PK_FUND_P[2]}): from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.")
-    print(f"- Large every round saves at most {marks['large_saves']:.1f}% of a loop (mark: at most 15%): PASS (FUNDING's upper bound of 12.2% is 2.4x too high: the Pre-IPO row is 7.6% in the table and 0.6% measured).")
-    print(f"- Is the maximum always best? For a player who values speed, yes: Large is best in 6 of 7 profiles even with Shares valued (+3.0% against +2.4% for Medium at IPO 3). The exception is the 2x Cash owner (Small +0.1%, Large -0.4%): "
-          f"mark 'no one choice best for every profile': PASS, but only because of the pass. With the shop complete and Platinum protected, the best is Medium. Scaling prices only helps up to the cap: at x{real_k if real_k else '>8'} the casual and the regular player first differ.")
-    print(f"- The same round saves hours within {marks['sector_diff']:.0f}% between Software and Gaming in relative terms (mark: 5%): FAIL by the letter (Hit 14-15%, Solid and Flop 23-28%), but it is 0.3 hours, 0.6 points of a loop; the Gaming launch cycle does not change the table, one `HoursShare` table is enough.")
-    print(f"- Alt-fed gains {marks['altfed']:.1f} points more from rounds than a plain player in loop 2 (mark: under 3): PASS; converter: nothing to convert (all 97 items are owned at the IPO in every case; eggs and HR are not modeled).")
-    print(f"- Raising the last open round late: 0.6% saved at once, 0.0% from halfway on, for the same {PK_FUND_LONG_BP[5][2]} bp: a late raise is a pure loss, skipping beats it: PASS.")
-    print(f"- Stake against speed: Large every round saves the most hours but is the only policy that loses Platinum (0% kept against 100% on time); Small and Medium keep it. The minimum prices Large-every-round without taking Platinum from most runs: PASS on the doc's table, but a table fitted to the measured savings never reaches 3,000 bp (fit at P: {sum(fit1[st][2] for st in fit1)} bp for Large every round), so the 70% line would never bite; at 2.3 P it does ({sum(fit2[st][2] for st in fit2)} bp).")
+    sv5 = [sm[(5, ci)] for ci in range(3)]
+    mid_sv = [sm[(st, 2)] for st in (1, 2, 3)]
+    tabL = pk_fund_formula("long")
+    upper = sum(tabL[st][2][2] for st in tabL) * 100
+    large_sw, large_gm = marks["large_sw_gm"]
+    print(f"- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten ({sv5[0]:.2f} / {sv5[1]:.2f} / {sv5[2]:.2f}%) and Large costs less per extra Cash than Medium. {lose_p} of {cnt} LONG sequences lose Platinum on stake and {marks['today'][0]} of {marks['today'][1]} of today's; "
+          f"the cap never binds (largest total {mx} bp and {marks['today'][2]} bp against {PK_FUND_CAP}), so only the 70% line bites. The cap is not redundant only as a safety net.")
+    print(f"- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays {mid_price:.1f}% of Shares per 1% of loop time at Series B and {pre_price:.0f}% at Pre-IPO, against FUNDING's {PK_FUND_P[2]} (that is {pre_price / PK_FUND_P[2]:.1f} times too dear for Large; the Pre-IPO row as a whole is {pre_x[0]:.1f} / {pre_x[1]:.1f} / {pre_x[2]:.1f} times too dear for Small / Medium / Large, "
+          f"and the prices themselves are {pre_p[0]:.1f} / {pre_p[1]:.1f} / {pre_p[2]:.1f} against {PK_FUND_P[0]} / {PK_FUND_P[1]} / {PK_FUND_P[2]}): from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B ({min(mid_sv):.1f}-{max(mid_sv):.1f}% of a loop for a Large round) are close to the doc's price.")
+    print(f"- Large every round saves at most {marks['large_saves']:.1f}% of a loop (mark: at most 15%): {'PASS' if marks['large_saves'] <= 15 else 'FAIL'} (FUNDING's upper bound, recomputed from its formula {upper:.1f}% (FUNDING prints 12.18%), is {upper / large_sw:.1f}x the Software figure ({large_sw:.1f}%) and {upper / large_gm:.1f}x the Gaming one ({large_gm:.1f}%): the Pre-IPO row is {tabL[5][2][2] * 100:.1f}% in the table and {sv5[2]:.1f}% measured).")
+    dt = marks["dtab"]
+    n_large = sum(1 for _l, (_v, top) in dt.items() if top == 2)
+    reg = dt["regular typical"][0]
+    exc = "; ".join(f"{lab}: best {ch_names[top]} ({', '.join(f'{ch_names[i]} {v:+.1f}%' for i, v in enumerate(vals))})" for lab, (vals, top) in dt.items() if top != 2)
+    print(f"- Is the maximum always best? For a player who values speed, yes: Large is best in {n_large} of {len(dt)} profiles even with Shares valued ({reg[2]:+.1f}% against {reg[1]:+.1f}% for Medium at IPO 3 for the regular typical player). Exceptions: {exc or 'none'}. "
+          f"Mark 'no one choice best for every profile': {'PASS' if len(marks['best_set']) > 1 else 'FAIL'}, but only because of the profile(s) named. With the shop complete and Platinum protected, the best is {real[0][1][1]} at the doc's prices. "
+          f"Scaling prices only helps up to the cap: at x{real_k if real_k else '>8'} the casual and the regular player first differ.")
+    hd = marks["hit_diffs"]
+    od = marks["other_diffs"]
+    hh = marks["hit_hours"]
+    print(f"- The same round saves hours within {marks['sector_diff']:.0f}% between Software and Gaming in relative terms (mark: 5%): {'PASS' if marks['sector_diff'] <= 5 else 'FAIL'} by the letter (Hit {min(hd):.0f}-{max(hd):.0f}%, " + ", ".join(f"{k} {v:.0f}%" for k, v in od.items()) +
+          f"), but for Large every round it is {abs(hh[0] - hh[1]):.1f} hours, {abs(hh[0] - hh[1]) / marks['loop_hours'] * 100:.1f} points of a loop; the Gaming launch cycle does not change the table, one `HoursShare` table is enough.")
+    ar = marks["altfed_readings"]
+    print(f"- Converter and alt-fed gain < 3% in loop 2 (FUND:107), two readings: (A) the alt-fed player's gain over a plain player is {ar[0]:+.1f} points: {'PASS' if ar[0] < 3 else 'FAIL'}; (B) the alt-fed player's absolute gain from rounds is {ar[1]:.1f}%: {'PASS' if ar[1] < 3 else 'FAIL by ' + format(ar[1] - 3, '.1f') + ' point'} "
+          f"(a plain player gets {ar[2]:.1f}%). Converter: nothing to convert (all {len(LONG_ITEMS)} items are owned at the IPO in every case; eggs and HR are not modeled).")
+    print(f"- Raising the last open round late: {late[0.0]:.1f}% saved at once, {late[0.5]:.1f}% at 50% of the way and {late[0.9]:.1f}% at 90%, for the same {PK_FUND_LONG_BP[5][2]} bp: {'a late raise is a pure loss, skipping beats it: PASS' if late[0.5] <= 0.05 else 'a late raise still saves something: check'}.")
+    ft = marks["ftab"]
+    parts = []
+    for rlabel in ("the doc: 0.8 T, ratio 1.25", "S6 fix: 1.0 T, ratio 1.20", "relaxed: 1.0 T, ratio 1.10"):
+        none_, small, med_, large = (ft[(rlabel, c)] for c in (0, 1, 2, 3))
+        parts.append(f"under {rlabel}: no round {none_[0]:.0f}% on time, Small {small[0]:.0f}% on time / {small[1]:.0f}% kept, Medium {med_[0]:.0f}% / {med_[1]:.0f}%, Large every round {large[0]:.0f}% on time and {large[1]:.0f}% kept after the stake rule")
+    print(f"- Stake against speed (table F; the stake mark was measured under three Platinum rules, the first version only under the relaxed one): " + "; ".join(parts) + ". "
+          f"The minimum prices Large-every-round (Platinum lost where it was won on time) without taking Platinum from the Small and Medium raisers, on the doc's table; under the doc's own Platinum rule nobody has Platinum to lose, so the mark is vacuous there. "
+          f"A table fitted to the measured savings never reaches 3,000 bp (fit at P: {sum(fit1[st][2] for st in fit1)} bp for Large every round), so the 70% line would never bite; at 2.3 P it does ({sum(fit2[st][2] for st in fit2)} bp).")
     return marks
 
 
