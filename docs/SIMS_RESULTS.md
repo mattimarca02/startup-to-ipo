@@ -783,3 +783,76 @@ Nothing below was changed silently; each open choice is either swept in the sim 
 - Mixed populations (a player who changes skill, schedule or pass during a run), passes bought mid-run (pass share is 0 or 1), players who leave, fun, retention, and the social side of the leaderboard (Collection is computed per player, not ranked).
 - Fintech and Biotech; the Studio UI limits; the real task bonus (f is the model's Monte Carlo; LONG_GAME's gate G1 measures it).
 - The real server's rules about shared saves between Studio and live.
+
+## 8. Robust versus assumption-dependent
+
+An independent review of tip `e08fd72` classified the results by how much they depend on an assumption of mine (the task skill, Gaming's work time and task bonus, the scope factor, the update threshold, the definition of T). I did not take the classification on trust: `--robust` runs each row under those changes and a row is **ROBUST** only if its verdict (the mark) never flips. Gaming's `beta` is S3's base fit and is not refitted unless the row says so (a refitted `beta` asks "is the spread between policies still within the mark?", an unrefitted one asks "what if the fit was made under the wrong assumption?"). **Result: 20 of 26 rows are classified as the review says; the six differences are listed below with the numbers.** The raw table is at the end of this section.
+
+### ROBUST (the review) and what the engine measured
+
+| Row | Measured | Verdict |
+|---|---|---|
+| S1 seed ~1.2% | 1.14% (1.08% to 1.24% with the task skill -20% / +20%) | **robust PASS** |
+| S2 bonus 96.6% | 96.66% (96.54% to 96.73%) | **robust PASS** |
+| S5 hopping ~0.1% | -0.01% base; alternating is never faster (it is up to 4.2% *slower* when Gaming's task bonus is off by 20% and the fit is not redone) | **robust PASS** |
+| S7 new sector, hours 99.6% | 0.39% apart (up to 8.0% with Gaming's task bonus x0.8 / x1.2 and no refit) | **robust PASS**, but the margin to the 10% mark shrinks to 2 points |
+| S3 check-in FAIL (24-32%) | 24% to 30% under every Gaming change (23.9% at work -20%, 29.5% at task bonus x0.8) | **robust FAIL** |
+| S3 slow skill ~6% off | 6.31% (5.30% to 7.04%); over 5% under every change | **robust FAIL** |
+| **S3 fast skill ~6% off** | 4.47% base (5.6% in the 40-seed table of S3), **2.91% at work -20% and 6.19% at +20%** | **not robust: borderline**; the verdict flips with Gaming's work time |
+| S6 Platinum 0% at 0.8 T / 1.25 | 0% with the task skill -20% and +20% | **robust FAIL** |
+| S6 15% pass shrink FAIL (about 6%) | the 2x Cash pass shortens a replay by 6.11% (5.96% to 6.24%) | **robust** |
+| S8 table (4 of 1,024 lose Platinum on stake; Large saves 5.0%) | Large every round saves 4.95% (4.88% to 5.04%); the 4 of 1,024 is arithmetic on the table, no assumption | **robust** |
+| S9 Solid / Flop / update timing | with `beta` refitted: Solid +8.3%, Flop +14.9%, update spread 1.6 points, under all 7 Gaming changes (Solid at most +9.7%, Flop +17.6%, spread 2.2) | **robust when refitted** |
+| (same, no refit) | **flips when Gaming's task bonus is x0.8**: Solid +17.5% (mark 12), Flop +25.2% (mark 25) | refit-dependent |
+| S10 cycle wait over 15 min | 35.7 to 53.7 min under work time -20% / +20% | **robust FAIL** |
+
+### ASSUMPTION-DEPENDENT (the review) and what the engine measured
+
+| Row | Measured | Verdict |
+|---|---|---|
+| S3 typical-skill PASS | 2.19% base; **9.22% at Gaming's task bonus x0.8 and 7.66% at x1.2** | **assumption-dependent** (as the review says) |
+| S3 fix B | 0.54% base; **9.36% and 8.41%** at task bonus x0.8 / x1.2 | **assumption-dependent** |
+| S6 fix 1.0 T / 1.20 | dedicated fast hunter 25%; **0% with the expert skill -20%, 75% with +20%** | **assumption-dependent, exactly as the review says** |
+| Shareholder 6% shrink | Gold 2.08 points from a no-pass player; **4.17 / 8.33 points** at skill -20% / +20%; **8.33 points** with T = LONG_GAME's 57 / 51.5 / 52 | **assumption-dependent** (the definition of T) |
+| S8 Software against Gaming 14% | the **value** moves 9.0% to 22.4% (14.6% base); the **verdict** (FAIL against 5%) holds under every change | assumption-dependent in the number, robust in the verdict |
+| **S9 Smash PASS (the review: "Gaming task bonus 0.8 flips it")** | **not reproduced.** With `beta` refitted Smash stays between -1.9% and +1.0% against Software under all 7 changes. Without a refit it flips only at task bonus **x1.2** (-6.95%, faster than the 5% mark), not at x0.8 (+7.34%, slower: the mark only limits being faster, so it still passes) | PASS survives a refit; flips at x1.2 without one |
+| **S9 spam FAIL** | **robust: +1.7% base, 1.9% to 3.2% under every change** (never under the 1% mark) | robust FAIL (the review lists it as assumption-dependent) |
+| S9 k = 0.4 | 0.41% base; **1.04% and 1.18%** with the update threshold at 0.35 / 0.65 (and 0.99% at work +20%) | **assumption-dependent** (the update threshold) |
+| S10 "no gap over 45 min" | 44.67 min base (PASS at the limit); **53.67 min with work time +20%** | **assumption-dependent, as the review says** |
+
+**Differences from the review's classification, in short:** (1) the S3 fast-skill row is borderline, not robust; (2) the S9 Solid and Flop rows are robust only if Gaming is refitted; (3) the S8 Software-against-Gaming row is assumption-dependent in size, not in verdict; (4) the S9 Smash row is not flipped by the task bonus x0.8 (it flips only at x1.2, and only without a refit); (5) the S9 launch-spam FAIL is robust (only the k = 0.4 fix is assumption-dependent); the review put both in one row.
+
+### The sim's table (`python tools/economy_sim.py --robust`)
+Each row is run with 8 seeds (the S3 parity rows 20, because a rung's median needs more; S5 and S7 fewer; hunters 16 players) under the perturbations listed; Gaming's beta is S3's base fit and is not refitted. A row is **ROBUST** if its verdict (the mark) does not change under any perturbation, **ASSUMPTION-DEPENDENT** if some perturbation flips it.
+
+| Sim | Row | Review's class | base | task skill -20% | task skill +20% | Gaming work time -20% | Gaming work time +20% | Gaming task bonus x0.8 | Gaming task bonus x1.2 | scope factor 1.2 | update threshold 0.35 | update threshold 0.65 | T = LONG_GAME's 57 / 51.5 / 52 h | verdict flips? | measured class |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S1 | seed gain of loop 1 (mark: at most 5%) | ROBUST | 1.14% (pass) | 1.08% | 1.24% | - | - | - | - | - | - | - | - | no | ROBUST |
+| S2 | hours at the cap, % of no bonus (mark: at least 95%) | ROBUST | 96.66% (pass) | 96.73% | 96.54% | - | - | - | - | - | - | - | - | no | ROBUST |
+| S5 | alternating gain over the faster sector, 6 IPOs (mark: under 3%) | ROBUST | -0.01% (pass) | -0.91% | - | -0.21% | -0.43% | -4.17% | -3.72% | - | - | - | - | no | ROBUST (the verdict holds, the value moves -4.2 to -0.0) |
+| S7 | new sector against a replay, hours (mark: within 10%) | ROBUST | 0.39% (pass) | 2.58% | - | 1.14% | 0.50% | 8.03% | 7.64% | - | - | - | - | no | ROBUST (the verdict holds, the value moves 0.4 to 8.0) |
+| S3 | check-in worst rung deviation (mark: within 5%; the review: FAIL 24-32%) | ROBUST | 25.96% (fail) | - | - | 23.91% | 25.96% | 29.54% | 25.96% | - | - | - | - | no | ROBUST |
+| S3 | slow skill, worst rung deviation (mark: within 5%; the review: about 6% off) | ROBUST | 6.31% (fail) | - | - | 7.04% | 5.30% | 6.31% | 6.31% | - | - | - | - | no | ROBUST |
+| S3 | fast skill, worst rung deviation (mark: within 5%; the review: about 6% off) | ROBUST | 4.47% (pass) | - | - | 2.91% | 6.19% | 4.47% | 4.47% | - | - | - | - | Gaming work time +20% | ASSUMPTION-DEPENDENT |
+| S6 | Platinum % of the dedicated fast hunter at 0.8 T / 1.25 (mark: at least 20%) | ROBUST | 0.00% (fail) | 0.00% | 0.00% | - | - | - | - | - | - | - | - | no | ROBUST |
+| S6 | how much the 2x Cash pass shortens a replay (the review: about 6%, not 15%) | ROBUST | 6.11% (pass) | 5.96% | 6.24% | - | - | - | - | - | - | - | - | no | ROBUST |
+| S8 | Large every round saves, % of IPO 1 (mark: at most 15%) | ROBUST | 4.95% (pass) | 4.88% | 5.04% | - | - | - | - | - | - | - | - | no | ROBUST |
+| S9 | Solid vs Software, beta refitted (mark: at most +12%) | ROBUST | 8.30% (pass) | - | - | 8.22% | 8.21% | 8.76% | 7.90% | 9.67% | 7.35% | 7.20% | - | no | ROBUST |
+| S9 | Flop vs Software, beta refitted (mark: at most +25%) | ROBUST | 14.86% (pass) | - | - | 15.25% | 14.38% | 15.94% | 13.97% | 17.55% | 13.84% | 13.67% | - | no | ROBUST |
+| S9 | update timing, best against worst, beta refitted (mark: at most 5 points) | ROBUST | 1.64 points (pass) | - | - | 0.93 | 2.18 | 1.77 | 1.52 | 1.89 | 0.74 | 0.58 | - | no | ROBUST (the verdict holds, the value moves 0.6 to 2.2) |
+| S10 | longest wait between title-cycle decisions, minutes (mark: under 15) | ROBUST | 44.67 min (fail) | - | - | 35.67 | 53.67 | - | - | - | - | - | - | no | ROBUST |
+| S3 | typical skill, worst rung deviation (mark: within 5%) | ASSUMPTION-DEPENDENT | 2.19% (pass) | 2.72% | 2.82% | 1.20% | 4.46% | 9.22% | 7.66% | - | - | - | - | Gaming task bonus x0.8, Gaming task bonus x1.2 | ASSUMPTION-DEPENDENT |
+| S3 | fix B, typical skill, worst rung deviation (mark: within 5%) | ASSUMPTION-DEPENDENT | 0.54% (pass) | 1.76% | 1.06% | 1.01% | 2.21% | 9.36% | 8.41% | - | - | - | - | Gaming task bonus x0.8, Gaming task bonus x1.2 | ASSUMPTION-DEPENDENT |
+| S6 | Platinum % of the dedicated fast hunter at the fix 1.0 T / 1.20 (mark: at least 20%) | ASSUMPTION-DEPENDENT | 25.00% (pass) | 0.00% | 75.00% | - | - | - | - | - | - | - | - | task skill -20% | ASSUMPTION-DEPENDENT |
+| S6 | Shareholder owner's Gold, points away from a no-pass player with the 6% shrink (mark: within 5 points) | ASSUMPTION-DEPENDENT | 2.08 points (pass) | 4.17 | 8.33 | - | - | - | - | - | - | - | 8.33 | task skill +20%, T = LONG_GAME's 57 / 51.5 / 52 h | ASSUMPTION-DEPENDENT |
+| S8 | hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%) | ASSUMPTION-DEPENDENT | 14.64% (fail) | - | - | 15.55% | 16.35% | 22.36% | 8.97% | - | - | - | - | no | ROBUST (the verdict holds, the value moves 9.0 to 22.4) |
+| S9 | Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5) | ASSUMPTION-DEPENDENT | -0.39% (pass) | - | - | -1.48% | 0.54% | -0.64% | -0.14% | 0.13% | -1.89% | 0.97% | - | no | ROBUST (the verdict holds, the value moves -1.9 to 1.0) |
+| S9 | Solid vs Software, beta NOT refitted (mark: at most +12%) | ROBUST | 8.30% (pass) | - | - | 7.36% | 9.10% | 17.45% | 0.51% | 6.21% | 8.30% | 8.30% | - | Gaming task bonus x0.8 | ASSUMPTION-DEPENDENT |
+| S9 | Flop vs Software, beta NOT refitted (mark: at most +25%) | ROBUST | 14.86% (pass) | - | - | 14.29% | 15.36% | 25.16% | 6.16% | 13.75% | 14.86% | 14.86% | - | Gaming task bonus x0.8 | ASSUMPTION-DEPENDENT |
+| S9 | Smash (update under half) vs Software, beta NOT refitted (mark: at most 5% faster, i.e. >= -5) | ASSUMPTION-DEPENDENT | -0.39% (pass) | - | - | -2.30% | 1.40% | 7.34% | -6.95% | -3.07% | -1.09% | 2.05% | - | Gaming task bonus x1.2 | ASSUMPTION-DEPENDENT |
+| S9 | Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL) | ASSUMPTION-DEPENDENT | 1.73% (fail) | - | - | 2.06% | 1.88% | - | - | 1.98% | 2.63% | 3.15% | - | no | ROBUST (the verdict holds, the value moves 1.7 to 3.1) |
+| S9 | the same with the per-title bound k = 0.4, beta refitted | ASSUMPTION-DEPENDENT | 0.41% (pass) | - | - | 0.15% | 0.99% | - | - | 0.21% | 1.04% | 1.18% | - | update threshold 0.35, update threshold 0.65 | ASSUMPTION-DEPENDENT |
+| S10 | longest gap between any timed moments in Gaming, minutes (mark: no gap over 45) | ASSUMPTION-DEPENDENT | 44.67 min (pass) | - | - | 35.67 | 53.67 | - | - | - | - | - | - | Gaming work time +20% | ASSUMPTION-DEPENDENT |
+
+**Result.** 20 of 26 rows are classified as the review says. Different: S3 'fast skill, worst rung deviation (mark: within 5%; the review: about 6% off)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming work time +20%); S8 'hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves 9.0 to 22.4); S9 'Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves -1.9 to 1.0); S9 'Solid vs Software, beta NOT refitted (mark: at most +12%)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming task bonus x0.8); S9 'Flop vs Software, beta NOT refitted (mark: at most +25%)': review ROBUST, measured ASSUMPTION-DEPENDENT (flips under: Gaming task bonus x0.8); S9 'Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL)': review ASSUMPTION-DEPENDENT, measured ROBUST (the verdict holds, the value moves 1.7 to 3.1). Rows whose verdict holds but whose value moves by more than 30%: S5 'alternating gain over the faster sector, 6 IPOs (mark: under 3%)' (the verdict holds, the value moves -4.2 to -0.0); S7 'new sector against a replay, hours (mark: within 10%)' (the verdict holds, the value moves 0.4 to 8.0); S9 'update timing, best against worst, beta refitted (mark: at most 5 points)' (the verdict holds, the value moves 0.6 to 2.2); S8 'hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%)' (the verdict holds, the value moves 9.0 to 22.4); S9 'Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5)' (the verdict holds, the value moves -1.9 to 1.0); S9 'Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL)' (the verdict holds, the value moves 1.7 to 3.1).
+

@@ -1723,6 +1723,8 @@ class PkGam:
     force_scope: int = None              # launch-spam: always build this scope (0 = Game Jam)
     checkpoint_min: float = None         # S10 fix: a visible checkpoint (a verb, never a task) every this many engaged minutes while a title is in development
     half_lives: tuple = None             # None = the SECTORS 2.4 table (20 / 30 / 40 / 50 / 60 engaged minutes); a tuple replaces it (S9 fix: half-life proportional to the work)
+    work_scale: float = 1.0              # sensitivity (--robust): the table's "typical work" time x this (the doc gives no work-per-second number)
+    half_thr: float = 0.5                # sensitivity (--robust): the "update when under half the peak" threshold
     scope_of_rung: tuple = PK_GAMING_SCOPE_OF_RUNG
 
 
@@ -1778,7 +1780,7 @@ class PkCycle:
             k = live["ups"] + 1
             target = max(0.1, c.update_first - 0.1 * k) * live["peak"]
             amp = live["amp"]
-            if target > amp and (c.update_rule == "every" or (c.update_rule == "half" and amp <= 0.5 * live["peak"])
+            if target > amp and (c.update_rule == "every" or (c.update_rule == "half" and amp <= c.half_thr * live["peak"])
                                  or (c.update_rule == "late" and amp <= 0.25 * live["peak"])):
                 live["amp"], live["ups"], live["last"] = target, k, self.t
                 self.ups += 1
@@ -1786,7 +1788,7 @@ class PkCycle:
         d = self.dev
         if d is None:
             sc = c.force_scope if c.force_scope is not None else c.scope_of_rung[min(rung, len(c.scope_of_rung) - 1)]
-            d = self.dev = {"scope": sc, "W": PK_GAMING_SCOPES[sc][1] * 60.0, "work": 0.0, "pol": 0.0, "pt": False}
+            d = self.dev = {"scope": sc, "W": PK_GAMING_SCOPES[sc][1] * 60.0 * c.work_scale, "work": 0.0, "pol": 0.0, "pt": False}
             self.ev.append((self.t, "pitch"))
         if c.checkpoint_min:
             d["cp"] = d.get("cp", 0.0) + dt
@@ -2956,6 +2958,22 @@ def sim_s7(n):
     return {"s7_hours": worst_h, "s7_pts": worst_pts}
 
 
+def pk_gaps(run, r, h, with_buys=True, cycle=False):
+    """Number of moments and the longest gap (minutes) in rung r of a recorded loop-0 run (S10)."""
+    start = run["stage_h"][0][r]
+    ev = []
+    if with_buys:
+        ev += [t for rr, t in run["buy_h"] if rr == r]
+        if r == LONG_BOARD_RUNG:
+            ev += [t for t in run["ms_h"] if start <= t <= start + h] + [t for t in run["board_h"] if start <= t <= start + h]
+    if cycle:
+        ev += [t for t, _ in run["cyc_ev"] if start <= t < start + h]
+    ev = sorted(ev)
+    pts = [start] + ev + [start + h]
+    g = [(b - a) * 60 for a, b in zip(pts, pts[1:])]
+    return len(ev), max(g)
+
+
 def sim_s10(n):
     """S10 cadence (SECTORS 4, LONG_GAME 4): moments per hour per rung and the longest gap, both sectors."""
     print("\n## S10. Cadence: moments per hour and the longest gap (docs/SECTORS_PROPOSAL.md 4; docs/LONG_GAME_PROPOSAL.md 4)")
@@ -2973,19 +2991,7 @@ def sim_s10(n):
     worst = {"sw": 0.0, "gm": 0.0, "cyc": 0.0, "cp": 0.0}
     hs, hg, hc = pk_rung_hours(sw), pk_rung_hours(gm), pk_rung_hours(gm_cp)
 
-    def gaps(run, r, h, with_buys=True, cycle=False):
-        start = run["stage_h"][0][r]
-        ev = []
-        if with_buys:
-            ev += [t for rr, t in run["buy_h"] if rr == r]
-            if r == LONG_BOARD_RUNG:
-                ev += [t for t in run["ms_h"] if start <= t <= start + h] + [t for t in run["board_h"] if start <= t <= start + h]
-        if cycle:
-            ev += [t for t, _ in run["cyc_ev"] if start <= t < start + h]
-        ev = sorted(ev)
-        pts = [start] + ev + [start + h]
-        g = [(b - a) * 60 for a, b in zip(pts, pts[1:])]
-        return len(ev), max(g)
+    gaps = pk_gaps
     for r, (name, *_x) in enumerate(LONG_RUNGS):
         ns, gs = gaps(sw, r, hs[r])
         ng, gg = gaps(gm, r, hg[r], cycle=True)
@@ -3379,7 +3385,235 @@ def sim_s8(n):
     return marks
 
 
-PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3", 4: "sim_s4", 5: "sim_s5", 6: "sim_s6", 7: "sim_s7", 8: "sim_s8", 9: "sim_s9", 10: "sim_s10"}   # filled in as the sims are written; the name of each sim function
+PK_HALF_LIVES = (20, 40, 60, 80, 120)          # S9's half-life fix: proportional to the work
+
+
+def pk_fix_b():
+    """S3's fix B: launch peaks x0.6, cap 0.48, back catalog 0.06."""
+    base = PkGam()
+    return replace(base, peak=tuple(round(x * 0.6, 3) for x in base.peak), cap=0.48, cat_cap=0.06)
+
+
+def _pk_refit(gam_kw, **ok):
+    """S3's beta for the Gaming cycle changed by gam_kw (and the task bonus ok['f_gam']), refitted so that the typical Hit player equals Software again."""
+    return pk_fit_beta(replace(PkGam(), **{k: v for k, v in gam_kw.items() if k in ("work_scale", "half_thr", "scope_factor", "half_lives", "title_cap_k", "peak", "cap", "cat_cap")}), f_gam=ok.get("f_gam", 1.0))
+
+
+def _pk_g(kind, skw, gam_kw, beta, n, **extra):
+    """IPO 1 hours of n Gaming seeds with the cycle changed by gam_kw (the base beta, NOT refitted: the question is what a different assumption does to a result already fitted)."""
+    return pk_gam_ipo1(kind, skw, replace(PkGam(), **gam_kw), beta, n, **extra)
+
+
+def sim_robust(n):
+    """Review of tip e08fd72, item 7: which results hold when an assumption is changed, and which do not. Each row is measured under the perturbations listed for it;
+    a verdict that does not change under any of them is ROBUST, one that does is ASSUMPTION-DEPENDENT. Gaming's beta is the base fit (S3 fit 1), never refitted."""
+    print("\n## Robust versus assumption-dependent (the review's classification, tested)")
+    m = max(6, n // 5)
+    beta = pk_fit_beta(PkGam())
+    PERT_SKILL = (("task skill -20%", dict(f_mult=0.8), {}), ("task skill +20%", dict(f_mult=1.2), {}))
+    PERT_GAM = (("Gaming work time -20%", {}, dict(work_scale=0.8)), ("Gaming work time +20%", {}, dict(work_scale=1.2)),
+                ("Gaming task bonus x0.8", dict(f_gam=0.8), {}), ("Gaming task bonus x1.2", dict(f_gam=1.2), {}),
+                ("scope factor 1.2", {}, dict(scope_factor=(1.2,) * 5)), ("update threshold 0.35", {}, dict(half_thr=0.35)), ("update threshold 0.65", {}, dict(half_thr=0.65)))
+    rows = []    # (family, row label, reviewer's class, unit, [(perturbation, value)], verdict function, mark text)
+
+    def add(family, label, reviewer, perts, fn, verdict, mark, unit="%"):
+        vals = [("base", fn({}, {}))] + [(pl, fn(ok, gk)) for pl, ok, gk in perts]
+        rows.append((family, label, reviewer, unit, vals, verdict, mark))
+
+    # ---------- ROBUST per the review ----------
+    def s1(ok, gk):
+        o = dict(seed_pct=0.10, seed_cap=0.25, **ok)
+        a, b = pk_many("regular", m, 2, PkOpt(**o)), pk_many("regular", m, 2, PkOpt(**{k: v for k, v in ok.items()}))
+        return _pq(pk_rel(a, b, 1), 50)
+    add("S1", "seed gain of loop 1 (mark: at most 5%)", "ROBUST", PERT_SKILL, s1, lambda v: v <= 5, "<= 5")
+
+    def s2(ok, gk):
+        a, b = pk_many("regular", m, 1, PkOpt(bonus=0.10, **ok)), pk_many("regular", m, 1, PkOpt(**ok))
+        return _pq([x["ipo_h"][0] / y["ipo_h"][0] * 100 for x, y in zip(a, b) if x["ipo_h"] and y["ipo_h"]], 50)
+    add("S2", "hours at the cap, % of no bonus (mark: at least 95%)", "ROBUST", PERT_SKILL, s2, lambda v: v >= 95, ">= 95")
+
+    def s5(ok, gk):
+        o = dict(gaming=replace(PkGam(), **gk), beta=beta, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1], **ok)
+        res = {}
+        for lab, sec in (("sw", ("Software",)), ("gm", ("Gaming",)), ("a1", ("Software", "Gaming")), ("a2", ("Gaming", "Software"))):
+            res[lab] = _pq([r["ipo_h"][5] for r in pk_many("regular", max(4, m // 2), 6, PkOpt(sectors=sec, **o)) if len(r["ipo_h"]) >= 6], 50)
+        best = min(res["sw"], res["gm"])
+        return max((1 - res["a1"] / best) * 100, (1 - res["a2"] / best) * 100)
+    add("S5", "alternating gain over the faster sector, 6 IPOs (mark: under 3%)", "ROBUST", PERT_SKILL[:1] + PERT_GAM[:4], s5, lambda v: v < 3, "< 3")
+
+    def s7(ok, gk):
+        o = dict(gaming=replace(PkGam(), **gk), beta=beta, rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1], **ok)
+        alt = pk_many("regular", max(4, m // 2), 2, PkOpt(sectors=("Software", "Gaming"), **o))
+        one = pk_many("regular", max(4, m // 2), 2, PkOpt(**{k: v for k, v in o.items() if k not in ("gaming", "beta")}))
+        return abs(_pq(pk_loop_h(alt, 1), 50) / _pq(pk_loop_h(one, 1), 50) - 1) * 100
+    add("S7", "new sector against a replay, hours (mark: within 10%)", "ROBUST", PERT_SKILL[:1] + PERT_GAM[:4], s7, lambda v: v <= 10, "<= 10")
+
+    def s3_ci(ok, gk):
+        o_s = PkOpt(**ok)
+        o_g = replace(o_s, sectors=("Gaming",), gaming=replace(PkGam(), **gk), beta=beta)
+        a, b = pk_med_rungs(pk_many("check-in", max(5, m // 2), 1, o_s)), pk_med_rungs(pk_many("check-in", max(5, m // 2), 1, o_g))
+        return max(abs(y / x - 1) * 100 for x, y in zip(a, b) if x and y)
+    add("S3", "check-in worst rung deviation (mark: within 5%; the review: FAIL 24-32%)", "ROBUST", PERT_GAM[:4], s3_ci, lambda v: v <= 5, "<= 5")
+
+    def s3_skill(sk):
+        def f(ok, gk):
+            skw = dict(PK_SKILLS)[sk]
+            o_s = PkOpt(**skw)
+            o_g = replace(o_s, sectors=("Gaming",), gaming=replace(PkGam(), **gk), beta=beta)
+            a, b = pk_med_rungs(pk_many("regular", 20, 1, o_s)), pk_med_rungs(pk_many("regular", 20, 1, o_g))
+            return max(abs(y / x - 1) * 100 for x, y in zip(a, b) if x and y)
+        return f
+    add("S3", "slow skill, worst rung deviation (mark: within 5%; the review: about 6% off)", "ROBUST", PERT_GAM[:4], s3_skill("slow"), lambda v: v <= 5, "<= 5")
+    add("S3", "fast skill, worst rung deviation (mark: within 5%; the review: about 6% off)", "ROBUST", PERT_GAM[:4], s3_skill("fast"), lambda v: v <= 5, "<= 5")
+
+    T = pk_T(PK_T_POP)
+    base6 = dict(T=T, rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1])
+    pop6 = max(12, m * 2)
+
+    def s6_plat_doc(ok, gk):
+        o = pk_opts("Software", None, **{**base6, "skill": "expert", "ipo_mode": "hunt", **ok})
+        return pk_tier_rates(pk_pop("dedicated", pop6, 4, o))[1]
+    add("S6", "Platinum % of the dedicated fast hunter at 0.8 T / 1.25 (mark: at least 20%)", "ROBUST", PERT_SKILL, s6_plat_doc, lambda v: v >= 20, ">= 20")
+
+    def s6_pass_pct(ok, gk):
+        a = pk_pop("regular", pop6, 4, pk_opts("Software", None, **{**base6, **ok}))
+        b = pk_pop("regular", pop6, 4, pk_opts("Software", None, **{**base6, "cash_mult": 2.0, **ok}))
+        return 100 - _pq([lp["stamp_h"] / lq["stamp_h"] * 100 for r1, r2 in zip(a, b) for lp, lq in zip(r2["loops"][1:], r1["loops"][1:])], 50)
+    add("S6", "how much the 2x Cash pass shortens a replay (the review: about 6%, not 15%)", "ROBUST", PERT_SKILL, s6_pass_pct, lambda v: v < 10, "< 10")
+
+    def s8_large(ok, gk):
+        ref = pk_many("regular", m, 1, PkOpt(shop_done=True, **ok))
+        out = pk_many("regular", m, 1, PkOpt(shop_done=True, rounds=3, **ok))
+        return _pq(pk_rel(out, ref, 0), 50)
+    add("S8", "Large every round saves, % of IPO 1 (mark: at most 15%)", "ROBUST", PERT_SKILL, s8_large, lambda v: v <= 15, "<= 15")
+
+    def s9_solid(ok, gk):
+        sw = pk_sw_ipo1("regular", dict(skill="typical"), m)
+        return _pq(_pk_pct(_pk_g("regular", dict(skill="typical"), dict(policy="solid", update_rule="none", **gk), _pk_refit(gk, **ok), m, **ok), sw), 50)
+    add("S9", "Solid vs Software, beta refitted (mark: at most +12%)", "ROBUST", PERT_GAM, s9_solid, lambda v: v <= 12, "<= 12")
+
+    def s9_flop(ok, gk):
+        sw = pk_sw_ipo1("regular", dict(skill="typical"), m)
+        return _pq(_pk_pct(_pk_g("regular", dict(skill="typical"), dict(policy="rush", update_rule="none", **gk), _pk_refit(gk, **ok), m, **ok), sw), 50)
+    add("S9", "Flop vs Software, beta refitted (mark: at most +25%)", "ROBUST", PERT_GAM, s9_flop, lambda v: v <= 25, "<= 25")
+
+    def s9_upd(ok, gk):
+        sw = pk_sw_ipo1("regular", dict(skill="typical"), m)
+        b2 = _pk_refit(gk, **ok)
+        meds = [_pq(_pk_pct(_pk_g("regular", dict(skill="typical"), dict(policy="hit", update_rule=rule, **gk), b2, m, **ok), sw), 50) for rule in ("none", "late", "half", "every")]
+        return max(meds) - min(meds)
+    add("S9", "update timing, best against worst, beta refitted (mark: at most 5 points)", "ROBUST", PERT_GAM, s9_upd, lambda v: v <= 5, "<= 5", unit=" points")
+
+    def s10_cycle(ok, gk):
+        gc = replace(PkGam(), **gk)
+        base = dict(away=(0, 0, 0), full_hours=1e9, max_days=400, record=True)
+        gm = pk_run("reference", 0, 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=beta, **base))
+        hg = pk_rung_hours(gm)
+        return max(pk_gaps(gm, r, hg[r], with_buys=False, cycle=True)[1] for r in range(len(hg)))
+    add("S10", "longest wait between title-cycle decisions, minutes (mark: under 15)", "ROBUST", PERT_GAM[:2], s10_cycle, lambda v: v < 15, "< 15", unit=" min")
+
+    # ---------- ASSUMPTION-DEPENDENT per the review ----------
+    def s3_typ(ok, gk):
+        o_s = PkOpt(**ok)
+        o_g = replace(o_s, sectors=("Gaming",), gaming=replace(PkGam(), **gk), beta=beta)
+        a, b = pk_med_rungs(pk_many("regular", 20, 1, o_s)), pk_med_rungs(pk_many("regular", 20, 1, o_g))
+        return max(abs(y / x - 1) * 100 for x, y in zip(a, b) if x and y)
+    add("S3", "typical skill, worst rung deviation (mark: within 5%)", "ASSUMPTION-DEPENDENT", PERT_SKILL + PERT_GAM[:4], s3_typ, lambda v: v <= 5, "<= 5")
+
+    gB = pk_fix_b()
+    betaB = pk_fit_beta(gB)
+
+    def s3_fixb(ok, gk):
+        o_s = PkOpt(**ok)
+        o_g = replace(o_s, sectors=("Gaming",), gaming=replace(gB, **gk), beta=betaB, away_fix=True)
+        a, b = pk_med_rungs(pk_many("regular", 20, 1, o_s)), pk_med_rungs(pk_many("regular", 20, 1, o_g))
+        return max(abs(y / x - 1) * 100 for x, y in zip(a, b) if x and y)
+    add("S3", "fix B, typical skill, worst rung deviation (mark: within 5%)", "ASSUMPTION-DEPENDENT", PERT_SKILL + PERT_GAM[:4], s3_fixb, lambda v: v <= 5, "<= 5")
+
+    def s6_fix(ok, gk):
+        o = pk_opts("Software", None, **{**base6, "skill": "expert", "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=1.0, plat_ratio=1.20), **ok})
+        return pk_tier_rates(pk_pop("dedicated", pop6, 4, o))[1]
+    add("S6", "Platinum % of the dedicated fast hunter at the fix 1.0 T / 1.20 (mark: at least 20%)", "ASSUMPTION-DEPENDENT", PERT_SKILL, s6_fix, lambda v: v >= 20, ">= 20")
+
+    def s6_sh(ok, gk):
+        tcfg = dict(PK_TIER, pass_shrink=0.06)
+        g0 = pk_tier_rates(pk_pop("regular", pop6, 4, pk_opts("Software", None, **{**base6, **ok})))[0]
+        g1 = pk_tier_rates(pk_pop("regular", pop6, 4, pk_opts("Software", None, **{**base6, "shareholder": True, "pass_share": 1.0, "tier": tcfg, **ok})))[0]
+        return abs(g1 - g0)
+    sh_perts = PERT_SKILL + (("T = LONG_GAME's 57 / 51.5 / 52 h", dict(T=(57.0, 51.5, 52.0)), {}),)
+    add("S6", "Shareholder owner's Gold, points away from a no-pass player with the 6% shrink (mark: within 5 points)", "ASSUMPTION-DEPENDENT", sh_perts, s6_sh, lambda v: v <= 5, "<= 5", unit=" points")
+
+    def s8_sec(ok, gk):
+        gc = replace(PkGam(), **gk)
+        ref = {"Software": pk_many("regular", m, 1, PkOpt(shop_done=True, **ok)), "Gaming": pk_many("regular", m, 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=beta, shop_done=True, **ok))}
+        sv = {}
+        for sec in ref:
+            o = PkOpt(shop_done=True, rounds=3, **ok) if sec == "Software" else PkOpt(sectors=("Gaming",), gaming=gc, beta=beta, shop_done=True, rounds=3, **ok)
+            sv[sec] = _pq([a - b for a, b in zip(pk_loop_h(ref[sec], 0), pk_loop_h(pk_many("regular", m, 1, o), 0))], 50)
+        return abs(sv["Gaming"] / sv["Software"] - 1) * 100
+    add("S8", "hours a Large round saves, Software against Gaming, relative difference (mark: within 5%; the review: 14%)", "ASSUMPTION-DEPENDENT", PERT_GAM[:4], s8_sec, lambda v: v <= 5, "<= 5")
+
+    def s9_smash(ok, gk):
+        sw = pk_sw_ipo1("regular", dict(skill="typical"), m)
+        return _pq(_pk_pct(_pk_g("regular", dict(skill="typical"), dict(policy="smash", update_rule="half", **gk), _pk_refit(gk, **ok), m, **ok), sw), 50)
+    add("S9", "Smash (update under half) vs Software, beta refitted (mark: at most 5% faster, i.e. >= -5)", "ASSUMPTION-DEPENDENT", PERT_GAM, s9_smash, lambda v: v >= -5, ">= -5")
+
+    def s9_unrefit(kw, mark_lo=None):
+        def f(ok, gk):
+            sw = pk_sw_ipo1("regular", dict(skill="typical"), m)
+            return _pq(_pk_pct(_pk_g("regular", dict(skill="typical"), dict(gk, **kw), beta, m, **ok), sw), 50)
+        return f
+    add("S9", "Solid vs Software, beta NOT refitted (mark: at most +12%)", "ROBUST", PERT_GAM, s9_unrefit(dict(policy="solid", update_rule="none")), lambda v: v <= 12, "<= 12")
+    add("S9", "Flop vs Software, beta NOT refitted (mark: at most +25%)", "ROBUST", PERT_GAM, s9_unrefit(dict(policy="rush", update_rule="none")), lambda v: v <= 25, "<= 25")
+    add("S9", "Smash (update under half) vs Software, beta NOT refitted (mark: at most 5% faster, i.e. >= -5)", "ASSUMPTION-DEPENDENT", PERT_GAM, s9_unrefit(dict(policy="smash", update_rule="half")), lambda v: v >= -5, ">= -5")
+
+    def s9_spam(k):
+        def f(ok, gk):
+            gam_kw = dict(gk)
+            if k:
+                gam_kw["title_cap_k"] = k
+            b2 = _pk_refit(gam_kw, **ok)
+            typ = _pk_g("regular", dict(skill="typical"), dict(policy="hit", update_rule="half", **gam_kw), b2, m, **ok)
+            spam = _pk_g("regular", dict(skill="typical"), dict(policy="hit", update_rule="half", force_scope=0, **gam_kw), b2, m, **ok)
+            return _pq([(b / a - 1) * 100 for a, b in zip(spam, typ) if a and b], 50)
+        return f
+    add("S9", "Jam-Hit launch-spam gain over the typical Hit player, beta refitted (mark: at most 1%; the review: FAIL)", "ASSUMPTION-DEPENDENT", PERT_GAM[:2] + PERT_GAM[4:], s9_spam(None), lambda v: v <= 1, "<= 1")
+    add("S9", "the same with the per-title bound k = 0.4, beta refitted", "ASSUMPTION-DEPENDENT", PERT_GAM[:2] + PERT_GAM[4:], s9_spam(0.4), lambda v: v <= 1, "<= 1")
+
+    def s10_gap(ok, gk):
+        gc = replace(PkGam(), **gk)
+        base = dict(away=(0, 0, 0), full_hours=1e9, max_days=400, record=True)
+        gm = pk_run("reference", 0, 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=beta, **base))
+        hg = pk_rung_hours(gm)
+        return max(pk_gaps(gm, r, hg[r], cycle=True)[1] for r in range(len(hg)))
+    add("S10", "longest gap between any timed moments in Gaming, minutes (mark: no gap over 45)", "ASSUMPTION-DEPENDENT", PERT_GAM[:2], s10_gap, lambda v: v <= 45, "<= 45", unit=" min")
+
+    # ---------- report ----------
+    print(f"Each row is run with {m} seeds (the S3 parity rows 20, because a rung's median needs more; S5 and S7 fewer; hunters {pop6} players) under the perturbations listed; Gaming's beta is S3's base fit and is not refitted. A row is **ROBUST** if its verdict (the mark) does not change under any perturbation, **ASSUMPTION-DEPENDENT** if some perturbation flips it.\n")
+    print("| Sim | Row | Review's class | base | " + " | ".join(dict.fromkeys(pl for r in rows for pl, _ in r[4][1:])) + " | verdict flips? | measured class |")
+    print("|---|---|---|---|" + "---|" * len(dict.fromkeys(pl for r in rows for pl, _ in r[4][1:])) + "---|---|")
+    cols = list(dict.fromkeys(pl for r in rows for pl, _ in r[4][1:]))
+    out = []
+    for fam, label, reviewer, unit, vals, verdict, mark in rows:
+        vd = dict(vals)
+        base_v = verdict(vd["base"])
+        flips = [pl for pl, v in vals[1:] if verdict(v) != base_v]
+        cls = "ASSUMPTION-DEPENDENT" if flips else "ROBUST"
+        allv = [v for _pl, v in vals]
+        moves = max(abs(v - vd["base"]) for v in allv) > 0.3 * max(abs(vd["base"]), 1e-9) and max(allv) - min(allv) > 1.0   # the verdict holds but the number moves by more than 30%
+        note = " (the verdict holds, the value moves " + format(min(allv), ".1f") + " to " + format(max(allv), ".1f") + ")" if moves and not flips else ""
+        out.append((fam, label, reviewer, cls, flips, note))
+        cells = [f"{vd[c]:.2f}{unit.strip() if unit.strip() in ('%',) else ''}" if c in vd else "-" for c in cols]
+        print(f"| {fam} | {label} | {reviewer} | {vd['base']:.2f}{unit.strip() if unit.strip() == '%' else unit} ({'pass' if base_v else 'fail'}) | " + " | ".join(cells) + f" | {', '.join(flips) if flips else 'no'} | {cls}{note} |")
+    agree = [o for o in out if o[2] == o[3]]
+    diff = [o for o in out if o[2] != o[3]]
+    moved = [o for o in out if o[5]]
+    print(f"\n**Result.** {len(agree)} of {len(out)} rows are classified as the review says. Different: " + ("; ".join(f"{o[0]} '{o[1]}': review {o[2]}, measured {o[3]}" + (f" (flips under: {', '.join(o[4])})" if o[4] else o[5]) for o in diff) or "none") + ". "
+          + ("Rows whose verdict holds but whose value moves by more than 30%: " + "; ".join(f"{o[0]} '{o[1]}'{o[5]}" for o in moved) + "." if moved else ""))
+    return {"rows": out}
+
+
+PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3", 4: "sim_s4", 5: "sim_s5", 6: "sim_s6", 7: "sim_s7", 8: "sim_s8", 9: "sim_s9", 10: "sim_s10", 12: "sim_robust"}   # filled in as the sims are written; the name of each sim function
 
 
 def pk_selected(args):
@@ -3391,6 +3625,8 @@ def pk_selected(args):
         want.add(8)
     if args.gaming:
         want |= {3, 9, 10}
+    if args.robust:
+        want.add(12)
     if args.pk_check and not want:
         return []
     return sorted(want) if (want or args.pk_check) else None
@@ -3421,6 +3657,7 @@ def main():
     ap.add_argument("--pokedex", action="store_true", help="sims S1-S7 (docs/CUSTOMIZE_PROPOSAL.md 5.5; default OFF)")
     ap.add_argument("--rounds", action="store_true", help="sim S8, funding round size (docs/FUNDING_ROUNDS_PROPOSAL.md 6; default OFF)")
     ap.add_argument("--gaming", action="store_true", help="sims S3, S9 and S10 (docs/SECTORS_PROPOSAL.md 4; default OFF)")
+    ap.add_argument("--robust", action="store_true", help="the review of tip e08fd72, item 7: which results survive a change of assumption (default OFF)")
     ap.add_argument("--pk-check", action="store_true", help="only check that the S1-S10 engine equals long_run when every hook is off")
     args = ap.parse_args()
     n = args.runs
