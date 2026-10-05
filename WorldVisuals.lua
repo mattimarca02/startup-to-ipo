@@ -33,7 +33,7 @@ WorldVisuals.MATERIALS = {
 	Metal = true, Fabric = true, Grass = true, Neon = true,
 }
 WorldVisuals.SHAPES = { Block = true, Cylinder = true, Ball = true }
-WorldVisuals.FONTS = { GothamBold = true, FredokaOne = true, LuckiestGuy = true }
+WorldVisuals.FONTS = { GothamBold = true, FredokaOne = true, GothamBlack = true }
 WorldVisuals.FACES = { Front = true, Back = true, Left = true, Right = true, Top = true }
 WorldVisuals.LIGHT_WORDS = { "Lamp", "Light", "Glow", "Bulb" }
 WorldVisuals.RESERVED_NAMES = { Floor = true, Baseplate = true, SpawnLocation = true, VipDoor = true, VipLounge = true }
@@ -71,6 +71,16 @@ end
 
 local function rgb(c)
 	return Color3.fromRGB(c[1], c[2], c[3])
+end
+
+-- A palette color by name. A name the palette doesn't have builds bright magenta (never an error): the palette
+-- check names it, and in the game it shows instead of stopping the whole world.
+local function colorOf(palette, key)
+	local c = palette[key]
+	if colorOk(c) then
+		return rgb(c)
+	end
+	return Color3.fromRGB(255, 0, 255)
 end
 
 local function turn(r)
@@ -172,10 +182,10 @@ function WorldVisuals.site(art, spacing, count, centerOf)
 		baseplateFact = { position = bp, size = bs },
 		ground = { x0 = bp[1] - bs[1] / 2, x1 = bp[1] + bs[1] / 2, z0 = bp[3] - bs[3] / 2, z1 = bp[3] + bs[3] / 2, top = bp[2] + bs[2] / 2 },
 	}
-	-- The Studio preview rooms count only while they don't stand on a plot of this site (at another spacing the
-	-- preview snippet has to move anyway, docs/WORLD_ICONS_NOTES.md)
+	-- The Studio preview rooms (placed for the game's own spacing) count only at that spacing, and only while they
+	-- don't stand on a plot of this site; at another spacing the preview snippet has to move (docs/WORLD_ICONS_NOTES.md)
 	local pv = s.previewStages
-	if pv then
+	if pv and spacing == s.plotSpacing then
 		local box = { pv.x0 - pv.reach, pv.x1 + pv.reach, 0, 40, pv.z0 - pv.reach, pv.z1 + pv.reach }
 		local onPlot = nil
 		for i, p in ipairs(plots) do
@@ -369,7 +379,7 @@ local function slab(parent, r, height, color, material)
 	part.Shape = Enum.PartType.Block
 	part.Size = Vector3.new(r.x1 - r.x0, height, r.z1 - r.z0)
 	part.CFrame = CFrame.new((r.x0 + r.x1) / 2, height / 2, (r.z0 + r.z1) / 2)
-	part.Color = rgb(color)
+	part.Color = color
 	part.Material = Enum.Material[material]
 	decorate(part, math.max(r.x1 - r.x0, r.z1 - r.z0), height <= WorldVisuals.FLAT, false)
 	part.Parent = parent
@@ -390,7 +400,7 @@ local function addText(part, text, palette, slot)
 		label.BackgroundTransparency = 1
 		label.TextScaled = true
 		label.Font = Enum.Font[text.font or "GothamBold"]
-		label.TextColor3 = rgb(palette[text.color])
+		label.TextColor3 = colorOf(palette, text.color)
 		label.Text = text.slot and tostring(slot) or text.value
 		label.Parent = gui
 		gui.Parent = part
@@ -404,7 +414,7 @@ local function piecePart(parent, base, spec, palette, slot)
 	part.Shape = Enum.PartType[spec.shape]
 	part.Size = Vector3.new(spec.size[1], spec.size[2], spec.size[3])
 	part.CFrame = base * CFrame.new(spec.offset[1], spec.offset[2], spec.offset[3]) * turn(spec.rot)
-	part.Color = rgb(palette[spec.color])
+	part.Color = colorOf(palette, spec.color)
 	part.Material = Enum.Material[spec.material]
 	local box = boxOf(part.CFrame, part.Size)
 	decorate(part, math.max(spec.size[1], spec.size[2], spec.size[3]), box[4] - box[3] <= WorldVisuals.FLAT, spec.material == "Neon")
@@ -432,13 +442,13 @@ function WorldVisuals.build(parent, art, site, palette)
 	end
 	local paths, kerbs, ground, decor, hills = group("Paths"), group("Kerbs"), group("Ground"), group("Decor"), group("Hills")
 	for _, r in ipairs(plan.paths) do
-		slab(paths, r, L.pathTop, palette[r.color], "SmoothPlastic")
+		slab(paths, r, L.pathTop, colorOf(palette, r.color), "SmoothPlastic")
 	end
 	for _, r in ipairs(plan.kerbs) do
-		slab(kerbs, r, L.kerbHeight, palette.Kerb, "Concrete")
+		slab(kerbs, r, L.kerbHeight, colorOf(palette, "Kerb"), "Concrete")
 	end
 	for _, r in ipairs(plan.ground) do
-		slab(ground, r, L.groundTop, palette[r.color], "SmoothPlastic")
+		slab(ground, r, L.groundTop, colorOf(palette, r.color), "SmoothPlastic")
 	end
 	local lamp = art.LampLight
 	for _, it in ipairs(plan.items) do
@@ -450,7 +460,7 @@ function WorldVisuals.build(parent, art, site, palette)
 			if it.lit and spec.name == lamp.part then
 				local light = Instance.new("PointLight")
 				light.Name = "Light"
-				light.Color = rgb(palette[lamp.color])
+				light.Color = colorOf(palette, lamp.color)
 				light.Brightness = lamp.brightness
 				light.Range = lamp.range
 				light.Shadows = false
@@ -471,7 +481,7 @@ function WorldVisuals.build(parent, art, site, palette)
 		part.Shape = Enum.PartType.Ball
 		part.Size = Vector3.new(d, d, d)
 		part.CFrame = CFrame.new(h.x, h.height - d / 2, h.z)
-		part.Color = rgb(palette[h.color])
+		part.Color = colorOf(palette, h.color)
 		part.Material = Enum.Material.SmoothPlastic
 		decorate(part, d, false, false)
 		part.CastShadow = false -- far away and huge: a shadow would only cost

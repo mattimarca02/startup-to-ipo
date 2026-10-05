@@ -198,7 +198,7 @@ WorldArt.Pieces = {
 		P("ArchPostLeft", "Block", { 1.2, 9, 1.2 }, { -6.6, 4.5, 0 }, "ArchPost", "Metal"),
 		P("ArchPostRight", "Block", { 1.2, 9, 1.2 }, { 6.6, 4.5, 0 }, "ArchPost", "Metal"),
 		P("ArchBeam", "Block", { 14.4, 1.8, 0.8 }, { 0, 9.9, 0 }, "ArchBeam", "SmoothPlastic",
-			{ text = { value = "BUILD YOUR STARTUP", font = "LuckiestGuy", color = "ArchText", faces = { "Front", "Back" }, glow = true } }),
+			{ text = { value = "BUILD YOUR STARTUP", font = "FredokaOne", color = "ArchText", faces = { "Front", "Back" }, glow = true } }),
 	},
 }
 

@@ -17,7 +17,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 2.1 `docs/WORLD_PASS_PROPOSAL.md` (2,481 words; numbers re-checked after the build in 2.4)
 - [x] 2.2 `WorldArt.lua` (pure data)
 - [x] 2.3 `WorldVisuals.lua` (builder, named checks, pure geometry)
-- [ ] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep)
+- [x] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep): 213 checks (154 in Luau, 59 source checks)
 - [ ] 2.5 World mutants, group A
 - [ ] 2.6 World mutants, group B (25 or more in all)
 - [ ] 2.7 `docs/world_pass_integration.patch` (not applied)
@@ -57,6 +57,12 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 - **Shop proposal (phase 1):** the phone numbers use a 36 px Roblox top bar (GUI 667 x 339 and 320 x 532), the same assumption as TUTORIAL_PROPOSAL section 3; portrait's window is capped at 470 px tall, so the shop looks the same with a 0 px bar. Text widths (characters per line) are marked as estimates.
 - **Shop proposal:** its future tests go in a new `tools/shop_ux_test.py`, not in `tools/daily_test.py` (other branches own that file).
 - **Shop proposal:** Robux buys keep Roblox's own prompt as their only confirmation; the two-tap confirm is proposed for Cash buys above a threshold (open question 2).
+- **World: the plots' reach.** The world keeps out of a box around each plot (36 studs to the sides, 50 behind, 40 in front of the center, 32 up), not just the 60 x 60 floor: today's rooms reach 35.5 to the sides (stage 1's dirt), 49 behind (stage 5's skyline) and 36.2 in front (stage 1's dirt), and the building pass (branch `building-pass`, not merged) puts ground pieces up to 40 in front. `tools/world_test.py` builds all five rooms and fails if one reaches past the box.
+- **World: the front walks** are the only pieces that enter a plot's box: a flat strip from the floor's front edge to the front street, 0.1 stud above stage 1's yard dirt (so the two never flicker). If the building pass lands, its doorstep path lies under the walk's first studs.
+- **World: the Studio preview rooms** (`PREVIEW_STAGES`, x -630 to -290) are a keep-out only at spacing 90: they were placed for it. At spacing 112 plot 1 itself would stand on them, so the preview snippet in docs/STUDIO_SYNC.md would have to move (to about x -700) first.
+- **World: font.** The arch uses `FredokaOne`, not PlotArt's `LuckiestGuy`: the rule against the four odds words in strings also catches that font's name.
+- **World: a missing palette color** builds bright magenta instead of stopping the build (a sector palette with a gap still gives a world); the `palette` check names the gap.
+- **World: decor streaming.** Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default).
 
 ## OWNER CHOICE
 
