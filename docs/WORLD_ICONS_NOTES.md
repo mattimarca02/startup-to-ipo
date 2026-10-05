@@ -37,7 +37,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 3b.3 `docs/previews/icons_sheet.svg` (an approximation: shapes and flat-shaded box faces)
 
 **Phase 4: Studio sync and wrap-up**
-- [ ] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, previews, delete list, what to look at)
+- [x] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, hash block, previews, delete list, what to look at); `tools/world_test.py` runs its hash block on the real files
 - [ ] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks)
 - [ ] 4.3 Release every claim in `CONTRIBUTING.md`
 

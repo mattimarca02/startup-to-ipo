@@ -1,6 +1,102 @@
 # Studio sync: the world and icons pass
 
-Branch `world-icons-pass`. Nothing here touches Roblox by itself: it is what the owner does in Studio. (This file is completed at the end of the work: files to copy with their SHA-256, the manual steps, what to delete before publishing and what to look at.)
+Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. Written at the end of the work; the SHA-256 and sizes below are the files as they are on the branch (`tools/world_test.py` fails if this table or the hash block stops matching the files).
+
+**What changes in the game:** nothing, until you approve the integration. The four new ModuleScripts only build something when a script requires them: the world needs the TycoonCore edit in `docs/world_pass_integration.patch`; the icons need the shop pull requests of `docs/SHOP_UX_PROPOSAL.md` (section 5). Until then they can sit in Studio safely, and the two command-bar previews below let you look at everything in edit mode.
+
+## (a) Files to copy
+
+| Script | Studio type and place | State | sha256 | Bytes |
+|---|---|---|---|---|
+| `WorldArt` | ModuleScript, ServerScriptService | new | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
+| `IconArt` | ModuleScript, ReplicatedStorage | new | `e2b936bb74d60ac263ff1939590dee0f8ff989e3be9e71044be775d2943f6b5c` | 30143 |
+| `IconVisuals` | ModuleScript, ReplicatedStorage | new | `59c365eee783730ddd9b58c5e0949326994f782890592cd953a2b19d320b4d77` | 37198 |
+| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file with `docs/world_pass_integration.patch` applied | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
+
+The files use `\n` line endings and end with one newline (Studio may add or drop that last newline: the check prints both). Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
+
+## (b) Studio-only settings
+
+Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnabled` stay as docs/STUDIO_SYNC.md (b) and the place have them. The world pass reads two **Studio facts** the owner measured and never changes them: `Workspace.Baseplate` 2048 x 16 x 2048 at (0, -8, 0), and `Workspace.SpawnLocation` 12 x 1 x 12 at (-1, 0.5, -1). The world preview prints `OK studio facts` when the place still matches them; if it prints `PROBLEM`, write the real numbers into `WorldArt.Site` (and tell the next Claude session: the tests use them).
+
+## (c) Steps on the Mac
+
+1. **Pull.** In the project folder: `git fetch`, then look at the branch `world-icons-pass` (or its pull request). Nothing to merge into Studio yet.
+2. **Create the four ModuleScripts** (right-click the service > Insert Object > ModuleScript, rename it exactly), then open each `.lua` file, select all, copy, and paste over the new script's whole source:
+   - **ServerScriptService:** `WorldArt` (from `WorldArt.lua`), `WorldVisuals` (from `WorldVisuals.lua`).
+   - **ReplicatedStorage:** `IconArt` (from `IconArt.lua`), `IconVisuals` (from `IconVisuals.lua`). They sit next to `CreatureConfig`, `CreatureModels` and `ShopConfig`, which the icons read.
+3. **Check the hashes:** paste block (d) into **View > Command Bar**, press Enter. Every line must say `OK`.
+4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
+5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the checklist in (f).
+6. **Delete the previews** (e) before anything else: before a playtest and always before publishing.
+7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch, `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
+8. **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
+
+## (d) Hash check (command bar)
+
+The same SHA-256 code as docs/STUDIO_SYNC.md (checked against `sha256sum`, and run by `tools/world_test.py` on these four files).
+
+```lua
+local K = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+}
+local function sha256(msg)
+	local h = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
+	local len = #msg
+	msg ..= "\128" .. string.rep("\0", (55 - len) % 64) .. string.pack(">I8", len * 8)
+	local w = {}
+	for chunk = 1, #msg, 64 do
+		for i = 0, 15 do w[i] = string.unpack(">I4", msg, chunk + i * 4) end
+		for i = 16, 63 do
+			local a, b = w[i - 15], w[i - 2]
+			local s0 = bit32.bxor(bit32.rrotate(a, 7), bit32.rrotate(a, 18), bit32.rshift(a, 3))
+			local s1 = bit32.bxor(bit32.rrotate(b, 17), bit32.rrotate(b, 19), bit32.rshift(b, 10))
+			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) % 2 ^ 32
+		end
+		local a, b, c, d, e, f, g, hh = table.unpack(h)
+		for i = 0, 63 do
+			local S1 = bit32.bxor(bit32.rrotate(e, 6), bit32.rrotate(e, 11), bit32.rrotate(e, 25))
+			local ch = bit32.bxor(bit32.band(e, f), bit32.band(bit32.bnot(e), g))
+			local t1 = (hh + S1 + ch + K[i + 1] + w[i]) % 2 ^ 32
+			local S0 = bit32.bxor(bit32.rrotate(a, 2), bit32.rrotate(a, 13), bit32.rrotate(a, 22))
+			local maj = bit32.bxor(bit32.band(a, b), bit32.band(a, c), bit32.band(b, c))
+			local t2 = (S0 + maj) % 2 ^ 32
+			hh, g, f, e, d, c, b, a = g, f, e, (d + t1) % 2 ^ 32, c, b, a, (t1 + t2) % 2 ^ 32
+		end
+		local r = { a, b, c, d, e, f, g, hh }
+		for i = 1, 8 do h[i] = (h[i] + r[i]) % 2 ^ 32 end
+	end
+	local out = {}
+	for i = 1, 8 do out[i] = string.format("%08x", h[i]) end
+	return table.concat(out)
+end
+
+local WANT = {
+	WorldArt = { "972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9", 13042, "ServerScriptService" },
+	WorldVisuals = { "81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343", 48782, "ServerScriptService" },
+	IconArt = { "e2b936bb74d60ac263ff1939590dee0f8ff989e3be9e71044be775d2943f6b5c", 30143, "ReplicatedStorage" },
+	IconVisuals = { "59c365eee783730ddd9b58c5e0949326994f782890592cd953a2b19d320b4d77", 37198, "ReplicatedStorage" },
+}
+for name, want in pairs(WANT) do
+	local script = game:GetService(want[3]):FindFirstChild(name)
+	if not script then
+		print(name, "MISSING (create it in " .. want[3] .. ")")
+	else
+		local source = script.Source
+		local same = sha256(source) == want[1] and #source == want[2]
+		local withNewline = sha256(source .. "\n") == want[1] and #source + 1 == want[2]
+		print(name, (same or withNewline) and "OK" or "DIFFERENT", #source, "bytes")
+	end
+end
+```
 
 ## The world preview (command bar)
 
@@ -181,3 +277,37 @@ end
 print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps at most %d 3D icons alive; this sheet shows all. Delete it before publishing.",
 	#icons, views, #icons - views, IconArt.Style.viewportCap))
 ```
+
+## (e) Delete before publishing (and before a playtest)
+
+| Object | Made by | Why it must go |
+|---|---|---|
+| `Workspace.PREVIEW_WORLD` | the world preview block | it lies where the wired-in world would be built (two copies on top of each other flicker), and it is not part of the game |
+| `StarterGui.PREVIEW_ICONS` | the icon preview block | everything in StarterGui is copied onto every player's screen |
+| `Workspace.PREVIEW_STAGES` | the plot visuals' preview (docs/STUDIO_SYNC.md) | still on the ROADMAP's before-publish list (item m), if it is there |
+
+Select each in the Explorer and press Delete. Then check that `Workspace` and `StarterGui` hold nothing named `PREVIEW_...`.
+
+## (f) What to look at in Studio (only your eyes can judge these)
+
+**The world** (after the world preview, in edit mode; then in a playtest once it is wired in)
+- [ ] The paths, kerbs and lawns next to the Baseplate's grass under the place's real Lighting (ClockTime 14, haze, color correction): too pale, too gray, too busy?
+- [ ] Stand where a player lands on a plot (its middle, a little to the front) and look out of the front, like the default camera: the front street, your plot's number sign across it (is the number readable?), lamps and trees not in the way.
+- [ ] The arch's BUILD YOUR STARTUP from the spawn plaza: readable, the right size?
+- [ ] The far hills through the haze: a nice horizon, or too bright, too dark, too round?
+- [ ] Walk it: spawn, plaza, under the arch, around the lounge, the forecourt at the door, the back street, between two plots, the front street, a plot's walk. Does it read as a little startup street?
+- [ ] The forecourt: the door and the spot where a non-VIP is put back (0, 88) are clear; the two lit lamps don't block the door.
+- [ ] Low camera angles at path joints and the plaza: any flicker (z-fighting)? The tests check every face plane, but your eyes have the final say.
+- [ ] In a playtest on a phone (Test > Device) once wired in: frame rate around the plots, and whether far parts pop in and out (StreamingEnabled) in a way that bothers you.
+
+**The icons** (after the icon preview)
+- [ ] Every icon reads at 56 px: zoom the Studio view to 100%, then Test > Device on a small phone.
+- [ ] The 3D icons: nothing cut off, nothing too small, lit from the top-left, not too dark (the ViewportFrame has its own ambient light).
+- [ ] The outline weight and the round plates: chunky cartoon, or too heavy?
+- [ ] The HUD icons on their real button colors: enough contrast (especially the magnet on POACH and the chart on IPO)?
+- [ ] The clover shows no text at all; the coin says 2x, the chair +3, the bill and the bag $.
+- [ ] Tap behavior is not in the previews (it needs the shop pull request).
+
+## (g) The pictures on GitHub
+
+`docs/previews/world_topdown.svg` (the world from above, with a scale bar and the whole Baseplate) and `docs/previews/icons_sheet.svg` (every icon at 96 px) are drawn by `tools/render_previews.py` from the same data, through the tests' fake Roblox. They are **approximations** (boxes from above, flat shading, no materials or real fonts), to look at before opening Studio. After a change to `WorldArt` or `IconArt`, run `python3 tools/render_previews.py` again; `--check` only says whether they are up to date.

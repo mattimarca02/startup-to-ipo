@@ -1106,6 +1106,83 @@ def preview_source():
     return PRELUDE + PREVIEW_TESTS.replace("__WORLDART__", read("WorldArt.lua")).replace("__WORLDVISUALS__", read("WorldVisuals.lua")).replace("__PREVIEW__", block)
 
 
+HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_WORLD.md, run as it is, on the real files in a fake place ----------------
+local SOURCES = __SOURCES__
+for name, entry in pairs(SOURCES) do
+	local script = newInstance("ModuleScript")
+	script.Name = name
+	script.Source = entry.source
+	script.Parent = SERVICES[entry.place]
+end
+local ok, err = pcall(function()
+__HASHBLOCK__
+end)
+check("hash block: it runs without an error", ok, err)
+for name in pairs(SOURCES) do
+	local said = nil
+	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #name + 1) == name .. " " then said = line end end
+	check("hash block: " .. name .. " prints OK (Luau's SHA-256 of the real file is the one in the table)", said ~= nil and string.find(said, " OK ", 1, true) ~= nil, said)
+end
+for name, entry in pairs(SOURCES) do
+	local script = SERVICES[entry.place]:FindFirstChild(name)
+	script.Source = entry.source .. "-- changed\n"
+end
+table.clear(PRINTED)
+pcall(function()
+__HASHBLOCK__
+end)
+local different = 0
+for _, line in ipairs(PRINTED) do if string.find(line, " DIFFERENT ", 1, true) then different += 1 end end
+check("hash block: a changed script prints DIFFERENT (four of four)", different == 4, different)
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def lua_long_string(text):
+    eq = "="
+    while ("]" + eq + "]") in text:
+        eq += "="
+    return "[" + eq + "[\n" + text + "]" + eq + "]"
+
+
+SYNCED = (("WorldArt", "ServerScriptService"), ("WorldVisuals", "ServerScriptService"), ("IconArt", "ReplicatedStorage"), ("IconVisuals", "ReplicatedStorage"))
+
+
+def hash_source():
+    block = doc_block("## (d) Hash check (command bar)")
+    sources = "{ " + ", ".join('%s = { place = "%s", source = %s }' % (name, place, lua_long_string(read(name + ".lua"))) for name, place in SYNCED) + " }"
+    text = HASH_TESTS.replace("__SOURCES__", sources).replace("__HASHBLOCK__", block)
+    return PRELUDE + text
+
+
+def sync_table_checks():
+    """docs/STUDIO_SYNC_WORLD.md's table and hash block list each new file with its real SHA-256 and size."""
+    import hashlib
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    doc = read("docs/STUDIO_SYNC_WORLD.md")
+    for name, place in SYNCED:
+        raw = open(os.path.join(ROOT, name + ".lua"), "rb").read()
+        h = hashlib.sha256(raw).hexdigest()
+        row = "| `%s` | ModuleScript, %s | new | `%s` | %d |" % (name, place, h, len(raw))
+        check("STUDIO_SYNC_WORLD.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
+        check("STUDIO_SYNC_WORLD.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), place)) in doc)
+    patched = patched_tycoon()
+    if patched is not None:
+        h = hashlib.sha256(patched.encode("utf-8")).hexdigest()
+        check("STUDIO_SYNC_WORLD.md: the patched TycoonCore's SHA-256 and size are the patch's real result",
+              ("`%s` | %d |" % (h, len(patched.encode("utf-8")))) in doc, h)
+    return passed, failed
+
+
 def patched_tycoon():
     """main's TycoonCore.lua with docs/world_pass_integration.patch applied in a scratch folder, or None without git."""
     try:
@@ -1408,6 +1485,18 @@ def main():
         if not m or m.group(2) != "0":
             code = 1
         total += int(m.group(1)) if m else 0
+    if os.path.exists(os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")) and "## (d) Hash check (command bar)" in read("docs/STUDIO_SYNC_WORLD.md"):
+        result = run_luau(luau, hash_source())
+        print("Hash block (docs/STUDIO_SYNC_WORLD.md) on the real files: " + (result.stdout.strip() or result.stderr.strip()))
+        m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+        if not m or m.group(2) != "0":
+            code = 1
+        total += int(m.group(1)) if m else 0
+        table_passed, table_failed = sync_table_checks()
+        print("Studio sync table: %d passed, %d failed" % (table_passed, table_failed))
+        total += table_passed
+        if table_failed:
+            code = 1
     if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
         patched = patched_tycoon()
         if patched is None:
