@@ -32,7 +32,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 3.6 Icon preview block (`StarterGui.PREVIEW_ICONS`) in `docs/STUDIO_SYNC_WORLD.md`, run in a fake place by `tools/icon_test.py` (16 checks)
 
 **Phase 3b: previews (SVG text)**
-- [ ] 3b.1 `tools/render_previews.py`
+- [x] 3b.1 `tools/render_previews.py` (standard library; `--check` says whether the SVGs match the data)
 - [ ] 3b.2 `docs/previews/world_topdown.svg`
 - [ ] 3b.3 `docs/previews/icons_sheet.svg`
 
