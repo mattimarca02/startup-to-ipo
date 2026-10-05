@@ -38,7 +38,7 @@ Checks the docs ask for inside these sims, all covered below: round Cash is a gi
 |---|---|---|---|
 | S1 seed | `--s1` | **PASS** | The seed is worth about 1.2% of a loop (mark 5%); the cap is the only thing that binds, `s` never does. |
 | S2 bonus | `--s2` | **PASS** | At +10 points the run takes 96.6% of the no-bonus hours (no pass), 99.0% with 2x Cash (mark 95%+). |
-| S3 parity | `--s3` | **FAIL as written, marginal after 2 changes** | Typical skill: every schedule within +-3%. Slow and fast players are 6% off, check-in 26% off. Fix B (launch revenue x0.6) plus an away-bank fix brings all but two cells inside +-5%. |
+| S3 parity | `--s3` | **FAIL as written, marginal after 2 changes** | Typical skill: every schedule within +-3% except the added `heavy` profile (4.8%; 5.1% on seeds 500-519: noise-level, so the typical-skill PASS is thin). Slow and fast players are 6% off, check-in 26% off, the pulse-bot 12.8% off in the Garage rung; `macro`, `task-bot` and `pulse-bot` had no per-rung parity before. Fix B (launch revenue x0.6) plus an away-bank fix brings all but two cells inside +-5%. |
 | S4 bots | `--s4` | **FAIL by +0.38% on the doc's strict mark; PASS within an invented 5%** | Task-bot 10.4 days in both sectors, Gaming at most +0.38% faster (Smash, update under half); a macro never finishes in either. |
 | S5 hopping | `--s5` | **PASS** | 10 IPOs: 543 h Software, 544 h Gaming, alternating 543-544 h (mark 3%). |
 | S6 tiers | `--s6` | **FAIL** | Gold 50% is a tautology (46% on new players with the same T; 69% / 52% against LONG_GAME's T); **Platinum 0%** for typical, fast, slow and pass owners under the doc's rule; 1.0 T / 1.20 helps only fast players (typical 0%), 1.1 T / 1.25 gives typical 29% / fast 69%; the Cash pass shortens a replay by 6%, not 15%, so the shrink must be 6%. |
@@ -121,7 +121,9 @@ Software ladder, regular player, typical skill, 40 seeds, IPO 1 and IPO 2. The b
 
 ### S3. Parity of the two sectors: FAIL as written, marginal after two changes
 
-**Finding.** The Gaming title cycle of SECTORS 2.2-2.4 (Hit policy, doc numbers) can be fitted so that Software and Gaming take the same hours in every rung for the reference player, and then **every schedule at the typical skill stays within +-3.0%** (dedicated, regular, casual, boundary: 0.2% to 3.0%, the worst being the Garage rung of the dedicated player; `heavy` 4.8% in one noisy rung; IPO 2 and 3 within 0.2%). That is the doc's rule and it passes. It fails in three places:
+**Finding.** The Gaming title cycle of SECTORS 2.2-2.4 (Hit policy, doc numbers) can be fitted so that Software and Gaming take the same hours in every rung for the reference player, and then **every schedule at the typical skill stays within +-3.0%** (dedicated, regular, casual, boundary: 0.2% to 3.0%, the worst being the Garage rung of the dedicated player; IPO 2 and 3 within 0.2%) **except `heavy`, 4.8% in one noisy rung**. That is the doc's rule and it passes, **but the typical-skill PASS is thin and rests on a profile this sim added**: the 4.8% of `heavy` (5 h a day, not a `LONG_PLAYERS` profile) is 0.2 point inside the mark, and on a second set of 20 seeds (500-519) the same row is **5.1%, outside it**. Treat the `heavy` row as noise-level around the mark: neither a pass nor a fail (every other typical-skill row stays at 3.0% or less on both seed sets).
+
+**The profiles the doc names are not all covered.** SECTORS 4 (SECT:157) asks for parity at "every `LONG_PLAYERS` profile". `LONG_PLAYERS` = dedicated, regular, casual, check-in, macro, task-bot, pulse-bot, reference. The per-rung tables cover dedicated, regular, casual, check-in and reference (plus `heavy` and `boundary`, added here); **`macro`, `task-bot` and `pulse-bot` had no per-rung parity**. `macro` answers no task, so it never finishes a rung and there is nothing to compare. Run now (typical skill only, a bot's skill is fixed by its profile): **task-bot is within 3.5%** (Garage 103.5, IPO 1 99.8), and **pulse-bot is 12.8% off in the Garage rung and 3.7% at IPO 1 under the doc's rule: FAIL** (its progress is mostly the away bank, which is lower in Gaming, S3 fix A); with fix B and the away fix both bots are within 2.6%. It fails in three places:
 
 1. **The fit is skill-dependent.** The extra is a fixed share of base Income, but the task bonus is not, so a slow player (task bonus x0.5) gets 5-6% *more* out of Gaming and a fast one (expert at tasks) 2-6% *less* (Garage rung). Slow players are 6.3% faster in Gaming at Pre-IPO, outside the mark; fast players are 5.6-5.8% slower in the Garage rung.
 2. **Away-heavy players.** The away bank pays 10% of base Income and the extra is never in it (SECTORS 2.4), and Gaming's base is lower, so a check-in player (1 minute a day) is 26-28% slower in Gaming in the Garage rung. This profile never reaches the IPO, but it is in `LONG_PLAYERS`, so it is a FAIL against "every profile".
@@ -225,6 +227,36 @@ Total titles to IPO 1: 49 (SECTORS 2.10 estimates about 40: 4 / 5 / 6 / 6 / 14 /
 | check-in | slow | 105.7 | 99.6 | 96.7 | 96.9 | n/a | n/a | never | |
 
 Worst deviation with fix B and the away fix: 7.0% (check-in/typical). Outside +-5%: heavy/slow (5.9%), check-in/typical (7.0%), check-in/fast (7.0%), check-in/slow (5.7%).
+
+### The LONG_GAME profiles that have no per-rung parity above
+SECTORS 4 asks for parity at 'every `LONG_PLAYERS` profile'. LONG_PLAYERS = dedicated, regular, casual, check-in, macro, task-bot, pulse-bot, reference. The tables above cover dedicated, regular, casual, check-in, reference (and `heavy` and `boundary`, added here); **not covered: macro, task-bot, pulse-bot**. `macro` answers no task, so it never finishes a rung (nothing to compare). `task-bot` and `pulse-bot` are run here (a bot's skill is fixed by its profile, so the typical-skill row only; fewer seeds, they are 24/7 runs):
+
+Fit 1 (the doc's rule):
+| Profile | Skill | Garage | Seed | Series A | Series B | Series C+D | Pre-IPO | IPO 1 | IPO 1 per-seed p10 to p90 |
+|---|---|---|---|---|---|---|---|---|---|
+| task-bot | typical | 103.5 | 100.3 | 99.8 | 99.9 | 99.6 | 100.0 | 99.8 | 99.8 to 99.8 |
+| pulse-bot | typical | 112.8 | 110.2 | 103.3 | 103.1 | 103.2 | 103.0 | 103.7 | 103.7 to 103.8 |
+
+Fix B and the away fix:
+| Profile | Skill | Garage | Seed | Series A | Series B | Series C+D | Pre-IPO | IPO 1 | IPO 1 per-seed p10 to p90 |
+|---|---|---|---|---|---|---|---|---|---|
+| task-bot | typical | 102.6 | 100.2 | 99.9 | 99.9 | 99.8 | 100.0 | 99.9 | 99.9 to 99.9 |
+| pulse-bot | typical | 101.1 | 101.9 | 98.7 | 99.6 | 99.5 | 100.1 | 99.8 | 99.7 to 99.8 |
+
+The bots: worst deviation 12.8% (pulse-bot/typical) with fit 1, 2.6% (task-bot/typical) with fix B and the away fix.
+
+### Typical skill on a second set of seeds (fit 1, seeds 500-519; mark 95 to 105): is the typical-skill PASS stable?
+| Profile | Skill | Garage | Seed | Series A | Series B | Series C+D | Pre-IPO | IPO 1 | IPO 1 per-seed p10 to p90 |
+|---|---|---|---|---|---|---|---|---|---|
+| reference | typical | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 to 100.0 |
+| dedicated | typical | 100.9 | 101.4 | 101.0 | 101.2 | 100.8 | 99.8 | 100.7 | 100.6 to 100.7 |
+| regular | typical | 102.7 | 101.2 | 101.0 | 101.3 | 100.8 | 99.8 | 100.7 | 100.6 to 100.8 |
+| casual | typical | 102.6 | 101.3 | 101.0 | 101.3 | 100.8 | 99.8 | 100.7 | 100.6 to 100.8 |
+| heavy | typical | 100.4 | 100.6 | 99.7 | 97.7 | 99.4 | 94.9 | 99.2 | 96.4 to 99.4 |
+| boundary | typical | 100.4 | 100.8 | 100.6 | 100.4 | 100.5 | 99.9 | 100.4 | 100.3 to 100.4 |
+| check-in | typical | 126.7 | 114.8 | 104.7 | 105.5 | n/a | n/a | never | |
+
+Typical skill without check-in, worst row: seeds 0-39: 4.8% (heavy/typical); seeds 500-519: 5.1% (heavy/typical). Rows over 5% on seeds 500-519: heavy/typical (5.1%); on seeds 0-39: none.
 
 **Result.** Fit 1 (the doc's rule): worst 28.4% (check-in/fast): FAIL. Outside +-5%: check-in, which pays only the away bank: check-in/typical (26.1%), check-in/fast (28.4%), check-in/slow (24.4%); the fast and slow skills: dedicated/slow (6.3%), regular/fast (5.6%), regular/slow (6.3%), casual/fast (5.7%), casual/slow (6.3%), heavy/slow (8.9%), boundary/slow (6.2%); any other profile: none. With fix B and the away fix the worst is 7.0% (check-in/typical): marginal. Outside +-5%: check-in: check-in/typical (7.0%), check-in/fast (7.0%), check-in/slow (5.7%); fast / slow skills: heavy/slow (5.9%); any other: none.
 

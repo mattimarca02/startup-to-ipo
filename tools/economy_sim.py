@@ -2181,9 +2181,9 @@ def _pdist(vals, fmt="{:.1f}"):
     return fmt.format(_pq(vals, 50)) + " (" + fmt.format(_pq(vals, 10)) + " to " + fmt.format(_pq(vals, 90)) + ")"
 
 
-def pk_many(kind, n, loops, o=None):
-    """n seeds of one profile (seeds 0..n-1: the same random streams for every option, so two options differ only by what they change)."""
-    return [pk_run(kind, s, loops, o) for s in range(n)]
+def pk_many(kind, n, loops, o=None, first=0):
+    """n seeds of one profile (seeds first..first+n-1, default 0..n-1: the same random streams for every option, so two options differ only by what they change)."""
+    return [pk_run(kind, s, loops, o) for s in range(first, first + n)]
 
 
 def pk_loop_h(outs, i, key="eng_h"):
@@ -2336,11 +2336,12 @@ def pk_med_rungs(outs):
     return cols
 
 
-def pk_parity_table(n, gcfg, beta, kinds, skills=PK_SKILLS, away_fix=False, label=""):
-    """Gaming hours / Software hours per rung for each profile and skill (median over n seeds, the same random streams). Returns (worst deviation in %, where, offenders)."""
+def pk_parity_table(n, gcfg, beta, kinds, skills=PK_SKILLS, away_fix=False, label="", first=0, detail=False):
+    """Gaming hours / Software hours per rung for each profile and skill (median over n seeds first..first+n-1, the same random streams). Returns (worst deviation in %, where, offenders);
+    with detail=True also {profile/skill: worst deviation of that row}."""
     print("| Profile | Skill | " + " | ".join(r[0] for r in LONG_RUNGS) + " | IPO 1 | IPO 1 per-seed p10 to p90 |")
     print("|---|---|" + "---|" * (len(LONG_RUNGS) + 2))
-    worst, worst_at, bad = 0.0, "", []
+    worst, worst_at, bad, per_row = 0.0, "", [], {}
     for kind in kinds:
         for sname, skw in skills:
             if kind == "reference" and sname != "typical":
@@ -2348,8 +2349,9 @@ def pk_parity_table(n, gcfg, beta, kinds, skills=PK_SKILLS, away_fix=False, labe
             nn = n if kind != "check-in" else max(5, n // 4)
             o_s = PkOpt(**skw, **({"away": (0, 0, 0), "full_hours": 1e9, "max_days": 400} if kind == "reference" else {}))
             o_g = replace(o_s, sectors=("Gaming",), gaming=gcfg, beta=beta, away_fix=away_fix)
-            rs = pk_many(kind, nn if kind != "reference" else 1, 1, o_s)
-            rg = pk_many(kind, nn if kind != "reference" else 1, 1, o_g)
+            f0 = first if kind != "reference" else 0
+            rs = pk_many(kind, nn if kind != "reference" else 1, 1, o_s, first=f0)
+            rg = pk_many(kind, nn if kind != "reference" else 1, 1, o_g, first=f0)
             a, b = pk_med_rungs(rs), pk_med_rungs(rg)
             cells, devs = [], []
             for x, y in zip(a, b):
@@ -2363,13 +2365,14 @@ def pk_parity_table(n, gcfg, beta, kinds, skills=PK_SKILLS, away_fix=False, labe
             if ipo:
                 devs.append(_pq(ipo, 50))
             mx = max((abs(d) for d in devs), default=0.0)
+            per_row[f"{kind}/{sname}"] = mx
             if mx > worst:
                 worst, worst_at = mx, f"{kind}/{sname}"
             if mx > 5:
                 bad.append(f"{kind}/{sname} ({mx:.1f}%)")
             tail = f" {100 + _pq(ipo, 50):.1f} | {100 + _pq(ipo, 10):.1f} to {100 + _pq(ipo, 90):.1f} |" if ipo else " never | |"
             print(f"| {kind} | {sname} | " + " | ".join(cells) + " |" + tail)
-    return worst, worst_at, bad
+    return (worst, worst_at, bad, per_row) if detail else (worst, worst_at, bad)
 
 
 def pk_fit_table(gcfg, beta, title):
@@ -2404,7 +2407,7 @@ def sim_s3(n):
     pk_fit_table(gcfg, beta, "Fit 1: the doc's rule (fit to the typical player)")
     kinds = ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in")
     print(f"### Parity with fit 1: Gaming hours / Software hours, per rung, in % (median over {n} seeds; mark 95 to 105)")
-    w1, at1, bad1 = pk_parity_table(n, gcfg, beta, kinds)
+    w1, at1, bad1, per_row_first = pk_parity_table(n, gcfg, beta, kinds, detail=True)
     typ = [k for k in kinds]
     print(f"\nWorst deviation with fit 1: {w1:.1f}% ({at1}). Outside +-5%: {', '.join(bad1) if bad1 else 'none'}.")
     print("\n### Loops 2 and 3 (regular, typical): hours of IPO 2 and IPO 3, a Gaming company in every loop, in % of Software")
@@ -2423,6 +2426,24 @@ def sim_s3(n):
     print(f"### Parity with fix B and the away fix (median over {n} seeds; mark 95 to 105)")
     wb, atb, badb = pk_parity_table(n, gB, betaB, ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in"), away_fix=True)
     print(f"\nWorst deviation with fix B and the away fix: {wb:.1f}% ({atb}). Outside +-5%: {', '.join(badb) if badb else 'none'}.")
+    print("\n### The LONG_GAME profiles that have no per-rung parity above")
+    covered = [k for k in LONG_PLAYERS if k in kinds]
+    missing = [k for k in LONG_PLAYERS if k not in kinds]
+    print(f"SECTORS 4 asks for parity at 'every `LONG_PLAYERS` profile'. LONG_PLAYERS = {', '.join(LONG_PLAYERS)}. The tables above cover {', '.join(covered)} (and `heavy` and `boundary`, added here); **not covered: {', '.join(missing)}**. "
+          "`macro` answers no task, so it never finishes a rung (nothing to compare). `task-bot` and `pulse-bot` are run here (a bot's skill is fixed by its profile, so the typical-skill row only; fewer seeds, they are 24/7 runs):")
+    nbot = max(5, n // 4)
+    print("\nFit 1 (the doc's rule):")
+    wbot1, atbot1, badbot1 = pk_parity_table(nbot, gcfg, beta, ("task-bot", "pulse-bot"), skills=PK_SKILLS[:1])
+    print("\nFix B and the away fix:")
+    wbotB, atbotB, badbotB = pk_parity_table(nbot, gB, betaB, ("task-bot", "pulse-bot"), skills=PK_SKILLS[:1], away_fix=True)
+    print(f"\nThe bots: worst deviation {wbot1:.1f}% ({atbot1}) with fit 1, {wbotB:.1f}% ({atbotB}) with fix B and the away fix.")
+    print("\n### Typical skill on a second set of seeds (fit 1, seeds 500-519; mark 95 to 105): is the typical-skill PASS stable?")
+    w500, at500, bad500, row500 = pk_parity_table(20, gcfg, beta, kinds, skills=PK_SKILLS[:1], first=500, detail=True)
+    typ_first = {k: v for k, v in per_row_first.items() if k.endswith("/typical") and not k.startswith("check-in")}
+    typ_500 = {k: v for k, v in row500.items() if k.endswith("/typical") and not k.startswith("check-in")}
+    print(f"\nTypical skill without check-in, worst row: seeds 0-{n - 1}: {max(typ_first.values()):.1f}% ({max(typ_first, key=typ_first.get)}); seeds 500-519: {max(typ_500.values()):.1f}% ({max(typ_500, key=typ_500.get)}). "
+          f"Rows over 5% on seeds 500-519: {', '.join(f'{k} ({v:.1f}%)' for k, v in sorted(typ_500.items()) if v > 5) or 'none'}; on seeds 0-{n - 1}: {', '.join(f'{k} ({v:.1f}%)' for k, v in sorted(typ_first.items()) if v > 5) or 'none'}.")
+
     def kinds_of(bad):
         """Offenders split by what they are: the check-in profile, the fast / slow skills, anything else."""
         ci = [b for b in bad if b.startswith("check-in")]
