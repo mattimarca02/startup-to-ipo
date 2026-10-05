@@ -2,6 +2,8 @@
 
 Written at the end of the plot visuals stages 2-5 work (branch `visuals-garage`). Last code commit: `21976f9` (nothing in a `.lua` file changed after it; only docs). Nothing here touches Roblox: it is the list of what the Mac has to do.
 
+**Addendum (d), 2026-10-05, branch `task-needs-desk`:** customer calls now start when the player owns the Desk. Three scripts changed (`TaskConfig`, `TaskServer`, `TaskClient`); their hashes are in section (d) and in the hash block below.
+
 ## (a) Scripts that differ from `main`
 
 SHA-256 and size in bytes of each `.lua` file as it is in the repo at the last code commit. `PlotArt` and `PlotVisuals` are **new** scripts (create them, they don't exist in Studio yet); the others are changed. Every other script is identical to `main`.
@@ -96,6 +98,7 @@ end
 
 local SSS = game:GetService("ServerScriptService")
 local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
+local RS = game:GetService("ReplicatedStorage")
 local WANT = {
 	TycoonCore = { "77ce9c43dcbd03ae5e03e5e112c99b3763af7b92e6527a367e3eeee112e61aa9", 34330 },
 	ShopServer = { "97e6ec51c10df789d1b0bf2620908e81c1bc883ace6aa71762062139f06fa27d", 32803 },
@@ -107,9 +110,12 @@ local WANT = {
 	PlotVisuals = { "2e10736f60b86590f0bced98eb3d8d0e9b0264108cdc9cd02f68dd8b5651ba89", 26508 },
 	ShopClient = { "41c98119430b29b501160ddd42485fc5316e779a5e380f1efe429fd6e98aae11", 28371 },
 	PoachClient = { "6c32b7fbb9e00ca9d8a3cad5371148a939c6bc0c27ecf5069dea6ab0791f2230", 39678 },
+	TaskConfig = { "a6ec3663f95bb23c87683416ad7ee2dbee5da2fcde3d28d97eb2f5600590fe06", 14607 },
+	TaskServer = { "7ee9ad23e89325cd12170a47e7187e787c811401d74a59c62a83cc3b08d4767c", 34933 },
+	TaskClient = { "75ac0721e1d603222c7fa1f2efb31724210a500e7615066826d8d33a1c321807", 18079 },
 }
 for name, want in pairs(WANT) do
-	local script = SSS:FindFirstChild(name) or SPS:FindFirstChild(name)
+	local script = SSS:FindFirstChild(name) or SPS:FindFirstChild(name) or RS:FindFirstChild(name)
 	if not script then
 		print(name, "MISSING (create it)")
 	else
@@ -149,6 +155,40 @@ for stage = 1, #PlotArt.Stages do
 	print("Stage", stage, #problems == 0 and "OK" or problems[1])
 end
 ```
+
+## (d) Addendum: customer calls start when the player owns the Desk
+
+Last code commit of this change: `5a07c70` (branch `task-needs-desk`, made from `main` at `e3c9e67`; the commits after it change only docs). Nothing here touches Roblox: it is the list of what the Mac has to do. **No new script is created** (all three exist already, from the task engine PR 1), `TycoonCore` and `ShopClient` are **unchanged**, there is no new remote and no save change.
+
+| Script | Studio type and place | State | sha256 | Bytes |
+|---|---|---|---|---|
+| `TaskConfig` | ModuleScript, **ReplicatedStorage** | changed | `a6ec3663f95bb23c87683416ad7ee2dbee5da2fcde3d28d97eb2f5600590fe06` | 14607 |
+| `TaskServer` | ModuleScript, ServerScriptService | changed | `7ee9ad23e89325cd12170a47e7187e787c811401d74a59c62a83cc3b08d4767c` | 34933 |
+| `TaskClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `75ac0721e1d603222c7fa1f2efb31724210a500e7615066826d8d33a1c321807` | 18079 |
+
+The ten scripts of section (a) are still identical to the repo at this commit (their hashes were re-computed and match the table above), so nothing else needs pasting for this change. The Studio MCP cannot create scripts inside services, which does not matter here: it is only a paste into three existing scripts.
+
+### Steps on the Mac (by hand)
+
+1. **Get the files.** `git fetch`, then open the three `.lua` files from branch `task-needs-desk` (in a folder no other session is using, or on GitHub: Code > branch `task-needs-desk`).
+2. **Paste in this order,** each time: open the `.lua` file, select all, copy; in Studio double-click the script of that name, select all, paste.
+   1. `TaskConfig` (ReplicatedStorage). It is read by both sides, so it goes first.
+   2. `TaskServer` (ServerScriptService). Before the client: the new client waits for the `on` flag that only the new server sends (with the old server it would still show a waiting call, but never "Tap to resume").
+   3. `TaskClient` (StarterPlayerScripts).
+   - If a Studio place has no `TaskConfig` / `TaskServer` / `TaskClient` at all yet (the task engine PR 1 was never pasted there), follow the PR 1 order in docs/PUBLISH_RULES.md 2c instead.
+3. **View > Drafts:** commit every draft (an uncommitted draft is not published).
+4. **Verify the hashes.** Paste the hash block above into the command bar (View > Command Bar). It now also checks `TaskConfig`, `TaskServer` and `TaskClient` (it looks in ReplicatedStorage too). The three lines must say `OK`; `DIFFERENT` names the script to paste again.
+5. **Playtest in Studio (F5) and read the Output window.** Use a test player whose save has no Desk (Test > Clients and Servers > Local Server with 2 players: Player1 and Player2 should start with an empty save the first time; a player that already bought the Desk keeps it, so use the other one).
+   - Stay in the garage for 2 minutes without opening the shop: **no call, no phone tray, no "Tap to resume"** (before this change the first call rang after 20 to 40 s). Debug > "Task stats" shows `offered` 0.
+   - Shop > Office > buy the Desk (it costs 0): the first call rings after a **normal gap** (20 to 40 s with no hires; never under 10 s), then the tray works as before.
+   - With Sales employees, after answering one call, "Team handled N calls" still appears.
+   - Debug > "Jump to IPO-ready", Go Public: the upgrades reset (the Desk is gone) but **calls keep coming** and the tray stays.
+   - Leave and rejoin with the Desk: calls come back after a normal gap.
+   - Debug > "Task: spawn a call" still works before the Desk (it is a Studio tool); that call shows and can be answered.
+   - Phone layout (Test > Device): the tray did not move; only when it is visible changed.
+6. **Publish** as usual. This change needs no "Shut down all servers" by itself: the task engine is Studio-only in PR 1 and nothing is saved differently.
+
+Never tested in Studio by whoever wrote this (no Studio, no MCP): the steps above are the first real test.
 
 ## What is not in Studio-only any more
 

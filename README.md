@@ -28,7 +28,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the garage's funding sign |
 | `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
 | `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
-| `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings, grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
+| `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings (not before the player owns the Desk, or has done an IPO), grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
 | `PlotVisuals.lua` | ServerScriptService | ModuleScript | Builds each player's plot room and the upgrade props from `PlotArt` (looks only), and checks a room against the reserved gameplay zones, part and light budgets |
 | `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, built from Parts on the same 60 x 60 plot), the hire desks, the six upgrade props |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
@@ -37,14 +37,14 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `IpoConfig.lua` | ReplicatedStorage | ModuleScript | IPO rules: stage thresholds, multiplier and Shares formulas, cooldown, IPO shop perks |
 | `OnboardingConfig.lua` | ReplicatedStorage | ModuleScript | First-minute settings: the free egg, the goals, when the arrow and tracker end, an on/off switch |
 | `DailyConfig.lua` | ReplicatedStorage | ModuleScript | Daily calendar: the 7 rewards, grace days, Cash caps, reset hour (UTC), texts, an on/off switch |
-| `TaskConfig.lua` | ReplicatedStorage | ModuleScript | Task rules: one row per task (gap, time limit, reward, team share), rungs, reward budget, the `Enabled` and `StudioOnly` switches |
+| `TaskConfig.lua` | ReplicatedStorage | ModuleScript | Task rules: one row per task (gap, time limit, reward, team share, when it starts: the Desk), rungs, reward budget, the `Enabled` and `StudioOnly` switches |
 | `ShopClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | SHOP button, shop window, pop-up messages, Debug tab |
 | `EmployeeClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | EGGS and TEAM buttons, Recruiting window, hatch reveal, employees walking |
 | `PoachClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | POACH button, Poach window, negotiation mini-screen, "you're being poached" alerts, Counter-Offer card |
 | `IpoClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | IPO button, valuation bar, IPO window (Go Public with a two-step confirm, Shares Shop, Leaderboard) |
 | `OnboardingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | New players only: the glowing arrow and the goal tracker card under the valuation bar |
 | `DailyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Gift chip next to the valuation bar, Daily Rewards window (7-day calendar, Claim button) |
-| `TaskClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | The phone tray: up to 3 waiting calls with an Answer button each, "Tap to resume". Does nothing outside Studio in PR 1 |
+| `TaskClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | The phone tray: up to 3 waiting calls with an Answer button each, "Tap to resume". Shows nothing until the Desk is owned (or after the first IPO). Does nothing outside Studio in PR 1 |
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 
 Other files:
