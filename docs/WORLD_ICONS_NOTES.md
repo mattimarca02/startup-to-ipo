@@ -15,7 +15,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 
 **Phase 2: world pass**
 - [x] 2.1 `docs/WORLD_PASS_PROPOSAL.md` (2,481 words; numbers re-checked after the build in 2.4)
-- [ ] 2.2 `WorldArt.lua` (pure data)
+- [x] 2.2 `WorldArt.lua` (pure data)
 - [ ] 2.3 `WorldVisuals.lua` (builder, named checks, pure geometry)
 - [ ] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep)
 - [ ] 2.5 World mutants, group A
