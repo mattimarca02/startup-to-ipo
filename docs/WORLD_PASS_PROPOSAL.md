@@ -1,6 +1,6 @@
 # World pass proposal: from a green field to a startup street
 
-Design (2026-10-06, branch `world-icons-pass`, from `main` `e3c9e67`). Line numbers are `main` `e3c9e67`. Built as new files only: `WorldArt.lua` (data), `WorldVisuals.lua` (builder and checks), `tools/world_test.py`. Nothing is wired into the game: the one edit that would build it is `docs/world_pass_integration.patch`, not applied. **Studio fact** = placed by hand in Studio and measured by the owner (no script makes it). **(unverified)** = not checked in Studio.
+Design (2026-10-06, branch `world-icons-pass`, from `main` `e3c9e67`; numbers updated after the build). Line numbers are `main` `e3c9e67`. Built as new files only: `WorldArt.lua` (data), `WorldVisuals.lua` (builder and checks), `tools/world_test.py`. Nothing is wired into the game: the one edit that would build it is `docs/world_pass_integration.patch`, not applied. **Studio fact** = placed by hand in Studio and measured by the owner (no script makes it). **(unverified)** = not checked in Studio.
 
 Looks only, like the plot visuals: nothing is saved, sent through a remote or read back; nothing collides, is touched or stops a ray; no gameplay position moves; no `Touched` handler; no script inside the built models; nothing random; no asset.
 
@@ -55,17 +55,17 @@ Bright chunky cartoon in PlotArt's palette: big simple Blocks, Balls and Cylinde
 | **Connectors** | 8 wide, z 95-191, through each gap line: between every two plots and around both ends | a gap is used only if it leaves 4 studs to each plot's reach; the two end ones always exist |
 | **Front street** | 8 wide at z 191-199, the whole row; kerb on the far side; one piece per plot block | 1 stud past what the rooms and the building pass reach (z 190) |
 | **Front walk** | per plot, 6 wide, from the floor's front edge (z 180) to the street | the only piece that enters the plot's front band; a flat layer 0.1 higher than the stage 1 dirt |
-| **Street sign** | per plot, across the street (x center + 7, z 201.5): a post and a green board with the plot number on both faces | text = the slot number |
+| **Street sign** | per plot, across the street (x center + 7, z 202): a post and a green board with the plot number on both faces | text = the slot number |
 | **Lamps** | on the far side at every gap line (7, unlit: a glowing head only) | |
-| **Trees and bushes** | 2 trees and 1 bush per plot on the far side; a row of trees behind the back street beyond the arms; 2 by the cross walk | deterministic variants by index (3 sizes, 3 greens) |
+| **Trees and bushes** | 2 trees and 1 bush per plot on the far side; a row of trees on the lounge side of the back street, beyond the arms; 2 by the cross walk; 4 at the plaza | deterministic variants by index (3 sizes, 3 greens) |
 | **Lawns** | a lighter lawn along the far side of the front street; a darker meadow on each side of the lounge loop | ground layer |
-| **Low hills (optional)** | 6 wide, low spheres mostly buried: 4 in front (z 500-640), 1 on each side (x ±760); 18-26 studs high | 250+ studs from everything, inside the Baseplate, away from the preview rooms |
+| **Low hills (optional)** | 6 wide, low spheres mostly buried: 4 in front (z 500-640), 1 on each side (x ±760); 18-26 studs high | 258+ studs from every other part at spacing 90 (221+ at 112), inside the Baseplate, away from the preview rooms |
 
 Walking routes with it: spawn, plaza, under the arch, avenue, around the lounge by either arm, forecourt (the door), back street, any connector, front street, the plot's walk. The plot's number faces it across the street.
 
 ## 5. Rules (each one is a named check in `WorldVisuals.checks`)
 
-- **Budget** (placeholders): at most **600 parts** and **8 lights** in the whole world. The default world is far under both (counts in section 7); lights are only the plaza's 4 and the forecourt's 2, whatever N is.
+- **Budget** (placeholders): at most **600 parts** and **8 lights** in the whole world. Built: **268 parts and 6 lights** at the default site; 151 (1 plot) to 268 (6 plots) at spacing 90 and 112. The lights are only the plaza's 4 and the forecourt's 2, whatever N is.
 - **Decor never interferes:** every part anchored, `CanCollide`, `CanTouch` and `CanQuery` off, tiny and flat parts cast no shadow. Only the Baseplate (and the game's own floors) are solid: the paths are visual layers.
 - **Layers:** ground tints top at y 0.04, paths at 0.16 (the stage 1 dirt is at 0.06), kerbs 0.4 tall. **Anti-z-fighting rule:** no two faces facing the same way may lie on the same plane and overlap, except bottoms resting on the ground (y 0, never seen). Path pieces only meet edge to edge, never overlap; different layers are at least 0.04 apart; nothing has its top at y 0 (the Baseplate's top).
 - **Keep-outs:** no part enters a plot's floor, a plot's reach box (centre ± 36 across, from 50 behind to 40 in front, the front walk's flat strip excepted), a garage sign, the lounge (with a 0.5 margin), the door's approach, the drop spot, the spawn pad plus its 1 stud margin, or the Studio preview rooms (at the default site).
@@ -89,7 +89,7 @@ Walking routes with it: spawn, plaza, under the arch, avenue, around the lounge 
 
 ## 7. Tests and what only Studio can judge
 
-`tools/world_test.py` runs the real `WorldArt` and `WorldVisuals` in a fake Roblox (the plot visuals fake plus Workspace objects), and the real `PlotArt` and `PlotVisuals` to measure every room's reach. It checks every rule of section 5 for the default site and for a sweep of `PLOT_SPACING` 90 and 112 with 1 to 6 plots; compares every copied number with the real `TycoonCore.lua`, `IpoServer.lua` and `ShopServer.lua`; runs the preview block in the fake; and breaks the data and the builder on purpose (25+ mutation runs, each caught by a named check, never by a crash).
+`tools/world_test.py` runs the real `WorldArt` and `WorldVisuals` in a fake Roblox (the plot visuals fake plus Workspace objects), and the real `PlotArt` and `PlotVisuals` to measure every room's reach. It checks every rule of section 5 for the default site and for a sweep of `PLOT_SPACING` 90 and 112 with 1 to 6 plots; compares every copied number with the real `TycoonCore.lua`, `IpoServer.lua` and `ShopServer.lua`; runs the preview block in the fake; and breaks the data and the builder on purpose: **53 mutation runs** (29 on the builder and the checks, 24 on the data and the copied numbers), each caught by its named check, never by a crash. It also runs the integration patch's two blocks and the Studio preview block as written. Built: 259 checks pass.
 
 **Only the owner's eyes can judge:** the colors next to the real Baseplate under the place's Lighting, whether the street reads as a street from the default camera, the hills through the Atmosphere haze, the text size on the signs, how streaming looks on a real phone, and frame rate on a low-end phone.
 
