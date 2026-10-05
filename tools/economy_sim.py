@@ -2685,6 +2685,15 @@ def pk_tier_rates(outs, first=1):
     return 100 * sum(1 for x in t if x >= 2) / len(t), 100 * sum(1 for x in t if x == 3) / len(t), len(t)
 
 
+def pk_replay_rates(outs):
+    """Gold or better % and Platinum % over the REAL replays only (a loop in a sector the career already finished), and their number.
+    `pk_tier_rates(outs, first=1)` counts every loop from the second one on: in an alternating career that includes the first company of the other sector, which is not a replay and can never be Gold."""
+    t = [lp["tier"] for r in outs for lp in r["loops"] if lp["replay"]]
+    if not t:
+        return None, None, 0
+    return 100 * sum(1 for x in t if x >= 2) / len(t), 100 * sum(1 for x in t if x == 3) / len(t), len(t)
+
+
 def sim_s6(n):
     """S6 tiers (CUSTOMIZE 1.5, 5.5): Gold and Platinum from time, ratio and stake, per profile and pass set."""
     print("\n## S6. Stamp tiers (docs/CUSTOMIZE_PROPOSAL.md 1.5, 5.5; docs/FUNDING_ROUNDS_PROPOSAL.md 3)")
@@ -2807,29 +2816,46 @@ def sim_s7(n):
         rows.append(pa / po)
         worst_pts = max(worst_pts, abs(pa / po - 1) * 100)
         print(f"| {k} | {_pq(ca, 50):.0f} / {_pq(ha, 50):.0f} h | {pa:.2f} | {_pq(co, 50):.0f} / {_pq(ho, 50):.0f} h | {po:.2f} | {pa / po * 100:.0f}% |")
-    print("\n### 3. Task-bot against a dedicated human, same career (alternating sectors, hunting): stamps and Collection")
+    print("\n### 3. Task-bot against a dedicated human and a heavy human, same career (alternating sectors, hunting): stamps and Collection")
+    print("Two metrics. **Collection total** is the doc's own (the board ranks Collection, CUSTOMIZE 1.6 = CUST:75; mark CUST:122 'the task-bot never above a dedicated human'). "
+          "**Collection per stamp-clock hour** (Collection / the median stamp-clock hours of one IPO) is INVENTED by this sim, not in any doc. "
+          "'Gold or better, loops 1-3' counts every loop after the first (as the first version of this table did), which in an alternating career includes the first company of the other sector, "
+          "a loop that is not a replay and can never be Gold; 'real replays' counts only the loops in a sector already finished (here IPO 3 and IPO 4). **heavy** = 5 h a day (the 3 h/day rule applies to it, a bot is not needed).")
     nb = max(4, n // 2)
-    bot = pk_many("task-bot", nb, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "skill": "typical"}))
-    hum = pk_pop("dedicated", pop, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **o_h))
-    print("| Player | stamp-clock hours per IPO (median) | Platinum % of replays | Gold or better % | Collection after 4 IPOs | days to the 4th IPO |")
-    print("|---|---|---|---|---|---|")
+    base7 = dict(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta)
+    bot = pk_many("task-bot", nb, 4, PkOpt(**base7, **{**o_h, "skill": "typical"}))
+    hum = pk_pop("dedicated", pop, 4, PkOpt(**base7, **o_h))
+    hvy = pk_pop("heavy", pop, 4, PkOpt(**base7, **o_h))
+    bot_raw = pk_many("task-bot", nb, 4, PkOpt(**base7, **{**o_h, "skill": "typical", "tier": dict(PK_TIER, clock="raw")}))
+    hum_raw = pk_pop("dedicated", pop, 4, PkOpt(**base7, **{**o_h, "tier": dict(PK_TIER, clock="raw")}))
+    hvy_raw = pk_pop("heavy", pop, 4, PkOpt(**base7, **{**o_h, "tier": dict(PK_TIER, clock="raw")}))
+    print("| Player | stamp-clock hours per IPO (median) | Platinum % of loops 1-3 | Gold or better %, loops 1-3 | Gold or better %, real replays | Collection after 4 IPOs, median (p10 to p90) | days to the 4th IPO | Collection per stamp-clock hour (INVENTED metric) |")
+    print("|---|---|---|---|---|---|---|---|")
     stats = {}
-    bot_raw = pk_many("task-bot", nb, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "skill": "typical", "tier": dict(PK_TIER, clock="raw")}))
-    hum_raw = pk_pop("dedicated", pop, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "tier": dict(PK_TIER, clock="raw")}))
-    for label, outs in (("dedicated human, fast, hunting", hum), ("task-bot, 24/7, hunting", bot), ("FIX: stamp clock = raw engaged hours: dedicated human", hum_raw), ("FIX: stamp clock = raw engaged hours: task-bot", bot_raw)):
+    rows7 = (("dedicated human, fast, hunting (2 h a day)", hum), ("heavy human, fast, hunting (5 h a day)", hvy), ("task-bot, 24/7, hunting", bot),
+             ("FIX: stamp clock = raw engaged hours: dedicated human", hum_raw), ("FIX: stamp clock = raw engaged hours: heavy human", hvy_raw), ("FIX: stamp clock = raw engaged hours: task-bot", bot_raw))
+    for label, outs in rows7:
         hrs = _pq([lp["stamp_h"] for r in outs for lp in r["loops"]], 50)
         g, pl, k = pk_tier_rates(outs)
-        col = _pq([pk_collection(r["loops"], 4) for r in outs if len(r["loops"]) >= 4], 50)
+        g_real, pl_real, k_real = pk_replay_rates(outs)
+        cols = [pk_collection(r["loops"], 4) for r in outs if len(r["loops"]) >= 4]
+        col = _pq(cols, 50)
         days = _pq([r["ipo_day"][3] for r in outs if len(r["ipo_day"]) >= 4], 50)
-        stats[label] = (hrs, pl, g, col, days)
-        print(f"| {label} | {hrs:.1f} | {pl:.0f} | {g:.0f} | {col:.0f} | {days:.0f} |")
-    h, b = stats["dedicated human, fast, hunting"], stats["task-bot, 24/7, hunting"]
+        stats[label] = dict(hrs=hrs, plat=pl, gold=g, gold_real=g_real, plat_real=pl_real, col=col, cols=cols, days=days)
+        print(f"| {label} | {hrs:.1f} | {pl:.0f} | {g:.0f} | {g_real:.0f} ({k_real} replays) | {_pdist(cols, '{:.0f}')} | {days:.0f} | {col / hrs:.1f} |")
+    h, hv, b = (stats[k] for k in ("dedicated human, fast, hunting (2 h a day)", "heavy human, fast, hunting (5 h a day)", "task-bot, 24/7, hunting"))
+    hr, hvr, br = (stats[k] for k in ("FIX: stamp clock = raw engaged hours: dedicated human", "FIX: stamp clock = raw engaged hours: heavy human", "FIX: stamp clock = raw engaged hours: task-bot"))
+    col_cmp = "above" if b["col"] > h["col"] else "equal to" if b["col"] == h["col"] else "below"
+    inv_b, inv_hv = (b["col"] / b["hrs"]) / (h["col"] / h["hrs"]) - 1, (hv["col"] / hv["hrs"]) / (h["col"] / h["hrs"]) - 1
     print(f"\n**Result.** New sector against replay: the hours differ by at most {worst_h:.1f}% (mark 10%): {'PASS' if worst_h <= 10 else 'FAIL'}. "
           f"Points per hour, new sectors against replays: within {worst_pts:.0f}% ({'PASS' if worst_pts <= 10 else 'FAIL'}; the replays only count when a better tier is reached). "
-          f"The bot's Collection per stamp-clock hour is {'above' if b[3] / b[0] > h[3] / h[0] * 1.001 else 'not above'} the dedicated human's ({b[3] / b[0]:.1f} against {h[3] / h[0]:.1f} per hour; "
-          f"mark: never above): {'FAIL' if b[3] / b[0] > h[3] / h[0] * 1.001 else 'PASS'}. Why: the 3 h/day rule weights only the valuation, never Cash, so a 24/7 bot has bought everything long before its weighted hours run out, and each weighted hour pays more. "
-          f"With the stamp clock counting raw engaged hours the bot's Platinum / Gold are {stats['FIX: stamp clock = raw engaged hours: task-bot'][1]:.0f}% / {stats['FIX: stamp clock = raw engaged hours: task-bot'][2]:.0f}% and the human's {stats['FIX: stamp clock = raw engaged hours: dedicated human'][1]:.0f}% / {stats['FIX: stamp clock = raw engaged hours: dedicated human'][2]:.0f}% "
-          f"(the human plays 2 h a day, so nothing changes for them); per day the bot is {h[4] / b[4]:.1f}x faster, which LONG_GAME section 2 already accepts.")
+          f"**The doc's own metric (Collection total):** the bot's median is {b['col']:.0f} against the dedicated human's {h['col']:.0f}, so the bot is {col_cmp} the human (mark: never above): {'PASS' if b['col'] <= h['col'] else 'FAIL'}"
+          f" (a tie at the median; per seed {_pdist(b['cols'], '{:.0f}')} against {_pdist(h['cols'], '{:.0f}')}). "
+          f"**The invented metric (Collection per stamp-clock hour):** the bot is {inv_b * 100:+.1f}% against the dedicated human ({b['col'] / b['hrs']:.1f} against {h['col'] / h['hrs']:.1f}), and the heavy human (5 h a day, no bot) is {inv_hv * 100:+.1f}% "
+          f"({hv['col'] / hv['hrs']:.1f}): a human gets part of the same edge, and it grows with the hours played over the 3 h a day the rule counts at full value (2 h a day: 0 by definition, 5 h: {inv_hv * 100:+.1f}%, 24 h: {inv_b * 100:+.1f}%), "
+          f"so the cause is playing more than 3 h a day, not being a bot (the heavy human gets {inv_hv / inv_b * 100:.0f}% of the bot's edge, not all of it). Why: the 3 h/day rule weights only the valuation, never Cash, so anyone who plays more than 3 h a day has bought everything long before the weighted hours run out, and each weighted hour pays more. "
+          f"With the stamp clock counting raw engaged hours the bot's Platinum / Gold are {br['plat']:.0f}% / {br['gold']:.0f}% (real replays {br['gold_real']:.0f}%), the heavy human's {hvr['plat']:.0f}% / {hvr['gold']:.0f}% (real replays {hvr['gold_real']:.0f}%) "
+          f"and the dedicated human's {hr['plat']:.0f}% / {hr['gold']:.0f}% (real replays {hr['gold_real']:.0f}%; the dedicated human plays 2 h a day, so nothing changes for them): the fix takes tiers from every player who plays more than 3 h a day, bot or human; per day the bot is {h['days'] / b['days']:.1f}x faster, which LONG_GAME section 2 already accepts.")
     return {"s7_hours": worst_h, "s7_pts": worst_pts}
 
 
