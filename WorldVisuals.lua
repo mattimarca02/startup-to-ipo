@@ -388,6 +388,9 @@ end
 
 local function addText(part, text, palette, slot)
 	for _, face in ipairs(text.faces or { "Back" }) do
+		if not WorldVisuals.FACES[face] then
+			continue -- the data check names it; the build goes on without that face
+		end
 		local gui = Instance.new("SurfaceGui")
 		gui.Name = "Text" .. face
 		gui.Face = Enum.NormalId[face]

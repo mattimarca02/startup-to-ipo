@@ -18,7 +18,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 2.2 `WorldArt.lua` (pure data)
 - [x] 2.3 `WorldVisuals.lua` (builder, named checks, pure geometry)
 - [x] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep): 213 checks (154 in Luau, 59 source checks)
-- [ ] 2.5 World mutants, group A
+- [x] 2.5 World mutants, group A: 29 runs on `WorldVisuals.lua` (builder breakages and weakened checks), 29 caught by their named checks
 - [ ] 2.6 World mutants, group B (25 or more in all)
 - [ ] 2.7 `docs/world_pass_integration.patch` (not applied)
 - [ ] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test

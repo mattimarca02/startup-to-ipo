@@ -338,6 +338,14 @@ __PLOTVISUALS__
 end)()
 local REAL = __REAL__
 
+-- Every part below runs inside section(): if broken code makes one error, that becomes a named FAIL and the
+-- rest still runs (a mutation must be caught by a named check, never by a crash)
+local function section(name, fn)
+	local ok, err = pcall(fn)
+	if not ok then check(name .. ": this part of the tests could not finish", false, err) end
+end
+local S, site, world, PARTS, LIGHTS, SWEEP, ROOMS, roomBoxes = WorldArt.Site, nil, nil, 0, 0, {}, {}, nil
+
 local function deepCopy(t)
 	if type(t) ~= "table" then return t end
 	local c = {}
@@ -382,447 +390,460 @@ __BUILDVIPLOUNGE__
 end)()
 
 -- 1. The data -------------------------------------------------------------------------------------------------------
-local problems = WorldVisuals.validate(WorldArt)
-check("data: WorldVisuals.validate finds no problem in WorldArt", #problems == 0, problems[1])
-check("data: every named check exists, in order", table.concat(WorldVisuals.CHECKS, ",") == "data,budget,flags,keepouts,floating,zfighting,baseplate,connected,palette,texts")
-check("data: the budget is 600 parts and 8 lights (placeholders)", WorldArt.Budget.parts == 600 and WorldArt.Budget.lights == 8)
-check("data: the only fixed text is BUILD YOUR STARTUP", #WorldArt.Texts == 1 and WorldArt.Texts[1] == "BUILD YOUR STARTUP")
-check("data: layers are ground 0.04, path 0.16, kerb 0.4 (at least 0.04 apart, and never the stage 1 dirt's 0.06)",
-	WorldArt.Layout.groundTop == 0.04 and WorldArt.Layout.pathTop == 0.16 and WorldArt.Layout.kerbHeight == 0.4)
+section("data", function()
+	local problems = WorldVisuals.validate(WorldArt)
+	check("data: WorldVisuals.validate finds no problem in WorldArt", #problems == 0, problems[1])
+	check("data: every named check exists, in order", table.concat(WorldVisuals.CHECKS, ",") == "data,budget,flags,keepouts,floating,zfighting,baseplate,connected,palette,texts")
+	check("data: the budget is 600 parts and 8 lights (placeholders)", WorldArt.Budget.parts == 600 and WorldArt.Budget.lights == 8)
+	check("data: the only fixed text is BUILD YOUR STARTUP", #WorldArt.Texts == 1 and WorldArt.Texts[1] == "BUILD YOUR STARTUP")
+	check("data: layers are ground 0.04, path 0.16, kerb 0.4 (at least 0.04 apart, and never the stage 1 dirt's 0.06)",
+		WorldArt.Layout.groundTop == 0.04 and WorldArt.Layout.pathTop == 0.16 and WorldArt.Layout.kerbHeight == 0.4)
+end)
 
 -- 2. The numbers copied from the scripts and the Studio facts ------------------------------------------------------------
-local S = WorldArt.Site
-check("copied: PLOT_SPACING (TycoonCore) is " .. REAL.spacing, S.plotSpacing == REAL.spacing, S.plotSpacing)
-check("copied: MAX_PLOTS (TycoonCore) is " .. REAL.count, S.plotCount == REAL.count, S.plotCount)
-check("copied: plotY and plotZ (TycoonCore plotCenter)", S.plotY == REAL.plotY and S.plotZ == REAL.plotZ, S.plotY .. " " .. S.plotZ)
-check("copied: the Floor is " .. table.concat(REAL.floor, " x ") .. " (TycoonCore)", S.floorSize[1] == REAL.floor[1] and S.floorSize[2] == REAL.floor[2] and S.floorSize[3] == REAL.floor[3])
-check("copied: the next-upgrade sign offset (TycoonCore SIGN_OFFSET)", S.signs[1].name == "BuySign" and S.signs[1].x == REAL.buySign[1] and S.signs[1].z == REAL.buySign[2])
-check("copied: the IPO sign offset (IpoServer SIGN_OFFSET)", S.signs[2].name == "IpoSign" and S.signs[2].x == REAL.ipoSign[1] and S.signs[2].z == REAL.ipoSign[2])
-check("copied: the signs' board and post (both scripts)", S.signBoard[1] == REAL.board[1] and S.signBoard[2] == REAL.board[2] and S.signBoard[3] == REAL.board[3]
-	and S.signPostHeight == REAL.postHeight and S.signBoardY == REAL.boardY)
-local lounge = S.lounge
-check("copied: lounge center, size, wall height and door (ShopServer)", lounge.center[1] == REAL.lounge.center[1] and lounge.center[2] == REAL.lounge.center[2]
-	and lounge.center[3] == REAL.lounge.center[3] and lounge.size[1] == REAL.lounge.size[1] and lounge.size[2] == REAL.lounge.size[2]
-	and lounge.size[3] == REAL.lounge.size[3] and lounge.wallHeight == REAL.lounge.wall and lounge.doorWidth == REAL.lounge.door)
-check("copied: lounge sign height and the drop spot past the front wall (ShopServer)", lounge.signHeight == REAL.lounge.signHeight and lounge.dropOut == REAL.lounge.dropOut)
-check("copied: the front is +Z (teleportToPlot lands at +12 and looks at +24)", REAL.landing[3] < REAL.lookAt[3] and REAL.landing[1] == 0 and REAL.lookAt[1] == 0)
-check("Studio facts: the Baseplate is 2048 x 16 x 2048 at (0, -8, 0)", S.baseplate.size[1] == 2048 and S.baseplate.size[2] == 16 and S.baseplate.size[3] == 2048
-	and S.baseplate.position[1] == 0 and S.baseplate.position[2] == -8 and S.baseplate.position[3] == 0)
-check("Studio facts: the SpawnLocation is 12 x 1 x 12 at (-1, 0.5, -1)", S.spawn.size[1] == 12 and S.spawn.size[2] == 1 and S.spawn.size[3] == 12
-	and S.spawn.position[1] == -1 and S.spawn.position[2] == 0.5 and S.spawn.position[3] == -1)
-local site = WorldVisuals.site(WorldArt)
-local facts = WorldVisuals.studioFacts(site, spawnPad, baseplate)
-check("Studio facts: they match the SpawnLocation and the Baseplate in the fake place", #facts == 0, facts[1])
-do
-	local moved = newInstance("SpawnLocation")
-	moved.Size = vec(12, 1, 12)
-	moved.Position = vec(-1, 0.5, 4)
-	check("Studio facts: a SpawnLocation 5 studs off is reported", anyMatch(WorldVisuals.studioFacts(site, moved, baseplate), "SpawnLocation is at"))
-	check("Studio facts: a missing Baseplate is reported", anyMatch(WorldVisuals.studioFacts(site, spawnPad, nil), "no Baseplate"))
-end
+section("copied numbers and Studio facts", function()
+	check("copied: PLOT_SPACING (TycoonCore) is " .. REAL.spacing, S.plotSpacing == REAL.spacing, S.plotSpacing)
+	check("copied: MAX_PLOTS (TycoonCore) is " .. REAL.count, S.plotCount == REAL.count, S.plotCount)
+	check("copied: plotY and plotZ (TycoonCore plotCenter)", S.plotY == REAL.plotY and S.plotZ == REAL.plotZ, S.plotY .. " " .. S.plotZ)
+	check("copied: the Floor is " .. table.concat(REAL.floor, " x ") .. " (TycoonCore)", S.floorSize[1] == REAL.floor[1] and S.floorSize[2] == REAL.floor[2] and S.floorSize[3] == REAL.floor[3])
+	check("copied: the next-upgrade sign offset (TycoonCore SIGN_OFFSET)", S.signs[1].name == "BuySign" and S.signs[1].x == REAL.buySign[1] and S.signs[1].z == REAL.buySign[2])
+	check("copied: the IPO sign offset (IpoServer SIGN_OFFSET)", S.signs[2].name == "IpoSign" and S.signs[2].x == REAL.ipoSign[1] and S.signs[2].z == REAL.ipoSign[2])
+	check("copied: the signs' board and post (both scripts)", S.signBoard[1] == REAL.board[1] and S.signBoard[2] == REAL.board[2] and S.signBoard[3] == REAL.board[3]
+		and S.signPostHeight == REAL.postHeight and S.signBoardY == REAL.boardY)
+	local lounge = S.lounge
+	check("copied: lounge center, size, wall height and door (ShopServer)", lounge.center[1] == REAL.lounge.center[1] and lounge.center[2] == REAL.lounge.center[2]
+		and lounge.center[3] == REAL.lounge.center[3] and lounge.size[1] == REAL.lounge.size[1] and lounge.size[2] == REAL.lounge.size[2]
+		and lounge.size[3] == REAL.lounge.size[3] and lounge.wallHeight == REAL.lounge.wall and lounge.doorWidth == REAL.lounge.door)
+	check("copied: lounge sign height and the drop spot past the front wall (ShopServer)", lounge.signHeight == REAL.lounge.signHeight and lounge.dropOut == REAL.lounge.dropOut)
+	check("copied: the front is +Z (teleportToPlot lands at +12 and looks at +24)", REAL.landing[3] < REAL.lookAt[3] and REAL.landing[1] == 0 and REAL.lookAt[1] == 0)
+	check("Studio facts: the Baseplate is 2048 x 16 x 2048 at (0, -8, 0)", S.baseplate.size[1] == 2048 and S.baseplate.size[2] == 16 and S.baseplate.size[3] == 2048
+		and S.baseplate.position[1] == 0 and S.baseplate.position[2] == -8 and S.baseplate.position[3] == 0)
+	check("Studio facts: the SpawnLocation is 12 x 1 x 12 at (-1, 0.5, -1)", S.spawn.size[1] == 12 and S.spawn.size[2] == 1 and S.spawn.size[3] == 12
+		and S.spawn.position[1] == -1 and S.spawn.position[2] == 0.5 and S.spawn.position[3] == -1)
+	site = WorldVisuals.site(WorldArt)
+	local facts = WorldVisuals.studioFacts(site, spawnPad, baseplate)
+	check("Studio facts: they match the SpawnLocation and the Baseplate in the fake place", #facts == 0, facts[1])
+	do
+		local moved = newInstance("SpawnLocation")
+		moved.Size = vec(12, 1, 12)
+		moved.Position = vec(-1, 0.5, 4)
+		check("Studio facts: a SpawnLocation 5 studs off is reported", anyMatch(WorldVisuals.studioFacts(site, moved, baseplate), "SpawnLocation is at"))
+		check("Studio facts: a missing Baseplate is reported", anyMatch(WorldVisuals.studioFacts(site, spawnPad, nil), "no Baseplate"))
+	end
+end)
 
 -- 3. The pure functions ------------------------------------------------------------------------------------------------
-check("site: six plots 90 apart at x -225 ... 225, y 0.5, z 150 (TycoonCore's formula)", #site.plots == 6 and site.plots[1].x == -225 and site.plots[6].x == 225
-	and site.plots[3].x == -45 and site.plots[1].z == 150 and site.plots[1].y == 0.5)
-do
-	local real = realPlotCenter(REAL.spacing, REAL.count)
-	local fromCore = WorldVisuals.site(WorldArt, REAL.spacing, REAL.count, real)
-	local same = true
-	for i, p in ipairs(fromCore.plots) do
-		local q = site.plots[i]
-		if p.x ~= q.x or p.y ~= q.y or p.z ~= q.z then same = false end
-	end
-	check("site: the real plotCenter and the copied formula give the same six centers", same and #fromCore.plots == 6)
-	for _, sweep in ipairs({ { 112, 6 }, { 90, 1 }, { 112, 3 } }) do
-		local a = WorldVisuals.site(WorldArt, sweep[1], sweep[2], realPlotCenter(sweep[1], sweep[2]))
-		local b = WorldVisuals.site(WorldArt, sweep[1], sweep[2])
-		local ok = #a.plots == sweep[2]
-		for i = 1, #a.plots do if a.plots[i].x ~= b.plots[i].x then ok = false end end
-		check("site: the real plotCenter and the formula agree at spacing " .. sweep[1] .. " with " .. sweep[2] .. " plots", ok)
-	end
-end
-check("site: the lounge as ShopServer builds it (walls x -18.5..18.5, z 57.5..82.5, sign to y 14.5, drop spot (0, 88))",
-	site.lounge.halfX == 18.5 and site.lounge.back == 57.5 and site.lounge.front == 82.5 and site.lounge.top == 14.5
-	and site.lounge.drop.x == 0 and site.lounge.drop.z == 88)
-check("site: the spawn pad from the Studio fact (x -7..5, z -7..5, top 1)", site.spawn.x == -1 and site.spawn.z == -1 and site.spawn.halfX == 6 and site.spawn.top == 1)
-check("site: the Baseplate's top is y 0 and it spans -1024..1024", site.ground.top == 0 and site.ground.x0 == -1024 and site.ground.x1 == 1024 and site.ground.z1 == 1024)
-check("site: the Studio preview rooms count at the default site", site.preview ~= nil and site.preview[1] == -636 and site.preview[2] == -284)
-do
-	local wide = WorldVisuals.site(WorldArt, 112, 6)
-	check("site: at spacing 112 the preview rooms (placed for spacing 90) don't count: the preview snippet must move", wide.preview == nil)
-	local fewer = WorldVisuals.site(WorldArt, 90, 4)
-	check("site: at spacing 90 with fewer plots the preview rooms still count", fewer.preview ~= nil)
-end
-do
-	local g = WorldVisuals.gapLines(site)
-	check("gap lines: halfway between plots and half a spacing past each end (-270 ... 270)", g[0] == -270 and g[1] == -180 and g[3] == 0 and g[6] == 270)
-	local one = WorldVisuals.gapLines(WorldVisuals.site(WorldArt, 90, 1))
-	check("gap lines: one plot has a line on each side", one[0] == -45 and one[1] == 45)
-end
-do
-	local b = WorldVisuals.aboveGround("Ball", { -10, 10, -16, 4, -10, 10 })
-	check("aboveGround: a sunk ball shows only its cap (radius 8 at y 0 for a radius 10 ball centered 6 down)",
-		math.abs(b[1] + 8) < 1e-9 and math.abs(b[2] - 8) < 1e-9 and b[3] == 0 and b[4] == 4)
-	local c = WorldVisuals.aboveGround("Block", { 0, 1, -2, 3, 0, 1 })
-	check("aboveGround: a block is cut at y 0", c[3] == 0 and c[4] == 3 and c[1] == 0)
-end
-do
-	local a, b = WorldVisuals.layout(WorldArt, site), WorldVisuals.layout(WorldArt, site)
-	local same = #a.paths == #b.paths and #a.items == #b.items
-	for i = 1, #a.items do
-		if a.items[i].name ~= b.items[i].name or a.items[i].x ~= b.items[i].x or a.items[i].z ~= b.items[i].z then same = false end
-	end
-	check("layout: the same site always gives the same world (nothing random)", same)
-	local names = {}
-	local unique = true
-	for _, list in ipairs({ a.paths, a.kerbs, a.ground, a.items, a.hills }) do
-		for _, r in ipairs(list) do
-			if names[r.name] then unique = false end
-			names[r.name] = true
+section("pure functions", function()
+	check("site: six plots 90 apart at x -225 ... 225, y 0.5, z 150 (TycoonCore's formula)", #site.plots == 6 and site.plots[1].x == -225 and site.plots[6].x == 225
+		and site.plots[3].x == -45 and site.plots[1].z == 150 and site.plots[1].y == 0.5)
+	do
+		local real = realPlotCenter(REAL.spacing, REAL.count)
+		local fromCore = WorldVisuals.site(WorldArt, REAL.spacing, REAL.count, real)
+		local same = true
+		for i, p in ipairs(fromCore.plots) do
+			local q = site.plots[i]
+			if p.x ~= q.x or p.y ~= q.y or p.z ~= q.z then same = false end
+		end
+		check("site: the real plotCenter and the copied formula give the same six centers", same and #fromCore.plots == 6)
+		for _, sweep in ipairs({ { 112, 6 }, { 90, 1 }, { 112, 3 } }) do
+			local a = WorldVisuals.site(WorldArt, sweep[1], sweep[2], realPlotCenter(sweep[1], sweep[2]))
+			local b = WorldVisuals.site(WorldArt, sweep[1], sweep[2])
+			local ok = #a.plots == sweep[2]
+			for i = 1, #a.plots do if a.plots[i].x ~= b.plots[i].x then ok = false end end
+			check("site: the real plotCenter and the formula agree at spacing " .. sweep[1] .. " with " .. sweep[2] .. " plots", ok)
 		end
 	end
-	check("layout: every path, kerb, lawn, item and hill has its own name", unique)
-	check("layout: one walk, one sign and one street piece of each street per plot", names.Walk6 and names.StreetSign6 and names.FrontStreet6 and names.BackStreet6
-		and not names.Walk7 and not names.StreetSign7)
-	check("layout: connectors through every gap at the default site (7)", names.Connector0 and names.Connector3 and names.Connector6)
-	local lit = 0
-	for _, it in ipairs(a.items) do if it.lit then lit += 1 end end
-	check("layout: only the plaza's four lamps and the forecourt's two are lit", lit == 6)
-	check("layout: the front street starts 1 stud past what the plots reach (z 191) and the back street ends 5 short of it (z 95)",
-		a.frontZ0 == 191 and a.backZ1 == 95)
-end
-
--- 4. What the rooms reach: every part of all five rooms (props included) stays inside Site.plotReach -------------------
-local ROOMS = {}
-do
-	local center = Vector3.new(0, 0.5, 150)
-	local reach = { side = 0, back = 0, front = 0, top = 0 }
-	for stage = 1, #PlotArt.Stages do
-		local room = PlotVisuals.buildRoom(nil, center, PlotArt, stage)
-		for _, slot in ipairs(PlotArt.Layout.itemSlots) do
-			PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
-		end
-		ROOMS[stage] = room
-		for _, p in ipairs(partsOf(room)) do
-			local b = PlotVisuals.boxOf(p.CFrame, p.Size)
-			reach.side = math.max(reach.side, math.abs(b[1] - center.X), math.abs(b[2] - center.X))
-			reach.back = math.max(reach.back, center.Z - b[5])
-			reach.front = math.max(reach.front, b[6] - center.Z)
-			reach.top = math.max(reach.top, b[4])
-		end
+	check("site: the lounge as ShopServer builds it (walls x -18.5..18.5, z 57.5..82.5, sign to y 14.5, drop spot (0, 88))",
+		site.lounge.halfX == 18.5 and site.lounge.back == 57.5 and site.lounge.front == 82.5 and site.lounge.top == 14.5
+		and site.lounge.drop.x == 0 and site.lounge.drop.z == 88)
+	check("site: the spawn pad from the Studio fact (x -7..5, z -7..5, top 1)", site.spawn.x == -1 and site.spawn.z == -1 and site.spawn.halfX == 6 and site.spawn.top == 1)
+	check("site: the Baseplate's top is y 0 and it spans -1024..1024", site.ground.top == 0 and site.ground.x0 == -1024 and site.ground.x1 == 1024 and site.ground.z1 == 1024)
+	check("site: the Studio preview rooms count at the default site", site.preview ~= nil and site.preview[1] == -636 and site.preview[2] == -284)
+	do
+		local wide = WorldVisuals.site(WorldArt, 112, 6)
+		check("site: at spacing 112 the preview rooms (placed for spacing 90) don't count: the preview snippet must move", wide.preview == nil)
+		local fewer = WorldVisuals.site(WorldArt, 90, 4)
+		check("site: at spacing 90 with fewer plots the preview rooms still count", fewer.preview ~= nil)
 	end
-	local R = S.plotReach
-	check(string.format("rooms: every room fits in Site.plotReach (they reach %.1f to the sides, %.1f behind, %.1f in front, %.1f up)", reach.side, reach.back, reach.front, reach.top),
-		reach.side <= R.side and reach.back <= R.back and reach.front <= R.front and reach.top <= R.top)
-	check("rooms: the reach is the measured one plus a little (no stud wasted: within 1 to the sides and 1 behind)", R.side - reach.side <= 1 and R.back - reach.back <= 1)
-end
--- The parts of the rooms at every plot of a site (stage 1 has the yard dirt, stage 5 the skyline), as world boxes
-local function roomBoxes(s)
-	local out = {}
-	for i, p in ipairs(s.plots) do
-		for _, stage in ipairs({ 1, 5 }) do
-			local room = PlotVisuals.buildRoom(nil, Vector3.new(p.x, p.y, p.z), PlotArt, stage)
-			for _, part in ipairs(partsOf(room)) do
-				table.insert(out, { name = "Plot" .. i .. ".Stage" .. stage .. "." .. part.Name, box = PlotVisuals.boxOf(part.CFrame, part.Size) })
+	do
+		local g = WorldVisuals.gapLines(site)
+		check("gap lines: halfway between plots and half a spacing past each end (-270 ... 270)", g[0] == -270 and g[1] == -180 and g[3] == 0 and g[6] == 270)
+		local one = WorldVisuals.gapLines(WorldVisuals.site(WorldArt, 90, 1))
+		check("gap lines: one plot has a line on each side", one[0] == -45 and one[1] == 45)
+	end
+	do
+		local b = WorldVisuals.aboveGround("Ball", { -10, 10, -16, 4, -10, 10 })
+		check("aboveGround: a sunk ball shows only its cap (radius 8 at y 0 for a radius 10 ball centered 6 down)",
+			math.abs(b[1] + 8) < 1e-9 and math.abs(b[2] - 8) < 1e-9 and b[3] == 0 and b[4] == 4)
+		local c = WorldVisuals.aboveGround("Block", { 0, 1, -2, 3, 0, 1 })
+		check("aboveGround: a block is cut at y 0", c[3] == 0 and c[4] == 3 and c[1] == 0)
+	end
+	do
+		local a, b = WorldVisuals.layout(WorldArt, site), WorldVisuals.layout(WorldArt, site)
+		local same = #a.paths == #b.paths and #a.items == #b.items
+		for i = 1, #a.items do
+			if a.items[i].name ~= b.items[i].name or a.items[i].x ~= b.items[i].x or a.items[i].z ~= b.items[i].z then same = false end
+		end
+		check("layout: the same site always gives the same world (nothing random)", same)
+		local names = {}
+		local unique = true
+		for _, list in ipairs({ a.paths, a.kerbs, a.ground, a.items, a.hills }) do
+			for _, r in ipairs(list) do
+				if names[r.name] then unique = false end
+				names[r.name] = true
 			end
 		end
+		check("layout: every path, kerb, lawn, item and hill has its own name", unique)
+		check("layout: one walk, one sign and one street piece of each street per plot", names.Walk6 and names.StreetSign6 and names.FrontStreet6 and names.BackStreet6
+			and not names.Walk7 and not names.StreetSign7)
+		check("layout: connectors through every gap at the default site (7)", names.Connector0 and names.Connector3 and names.Connector6)
+		local lit = 0
+		for _, it in ipairs(a.items) do if it.lit then lit += 1 end end
+		check("layout: only the plaza's four lamps and the forecourt's two are lit", lit == 6)
+		check("layout: the front street starts 1 stud past what the plots reach (z 191) and the back street ends 5 short of it (z 95)",
+			a.frontZ0 == 191 and a.backZ1 == 95)
 	end
-	return out
-end
+end)
+
+-- 4. What the rooms reach: every part of all five rooms (props included) stays inside Site.plotReach -------------------
+section("rooms", function()
+	do
+		local center = Vector3.new(0, 0.5, 150)
+		local reach = { side = 0, back = 0, front = 0, top = 0 }
+		for stage = 1, #PlotArt.Stages do
+			local room = PlotVisuals.buildRoom(nil, center, PlotArt, stage)
+			for _, slot in ipairs(PlotArt.Layout.itemSlots) do
+				PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
+			end
+			ROOMS[stage] = room
+			for _, p in ipairs(partsOf(room)) do
+				local b = PlotVisuals.boxOf(p.CFrame, p.Size)
+				reach.side = math.max(reach.side, math.abs(b[1] - center.X), math.abs(b[2] - center.X))
+				reach.back = math.max(reach.back, center.Z - b[5])
+				reach.front = math.max(reach.front, b[6] - center.Z)
+				reach.top = math.max(reach.top, b[4])
+			end
+		end
+		local R = S.plotReach
+		check(string.format("rooms: every room fits in Site.plotReach (they reach %.1f to the sides, %.1f behind, %.1f in front, %.1f up)", reach.side, reach.back, reach.front, reach.top),
+			reach.side <= R.side and reach.back <= R.back and reach.front <= R.front and reach.top <= R.top)
+		check("rooms: the reach is the measured one plus a little (no stud wasted: within 1 to the sides and 1 behind)", R.side - reach.side <= 1 and R.back - reach.back <= 1)
+	end
+	-- The parts of the rooms at every plot of a site (stage 1 has the yard dirt, stage 5 the skyline), as world boxes
+	roomBoxes = function(s)
+		local out = {}
+		for i, p in ipairs(s.plots) do
+			for _, stage in ipairs({ 1, 5 }) do
+				local room = PlotVisuals.buildRoom(nil, Vector3.new(p.x, p.y, p.z), PlotArt, stage)
+				for _, part in ipairs(partsOf(room)) do
+					table.insert(out, { name = "Plot" .. i .. ".Stage" .. stage .. "." .. part.Name, box = PlotVisuals.boxOf(part.CFrame, part.Size) })
+				end
+			end
+		end
+		return out
+	end
+end)
 
 -- 5. The default world --------------------------------------------------------------------------------------------------
-local world = WorldVisuals.build(nil, WorldArt, site)
-local PARTS = #partsOf(world)
-local LIGHTS = count(world, "PointLight")
-local byName = results(world, WorldArt, site, { roomBoxes = roomBoxes(site) })
-for _, name in ipairs(WorldVisuals.CHECKS) do
-	check("default site: check " .. name .. " passes (rooms of stages 1 and 5 at every plot included)", byName[name] ~= nil and #byName[name] == 0, byName[name] and byName[name][1])
-end
-check("default site: " .. PARTS .. " parts, within 600", PARTS <= 600 and PARTS > 100, PARTS)
-check("default site: " .. LIGHTS .. " lights, within 8", LIGHTS <= 8 and LIGHTS == 6, LIGHTS)
-check("default site: the World Model holds Paths, Kerbs, Ground, Decor and Hills", world.Name == "World" and world:FindFirstChild("Paths") and world:FindFirstChild("Kerbs")
-	and world:FindFirstChild("Ground") and world:FindFirstChild("Decor") and world:FindFirstChild("Hills"))
-check("default site: knows its spacing and plot count", world:GetAttribute("Spacing") == 90 and world:GetAttribute("Plots") == 6)
-do
-	local collide, touch, query, anchored, scripts = 0, 0, 0, 0, 0
-	for _, p in ipairs(partsOf(world)) do
-		if p.CanCollide then collide += 1 end
-		if p.CanTouch then touch += 1 end
-		if p.CanQuery then query += 1 end
-		if not p.Anchored then anchored += 1 end
+section("default site", function()
+	world = WorldVisuals.build(nil, WorldArt, site)
+	PARTS = #partsOf(world)
+	LIGHTS = count(world, "PointLight")
+	local byName = results(world, WorldArt, site, { roomBoxes = roomBoxes(site) })
+	for _, name in ipairs(WorldVisuals.CHECKS) do
+		check("default site: check " .. name .. " passes (rooms of stages 1 and 5 at every plot included)", byName[name] ~= nil and #byName[name] == 0, byName[name] and byName[name][1])
 	end
-	for _, d in ipairs(world:GetDescendants()) do if d:IsA("LuaSourceContainer") then scripts += 1 end end
-	check("default site: no decor collides, is touched or stops a ray; every part is anchored; no script", collide + touch + query + anchored + scripts == 0)
-	local atomic = 0
-	for _, m in ipairs(world:FindFirstChild("Decor"):GetChildren()) do if m.ModelStreamingMode == Enum.ModelStreamingMode.Atomic then atomic += 1 end end
-	check("default site: every decor item streams whole (ModelStreamingMode Atomic)", atomic == #world:FindFirstChild("Decor"):GetChildren() and atomic > 0)
-	local lightsIn = true
-	for _, d in ipairs(world:GetDescendants()) do
-		if d.ClassName == "PointLight" and not (d.Parent.Name == "LampGlow" and (string.find(d.Parent.Parent.Name, "PlazaLamp", 1, true) or string.find(d.Parent.Parent.Name, "ForecourtLamp", 1, true))) then
-			lightsIn = false
+	check("default site: " .. PARTS .. " parts, within 600", PARTS <= 600 and PARTS > 100, PARTS)
+	check("default site: " .. LIGHTS .. " lights, within 8", LIGHTS <= 8 and LIGHTS == 6, LIGHTS)
+	check("default site: the World Model holds Paths, Kerbs, Ground, Decor and Hills", world.Name == "World" and world:FindFirstChild("Paths") and world:FindFirstChild("Kerbs")
+		and world:FindFirstChild("Ground") and world:FindFirstChild("Decor") and world:FindFirstChild("Hills"))
+	check("default site: knows its spacing and plot count", world:GetAttribute("Spacing") == 90 and world:GetAttribute("Plots") == 6)
+	do
+		local collide, touch, query, anchored, scripts = 0, 0, 0, 0, 0
+		for _, p in ipairs(partsOf(world)) do
+			if p.CanCollide then collide += 1 end
+			if p.CanTouch then touch += 1 end
+			if p.CanQuery then query += 1 end
+			if not p.Anchored then anchored += 1 end
 		end
+		for _, d in ipairs(world:GetDescendants()) do if d:IsA("LuaSourceContainer") then scripts += 1 end end
+		check("default site: no decor collides, is touched or stops a ray; every part is anchored; no script", collide + touch + query + anchored + scripts == 0)
+		local atomic = 0
+		for _, m in ipairs(world:FindFirstChild("Decor"):GetChildren()) do if m.ModelStreamingMode == Enum.ModelStreamingMode.Atomic then atomic += 1 end end
+		check("default site: every decor item streams whole (ModelStreamingMode Atomic)", atomic == #world:FindFirstChild("Decor"):GetChildren() and atomic > 0)
+		local lightsIn = true
+		for _, d in ipairs(world:GetDescendants()) do
+			if d.ClassName == "PointLight" and not (d.Parent.Name == "LampGlow" and (string.find(d.Parent.Parent.Name, "PlazaLamp", 1, true) or string.find(d.Parent.Parent.Name, "ForecourtLamp", 1, true))) then
+				lightsIn = false
+			end
+		end
+		check("default site: the lights are in the lanterns of the plaza and forecourt lamps only", lightsIn)
+		local texts = {}
+		for _, d in ipairs(world:GetDescendants()) do if d.ClassName == "TextLabel" then texts[d.Text] = (texts[d.Text] or 0) + 1 end end
+		check("default site: the arch says BUILD YOUR STARTUP on both faces, each sign its number on both faces",
+			texts["BUILD YOUR STARTUP"] == 2 and texts["1"] == 2 and texts["6"] == 2 and texts["7"] == nil)
+		local signs = world:FindFirstChild("Decor"):FindFirstChild("StreetSign3")
+		local sb = WorldVisuals.boxOf(signs:FindFirstChild("SignBoard").CFrame, signs:FindFirstChild("SignBoard").Size)
+		check("default site: plot 3's sign stands across the street from it (x -45 + 7, past the street)", math.abs((sb[1] + sb[2]) / 2 - (-38)) < 1e-6 and sb[5] > 199)
 	end
-	check("default site: the lights are in the lanterns of the plaza and forecourt lamps only", lightsIn)
-	local texts = {}
-	for _, d in ipairs(world:GetDescendants()) do if d.ClassName == "TextLabel" then texts[d.Text] = (texts[d.Text] or 0) + 1 end end
-	check("default site: the arch says BUILD YOUR STARTUP on both faces, each sign its number on both faces",
-		texts["BUILD YOUR STARTUP"] == 2 and texts["1"] == 2 and texts["6"] == 2 and texts["7"] == nil)
-	local signs = world:FindFirstChild("Decor"):FindFirstChild("StreetSign3")
-	local sb = WorldVisuals.boxOf(signs:FindFirstChild("SignBoard").CFrame, signs:FindFirstChild("SignBoard").Size)
-	check("default site: plot 3's sign stands across the street from it (x -45 + 7, past the street)", math.abs((sb[1] + sb[2]) / 2 - (-38)) < 1e-6 and sb[5] > 199)
-end
+end)
 
 -- 6. The real objects: the plots (real plotCenter and makePart), their signs, the lounge (ShopServer's own builder), the
 -- SpawnLocation and the Baseplate stand in the Workspace. The world is built next to them and changes none of them.
-do
-	local real = realPlotCenter(REAL.spacing, REAL.count)
-	local existing = { baseplate, spawnPad }
-	for slot = 1, REAL.count do
-		local folder = newInstance("Folder")
-		folder.Name = "Player" .. slot .. "_Startup"
-		folder.Parent = workspace
-		local floor = tycoonMakePart(folder, "Floor", Vector3.new(REAL.floor[1], REAL.floor[2], REAL.floor[3]), real(slot), Color3.fromRGB(90, 90, 100))
-		table.insert(existing, floor)
-		for _, sign in ipairs({ { "BuySign", REAL.buySign }, { "IpoSign", REAL.ipoSign } }) do
-			local pos = real(slot) + Vector3.new(sign[2][1], 0.5, sign[2][2])
-			local post = tycoonMakePart(folder, sign[1], Vector3.new(0.4, REAL.postHeight, 0.4), pos + Vector3.new(0, REAL.postHeight / 2, 0), Color3.fromRGB(70, 74, 86))
-			local board = tycoonMakePart(post, "Board", Vector3.new(REAL.board[1], REAL.board[2], REAL.board[3]), pos + Vector3.new(0, REAL.boardY, 0), Color3.fromRGB(0, 140, 70))
-			table.insert(existing, post)
-			table.insert(existing, board)
+section("real objects", function()
+	do
+		local real = realPlotCenter(REAL.spacing, REAL.count)
+		local existing = { baseplate, spawnPad }
+		for slot = 1, REAL.count do
+			local folder = newInstance("Folder")
+			folder.Name = "Player" .. slot .. "_Startup"
+			folder.Parent = workspace
+			local floor = tycoonMakePart(folder, "Floor", Vector3.new(REAL.floor[1], REAL.floor[2], REAL.floor[3]), real(slot), Color3.fromRGB(90, 90, 100))
+			table.insert(existing, floor)
+			for _, sign in ipairs({ { "BuySign", REAL.buySign }, { "IpoSign", REAL.ipoSign } }) do
+				local pos = real(slot) + Vector3.new(sign[2][1], 0.5, sign[2][2])
+				local post = tycoonMakePart(folder, sign[1], Vector3.new(0.4, REAL.postHeight, 0.4), pos + Vector3.new(0, REAL.postHeight / 2, 0), Color3.fromRGB(70, 74, 86))
+				local board = tycoonMakePart(post, "Board", Vector3.new(REAL.board[1], REAL.board[2], REAL.board[3]), pos + Vector3.new(0, REAL.boardY, 0), Color3.fromRGB(0, 140, 70))
+				table.insert(existing, post)
+				table.insert(existing, board)
+			end
 		end
+		buildRealLounge()
+		local loungeFolder = workspace:FindFirstChild("VipLounge")
+		check("real objects: ShopServer's own lounge builder ran in the fake (" .. (loungeFolder and #loungeFolder:GetChildren() or 0) .. " parts)", loungeFolder ~= nil and #loungeFolder:GetChildren() >= 10)
+		for _, p in ipairs(loungeFolder and loungeFolder:GetChildren() or {}) do table.insert(existing, p) end
+		-- The lounge the site describes is the lounge ShopServer builds: every lounge part inside the site's box
+		local inside = true
+		for _, p in ipairs(loungeFolder and loungeFolder:GetChildren() or {}) do
+			local b = WorldVisuals.boxOf(p.CFrame, p.Size)
+			local lg = site.lounge
+			if b[1] < lg.x - lg.halfX - 1e-6 or b[2] > lg.x + lg.halfX + 1e-6 or b[5] < lg.back - 0.11 or b[6] > lg.front + 1e-6 or b[4] > lg.top + 1e-6 then inside = false end
+		end
+		check("real objects: every part ShopServer builds for the lounge is inside the site's lounge box", inside)
+		local snap = WorldVisuals.snapshot(existing)
+		local before = #workspace:GetChildren()
+		local built = WorldVisuals.build(workspace, WorldArt, WorldVisuals.site(WorldArt, REAL.spacing, REAL.count, real))
+		local changed = WorldVisuals.compare(snap)
+		check("real objects: the plots, their signs, the lounge, the SpawnLocation and the Baseplate are exactly as before (" .. #snap .. " parts)", #changed == 0, changed[1])
+		check("real objects: the build only added its own Model to the Workspace", #workspace:GetChildren() == before + 1 and built.Parent == workspace)
+		local others = {}
+		for _, p in ipairs(existing) do if p ~= baseplate then table.insert(others, p) end end
+		local clashes = WorldVisuals.clashes(built, others)
+		check("real objects: no world part goes into a real plot floor, sign, lounge part or the spawn pad", #clashes == 0, clashes[1])
+		check("real objects: a world part pushed into the real lounge is reported as a clash", (function()
+			local lamp = built:FindFirstChild("Decor"):FindFirstChild("ForecourtLampWest")
+			local glow = lamp:FindFirstChild("LampGlow")
+			local old = glow.CFrame
+			glow.CFrame = CFrame.new(0, 0.5, 70) -- on the lounge's floor
+			local found = anyMatch(WorldVisuals.clashes(built, others), "would go into")
+			glow.CFrame = old
+			return found
+		end)())
+		-- A builder that touched them would be seen
+		baseplate.Size = vec(2048, 16, 2047)
+		check("real objects: a resized Baseplate is noticed", anyMatch(WorldVisuals.compare(snap), "Baseplate was resized"))
+		baseplate.Size = vec(2048, 16, 2048)
+		spawnPad.Position = vec(-1, 0.5, 0)
+		check("real objects: a moved SpawnLocation is noticed", anyMatch(WorldVisuals.compare(snap), "SpawnLocation was moved"))
+		spawnPad.Position = vec(-1, 0.5, -1)
+		local floor1 = existing[3]
+		floor1.Parent = nil
+		check("real objects: a deleted plot Floor is noticed", anyMatch(WorldVisuals.compare(snap), "Floor was moved to another parent or deleted"))
+		floor1.Parent = workspace:FindFirstChild("Player1_Startup")
+		check("real objects: everything put back is clean again", #WorldVisuals.compare(snap) == 0, WorldVisuals.compare(snap)[1])
+		built:Destroy()
 	end
-	buildRealLounge()
-	local loungeFolder = workspace:FindFirstChild("VipLounge")
-	check("real objects: ShopServer's own lounge builder ran in the fake (" .. (loungeFolder and #loungeFolder:GetChildren() or 0) .. " parts)", loungeFolder ~= nil and #loungeFolder:GetChildren() >= 10)
-	for _, p in ipairs(loungeFolder and loungeFolder:GetChildren() or {}) do table.insert(existing, p) end
-	-- The lounge the site describes is the lounge ShopServer builds: every lounge part inside the site's box
-	local inside = true
-	for _, p in ipairs(loungeFolder and loungeFolder:GetChildren() or {}) do
-		local b = WorldVisuals.boxOf(p.CFrame, p.Size)
-		local lg = site.lounge
-		if b[1] < lg.x - lg.halfX - 1e-6 or b[2] > lg.x + lg.halfX + 1e-6 or b[5] < lg.back - 0.11 or b[6] > lg.front + 1e-6 or b[4] > lg.top + 1e-6 then inside = false end
-	end
-	check("real objects: every part ShopServer builds for the lounge is inside the site's lounge box", inside)
-	local snap = WorldVisuals.snapshot(existing)
-	local before = #workspace:GetChildren()
-	local built = WorldVisuals.build(workspace, WorldArt, WorldVisuals.site(WorldArt, REAL.spacing, REAL.count, real))
-	local changed = WorldVisuals.compare(snap)
-	check("real objects: the plots, their signs, the lounge, the SpawnLocation and the Baseplate are exactly as before (" .. #snap .. " parts)", #changed == 0, changed[1])
-	check("real objects: the build only added its own Model to the Workspace", #workspace:GetChildren() == before + 1 and built.Parent == workspace)
-	local others = {}
-	for _, p in ipairs(existing) do if p ~= baseplate then table.insert(others, p) end end
-	local clashes = WorldVisuals.clashes(built, others)
-	check("real objects: no world part goes into a real plot floor, sign, lounge part or the spawn pad", #clashes == 0, clashes[1])
-	check("real objects: a world part pushed into the real lounge is reported as a clash", (function()
-		local lamp = built:FindFirstChild("Decor"):FindFirstChild("ForecourtLampWest")
-		local glow = lamp:FindFirstChild("LampGlow")
-		local old = glow.CFrame
-		glow.CFrame = CFrame.new(0, 0.5, 70) -- on the lounge's floor
-		local found = anyMatch(WorldVisuals.clashes(built, others), "would go into")
-		glow.CFrame = old
-		return found
-	end)())
-	-- A builder that touched them would be seen
-	baseplate.Size = vec(2048, 16, 2047)
-	check("real objects: a resized Baseplate is noticed", anyMatch(WorldVisuals.compare(snap), "Baseplate was resized"))
-	baseplate.Size = vec(2048, 16, 2048)
-	spawnPad.Position = vec(-1, 0.5, 0)
-	check("real objects: a moved SpawnLocation is noticed", anyMatch(WorldVisuals.compare(snap), "SpawnLocation was moved"))
-	spawnPad.Position = vec(-1, 0.5, -1)
-	local floor1 = existing[3]
-	floor1.Parent = nil
-	check("real objects: a deleted plot Floor is noticed", anyMatch(WorldVisuals.compare(snap), "Floor was moved to another parent or deleted"))
-	floor1.Parent = workspace:FindFirstChild("Player1_Startup")
-	check("real objects: everything put back is clean again", #WorldVisuals.compare(snap) == 0, WorldVisuals.compare(snap)[1])
-	built:Destroy()
-end
+end)
 
 -- 7. The sweep: PLOT_SPACING 90 and 112, 1 to 6 plots, with the real plotCenter --------------------------------------------
-local SWEEP = {}
-for _, spacing in ipairs({ 90, 112 }) do
-	for n = 1, 6 do
-		local s = WorldVisuals.site(WorldArt, spacing, n, realPlotCenter(spacing, n))
-		local w = WorldVisuals.build(nil, WorldArt, s)
-		local r = results(w, WorldArt, s, { roomBoxes = roomBoxes(s) })
-		local bad = nil
-		for _, name in ipairs(WorldVisuals.CHECKS) do
-			if #r[name] > 0 then bad = bad or (name .. ": " .. r[name][1]) end
+section("sweep", function()
+	for _, spacing in ipairs({ 90, 112 }) do
+		for n = 1, 6 do
+			local s = WorldVisuals.site(WorldArt, spacing, n, realPlotCenter(spacing, n))
+			local w = WorldVisuals.build(nil, WorldArt, s)
+			local r = results(w, WorldArt, s, { roomBoxes = roomBoxes(s) })
+			local bad = nil
+			for _, name in ipairs(WorldVisuals.CHECKS) do
+				if #r[name] > 0 then bad = bad or (name .. ": " .. r[name][1]) end
+			end
+			local parts, lights = #partsOf(w), count(w, "PointLight")
+			table.insert(SWEEP, string.format("spacing %d, %d plot%s: %d parts, %d lights", spacing, n, n == 1 and "" or "s", parts, lights))
+			check(string.format("sweep: spacing %d with %d plot(s): every named check passes", spacing, n), bad == nil, bad)
+			check(string.format("sweep: spacing %d with %d plot(s): %d parts and %d lights within the budget", spacing, n, parts, lights), parts <= 600 and lights <= 8)
+			local walks = 0
+			for _, p in ipairs(w:FindFirstChild("Paths"):GetChildren()) do if string.find(p.Name, "Walk", 1, true) == 1 then walks += 1 end end
+			check(string.format("sweep: spacing %d with %d plot(s): one walk per plot", spacing, n), walks == n)
 		end
-		local parts, lights = #partsOf(w), count(w, "PointLight")
-		table.insert(SWEEP, string.format("spacing %d, %d plot%s: %d parts, %d lights", spacing, n, n == 1 and "" or "s", parts, lights))
-		check(string.format("sweep: spacing %d with %d plot(s): every named check passes", spacing, n), bad == nil, bad)
-		check(string.format("sweep: spacing %d with %d plot(s): %d parts and %d lights within the budget", spacing, n, parts, lights), parts <= 600 and lights <= 8)
-		local walks = 0
-		for _, p in ipairs(w:FindFirstChild("Paths"):GetChildren()) do if string.find(p.Name, "Walk", 1, true) == 1 then walks += 1 end end
-		check(string.format("sweep: spacing %d with %d plot(s): one walk per plot", spacing, n), walks == n)
 	end
-end
+end)
 
 -- 8. The checks catch a broken world (a check that can't fail proves nothing) ---------------------------------------------
-do
-	local function fresh() return WorldVisuals.build(nil, WorldArt, site) end
-	local function anyPart(w, name) return w:FindFirstChild(name, true) end
-	local w = fresh()
-	check("clean: a fresh default world passes every check", #WorldVisuals.check(w, WorldArt, site) == 0, WorldVisuals.check(w, WorldArt, site)[1])
-	local p = anyPart(w, "Avenue")
-	p.CanCollide = true
-	check("negative flags: a collidable part is caught", failsWith(w, site, "flags", "CanCollide is on"))
-	p.CanCollide = false
-	p.CanQuery = true
-	check("negative flags: a part that stops rays is caught", failsWith(w, site, "flags", "CanQuery is on"))
-	p.CanQuery = false
-	p.CanTouch = true
-	check("negative flags: a touchable part is caught", failsWith(w, site, "flags", "CanTouch is on"))
-	p.CanTouch = false
-	p.Anchored = false
-	check("negative flags: an unanchored part is caught", failsWith(w, site, "flags", "not anchored"))
-	p.Anchored = true
-	p.CastShadow = true
-	check("negative flags: a flat path that casts a shadow is caught", failsWith(w, site, "flags", "casts a shadow"))
-	p.CastShadow = false
-	p.Material = Enum.Material.Neon
-	check("negative flags: Neon on a path is caught", failsWith(w, site, "flags", "Neon on something"))
-	p.Material = Enum.Material.SmoothPlastic
-	local script = newInstance("Script")
-	script.Parent = anyPart(w, "PlazaLamp1")
-	check("negative flags: a script inside the world is caught", failsWith(w, site, "flags", "no scripts"))
-	script.Parent = nil
-	local decal = newInstance("Decal")
-	decal.Parent = p
-	check("negative flags: an image (Decal) is caught", failsWith(w, site, "flags", "(Decal)"))
-	decal.Parent = nil
-	local trunk = anyPart(w, "PlazaTree1"):FindFirstChild("Trunk")
-	local trunkCf = trunk.CFrame
-	trunk.CFrame = trunkCf * CFrame.Angles(0, 0, math.rad(10))
-	check("negative flags: a part turned by 10 degrees is caught", failsWith(w, site, "flags", "quarter turns"))
-	trunk.CFrame = trunkCf
-	check("clean: put back, the flags check is clean again", #results(w, WorldArt, site).flags == 0)
+section("negative tests", function()
+	do
+		local function fresh() return WorldVisuals.build(nil, WorldArt, site) end
+		local function anyPart(w, name) return w:FindFirstChild(name, true) end
+		local w = fresh()
+		check("clean: a fresh default world passes every check", #WorldVisuals.check(w, WorldArt, site) == 0, WorldVisuals.check(w, WorldArt, site)[1])
+		local p = anyPart(w, "Avenue")
+		p.CanCollide = true
+		check("negative flags: a collidable part is caught", failsWith(w, site, "flags", "CanCollide is on"))
+		p.CanCollide = false
+		p.CanQuery = true
+		check("negative flags: a part that stops rays is caught", failsWith(w, site, "flags", "CanQuery is on"))
+		p.CanQuery = false
+		p.CanTouch = true
+		check("negative flags: a touchable part is caught", failsWith(w, site, "flags", "CanTouch is on"))
+		p.CanTouch = false
+		p.Anchored = false
+		check("negative flags: an unanchored part is caught", failsWith(w, site, "flags", "not anchored"))
+		p.Anchored = true
+		p.CastShadow = true
+		check("negative flags: a flat path that casts a shadow is caught", failsWith(w, site, "flags", "casts a shadow"))
+		p.CastShadow = false
+		p.Material = Enum.Material.Neon
+		check("negative flags: Neon on a path is caught", failsWith(w, site, "flags", "Neon on something"))
+		p.Material = Enum.Material.SmoothPlastic
+		local script = newInstance("Script")
+		script.Parent = anyPart(w, "PlazaLamp1")
+		check("negative flags: a script inside the world is caught", failsWith(w, site, "flags", "no scripts"))
+		script.Parent = nil
+		local decal = newInstance("Decal")
+		decal.Parent = p
+		check("negative flags: an image (Decal) is caught", failsWith(w, site, "flags", "(Decal)"))
+		decal.Parent = nil
+		local trunk = anyPart(w, "PlazaTree1"):FindFirstChild("Trunk")
+		local trunkCf = trunk.CFrame
+		trunk.CFrame = trunkCf * CFrame.Angles(0, 0, math.rad(10))
+		check("negative flags: a part turned by 10 degrees is caught", failsWith(w, site, "flags", "quarter turns"))
+		trunk.CFrame = trunkCf
+		check("clean: put back, the flags check is clean again", #results(w, WorldArt, site).flags == 0)
 
-	for i = 1, 3 do
-		local light = newInstance("PointLight")
-		light.Parent = anyPart(w, "StreetLamp" .. i):FindFirstChild("LampGlow")
+		for i = 1, 3 do
+			local light = newInstance("PointLight")
+			light.Parent = anyPart(w, "StreetLamp" .. i):FindFirstChild("LampGlow")
+		end
+		check("negative budget: 9 lights are caught (budget 8)", failsWith(w, site, "budget", "lights (budget 8)"))
+		local filler = newInstance("Model")
+		filler.Parent = w
+		for i = 1, 400 do
+			local q = newInstance("Part")
+			q.Size = vec(1, 1, 1)
+			q.Position = vec(500 + (i % 20) * 2, 0.5, 500 + i)
+			q.Anchored, q.CanCollide, q.CanTouch, q.CanQuery, q.CastShadow = true, false, false, false, false
+			q.Parent = filler
+		end
+		check("negative budget: 668 parts are caught (budget 600)", failsWith(w, site, "budget", "parts (budget 600)"))
+
+		w = fresh()
+		local lamp = anyPart(w, "ForecourtLampWest")
+		for _, part in ipairs(lamp:GetChildren()) do if part:IsA("BasePart") then part.CFrame = CFrame.new(20.5, 0, -15) * part.CFrame end end -- from (-20.5, 85) to (0, 70)
+		check("negative keepouts: a lamp moved into the lounge is caught", failsWith(w, site, "keepouts", "lounge zone VipLounge"))
+		w = fresh()
+		local bush = anyPart(w, "StreetBush2"):FindFirstChild("BushBig")
+		bush.CFrame = CFrame.new(-135, 1, 150)
+		check("negative keepouts: a bush on a plot's floor is caught", failsWith(w, site, "keepouts", "plot floor zone Plot2"))
+		bush.CFrame = CFrame.new(-135, 4, 174)
+		check("negative keepouts: a bush on a garage sign is caught", failsWith(w, site, "keepouts", "sign zone BuySign2"))
+		bush.CFrame = CFrame.new(-1, 1, -1)
+		check("negative keepouts: a bush on the spawn pad is caught", failsWith(w, site, "keepouts", "spawn pad zone"))
+		bush.CFrame = CFrame.new(0, 1.5, 86)
+		check("negative keepouts: a bush in front of the lounge door is caught", failsWith(w, site, "keepouts", "lounge door zone"))
+		bush.CFrame = CFrame.new(-500, 1, 150)
+		check("negative keepouts: a bush in the Studio preview rooms is caught", failsWith(w, site, "keepouts", "preview rooms zone"))
+		bush.CFrame = CFrame.new(-135, 1, 112)
+		check("negative keepouts: a bush where a room's yard reaches (behind the plot) is caught", failsWith(w, site, "keepouts", "plot reach zone Plot2"))
+		w = fresh()
+		check("keepouts: the walks lie in their plot's front yard on purpose (allowed, and flat)", #results(w, WorldArt, site).keepouts == 0)
+		local walk = anyPart(w, "Walk2")
+		walk.CFrame = walk.CFrame * CFrame.new(0, 0, -3)
+		check("negative keepouts: a walk pushed onto its plot's floor is caught", failsWith(w, site, "keepouts", "Walk2 is inside the plot floor zone Plot2"))
+
+		w = fresh()
+		local cap = anyPart(w, "StreetSign4"):FindFirstChild("SignCap")
+		cap.CFrame = cap.CFrame * CFrame.new(0, 3, 0)
+		check("negative floating: a sign cap lifted 3 studs off its post is caught", failsWith(w, site, "floating", "SignCap is floating"))
+		w = fresh()
+		local twin = anyPart(w, "Avenue")
+		local copy = newInstance("Part")
+		copy.Name = "AvenueTwin"
+		copy.Size = twin.Size
+		copy.CFrame = twin.CFrame * CFrame.new(1, 0, 0)
+		copy.Anchored, copy.CanCollide, copy.CanTouch, copy.CanQuery, copy.CastShadow = true, false, false, false, false
+		copy.Material = Enum.Material.SmoothPlastic
+		copy.Parent = w:FindFirstChild("Paths")
+		check("negative zfighting: a second slab on the avenue's plane is caught", failsWith(w, site, "zfighting", "share a face plane"))
+		copy.Size = vec(copy.Size.X, 0.08, copy.Size.Z)
+		copy.CFrame = CFrame.new(0, -0.04, 400) -- half sunk: its top is y 0, the Baseplate's top plane
+		check("negative zfighting: a slab whose top is the Baseplate's top is caught", failsWith(w, site, "zfighting", "the Baseplate's top"))
+		copy.Parent = nil
+		local roomPlane = { { name = "FakeRoomMat", box = { -150, -120, 0, 0.16, 182, 188 } } }
+		check("negative zfighting: a room part whose top is a world path's top is caught", failsWith(w, site, "zfighting", "FakeRoomMat", { roomBoxes = roomPlane }))
+		w = fresh()
+		local hill = anyPart(w, "HillWest")
+		hill.CFrame = hill.CFrame * CFrame.new(-300, 0, 0)
+		check("negative baseplate: a hill pushed past the Baseplate's edge is caught", failsWith(w, site, "baseplate", "HillWest reaches past"))
+		w = fresh()
+		anyPart(w, "Walk3").Parent = nil
+		check("negative connected: plot 3 without its walk is caught", failsWith(w, site, "connected", "plot 3's front edge"))
+		w = fresh()
+		anyPart(w, "Avenue").Parent = nil
+		local r = results(w, WorldArt, site).connected
+		check("negative connected: without the avenue no plot is reached from the spawn", #r == 6, #r)
+		w = fresh()
+		for _, name in ipairs({ "PlazaSouth", "PlazaNorth", "PlazaWest", "PlazaEast" }) do anyPart(w, name).Parent = nil end
+		check("negative connected: without the plaza nothing reaches the spawn pad", failsWith(w, site, "connected", "no path reaches the spawn"))
+		w = fresh()
+		local poor = deepCopy(WorldArt.Palette)
+		poor.Kerb = nil
+		check("negative palette: a palette without Kerb is caught", failsWith(w, site, "palette", "color Kerb is not in the palette", { palette = poor }))
+		local magenta = WorldVisuals.build(nil, WorldArt, site, poor):FindFirstChild("Kerbs"):GetChildren()[1].Color
+		check("palette: a missing color builds bright magenta instead of stopping the build", magenta.rgb[1] == 255 and magenta.rgb[2] == 0 and magenta.rgb[3] == 255)
+		local night = deepCopy(WorldArt.Palette)
+		night.Path = { 60, 60, 70 }
+		local restyled = WorldVisuals.build(nil, WorldArt, site, night)
+		check("palette: another palette restyles the world (a sector's) and still passes every check", restyled:FindFirstChild("Avenue", true).Color.rgb[1] == 60
+			and #WorldVisuals.check(restyled, WorldArt, site, { palette = night }) == 0)
+		w = fresh()
+		anyPart(w, "StreetSign2"):FindFirstChild("SignBoard"):FindFirstChild("TextFront"):FindFirstChild("Label").Text = "FREE CASH"
+		check("negative texts: a word that is not in WorldArt.Texts is caught", failsWith(w, site, "texts", "FREE CASH"))
+		local gui = newInstance("SurfaceGui")
+		gui.Parent = anyPart(w, "Avenue")
+		check("negative texts: a text surface without its label is caught", failsWith(w, site, "texts", "text surfaces"))
+		local bad = deepCopy(WorldArt)
+		bad.Pieces.Bush[1].shape = "Wedge"
+		check("negative data: a Wedge is caught", anyMatch(WorldVisuals.validate(bad), "unknown shape Wedge"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Bush[1].size = { 3, 2, 3 }
+		check("negative data: a squashed Ball is caught", anyMatch(WorldVisuals.validate(bad), "3 equal sides"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Lamp[2].rot = { 0, 0, 80 }
+		check("negative data: a rotation that is not a quarter turn is caught", anyMatch(WorldVisuals.validate(bad), "quarter turns"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Bench[1].material = "Neon"
+		check("negative data: Neon on a bench is caught", anyMatch(WorldVisuals.validate(bad), "Neon is only for lights"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Arch[3].text.value = "WIN"
+		check("negative data: a text that is not in WorldArt.Texts is caught", anyMatch(WorldVisuals.validate(bad), "text must be"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Sign[1].collide = true
+		check("negative data: a part that wants to collide is caught", anyMatch(WorldVisuals.validate(bad), "never collide"))
+		bad = deepCopy(WorldArt)
+		bad.Layout.pathTop = bad.Layout.groundTop + 0.01
+		check("negative data: layers closer than 0.04 are caught", anyMatch(WorldVisuals.validate(bad), "at least 0.04 apart"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Bush[2].name = "BushBig"
+		check("negative data: two parts with the same name in a piece are caught", anyMatch(WorldVisuals.validate(bad), "two parts named BushBig"))
+		bad = deepCopy(WorldArt)
+		bad.Pieces.Sign[2].name = "Floor"
+		check("negative data: a part named like the game's Floor is caught", anyMatch(WorldVisuals.validate(bad), "belongs to the game"))
+		bad = deepCopy(WorldArt)
+		bad.Hills[1].radius = 10
+		check("negative data: a hill steeper than it is wide is caught", anyMatch(WorldVisuals.validate(bad), "Hills[1]"))
+		bad = deepCopy(WorldArt)
+		bad.Site.spawn = nil
+		check("negative data: a missing Studio fact is caught", anyMatch(WorldVisuals.validate(bad), "Site.spawn"))
 	end
-	check("negative budget: 9 lights are caught (budget 8)", failsWith(w, site, "budget", "lights (budget 8)"))
-	local filler = newInstance("Model")
-	filler.Parent = w
-	for i = 1, 400 do
-		local q = newInstance("Part")
-		q.Size = vec(1, 1, 1)
-		q.Position = vec(500 + (i % 20) * 2, 0.5, 500 + i)
-		q.Anchored, q.CanCollide, q.CanTouch, q.CanQuery, q.CastShadow = true, false, false, false, false
-		q.Parent = filler
-	end
-	check("negative budget: 668 parts are caught (budget 600)", failsWith(w, site, "budget", "parts (budget 600)"))
-
-	w = fresh()
-	local lamp = anyPart(w, "ForecourtLampWest")
-	for _, part in ipairs(lamp:GetChildren()) do part.CFrame = CFrame.new(20.5, 0, -15) * part.CFrame end -- from (-20.5, 85) to (0, 70)
-	check("negative keepouts: a lamp moved into the lounge is caught", failsWith(w, site, "keepouts", "lounge zone VipLounge"))
-	w = fresh()
-	local bush = anyPart(w, "StreetBush2"):FindFirstChild("BushBig")
-	bush.CFrame = CFrame.new(-135, 1, 150)
-	check("negative keepouts: a bush on a plot's floor is caught", failsWith(w, site, "keepouts", "plot floor zone Plot2"))
-	bush.CFrame = CFrame.new(-135, 4, 174)
-	check("negative keepouts: a bush on a garage sign is caught", failsWith(w, site, "keepouts", "sign zone BuySign2"))
-	bush.CFrame = CFrame.new(-1, 1, -1)
-	check("negative keepouts: a bush on the spawn pad is caught", failsWith(w, site, "keepouts", "spawn pad zone"))
-	bush.CFrame = CFrame.new(0, 1.5, 86)
-	check("negative keepouts: a bush in front of the lounge door is caught", failsWith(w, site, "keepouts", "lounge door zone"))
-	bush.CFrame = CFrame.new(-500, 1, 150)
-	check("negative keepouts: a bush in the Studio preview rooms is caught", failsWith(w, site, "keepouts", "preview rooms zone"))
-	bush.CFrame = CFrame.new(-135, 1, 112)
-	check("negative keepouts: a bush where a room's yard reaches (behind the plot) is caught", failsWith(w, site, "keepouts", "plot reach zone Plot2"))
-	w = fresh()
-	check("keepouts: the walks lie in their plot's front yard on purpose (allowed, and flat)", #results(w, WorldArt, site).keepouts == 0)
-	local walk = anyPart(w, "Walk2")
-	walk.CFrame = walk.CFrame * CFrame.new(0, 0, -3)
-	check("negative keepouts: a walk pushed onto its plot's floor is caught", failsWith(w, site, "keepouts", "Walk2 is inside the plot floor zone Plot2"))
-
-	w = fresh()
-	local cap = anyPart(w, "StreetSign4"):FindFirstChild("SignCap")
-	cap.CFrame = cap.CFrame * CFrame.new(0, 3, 0)
-	check("negative floating: a sign cap lifted 3 studs off its post is caught", failsWith(w, site, "floating", "SignCap is floating"))
-	w = fresh()
-	local twin = anyPart(w, "Avenue")
-	local copy = newInstance("Part")
-	copy.Name = "AvenueTwin"
-	copy.Size = twin.Size
-	copy.CFrame = twin.CFrame * CFrame.new(1, 0, 0)
-	copy.Anchored, copy.CanCollide, copy.CanTouch, copy.CanQuery, copy.CastShadow = true, false, false, false, false
-	copy.Material = Enum.Material.SmoothPlastic
-	copy.Parent = w:FindFirstChild("Paths")
-	check("negative zfighting: a second slab on the avenue's plane is caught", failsWith(w, site, "zfighting", "share a face plane"))
-	copy.Size = vec(copy.Size.X, 0.08, copy.Size.Z)
-	copy.CFrame = CFrame.new(0, -0.04, 400) -- half sunk: its top is y 0, the Baseplate's top plane
-	check("negative zfighting: a slab whose top is the Baseplate's top is caught", failsWith(w, site, "zfighting", "the Baseplate's top"))
-	copy.Parent = nil
-	local roomPlane = { { name = "FakeRoomMat", box = { -150, -120, 0, 0.16, 182, 188 } } }
-	check("negative zfighting: a room part whose top is a world path's top is caught", failsWith(w, site, "zfighting", "FakeRoomMat", { roomBoxes = roomPlane }))
-	w = fresh()
-	local hill = anyPart(w, "HillWest")
-	hill.CFrame = hill.CFrame * CFrame.new(-300, 0, 0)
-	check("negative baseplate: a hill pushed past the Baseplate's edge is caught", failsWith(w, site, "baseplate", "HillWest reaches past"))
-	w = fresh()
-	anyPart(w, "Walk3").Parent = nil
-	check("negative connected: plot 3 without its walk is caught", failsWith(w, site, "connected", "plot 3's front edge"))
-	w = fresh()
-	anyPart(w, "Avenue").Parent = nil
-	local r = results(w, WorldArt, site).connected
-	check("negative connected: without the avenue no plot is reached from the spawn", #r == 6, #r)
-	w = fresh()
-	for _, name in ipairs({ "PlazaSouth", "PlazaNorth", "PlazaWest", "PlazaEast" }) do anyPart(w, name).Parent = nil end
-	check("negative connected: without the plaza nothing reaches the spawn pad", failsWith(w, site, "connected", "no path reaches the spawn"))
-	w = fresh()
-	local poor = deepCopy(WorldArt.Palette)
-	poor.Kerb = nil
-	check("negative palette: a palette without Kerb is caught", failsWith(w, site, "palette", "color Kerb is not in the palette", { palette = poor }))
-	local magenta = WorldVisuals.build(nil, WorldArt, site, poor):FindFirstChild("Kerbs"):GetChildren()[1].Color
-	check("palette: a missing color builds bright magenta instead of stopping the build", magenta.rgb[1] == 255 and magenta.rgb[2] == 0 and magenta.rgb[3] == 255)
-	local night = deepCopy(WorldArt.Palette)
-	night.Path = { 60, 60, 70 }
-	local restyled = WorldVisuals.build(nil, WorldArt, site, night)
-	check("palette: another palette restyles the world (a sector's) and still passes every check", restyled:FindFirstChild("Avenue", true).Color.rgb[1] == 60
-		and #WorldVisuals.check(restyled, WorldArt, site, { palette = night }) == 0)
-	w = fresh()
-	anyPart(w, "StreetSign2"):FindFirstChild("SignBoard"):FindFirstChild("TextFront"):FindFirstChild("Label").Text = "FREE CASH"
-	check("negative texts: a word that is not in WorldArt.Texts is caught", failsWith(w, site, "texts", "FREE CASH"))
-	local gui = newInstance("SurfaceGui")
-	gui.Parent = anyPart(w, "Avenue")
-	check("negative texts: a text surface without its label is caught", failsWith(w, site, "texts", "text surfaces"))
-	local bad = deepCopy(WorldArt)
-	bad.Pieces.Bush[1].shape = "Wedge"
-	check("negative data: a Wedge is caught", anyMatch(WorldVisuals.validate(bad), "unknown shape Wedge"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Bush[1].size = { 3, 2, 3 }
-	check("negative data: a squashed Ball is caught", anyMatch(WorldVisuals.validate(bad), "3 equal sides"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Lamp[2].rot = { 0, 0, 80 }
-	check("negative data: a rotation that is not a quarter turn is caught", anyMatch(WorldVisuals.validate(bad), "quarter turns"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Bench[1].material = "Neon"
-	check("negative data: Neon on a bench is caught", anyMatch(WorldVisuals.validate(bad), "Neon is only for lights"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Arch[3].text.value = "WIN"
-	check("negative data: a text that is not in WorldArt.Texts is caught", anyMatch(WorldVisuals.validate(bad), "text must be"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Sign[1].collide = true
-	check("negative data: a part that wants to collide is caught", anyMatch(WorldVisuals.validate(bad), "never collide"))
-	bad = deepCopy(WorldArt)
-	bad.Layout.pathTop = bad.Layout.groundTop + 0.01
-	check("negative data: layers closer than 0.04 are caught", anyMatch(WorldVisuals.validate(bad), "at least 0.04 apart"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Bush[2].name = "BushBig"
-	check("negative data: two parts with the same name in a piece are caught", anyMatch(WorldVisuals.validate(bad), "two parts named BushBig"))
-	bad = deepCopy(WorldArt)
-	bad.Pieces.Sign[2].name = "Floor"
-	check("negative data: a part named like the game's Floor is caught", anyMatch(WorldVisuals.validate(bad), "belongs to the game"))
-	bad = deepCopy(WorldArt)
-	bad.Hills[1].radius = 10
-	check("negative data: a hill steeper than it is wide is caught", anyMatch(WorldVisuals.validate(bad), "Hills[1]"))
-	bad = deepCopy(WorldArt)
-	bad.Site.spawn = nil
-	check("negative data: a missing Studio fact is caught", anyMatch(WorldVisuals.validate(bad), "Site.spawn"))
-end
+end)
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 print_real(string.format("  default site: %d parts, %d lights", PARTS, LIGHTS))
@@ -960,14 +981,65 @@ def apply_mutation(text, old, new, what):
 
 # Mutation runs: (label, file, old text, new text, the named check that must fail). Each one is run as the full test
 # program; it counts only if it runs to the end AND the named check fails (a crash or another check is not enough).
-MUTANTS_A = []
+V = "WorldVisuals.lua"
+A = "WorldArt.lua"
+# Group A: WorldVisuals.lua. The builder breaks a rule (the default world's named check must fail), or a check is
+# weakened (the negative test that proves that check must fail).
+MUTANTS_A = [
+    ("decor that collides", V, "part.CanCollide = false", "part.CanCollide = true", "default site: check flags"),
+    ("decor that stops rays and the camera", V, "part.CanQuery = false", "part.CanQuery = true", "default site: check flags"),
+    ("decor that can be touched", V, "part.CanTouch = false", "part.CanTouch = true", "default site: check flags"),
+    ("unanchored decor", V, "\tpart.Anchored = true\n\tpart.CanCollide", "\tpart.Anchored = false\n\tpart.CanCollide", "default site: check flags"),
+    ("every part casts a shadow (flat paths too)", V, "part.CastShadow = longest >= WorldVisuals.TINY and not flat and not neon", "part.CastShadow = true",
+     "default site: check flags"),
+    ("no avenue from the plaza", V, 'rect(plan.paths, "Avenue", ax - half, ax + half, pz1, crossZ0, "Path")', "", "default site: check connected"),
+    ("walks stop a stud short of their plot", V, 'p.z + site.floor[3] / 2, frontZ0, "Walk")', 'p.z + site.floor[3] / 2 + 1, frontZ0, "Walk")',
+     "default site: check connected"),
+    ("walks run onto their plot's floor", V, 'p.z + site.floor[3] / 2, frontZ0, "Walk")', 'p.z + site.floor[3] / 2 - 2, frontZ0, "Walk")',
+     "default site: check keepouts"),
+    ("no connector between the streets", V, "if roomLeft and roomRight then", "if false then", "default site: check connected"),
+    ("the back street pushed into the rooms' yard", V, "local backZ1 = backZ0 + L.pathWidth", "local backZ1 = backZ0 + L.pathWidth + 8",
+     "default site: check keepouts"),
+    ("every street lamp lit", V, 'item("Lamp", "StreetLamp" .. k, gaps[k], far + L.lampDZ)', 'item("Lamp", "StreetLamp" .. k, gaps[k], far + L.lampDZ, 0, { lit = true })',
+     "default site: check budget"),
+    ("the plaza over the spawn pad's margin", V, "local hx, hz = sp.halfX + L.spawnMargin, sp.halfZ + L.spawnMargin", "local hx, hz = sp.halfX - 1, sp.halfZ - 1",
+     "default site: check keepouts"),
+    ("the forecourt overlapping the back street", V, 'rect(plan.paths, "Forecourt", ax - armIn, ax + armIn, foreZ0, backZ0, "Plaza")',
+     'rect(plan.paths, "Forecourt", ax - armIn, ax + armIn, foreZ0, backZ0 + 2, "Plaza")', "default site: check zfighting"),
+    ("hills standing on the ground instead of sunk", V, "part.CFrame = CFrame.new(h.x, h.height - d / 2, h.z)", "part.CFrame = CFrame.new(h.x, d / 2, h.z)",
+     "default site: check baseplate"),
+    ("a street sign shows the next plot's number", V, "{ slot = i })", "{ slot = i + 1 })", "default site: check texts"),
+    ("a street sign planted inside its plot", V, 'item("Sign", "StreetSign" .. i, p.x + L.signDX, far + L.signDZ, 0, { slot = i })',
+     'item("Sign", "StreetSign" .. i, p.x + L.signDX, p.z, 0, { slot = i })', "default site: check keepouts"),
+    ("a script in every decor item", V, "\t\tmodel.Parent = decor", "\t\tInstance.new(\"Script\").Parent = model\n\t\tmodel.Parent = decor",
+     "default site: check flags"),
+    ("paths, kerbs and lawns in Neon", V, "part.Material = Enum.Material[material]", "part.Material = Enum.Material.Neon", "default site: check flags"),
+    ("two plaza slabs overlapping", V, 'rect(plan.paths, "PlazaWest", px0, cx - hx, cz - hz, cz + hz, "Plaza")',
+     'rect(plan.paths, "PlazaWest", px0, cx - hx, cz - hz - 2, cz + hz, "Plaza")', "default site: check zfighting"),
+    ("the build resizes the Baseplate next to it", V, "\tworld.Parent = parent\n\treturn world",
+     "\tif parent and parent:FindFirstChild(\"Baseplate\") then parent:FindFirstChild(\"Baseplate\").Size = Vector3.new(2048, 16, 2000) end\n\tworld.Parent = parent\n\treturn world",
+     "real objects: the plots, their signs, the lounge, the SpawnLocation and the Baseplate are exactly as before"),
+    ("the flags check forgets CanCollide", V, "if part.CanCollide then", "if false then", "negative flags: a collidable part is caught"),
+    ("the flicker check wants exactly the same plane", V, "WorldVisuals.PLANE = 0.005", "WorldVisuals.PLANE = 0", "negative zfighting"),
+    ("the floating check thinks everything touches", V, "WorldVisuals.TOUCH = 0.06", "WorldVisuals.TOUCH = 50", "negative floating"),
+    ("the keep-out zones are never looked at", V, "if overlaps(p.above, zone.box, WorldVisuals.OVERLAP) and", "if false and overlaps(p.above, zone.box, WorldVisuals.OVERLAP) and",
+     "negative keepouts"),
+    ("the Baseplate's edge is never looked at", V, "if b[1] < g.x0 or b[2] > g.x1 or b[5] < g.z0 or b[6] > g.z1 then", "if false then", "negative baseplate"),
+    ("the parts budget is never looked at", V, "if #parts > art.Budget.parts then", "if false then", "negative budget: 668 parts"),
+    ("the texts check allows any word", V, "if not allowed[label.Text] then", "if false then", "negative texts: a word"),
+    ("a sunk ball measured as a whole sphere", V, "local a = cy >= 0 and r or math.sqrt(math.max(r * r - cy * cy, 0))", "local a = r", "aboveGround: a sunk ball"),
+    ("two paths join without touching", V, "return ox >= need and oz >= need", "return true", "negative connected"),
+]
 MUTANTS_B = []
 
 
 def run_mutants(luau, mutants, group):
-    caught, problems = 0, []
+    """Runs every mutant (four at a time). Returns how many were caught and a FAIL line for each one that was not."""
+    from concurrent.futures import ThreadPoolExecutor
     art, vis = read("WorldArt.lua"), read("WorldVisuals.lua")
-    for label, filename, old, new, expected in mutants:
+
+    def one(mutant):
+        label, filename, old, new, expected = mutant
         if filename == "WorldArt.lua":
             source = world_source(art=apply_mutation(art, old, new, filename))
         else:
@@ -976,12 +1048,17 @@ def run_mutants(luau, mutants, group):
         finished = re.search(r"^\d+ passed, \d+ failed$", result.stdout, re.M) is not None
         named = any(line.startswith("FAIL: " + expected) for line in result.stdout.split("\n"))
         if finished and named:
-            caught += 1
+            return None
+        if not finished:
+            why = "it crashed: " + (result.stderr.strip().split("\n")[0] if result.stderr.strip() else "no summary")
         else:
-            why = "it crashed: " + (result.stderr.strip().split("\n")[-1] if result.stderr.strip() else "no summary") if not finished else \
-                "the check '%s' did not fail" % expected
-            problems.append("FAIL: mutation %s %s not caught by its named check (%s)" % (group, label, why))
-    return caught, problems
+            why = "the check '%s' did not fail" % expected
+        return "FAIL: mutation %s, %s: not caught by its named check (%s)" % (group, label, why)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        outcomes = list(pool.map(one, mutants))
+    problems = [o for o in outcomes if o]
+    return len(mutants) - len(problems), problems
 
 
 def main():
