@@ -25,7 +25,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 
 **Phase 3: icons**
 - [x] 3.1 `IconArt.lua` (pure data, style sheet): 38 recipes (6 Office props copied from PlotArt, 3 eggs, 12 creatures, 12 shop items, 5 HUD buttons)
-- [ ] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions)
+- [x] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions, the cache with the cap of 8, taps, named checks)
 - [ ] 3.3 `tools/icon_test.py`
 - [ ] 3.4 Icon mutants, group A
 - [ ] 3.5 Icon mutants, group B (20 or more in all)
