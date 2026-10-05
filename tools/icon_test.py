@@ -197,7 +197,8 @@ local Vector2 = { new = function(x, y) return { X = x, Y = y } end }
 
 -- Instances
 local IS_A = {
-	Part = { BasePart = true, PVInstance = true }, Model = { PVInstance = true }, ViewportFrame = { GuiObject = true, GuiBase2d = true },
+	Part = { BasePart = true, PVInstance = true }, WedgePart = { BasePart = true, PVInstance = true }, Model = { PVInstance = true },
+	ViewportFrame = { GuiObject = true, GuiBase2d = true },
 	Frame = { GuiObject = true, GuiBase2d = true }, TextLabel = { GuiObject = true, GuiBase2d = true }, ScreenGui = { LayerCollector = true },
 	ImageLabel = { GuiObject = true }, Camera = {}, Folder = {},
 }
@@ -646,6 +647,10 @@ section("negative", function()
 	mesh.Parent = find("Office/Desk"):FindFirstChild("View"):FindFirstChild("Model"):GetChildren()[1]
 	check("negative assets: a mesh file in an icon is caught", fails(icons, "assets", "no mesh or texture file"))
 	mesh.Parent = nil
+	local wedge = newInstance("WedgePart")
+	wedge.Parent = find("Office/Desk"):FindFirstChild("View"):FindFirstChild("Model")
+	check("negative assets: a WedgePart (not a plain Part) in a 3D icon is caught", fails(icons, "assets", "only plain Parts"))
+	wedge.Parent = nil
 	local label = find("Shop/DoubleCash"):FindFirstChild("CoinLabel", true)
 	label.Text = "50%"
 	check("negative texts: a word that is not in IconArt.Texts is caught", fails(icons, "texts", "is not one of IconArt.Texts"))

@@ -792,7 +792,7 @@ end
 
 local function partInfo(d)
 	local b = boxOf(d.CFrame, d.Size)
-	local shape = d.Shape and d.Shape.Name or "Block"
+	local shape = d:IsA("Part") and d.Shape.Name or "Block" -- only a Part has a Shape (reading it on a MeshPart errors)
 	local above = aboveGround(shape, b)
 	return {
 		part = d, name = d:GetFullName(), box = b, above = above, shape = shape,
@@ -856,6 +856,9 @@ function WorldVisuals.checks(world, art, site, options)
 		end
 		for _, p in ipairs(parts) do
 			local part = p.part
+			if part.ClassName ~= "Part" then
+				problem(p.name .. ": only plain Parts in the world (not a " .. part.ClassName .. ")")
+			end
 			if not part.Anchored then
 				problem(p.name .. ": not anchored")
 			end

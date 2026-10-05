@@ -735,6 +735,13 @@ section("negative tests", function()
 		trunk.CFrame = trunkCf * CFrame.Angles(0, 0, math.rad(10))
 		check("negative flags: a part turned by 10 degrees is caught", failsWith(w, site, "flags", "quarter turns"))
 		trunk.CFrame = trunkCf
+		local wedge = newInstance("WedgePart")
+		wedge.Size = vec(1, 1, 1)
+		wedge.Position = vec(-500, 0.5, -500)
+		wedge.Anchored, wedge.CanCollide, wedge.CanTouch, wedge.CanQuery, wedge.CastShadow = true, false, false, false, false
+		wedge.Parent = w:FindFirstChild("Decor")
+		check("negative flags: a WedgePart (not a plain Part) is caught, and the checks don't stop on it", failsWith(w, site, "flags", "only plain Parts"))
+		wedge.Parent = nil
 		check("clean: put back, the flags check is clean again", #results(w, WorldArt, site).flags == 0)
 
 		for i = 1, 3 do

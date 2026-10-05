@@ -817,6 +817,8 @@ function IconVisuals.checks(art, icons, expect)
 			for _, d in ipairs(icon:GetDescendants()) do
 				if IconVisuals.FORBIDDEN_CLASSES[d.ClassName] then
 					problem(d:GetFullName() .. ": no images, meshes, sounds, effects, lights or scripts in an icon (" .. d.ClassName .. ")")
+				elseif d:IsA("BasePart") and d.ClassName ~= "Part" then
+					problem(d:GetFullName() .. ": only plain Parts in a 3D icon (not a " .. d.ClassName .. ")")
 				elseif d.ClassName == "SpecialMesh" then
 					if not creatureIcon or d.MeshType ~= Enum.MeshType.Sphere or (d.MeshId or "") ~= "" or (d.TextureId or "") ~= "" then
 						problem(d:GetFullName() .. ": only CreatureModels' built-in sphere shapes, with no mesh or texture file")
