@@ -32,9 +32,25 @@ Checks the docs ask for inside these sims, all covered below: round Cash is a gi
 - **Valuation is base Cash** (LG:93), and a pass, the bonus, the seed and a round change spendable Cash only.
 
 
+## Summary of the results (details in section 3)
+
+| Sim | Flag | Verdict | One-line finding |
+|---|---|---|---|
+| S1 seed | `--s1` | **PASS** | The seed is worth about 1.2% of a loop (mark 5%); the cap is the only thing that binds, `s` never does. |
+| S2 bonus | `--s2` | **PASS** | At +10 points the run takes 96.6% of the no-bonus hours (no pass), 99.0% with 2x Cash (mark 95%+). |
+| S3 parity | `--s3` | **FAIL as written, marginal after 2 changes** | Typical skill: every schedule within +-3%. Slow and fast players are 6% off, check-in 26% off. Fix B (launch revenue x0.6) plus an away-bank fix brings all but two cells inside +-5%. |
+| S4 bots | `--s4` | **PASS** | Task-bot 10.4 days in both sectors (edge +0.4%); a macro never finishes in either. |
+| S5 hopping | `--s5` | **PASS** | 10 IPOs: 543 h Software, 544 h Gaming, alternating 543-544 h (mark 3%). |
+| S6 tiers | `--s6` | **FAIL** | Gold 50% (by construction); **Platinum 0%** for everyone; the Cash pass shortens a replay by 6%, not 15%, so the shrink must be 6%. |
+| S7 board | `--s7` | **PASS in hours, FAIL in points and for the bot** | New sector 99.6% of a replay's hours; points per hour 2x apart (a sector caps at 3 points); the bot is 7% above a human per stamp-clock hour: use raw engaged hours. |
+| S8 round size | `--s8` | **mixed** | Tables reproduced, nothing dominated, Large saves 5.0-5.6% of a loop; but the price per hour is not constant (Pre-IPO 32 against 2.5), the maximum is best for everyone except 2x Cash owners, and a table fitted to the measured savings never makes the stake line bite. |
+| S9 launch policy | `--s9` | **FAIL (launch-spam)** | Smash +2.6% with 'every update' (-0.4% with the smarter rule: about 1% faster than Hit), Solid +8.3%, Flop +14.8% all inside their marks; Game-Jam spam is 1.7% faster than the typical player (mark 1%); k = 0.4 fixes it. |
+| S10 cadence | `--s10` | **FAIL (cycle gap)** | Gaming has no gap over 45 min but its own cycle leaves 45-minute waits (mark: under 15); a 12-minute checkpoint verb gives 12. Software outside Series C+D cannot be confirmed (untimed content). |
+
+
 ## 3. Results
 
-(Summary table of all ten sims: section 0 above; the placeholder numbers that must change: section 4 below.)
+(Summary table of all ten sims: the summary above; the placeholder numbers that must change: section 4 below.)
 
 ### S1. Seed: PASS
 
@@ -265,6 +281,264 @@ Regular player, typical skill, 10 seeds, 10 IPOs, with the placeholder seed (10%
 **Result.** Alternating gains at most +0.00% over the faster single sector (mark: under 3%): PASS. The two single sectors differ by 0.12%.
 
 
+### S6. Stamp tiers: Gold PASS; Platinum FAIL; pass owners FAIL (the 15% shrink is too big)
+
+**Finding.**
+- **Gold: PASS, but only by construction.** T is the regular typical player's own median, so 50% of that player's replays are Gold (mark: at least 50%). A fast player gets Gold on 81% of replays, a slow one on 0%. The rate is hypersensitive: the same T gives **69% in Gaming against 50% in Software** because Gaming's replays are 0.2% faster (S3), which moves a tight population across the median.
+- **Platinum: FAIL, 0% for everyone** (mark: at least 20% of dedicated players). Reaching 1.25 x the IPO-ready valuation within 0.8 T needs about 1.5x the typical speed (if valuation grew in a straight line); the fastest human profile (expert at tasks, dedicated, hunting) gets Gold on 81% of replays but reaches ratio 1.25 within 1.0 T on only 15%, and within 0.9 T on none. **Smallest rule change that gives 20%: 1.0 T with ratio 1.20 (25%)**; 1.0 T with ratio 1.25 gives 15%, 1.0 T with 1.10 gives 67%, and keeping 0.8 T gives 0% at any ratio tried (0.9 T / ratio 1.10 gives 4%).
+- **Pass owners: FAIL.** The 2x Cash pass shortens a replay by only **6.1%** (not the 15% LONG_GAME measures for IPO 1: kept employees make later loops less Cash-bound), so the rule "targets shrink by 15% x the share with the pass" puts Cash-pass owners at **0% Gold against 50%** (pass-blind targets: 81%). **A shrink of 6% puts them within 5 points** (54% against 50%). The **Shareholder pass** is not covered by the doc's rule and also speeds replays (2.6% / 5.3% / 8.5% at IPO 2 / 3 / 4, through the speed perks coming sooner): 83% Gold with no shrink, **48% with a 6% shrink**. Cash + VIP (x3) needs about 6% too (67% at 6%, 44% at 8%).
+- **Stake.** A Large raise in every round (stake 69.6%) keeps Gold (stake minimum 55%) and, because Platinum is unreachable here, cannot lose a Platinum; the stake effect on Platinum is S8 section F.
+
+**Placeholder changes that fix it.** Pass shrink 15% -> **6%** (Cash pass, and the same 6% for the Shareholder pass); Platinum 0.8 T and ratio 1.25 -> **1.0 T and ratio 1.20**.
+
+**Assumptions.** T measured per loop (55.5 / 50.4 / 51.2 / 51.6 h for IPO 1-4 with a typical raise, not LONG_GAME's 57 / 51.5 / 52); a profile is a population with +-20% task skill; the pass is owned for the whole run (share 1).
+
+## S6. Stamp tiers (docs/CUSTOMIZE_PROPOSAL.md 1.5, 5.5; docs/FUNDING_ROUNDS_PROPOSAL.md 3)
+Population: 16 players per profile, task skill spread +-20% (assumption), replays = IPO 2, 3 and 4 of the same sector (loops 1-3), so 48 replays per cell. T = the regular typical player's stamp-clock hours per loop with a typical raise (Medium at every round) and the placeholder seed: **55.5, 50.4, 51.2, 51.6 h** for IPO 1-4 (the doc's LONG_GAME hours are 57 / 51.5 / 52 without a raise). Gold = within 1.0 T, ratio >= 1, stake >= 55%; Platinum = within 0.8 T, ratio >= 1.25, stake >= 70%. Targets shrink by 15% x the share of the run with the 2x Cash pass (CUSTOMIZE 1.5). 'ready' players go public the moment IPO-ready is reached (ratio 1.0); 'hunt' players keep playing until the ratio reaches 1.25 while Platinum is still possible, then go public. Cells: Gold or better % / Platinum %, Software | Gaming (Hit).
+
+| Profile | Gold or better % (Software / Gaming) | Platinum % (Software / Gaming) |
+|---|---|---|
+| regular, typical, ready (the T player) | 50 / 69 | 0 / 0 |
+| regular, fast, ready | 81 / 83 | 0 / 0 |
+| regular, slow, ready | 0 / 0 | 0 / 0 |
+| dedicated, typical, hunt | 48 / 69 | 0 / 0 |
+| dedicated, fast, hunt | 81 / 85 | 0 / 0 |
+| regular, typical, 2x Cash pass, targets shrunk (the rule) | 0 / 0 | 0 / 0 |
+| regular, typical, 2x Cash pass, targets NOT shrunk (pass-blind) | 81 / 100 | 0 / 0 |
+| dedicated, fast, hunt, 2x Cash pass, shrunk | 31 / 27 | 0 / 0 |
+| regular, typical, Shareholder pass | 83 / 90 | 0 / 0 |
+| regular, typical, 2x Cash + VIP (x3), shrunk 15% only | 4 / 4 | 0 / 0 |
+| regular, typical, Large raise in every round (stake 69.6%) | 50 / 65 | 0 / 0 |
+
+### Platinum for the dedicated, fast, hunting player under other time and ratio rules (Software)
+| Rule | Platinum % | Gold or better % |
+|---|---|---|
+| 0.8 T and ratio 1.25 (the doc) | 0 | 81 |
+| 0.9 T, ratio 1.25 | 0 | 81 |
+| 1.0 T, ratio 1.25 | 15 | 15 |
+| 1.0 T, ratio 1.20 | 25 | 25 |
+| 1.0 T, ratio 1.15 | 44 | 44 |
+| 1.0 T, ratio 1.10 | 67 | 67 |
+| 0.8 T, ratio 1.10 | 0 | 81 |
+| 0.9 T, ratio 1.10 | 4 | 81 |
+
+### Pass owners: how much a pass really shortens a replay, and the target shrink that makes Gold equal (regular typical, Software)
+| Pass | stamp-clock hours of IPO 2 / 3 / 4 as a % of no pass | Gold or better % with target shrink of 0 | 4% | 6% | 8% | 10% | 15% (the doc, Cash pass) |
+|---|---|---|---|---|---|---|---|
+| 2x Cash | 93.9 / 94.0 / 93.9 | 81 | 69 | 54 | 44 | 25 | 0 |
+| 2x Cash + VIP (x3) | 93.5 / 93.5 / 93.4 | 88 | 69 | 67 | 44 | 31 | 4 |
+| Shareholder (x2 Shares) | 97.4 / 94.7 / 91.5 | 83 | 62 | 48 | 44 | 27 | 4 |
+
+(The player with no pass has Gold on 50%. Shrinks that land within 5 points: 2x Cash 6%, Shareholder (x2 Shares) 6%.)
+
+**Result.** Gold on 50% of the regular typical player's replays (mark: at least 50%): PASS. Platinum on 0% of the dedicated fast hunter's replays (mark: at least 20%): FAIL; the smallest rule change that reaches 20%: 1.0 T, ratio 1.20. Pass owners (2x Cash, shrunk) Gold 0% against 50% without the pass: FAIL (mark: within 5 points); pass-blind targets give 81%.
+
+### S7. Leaderboard: new sector against replay PASS in hours, FAIL in points; the bot FAIL by 7% per stamp-clock hour
+
+**Finding.**
+- **Hours (the likely reading of "within 10%"): PASS.** A first Gaming company takes 49.6 h against a Software replay's 49.8 h (99.6%) at the same IPO count.
+- **Points: FAIL (99% apart).** A new sector always adds +1,000 (Bronze) for about one loop; a replay adds at most +1,000 once (Gold) and +1,000 once more (Platinum), and only if the player reaches the tier: the dedicated fast hunter earns 2.01 points per 100 stamp-clock hours either way for the first two loops, then **2.04 against 1.02** after four and 1.36 against 0.68 after six, because one sector can give at most 3 points. This is structural, not a number to tune: if the board must make replays as attractive as a new sector, replays need an uncapped reward; if only the first two sectors matter, the mark is met by the hours.
+- **The task-bot is above the dedicated human: FAIL by 7%.** Per stamp-clock hour the bot earns 88.8 Collection points against the human's 82.6, and its Gold rate is 67% against 54%. Cause: the 3 h/day rule weights the valuation but never Cash, so a 24/7 bot has bought everything long before its weighted hours run out and each weighted hour pays more. **Smallest change: the stamp clock counts raw engaged hours** (not weighted): the human (2 h a day, never over the cap) is unchanged (54% Gold, Collection 4004) and the bot falls to **0% Gold, Collection 2004** (its 264 raw hours per IPO are far over T). Per day the bot is 2.4x faster than the human (43 against 103 days to the 4th IPO), which LONG_GAME section 2 already accepts; it still gets Bronze in every sector.
+- A player who plays more than 3 h a day (the `heavy` profile) would also lose tiers under a raw clock; that is the same rule applied fairly.
+
+## S7. Leaderboard (docs/CUSTOMIZE_PROPOSAL.md 1.6, 5.5)
+Collection = 1000 x (best stamp of each sector, Bronze 1 / Gold 2 / Platinum 3) + IPOs (CUSTOMIZE 1.6). 8 seeds per cell. Tiers use T from S6 (55.5, 50.4, 51.2, 51.6 h) and a typical raise (Medium at every round).
+
+### 1. Hours of a new sector against a replay at the same IPO count (regular typical, placeholder seed)
+| IPO | Alternating: what the loop is | hours | One sector: replay, hours | ratio |
+|---|---|---|---|---|
+| 2 | first Gaming company (new sector) | 49.6 | 49.8 | 99.6% |
+| 3 | Software replay | 50.6 | 50.6 | 99.9% |
+| 4 | first Gaming company (new sector) | 50.8 | 51.0 | 99.6% |
+| 5 | Software replay | 51.2 | 51.2 | 100.0% |
+
+### 2. Collection points per 100 stamp-clock hours: seeking new sectors against replaying one (dedicated, fast, hunting for Platinum)
+| After IPO | Alternating: Collection / hours | points per 100 h | One sector: Collection / hours | points per 100 h | alternating / one |
+|---|---|---|---|---|---|
+| 2 | 2002 / 100 h | 2.01 | 2002 / 99 h | 2.01 | 100% |
+| 4 | 4004 / 197 h | 2.04 | 2004 / 196 h | 1.02 | 199% |
+| 6 | 4006 / 295 h | 1.36 | 2006 / 294 h | 0.68 | 199% |
+
+### 3. Task-bot against a dedicated human, same career (alternating sectors, hunting): stamps and Collection
+| Player | stamp-clock hours per IPO (median) | Platinum % of replays | Gold or better % | Collection after 4 IPOs | days to the 4th IPO |
+|---|---|---|---|---|---|
+| dedicated human, fast, hunting | 48.5 | 0 | 54 | 4004 | 103 |
+| task-bot, 24/7, hunting | 45.1 | 0 | 67 | 4004 | 43 |
+| FIX: stamp clock = raw engaged hours: dedicated human | 48.5 | 0 | 54 | 4004 | 103 |
+| FIX: stamp clock = raw engaged hours: task-bot | 263.9 | 0 | 0 | 2004 | 43 |
+
+**Result.** New sector against replay: the hours differ by at most 0.4% (mark 10%): PASS. Points per hour, new sectors against replays: within 99% (FAIL; the replays only count when a better tier is reached). The bot's Collection per stamp-clock hour is above the dedicated human's (88.8 against 82.6 per hour; mark: never above): FAIL. Why: the 3 h/day rule weights only the valuation, never Cash, so a 24/7 bot has bought everything long before its weighted hours run out, and each weighted hour pays more. With the stamp clock counting raw engaged hours the bot's Platinum / Gold are 0% / 0% and the human's 0% / 54% (the human plays 2 h a day, so nothing changes for them); per day the bot is 2.4x faster, which LONG_GAME section 2 already accepts.
+
+
+### S8. Funding rounds: the table is internally sound but priced wrong from Series C+D on; a player takes the maximum unless a pass or the stake stops them
+
+**What the sim confirms.**
+- The doc's basis-point tables are **reproduced by the formula** (to within 1-8 bp at Series B, Series C+D and Pre-IPO, because the sim's 59.9 h loop is not LONG_GAME's 59.8 h; Seed and Series A and all of today's table exactly), and **no choice is dominated at any stage** for LONG_GAME's 7 stages and for today's 5 (0 < S < M-S < L-M everywhere).
+- Of the 1,024 LONG sequences, **4 lose Platinum on stake** (all four are Large in Series A, B, C+D and Pre-IPO); of today's 64, none. The cap of 4,000 bp never binds (largest total 3,042 and 1,999), and Gold's 55% can never fail, so only the 70% line is a real limit.
+- **Round Cash never reaches the valuation:** the engine asserts, on every raise in both the long-game model and today's economy, that valuation, lifetime and earnings are unchanged.
+- **Large every round saves 5.0% of IPO 1** in Software and 5.6% in Gaming (mark: at most 15%: PASS); FUNDING's 12.2% was an upper bound that is 2.4x too high.
+- **Converter and alt-fed: PASS.** Every one of the 97 items is already owned at each IPO in every case (the threshold is 1.5 x the price of everything), so round Cash has nothing kept left to buy; an alt-fed player gains 3.2% from Large rounds in loop 2, a plain one 3.3% (difference -0.1 points, mark under 3).
+- **Raising the last open round late:** the Pre-IPO round saves 0.60% when raised at once and **0.00% from halfway on**, for the same 1,909 bp: a late raise is all cost, skipping beats it: PASS.
+
+**What fails or needs a decision.**
+1. **FUNDING 3's claim "the price per hour saved is the same at every stage" is false (FAIL).** Measured, a Large round costs 1.7 / 2.3 / 2.8 % of Shares per 1% of loop time at Series A / B / C+D (close to the doc's 2.5) but **32% at Pre-IPO**: its Cash can only buy that rung's items, which pay back in tens of hours, so the round saves 0.6% of a loop where the table promises 7.6%. The Pre-IPO row (381 / 1,018 / 1,909 bp) is 10 to 30 times too dear, and it is the row that makes Large-every-round lose Platinum. Refitted to the measured savings (bp = P x saved% x 100) the Pre-IPO row is **56 / 109 / 150 bp** and Large every round costs 1,344 bp in all, so **the 70% stake line would never bite**. With the prices x2.3 (Large every round 3,095 bp) it bites again (5 sequences lose Platinum), at **Seed 8 / 22 / 48, Series A 117 / 313 / 571, Series B 200 / 509 / 919, Series C+D 258 / 673 / 1,212, Pre-IPO 130 / 252 / 345**; but that refit **fails dominance at Pre-IPO** (the measured savings flatten: 0.38 / 0.55 / 0.60%). The owner has to choose: keep the doc's table (Pre-IPO is a trap: 19% of Shares for 0.6% of a loop, which keeps the stake rule meaningful but teaches players to skip the last round), or the x2.3 table with a Pre-IPO row set by hand to stay convex.
+2. **Is the maximum always best? Yes, for speed.** Large wins in 6 of 7 profiles even when Shares are valued (+3.0% against +2.4% for Medium at IPO 3), because the Shares it costs only delay a +25% perk. The exceptions: the **2x Cash owner** (Small +0.1%, Large -0.4%: the round Cash is worth less to them), and a player with the shop complete who protects Platinum (Medium; best per stage then: Large in Seed to C+D and Small at Pre-IPO, 1,514 bp). Mark "no one choice best for every profile": PASS, but because of one pass and the stake rule. **Which curve makes the choice real?** Multiplying all prices does not, beyond what the cap allows: at x2 the cap of 4,000 bp locks Large, and the speed-valuing regular and casual player only differ at x5. The stake minimum is what makes the choice real.
+3. **Same round, same hours in both sectors (marginal).** The hours a round saves differ by 14-15% between Software and Gaming (Hit), 23-28% with Solid and Flop, as a ratio of the saved hours; in absolute terms it is 0.3 hours, 0.6 points of a loop. Read as a ratio this fails the 5% mark; as a share of the loop it is under one point and **one `HoursShare` table serves both sectors**. FUNDING open question 2: keep one table.
+4. **Dilution rounding is real but small.** Today's economy: with the nearest-Share carry the 10-IPO Shares are 512 / 474 / 427 (Small / Medium / Large) against 507 / 469 / 424 with a plain floor, so the carry returns 3-6 Shares (1%), and Large costs 20% of the Shares. At today's scale rounds change nothing measurable in time (the Cash is minutes of Income).
+5. **Speed against tier (section F).** For a dedicated hunter with the shop complete, Large every round makes the Platinum time target reachable more often (42% against 25% with no round) but the stake rule takes all of it (0% kept); Small and Medium keep it (33%). The minimum prices Large-every-round and takes Platinum from nobody who raises Medium or less: PASS on the doc's table.
+6. **Ten loops (section G).** Large every round is fastest at IPO 1-3 (-5%, -2.5%, -1.3%) but by IPO 5 it is 1% slower than no round (52.5 against 51.9 h) because it pays 30% fewer Shares (296 against 425 over ten IPOs) and completes the speed perk one IPO later (7 against 6).
+
+**Assumptions** are in section 5 (policies, "shop complete", best-per-stage search, the Pre-IPO test).
+
+## S8. Funding rounds: round size, speed against Shares and against the stamp tier (docs/FUNDING_ROUNDS_PROPOSAL.md 1-6)
+### A. The basis-point tables, recomputed from FUNDING 3's formula, and the dominance check
+
+**LONG_GAME's 7 stages (5 rounds).** Cell = bp Small / Medium / Large: recomputed (doc).
+| Stage | recomputed (doc) | Large: Cash as % of the gap to the next stage | Large: loop time it is worth (upper bound) | 0 < S < M-S < L-M ? |
+|---|---|---|---|---|
+| Seed | 3 / 8 / 15 (3 / 8 / 15) | 0.94% | 0.062% | yes |
+| Series A | 34 / 91 / 170 (34 / 91 / 170) | 6.29% | 0.684% | yes |
+| Series B | 73 / 196 / 368 (73 / 195 / 366) | 9.77% | 1.473% | yes |
+| Series C+D | 116 / 309 / 580 (116 / 310 / 582) | 5.83% | 2.323% | yes |
+| Pre-IPO | 380 / 1014 / 1901 (381 / 1018 / 1909) | 30.33% | 7.607% | yes |
+
+All 1024 sequences of (none, Small, Medium, Large) over the rounds, doc table: **4 lose Platinum on stake (D over 3,000 bp)**, 0 lose Gold (over 4,500), 0 pass the 4,000 cap; the largest total is 3042 bp. Dominance (each step up costs strictly more per unit of Cash): holds at every stage.
+
+**today's 5 stages (3 rounds).** Cell = bp Small / Medium / Large: recomputed (doc).
+| Stage | recomputed (doc) | Large: Cash as % of the gap to the next stage | Large: loop time it is worth (upper bound) | 0 < S < M-S < L-M ? |
+|---|---|---|---|---|
+| Seed | 100 / 266 / 500 (100 / 266 / 500) | 12.00% | 2.000% | yes |
+| Series A | 46 / 122 / 230 (46 / 122 / 230) | 11.05% | 0.921% | yes |
+| Series B | 253 / 677 / 1269 (253 / 677 / 1269) | 12.19% | 5.078% | yes |
+
+All 64 sequences of (none, Small, Medium, Large) over the rounds, doc table: **0 lose Platinum on stake (D over 3,000 bp)**, 0 lose Gold (over 4,500), 0 pass the 4,000 cap; the largest total is 1999 bp. Dominance (each step up costs strictly more per unit of Cash): holds at every stage.
+
+### B. Hours saved by each single round (LONG ladder, regular typical, 10 seeds, same random streams, the shop is complete so Shares are worth nothing)
+| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P |
+|---|---|---|---|---|---|---|---|
+| Seed | Small | 19.71K | 3 | 0.02% (0.01% to 0.04%) | 0.02% | 1.2 | 1.5 |
+| Seed | Medium | 39.42K | 8 | 0.05% (0.04% to 0.08%) | 0.04% | 1.6 | 2.0 |
+| Seed | Large | 59.13K | 15 | 0.09% (0.06% to 0.10%) | 0.06% | 1.8 | 2.5 |
+| Series A | Small | 649.71K | 34 | 0.34% (0.32% to 0.36%) | 0.23% | 1.0 | 1.5 |
+| Series A | Medium | 1.30M | 91 | 0.68% (0.67% to 0.70%) | 0.46% | 1.3 | 2.0 |
+| Series A | Large | 1.95M | 170 | 0.99% (0.96% to 1.00%) | 0.68% | 1.7 | 2.5 |
+| Series B | Small | 3.75M | 73 | 0.58% (0.55% to 0.60%) | 0.49% | 1.3 | 1.5 |
+| Series B | Medium | 7.50M | 195 | 1.11% (1.09% to 1.13%) | 0.98% | 1.8 | 2.0 |
+| Series B | Large | 11.25M | 366 | 1.60% (1.56% to 1.61%) | 1.47% | 2.3 | 2.5 |
+| Series C+D | Small | 15.25M | 116 | 0.75% (0.73% to 0.77%) | 0.77% | 1.5 | 1.5 |
+| Series C+D | Medium | 30.51M | 310 | 1.47% (1.44% to 1.48%) | 1.55% | 2.1 | 2.0 |
+| Series C+D | Large | 45.76M | 582 | 2.11% (2.09% to 2.12%) | 2.32% | 2.8 | 2.5 |
+| Pre-IPO | Small | 93.73M | 381 | 0.38% (0.38% to 0.40%) | 2.54% | 10.1 | 1.5 |
+| Pre-IPO | Medium | 187.47M | 1018 | 0.55% (0.53% to 0.56%) | 5.07% | 18.5 | 2.0 |
+| Pre-IPO | Large | 281.20M | 1909 | 0.60% (0.59% to 0.61%) | 7.61% | 31.8 | 2.5 |
+
+### C. Round policies over a whole loop, both sectors (regular typical, shop complete, 10 seeds): hours saved at IPO 1 and IPO 2
+| Policy | total dilution bp | Software: IPO 1 saved | Software: IPO 2 saved | Gaming (Hit): IPO 1 saved | Gaming: IPO 2 saved | hours saved at IPO 1, Software vs Gaming (difference) |
+|---|---|---|---|---|---|---|
+| Small every round | 607 | 2.0% | 1.4% | 2.3% | 1.7% | 0.92 h vs 1.06 h (15.1%) |
+| Medium every round | 1622 | 3.6% | 2.5% | 4.2% | 2.9% | 1.67 h vs 1.92 h (15.1%) |
+| Large every round | 3042 | 5.0% | 3.4% | 5.6% | 3.9% | 2.27 h vs 2.59 h (14.2%) |
+
+Large every round saves 5.0% of IPO 1 in Software and 5.6% in Gaming (FUNDING's upper bound is 12.18%, mark: at most 15%).
+Gaming with the other launch policies saves the same hours as Software (Large every round) within Solid 22.6%, Flop 28.4%.
+
+### D. Is the maximum always best? Engaged hours to IPO 3, the shop NOT complete (Shares buy the speed perk), per profile and policy (10 seeds; cell = hours saved against no round; the best cell is bold)
+| Profile | Small | Medium | Large | best |
+|---|---|---|---|---|
+| regular typical | +1.46% | +2.42% | **+3.01%** | Large |
+| dedicated typical | +1.45% | +2.48% | **+3.00%** | Large |
+| casual typical | +1.42% | +2.41% | **+2.93%** | Large |
+| regular fast | +1.40% | +2.42% | **+2.93%** | Large |
+| regular slow | +1.33% | +2.24% | **+2.72%** | Large |
+| regular, 2x Cash | **+0.11%** | -0.03% | -0.39% | Small |
+| regular, Shareholder | +1.34% | +2.00% | **+2.19%** | Large |
+
+The only Share sink in the model is the speed lump (154 Shares for +25% Income), so the Shares a round costs delay a +25% perk by only a few percent of a loop: the best policy is Small, Large in every profile.
+
+**What curve makes the choice real?** The same table with every basis-point price multiplied (the 4,000 cap stays); cell = the best policy by hours to IPO 3 for a player who values Shares (shop not complete), for a player with the shop complete who protects Platinum (total dilution at most 3,000 bp), and for a casual player:
+| price multiplier | total of Large every round | regular, Shares valued: best | regular, shop complete, Platinum protected: best | casual, Shares valued: best |
+|---|---|---|---|---|
+| x1 | 3042 bp | Large | Medium | Large |
+| x2 | 6084 bp | Large | Small | Large |
+| x3 | 9126 bp | Large | Small | Large |
+| x5 | 15210 bp | Large | none | Medium |
+| x8 | 24336 bp | Large | none | Large |
+
+**Best per stage** (coordinate search over the 4^5 sequences, 2 passes; hours to IPO 3, 3 seeds):
+- Shares valued, shop not complete: Seed Large, Series A Large, Series B Large, Series C+D Large, Pre-IPO skip (total dilution 1133 bp)
+- shop complete, Platinum protected (D <= 3,000 bp): Seed Large, Series A Large, Series B Large, Series C+D Large, Pre-IPO Small (total dilution 1514 bp)
+
+### E. The other marks
+**Alt-fed and converter, loop 2** (regular typical, shop complete; the alt feeds 3 poach-ins per run, which do not carry over an IPO, as LONG_GAME R2):
+| Case | IPO 1 hours | IPO 2 hours | items owned at the IPO (of 97) |
+|---|---|---|---|
+| no rounds, no alt | 45.7 | 42.5 | 97 |
+| Large every round | 43.4 | 41.1 | 97 |
+| alt-fed, no rounds | 42.6 | 40.8 | 97 |
+| alt-fed + Large every round | 40.7 | 39.5 | 97 |
+
+In loop 2 Large every round saves a plain player 3.3% and an alt-fed player 3.2%: rounds give the alt-fed player -0.1 points more than a plain one (mark: under 3). The converter cannot gain either: every one of the 97 items is already owned at the IPO in every case (the IPO threshold is 1.5 x the price of everything), so round Cash has no kept employee left to buy. Not modeled: eggs and HR levels.
+
+**Raising the last open round, late** (Pre-IPO round, Large, raised this far through the stage; regular typical, shop complete):
+| Raised at | hours saved, % of the loop | dilution bp | bp per 1% of time saved |
+|---|---|---|---|
+| at once | 0.60% | 1909 | 3179 |
+| 50% of the way | 0.00% | 1909 | 1909000000 |
+| 90% of the way | 0.00% | 1909 | 1909000000 |
+| 99% of the way | 0.00% | 1909 | 1909000000 |
+
+### F. Speed against the stamp tier lost on stake (dedicated, fast, hunting for Platinum; shop complete; replays IPO 2-4; population 12)
+Platinum rule for this table: within 1.0 T and ratio 1.10 (S6's relaxed rule; the doc's 0.8 T / 1.25 gives no Platinum to anyone, see S6), stake at least 70%; Gold: 1.0 T, stake 55%. T is refitted for a player whose shop is complete (Medium raise, the +25% speed perk from the start): 44.5, 41.4, 43.5, 45.5 h.
+| Policy | total dilution bp | hours per IPO (stamp clock) | Platinum on time and ratio % | Platinum kept after the stake rule % | Gold or better % |
+|---|---|---|---|---|---|
+| no round | 0 | 43.5 | 25 | 25 | 25 |
+| Small every round | 607 | 43.4 | 33 | 33 | 33 |
+| Medium every round | 1622 | 43.0 | 33 | 33 | 33 |
+| Large every round | 3042 | 42.7 | 42 | 0 | 42 |
+
+### I. The table refitted to the measured savings (bp = P x measured % of the loop saved x 100; P = 1.5 / 2.0 / 2.5, and the same x2.3 so that Large every round again costs about 3,000 bp)
+| Stage | measured saved %: Small / Medium / Large | fitted bp at P | fitted bp at 2.3 P | the doc's bp |
+|---|---|---|---|---|
+| Seed | 0.02 / 0.05 / 0.09 | 3 / 9 / 21 | 8 / 22 / 48 | 3 / 8 / 15 |
+| Series A | 0.34 / 0.68 / 0.99 | 51 / 136 / 248 | 117 / 313 / 571 | 34 / 91 / 170 |
+| Series B | 0.58 / 1.11 / 1.60 | 87 / 221 / 399 | 200 / 509 / 919 | 73 / 195 / 366 |
+| Series C+D | 0.75 / 1.47 / 2.11 | 112 / 293 / 526 | 258 / 673 / 1212 | 116 / 310 / 582 |
+| Pre-IPO | 0.38 / 0.55 / 0.60 | 56 / 109 / 150 | 130 / 252 / 345 | 381 / 1018 / 1909 |
+- fit at P: Small / Medium / Large every round cost 309 / 768 / 1344 bp; of 1024 sequences 0 lose Platinum on stake (D over 3,000) and 0 pass the 4,000 cap; dominance FAILS.
+- fit at 2.3 P: Small / Medium / Large every round cost 713 / 1769 / 3095 bp; of 1024 sequences 5 lose Platinum on stake (D over 3,000) and 0 pass the 4,000 cap; dominance FAILS.
+
+### G. Ten loops (regular typical, the shop not complete, 5 seeds): hours of each IPO, Shares, and when the speed lump (154 Shares) is complete
+| Policy | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares paid, 10 IPOs | IPO at which the lump is complete |
+|---|---|---|---|---|---|---|---|
+| no round | 57.0 | 51.5 | 52.0 | 51.9 | 62.4 | 425 | 6 |
+| Small every round | 55.9 | 50.8 | 51.6 | 51.5 | 61.5 | 399 | 6 |
+| Medium every round | 54.9 | 50.4 | 51.3 | 51.8 | 60.7 | 356 | 6 |
+| Large every round | 54.2 | 50.2 | 51.3 | 52.5 | 60.2 | 296 | 7 |
+
+### H. Today's 5 stages (the Player model: 3 rounds, real IpoConfig numbers; online minutes of each IPO's run, Shares; median of 40 runs, 60 days)
+The table's Cash is tiny next to a minute of today's Income, so rounds there are a smoke test (the runs are not paired: egg rolls differ). Shares paid with the nearest-Share carry (FUNDING 3) against a plain floor.
+| Player | Policy | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares over 10 IPOs, with carry | plain floor |
+|---|---|---|---|---|---|---|---|---|
+| active | none | 12 min | 8 min | 15 min | 20 min | 2.4 h | 533 | 533 |
+| active | Small | 12 min | 8 min | 15 min | 20 min | 2.4 h | 512 | 507 |
+| active | Medium | 11 min | 9 min | 15 min | 20 min | 2.6 h | 474 | 469 |
+| active | Large | 11 min | 9 min | 15 min | 20 min | 2.4 h | 427 | 424 |
+| casual30 | none | 12 min | 10 min | 17 min | 12 min | 9.6 h | 500 | 500 |
+| casual30 | Small | 12 min | 11 min | 17 min | 16 min | 9.6 h | 486 | 480 |
+| casual30 | Medium | 11 min | 11 min | 18 min | 15 min | 9.6 h | 446 | 440 |
+| casual30 | Large | 11 min | 10 min | 18 min | 29 min | 9.6 h | 399 | 396 |
+
+**Result.**
+- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. 4 of 1024 LONG sequences lose Platinum on stake and 0 of 64 of today's; the cap never binds (largest total 3042 bp and 1999 bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.
+- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays 2.3% of Shares per 1% of loop time at Series B and 32% at Pre-IPO, against FUNDING's 2.5: from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.
+- Large every round saves at most 5.6% of a loop (mark: at most 15%): PASS (FUNDING's upper bound of 12.2% is 2.4x too high: the Pre-IPO row is 7.6% in the table and 0.6% measured).
+- Is the maximum always best? For a player who values speed, yes: Large is best in 6 of 7 profiles even with Shares valued (+3.0% against +2.4% for Medium at IPO 3). The exception is the 2x Cash owner (Small +0.1%, Large -0.4%): mark 'no one choice best for every profile': PASS, but only because of the pass. With the shop complete and Platinum protected, the best is Medium. Scaling prices only helps up to the cap: at x5 the casual and the regular player first differ.
+- The same round saves hours within 28% between Software and Gaming in relative terms (mark: 5%): FAIL by the letter (Hit 14-15%, Solid and Flop 23-28%), but it is 0.3 hours, 0.6 points of a loop; the Gaming launch cycle does not change the table, one `HoursShare` table is enough.
+- Alt-fed gains 0.1 points more from rounds than a plain player in loop 2 (mark: under 3): PASS; converter: nothing to convert (all 97 items are owned at the IPO in every case; eggs and HR are not modeled).
+- Raising the last open round late: 0.6% saved at once, 0.0% from halfway on, for the same 1909 bp: a late raise is a pure loss, skipping beats it: PASS.
+- Stake against speed: Large every round saves the most hours but is the only policy that loses Platinum (0% kept against 100% on time); Small and Medium keep it. The minimum prices Large-every-round without taking Platinum from most runs: PASS on the doc's table, but a table fitted to the measured savings never reaches 3,000 bp (fit at P: 1344 bp for Large every round), so the 70% line would never bite; at 2.3 P it does (3095 bp).
+
+
 ### S9. Launch policy: launch-spam FAIL (+1.7% against the mark of 1%); the other marks PASS
 
 **Finding.** Hours for the regular typical player against Software: Smash +2.6% (doc's estimate 54 h = 5% *faster*; measured 58.5 h), Hit +0.7% (57.5 h, the fit), Solid +8.3% (61.8 h; doc 63), Flop +14.8% (65.5 h; doc 69), never ship +25.6% (71.6 h; doc 74). **Marks: Smash at most 5% faster PASS (it is not faster at all); Solid at most 12% slower PASS (+9.3% in the worst profile); Flop at most 25% slower PASS (+15.5%).** The order is the doc's, the spread is narrower than the doc's estimate by division.
@@ -361,6 +635,28 @@ Always-engaged reference player, IPO 1 (the engaged hours of each event come fro
 **Result.** Software: the Series C+D gap is 45 min (LONG_GAME's 45 with the board requests); the other rungs' timed gaps (up to 576 min) are upper bounds, because their tasks, products, decor and titles have no time in the sim, so the 45-minute mark cannot be confirmed for Software outside C+D from this sim. Gaming: longest gap between any timed moments 45 min (mark: no gap over 45 minutes: PASS, at the limit). Gaming's longest wait between decisions of the title cycle alone is 45 min (mark: under 15: FAIL); with a checkpoint verb every 12 engaged minutes while a title is in development it is 12 min: PASS.
 
 
+## 4. The placeholder numbers that must change, and to what
+
+| Where | Now | Change to | Why (sim) |
+|---|---|---|---|
+| SECTORS 2.4 Gaming upgrade Incomes | "fitted base 0.77" | upgrade factor per rung **0.72 / 0.66 / 0.65 / 0.59 / 0.61 / 0.41** (0.74-0.83 of Software's *total* base, so 0.77 is right as a total); with fix B **0.81 / 0.78 / 0.78 / 0.73 / 0.75 / 0.61** | S3 |
+| SECTORS 2.4 peaks, cap, catalog | 0.15 / 0.35 / 0.6 / 0.8, cap 0.8, catalog 10% | **x0.6**: 0.09 / 0.21 / 0.36 / 0.48, cap 0.48, catalog 6% (optional: halves the skill spread of S3; policies matter less) | S3, S9 |
+| SECTORS 2.4 away bank | 10% of Gaming's base | 10% of the base the same purchases give in Software (`SectorGaming` data) | S3 (check-in +26% -> +7-12%) |
+| SECTORS 2.4 per-title bound `k` | unset | **k = 0.4** x build seconds x base Income (or half-lives 20 / 40 / 60 / 80 / 120 min) | S9 (spam +1.7% -> +0.4% / 0.0%) |
+| SECTORS 2.10 Smash | "5% faster, 54 h" | Smash with 'every update' is slower than Hit (58.5 h against 57.5 h), with 'update under half' it is 1.1% faster; Hit 57.5, Solid 61.8, Flop 65.5, never 71.6 h. To make Smash matter: cap above 0.8 | S9 |
+| SECTORS 2.10 titles to IPO 1 | about 40 | **49** (4 / 7 / 8 / 7 / 14 / 9) | S3 |
+| SECTORS 2.2 cycle | decisions at Pitch, Playtest, Launch | add a **checkpoint verb every 12 engaged minutes** while a title is in development | S10 |
+| CUSTOMIZE 1.5 Platinum | 0.8 T and ratio 1.25 | **1.0 T and ratio 1.20** (25% of dedicated hunters) | S6 |
+| CUSTOMIZE 1.5 pass shrink | 15% (Cash pass only) | **6%** for the 2x Cash pass, **6%** for the Shareholder pass | S6 |
+| CUSTOMIZE 1.5 T | 57 / 51.5 / 52 h | **55.5 / 50.4 / 51.2 / 51.6 h** with a typical raise (Medium) and the seed | S6 |
+| CUSTOMIZE 1.5 stamp clock | weighted like the valuation | **raw engaged hours** | S7 (bot) |
+| CUSTOMIZE 5.1 seed | s 10%, c 25% | keep c = 25%; `s` can go (cap binds in 100% of runs) | S1 |
+| CUSTOMIZE 5.2 bonus | +1.5 / 0.5 / 0.5, cap 10 | keep (worth 3.4% at most for a no-pass player) | S2 |
+| FUNDING 3 prices | 381 / 1,018 / 1,909 bp at Pre-IPO; "the price per hour is the same everywhere" | the claim is false; Pre-IPO row **56 / 109 / 150** on the measured savings, or the whole table x2.3 (Seed 8 / 22 / 48, A 117 / 313 / 571, B 200 / 509 / 919, C+D 258 / 673 / 1,212, Pre-IPO 130 / 252 / 345) with the Pre-IPO row hand-set to stay convex | S8 |
+| FUNDING 3 upper bound | Large every round "at most 12.18% of a loop" | measured **5.0% / 5.6%** | S8 |
+| FUNDING 9 question 2 | one `HoursShare` table or two | one table (0.6 points of a loop apart) | S8 |
+
+
 ## 5. Assumptions (where a doc is ambiguous, and what was run instead)
 
 Nothing below was changed silently; each open choice is either swept in the sim named, or marked as a plain assumption.
@@ -388,6 +684,8 @@ Nothing below was changed silently; each open choice is either swept in the sim 
 ## 6. Output of the default run and of `--long`: unchanged
 
 `python tools/economy_sim.py > after.txt` and `python tools/economy_sim.py --long > after_long.txt` were compared byte for byte (`cmp`) with the output of the unmodified script on `main` `e3c9e67`: **identical**, before the first commit and again before the last. The only edit to existing code is one line in `run()` (`player_cls`, default `Player`) so that S8 can run today's economy with rounds; with the default it builds the same object. Everything else is new code after `report_long` and in `main()`'s argument list.
+
+**Branch note.** The sims were first committed to `sims-two-sectors`; while this work was in progress two commits from another session (`95e30cc`, a CONTRIBUTING.md claim, and `c84a278`, `CompanyConfig.lua`, `SectorConfig.lua` and `tools/daily_test.py`) landed on that branch by accident. They did not touch `tools/economy_sim.py`, `docs/SIMS_RESULTS.md` or anything these sims read (`git diff f67ee5c sims-two-sectors -- tools/economy_sim.py docs/SIMS_RESULTS.md` is empty), so no number here depends on them. To keep this pull request to its own files, the work lives on **`sims-two-sectors-clean`**, branched from `origin/main`, with my claim commit cherry-picked; `sims-two-sectors` was not reset, rebased or force-pushed.
 
 ## 7. What was NOT modeled
 
