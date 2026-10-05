@@ -63,3 +63,121 @@ end
 print(string.format("PREVIEW_WORLD: %d parts (budget %d), %d lights (budget %d). Delete it before publishing.",
 	parts, WorldArt.Budget.parts, lights, WorldArt.Budget.lights))
 ```
+
+## The icon preview (command bar)
+
+Only to look at the icons in Studio; it never plays the game. It needs `IconArt` and `IconVisuals` as ModuleScripts in **ReplicatedStorage** (next to the existing `CreatureConfig`, `CreatureModels` and `ShopConfig`). Paste the block into **View > Command Bar** and press Enter: it builds a ScreenGui **`StarterGui.PREVIEW_ICONS`** with every icon in a grid at card size (56 px), each with a caption (its group and its drawing's name), the HUD icons on their real button colors, and prints one line per check (`OK` or `PROBLEM` and the first problem). It shows all 18 3D icons at once; the game never has more than 8 alive (the cap). Running it again replaces the old sheet.
+
+**Delete `StarterGui.PREVIEW_ICONS` before publishing**, and before any playtest (everything in StarterGui is copied onto every player's screen).
+
+```lua
+-- Icon preview: builds StarterGui.PREVIEW_ICONS with every icon and prints one line per check. Delete it before publishing.
+local RS = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+local artModule, visualsModule = RS:FindFirstChild("IconArt"), RS:FindFirstChild("IconVisuals")
+assert(artModule and visualsModule, "First create the ModuleScripts IconArt and IconVisuals in ReplicatedStorage")
+-- A fresh copy of the two new modules, so a change you just pasted is used (the command bar keeps what it required before)
+local IconArt = require(artModule:Clone())
+local IconVisuals = require(visualsModule:Clone())
+local CreatureConfig = require(RS:FindFirstChild("CreatureConfig"))
+local CreatureModels = require(RS:FindFirstChild("CreatureModels"))
+local ShopConfig = require(RS:FindFirstChild("ShopConfig"))
+local deps = { CreatureConfig = CreatureConfig, CreatureModels = CreatureModels }
+-- What needs an icon: the game's own lists (the Office upgrades are IconArt's, TycoonCore is a server Script)
+local expect = { Office = {}, Eggs = {}, Creatures = {}, Shop = {}, Hud = { "Eggs", "Shop", "Team", "Poach", "Ipo" }, rarity = {}, noText = {} }
+for key in pairs(IconArt.Office) do
+	table.insert(expect.Office, key)
+end
+table.sort(expect.Office)
+for _, egg in ipairs(CreatureConfig.Eggs) do
+	table.insert(expect.Eggs, egg.key)
+end
+for _, creature in ipairs(CreatureConfig.Creatures) do
+	table.insert(expect.Creatures, creature.key)
+	expect.rarity[creature.key] = creature.rarity
+end
+for _, list in ipairs({ ShopConfig.Passes, ShopConfig.Products }) do
+	for _, item in ipairs(list) do
+		table.insert(expect.Shop, item.key)
+		if item.changesOdds then
+			expect.noText[item.key] = true
+		end
+	end
+end
+-- The HUD buttons' own colors (EmployeeClient, ShopClient, PoachClient, IpoClient), to judge the light HUD icons on them
+local HUD_COLORS = { Eggs = { 70, 120, 255 }, Shop = { 0, 200, 90 }, Team = { 70, 120, 255 }, Poach = { 225, 95, 60 }, Ipo = { 225, 150, 20 } }
+local old = StarterGui:FindFirstChild("PREVIEW_ICONS")
+if old then
+	old:Destroy()
+end
+local gui = Instance.new("ScreenGui")
+gui.Name = "PREVIEW_ICONS"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 50
+local sheet = Instance.new("ScrollingFrame")
+sheet.Name = "Sheet"
+sheet.Position = UDim2.fromOffset(16, 16)
+sheet.Size = UDim2.new(1, -32, 1, -32)
+sheet.BackgroundColor3 = Color3.fromRGB(28, 30, 38)
+sheet.AutomaticCanvasSize = Enum.AutomaticSize.Y
+sheet.CanvasSize = UDim2.new()
+sheet.Parent = gui
+local layout = Instance.new("UIGridLayout")
+layout.CellSize = UDim2.fromOffset(104, 104)
+layout.CellPadding = UDim2.fromOffset(8, 8)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = sheet
+local icons, order = {}, 0
+for _, group in ipairs(IconVisuals.GROUPS) do
+	for _, key in ipairs(expect[group]) do
+		order += 1
+		local cell = Instance.new("Frame")
+		cell.Name = group .. "_" .. order
+		cell.LayoutOrder = order
+		cell.BackgroundColor3 = Color3.fromRGB(42, 45, 56)
+		cell.Parent = sheet
+		local slot = Instance.new("Frame")
+		slot.Name = "Slot"
+		slot.AnchorPoint = Vector2.new(0.5, 0)
+		slot.Position = UDim2.new(0.5, 0, 0, 8)
+		slot.Size = UDim2.fromOffset(56, 56)
+		slot.BackgroundTransparency = 1
+		local back = HUD_COLORS[key]
+		if group == "Hud" and back then
+			slot.BackgroundTransparency = 0
+			slot.BackgroundColor3 = Color3.fromRGB(back[1], back[2], back[3])
+			local round = Instance.new("UICorner")
+			round.CornerRadius = UDim.new(0, 14)
+			round.Parent = slot
+		end
+		slot.Parent = cell
+		local icon = IconVisuals.build(slot, IconArt, group, key, 56, deps)
+		local caption = Instance.new("TextLabel")
+		caption.Name = "Caption"
+		caption.Position = UDim2.new(0, 4, 1, -32)
+		caption.Size = UDim2.new(1, -8, 0, 28)
+		caption.BackgroundTransparency = 1
+		caption.TextScaled = true
+		caption.TextColor3 = Color3.fromRGB(235, 238, 245)
+		caption.Font = Enum.Font.GothamBold
+		caption.Text = group .. ": " .. (icon and icon:GetAttribute("Recipe") or "MISSING")
+		caption.Parent = cell
+		if icon then
+			table.insert(icons, icon)
+		end
+	end
+end
+gui.Parent = StarterGui
+for _, result in ipairs(IconVisuals.checks(IconArt, icons, expect)) do
+	local more = #result.problems > 1 and string.format(" (and %d more)", #result.problems - 1) or ""
+	print(#result.problems == 0 and "OK" or "PROBLEM", result.name, (result.problems[1] or "") .. more)
+end
+local views = 0
+for _, icon in ipairs(icons) do
+	if icon:FindFirstChild("View") then
+		views += 1
+	end
+end
+print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps at most %d 3D icons alive; this sheet shows all. Delete it before publishing.",
+	#icons, views, #icons - views, IconArt.Style.viewportCap))
+```

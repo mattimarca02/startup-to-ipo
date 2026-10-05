@@ -174,6 +174,7 @@ local Enum = {
 	Font = enumType({ "GothamBold", "Gotham", "FredokaOne", "GothamBlack", "LuckiestGuy" }),
 	ApplyStrokeMode = enumType({ "Border", "Contextual" }),
 	FillDirection = enumType({ "Horizontal", "Vertical" }),
+	AutomaticSize = enumType({ "None", "X", "Y", "XY" }),
 	SortOrder = enumType({ "LayoutOrder", "Name" }),
 	TextXAlignment = enumType({ "Left", "Center", "Right" }),
 }
@@ -740,6 +741,124 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+PREVIEW_TESTS = r"""-- Tests: the icon preview block of docs/STUDIO_SYNC_WORLD.md, run as it is in a fake place -------------------------
+local loaded = {
+	IconArt = (function()
+__ICONART__
+	end)(),
+	IconVisuals = (function()
+__ICONVISUALS__
+	end)(),
+	CreatureConfig = (function()
+__CREATURECONFIG__
+	end)(),
+	CreatureModels = (function()
+__CREATUREMODELS__
+	end)(),
+	ShopConfig = (function()
+__SHOPCONFIG__
+	end)(),
+}
+local RS, StarterGui = SERVICES.ReplicatedStorage, SERVICES.StarterGui
+for name, module in pairs(loaded) do
+	local script = newInstance("ModuleScript")
+	script.Name = name
+	script.Parent = RS
+	MODULES[script] = module
+end
+local baseClone = Methods.Clone
+function Methods.Clone(t)
+	local c = baseClone(t)
+	if MODULES[t] ~= nil then MODULES[c] = MODULES[t] end
+	return c
+end
+local REAL_HUD = __HUDCOLORS__
+local function has(prefix)
+	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #prefix) == prefix then return true end end
+	return false
+end
+local function runPreview()
+	table.clear(PRINTED)
+	return pcall(function()
+__PREVIEW__
+	end)
+end
+local ok, err = runPreview()
+check("icon preview: the block runs in the fake place without an error", ok, err)
+local gui = StarterGui:FindFirstChild("PREVIEW_ICONS")
+local sheet = gui and gui:FindFirstChild("Sheet")
+local cells, icons, missing = 0, 0, 0
+for _, cell in ipairs(sheet and sheet:GetChildren() or {}) do
+	if cell.ClassName == "Frame" then
+		cells += 1
+		local slot = cell:FindFirstChild("Slot")
+		if slot and slot:FindFirstChild("Icon") then icons += 1 end
+		if string.find(cell:FindFirstChild("Caption").Text, "MISSING", 1, true) then missing += 1 end
+	end
+end
+check("icon preview: StarterGui.PREVIEW_ICONS holds 38 cells, each with its icon and a caption", gui ~= nil and cells == 38 and icons == 38 and missing == 0, cells .. "/" .. icons .. "/" .. missing)
+for _, name in ipairs(loaded.IconVisuals.CHECKS) do
+	check("icon preview: it prints OK for the check " .. name, has("OK " .. name), PRINTED[1])
+end
+check("icon preview: it prints the count line (38 icons, 18 3D, 20 drawn, the cap of 8)",
+	has("PREVIEW_ICONS: 38 icons (18 3D, 20 drawn). The game keeps at most 8 3D icons alive; this sheet shows all. Delete it before publishing."))
+local captions = {}
+for _, cell in ipairs(sheet:GetChildren()) do
+	local caption = cell:FindFirstChild("Caption")
+	if caption then captions[caption.Text] = true end
+end
+check("icon preview: captions name the drawing, never the product's word (Shop: Clover, Shop: Coin2x, Hud: HudMagnet)", captions["Shop: Clover"] and captions["Shop: Coin2x"] and captions["Hud: HudMagnet"])
+local hudOk = true
+for _, cell in ipairs(sheet:GetChildren()) do
+	local slot = cell:FindFirstChild("Slot")
+	local icon = slot and slot:FindFirstChild("Icon")
+	if icon and icon:GetAttribute("Group") == "Hud" then
+		local want = REAL_HUD[icon:GetAttribute("Key")]
+		if not want or slot.BackgroundColor3 ~= Color3.fromRGB(want[1], want[2], want[3]) or slot.BackgroundTransparency ~= 0 then hudOk = false end
+	end
+end
+check("icon preview: each HUD icon sits on its button's real color (from the client scripts)", hudOk)
+runPreview()
+local n = 0
+for _, c in ipairs(StarterGui:GetChildren()) do if c.Name == "PREVIEW_ICONS" then n += 1 end end
+check("icon preview: running it again replaces the old sheet (one PREVIEW_ICONS)", n == 1)
+local saved = {}
+for _, c in ipairs(RS:GetChildren()) do if c.Name == "IconArt" or c.Name == "IconVisuals" then table.insert(saved, c); c.Parent = nil end end
+local missingOk, missingErr = runPreview()
+check("icon preview: without the two ModuleScripts it stops at once with a clear message", not missingOk and string.find(tostring(missingErr), "First create the ModuleScripts", 1, true) ~= nil, missingErr)
+for _, c in ipairs(saved) do c.Parent = RS end
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def hud_colors_lua():
+    """The HUD buttons' background colors, read from the four client scripts."""
+    def color(filename, field):
+        text = read(filename)
+        m = re.search(r"\b%s = Color3\.fromRGB\((\d+), (\d+), (\d+)\)" % field, text)
+        if not m or ("BackgroundColor3 = COLORS.%s," % field) not in text:
+            raise SystemExit("icon_test: the %s button color changed in %s" % (field, filename))
+        return "{ %s, %s, %s }" % m.groups()
+    employee, shop, poach, ipo = color("EmployeeClient.lua", "hud"), color("ShopClient.lua", "buy"), color("PoachClient.lua", "poach"), color("IpoClient.lua", "hud")
+    return "{ Eggs = %s, Shop = %s, Team = %s, Poach = %s, Ipo = %s }" % (employee, shop, employee, poach, ipo)
+
+
+def doc_block(heading):
+    text = read("docs/STUDIO_SYNC_WORLD.md")
+    start = text.index("```lua\n", text.index(heading)) + len("```lua\n")
+    return text[start:text.index("```", start)]
+
+
+def preview_source():
+    block = "\n".join("\t\t" + line if line.strip() else line for line in doc_block("## The icon preview (command bar)").split("\n"))
+    text = PREVIEW_TESTS
+    for key, value in (("__ICONART__", read("IconArt.lua")), ("__ICONVISUALS__", read("IconVisuals.lua")), ("__CREATURECONFIG__", read("CreatureConfig.lua")),
+                       ("__CREATUREMODELS__", read("CreatureModels.lua")), ("__SHOPCONFIG__", read("ShopConfig.lua")), ("__HUDCOLORS__", hud_colors_lua()),
+                       ("__PREVIEW__", block)):
+        text = text.replace(key, value)
+    return PRELUDE + text
+
+
 def upgrades_lua():
     core = read("TycoonCore.lua")
     names = re.findall(r'\{ name = "([^"]+)",\s+cost = ', core)
@@ -940,6 +1059,13 @@ def main():
     if not m or m.group(2) != "0" or result.returncode != 0:
         code = 1
     total += int(m.group(1)) if m else 0
+    if os.path.exists(os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")) and "## The icon preview (command bar)" in read("docs/STUDIO_SYNC_WORLD.md"):
+        result = run_luau(luau, preview_source())
+        print("Icon preview block (docs/STUDIO_SYNC_WORLD.md) in a fake place: " + (result.stdout.strip() or result.stderr.strip()))
+        m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+        if not m or m.group(2) != "0":
+            code = 1
+        total += int(m.group(1)) if m else 0
     static_passed, static_failed = static_checks()
     print("Icon source checks: %d passed, %d failed" % (static_passed, static_failed))
     total += static_passed
