@@ -24,7 +24,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in a fake place by `tools/world_test.py` (23 checks)
 
 **Phase 3: icons**
-- [ ] 3.1 `IconArt.lua` (pure data, style sheet)
+- [x] 3.1 `IconArt.lua` (pure data, style sheet): 38 recipes (6 Office props copied from PlotArt, 3 eggs, 12 creatures, 12 shop items, 5 HUD buttons)
 - [ ] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions)
 - [ ] 3.3 `tools/icon_test.py`
 - [ ] 3.4 Icon mutants, group A
