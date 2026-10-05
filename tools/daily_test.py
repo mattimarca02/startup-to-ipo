@@ -4548,8 +4548,8 @@ for name, probe in pairs(keptAt) do
 	local ok, result = pcall(probe)
 	check("unknown data is kept: " .. name, ok and result == true)
 end
-out.active.objects[1].x = 99
-check("the saved section is a copy: changing it never changes the live state", state.section.active.objects[1].x == -23)
+local changedCopy = pcall(function() out.active.objects[1].x = 99 end)
+check("the saved section is a copy: changing it never changes the live state", changedCopy and state.section.active.objects[1].x == -23)
 
 -- 4. The version rule ----------------------------------------------------------------------
 local V2 = { v = 2, run = 0, active = { sector = "Software", name = "From the future", newShape = { 1, 2 } }, extra = { a = { b = 1 } }, sectors = { Software = "other shape" } }
@@ -4582,21 +4582,26 @@ end
 state = load(savedCompany(0), 1)
 s = state.section
 check("run < count: the event is 'complete', with a warning", state.event == "complete" and anyWarning("older version ran an IPO"))
-check("run < count: Software is done with Bronze, first done now", s.sectors.Software.state == "done" and s.sectors.Software.stamp == 1 and s.sectors.Software.firstAt == NOW and s.sectors.Software.replays == 0)
-check("run < count: the best engaged time is the company's", s.sectors.Software.bestEngaged == 100.5)
-local card = s.sectors.Software.card
+local entry = s.sectors.Software or {} -- (a broken run check must fail these checks by name, not crash the program)
+check("run < count: Software is done with Bronze, first done now", entry.state == "done" and entry.stamp == 1 and entry.firstAt == NOW and entry.replays == 0)
+check("run < count: the best engaged time is the company's", entry.bestEngaged == 100.5)
+local card = entry.card or { decor = {}, objects = {}, rounds = {}, sx = {}, owned = {} }
 check("run < count: the card names the company, the IPO number and the date", card.name == "Pixel Pioneers" and card.ipoNumber == 1 and card.at == NOW)
-check("run < count: the card keeps the building, decor, items, rounds and sx as they were",
-	card.building == 3 and card.decor.Chair == 1 and card.objects[1].id == "Desk" and card.rounds.Seed.bp == 300 and card.sx.n == 1 and card.engaged == 100.5)
+check("run < count: the card keeps the building, decor, items and sx as they were",
+	card.building == 3 and card.decor.Chair == 1 and card.objects[1].id == "Desk" and card.sx.n == 1 and card.engaged == 100.5)
+check("run < count: the card keeps the rounds (the Seed round, 300 bp)", card.rounds.Seed ~= nil and card.rounds.Seed.bp == 300)
 check("run < count: the stake is 10,000 minus the dilution, what is unknown is 0", card.stake == 9700 and card.ratio == 0 and card.shares == 0 and #card.owned == 0)
 do
 	local live = CC.load(deepCopy(savedCompany(2)), ctx(2)).section
 	CC.completeCompany(live, 3, NOW)
-	live.active.objects[1].x = 99
-	live.active.rounds.Seed.bp = 1
-	live.active.decor.Chair = 9
+	-- (changing the live company afterwards: through pcall, a broken load must fail this check, not stop the program)
+	local touched = pcall(function()
+		live.active.objects[1].x = 99
+		live.active.rounds.Seed.bp = 1
+		live.active.decor.Chair = 9
+	end)
 	local made = live.sectors.Software.card
-	check("completeCompany: the card is a copy (changing the live company never changes it)", made.objects[1].x == -23 and made.rounds.Seed.bp == 300 and made.decor.Chair == 1)
+	check("completeCompany: the card is a copy (changing the live company never changes it)", touched and made.objects[1].x == -23 and made.rounds.Seed ~= nil and made.rounds.Seed.bp == 300 and made.decor.Chair == 1)
 end
 check("run < count: a new company starts (same sector, building 1, nothing placed, no rounds, picked while the picker is off)",
 	s.active.sector == "Software" and s.active.building == 1 and next(s.active.objects) == nil and next(s.active.rounds) == nil
@@ -4626,7 +4631,7 @@ check("a finished sector saved with stamp 0 counts as Bronze", load(done, 1).sec
 local both = savedCompany(0)
 both.sectors = { Gaming = { state = "done", stamp = 3, replays = 0, firstAt = 5, bestEngaged = 1 } }
 state = load(both, 1)
-check("Gaming 'done' in a save (a Studio test) is kept but Launch is not reached while Gaming can't be picked", state.section.sectors.Gaming.stamp == 3 and state.section.sectors.Software.state == "done" and state.section.hall.Launch == nil)
+check("Gaming 'done' in a save (a Studio test) is kept but Launch is not reached while Gaming can't be picked", state.section.sectors.Gaming.stamp == 3 and (state.section.sectors.Software or {}).state == "done" and state.section.hall.Launch == nil)
 SectorConfig.Sectors.Gaming.enabled = true
 check("... with Gaming enabled, both done is the Launch goal", load(deepCopy(both), 1).section.hall.Launch == NOW)
 SectorConfig.Sectors.Gaming.enabled = false
@@ -4685,7 +4690,7 @@ check("a name that isn't a string is skipped (the sector's first name)", sec.act
 sec, warned = loaded(function(d) d.active.name = string.rep("x", 61) end)
 check("a name over 60 characters is skipped", sec.active.name == SectorConfig.defaultName("Software") and warned == 1)
 sec, warned = loaded(function(d) d.active.passSeconds.DoubleCash = -1; d.active.passSeconds.VIP = "x" end)
-check("passSeconds: a bad value of a known pass is skipped, the others stay", sec.active.passSeconds.DoubleCash == nil and sec.active.passSeconds.VIP == nil and sec.active.passSeconds.FuturePass.a == 1 and warned == 2)
+check("passSeconds: a bad value of a known pass is skipped, the others stay", sec.active.passSeconds.DoubleCash == nil and sec.active.passSeconds.VIP == nil and (sec.active.passSeconds.FuturePass or {}).a == 1 and warned == 2)
 sec, warned = loaded(function(d) d.active.passSeconds = 5 end)
 check("passSeconds that isn't a table is skipped", next(sec.active.passSeconds) == nil and warned == 1)
 sec, warned = loaded(function(d)
@@ -4722,10 +4727,10 @@ check("decor that isn't a table is skipped", next(sec.active.decor) == nil and w
 sec, warned = loaded(function(d)
 	d.active.rounds = { Seed = "x", SeriesA = { s = "maybe", bp = 300, extra = 1 }, SeriesB = { s = "raised", bp = 12.5 }, Future = { bp = 500 } }
 end)
-check("rounds: a record of a known stage that isn't a table counts as settled (skipped, no dilution)", sec.active.rounds.Seed.s == "skipped" and sec.active.rounds.Seed.bp == 0)
-check("rounds: a malformed record counts as settled with bp 0, its unknown fields stay", sec.active.rounds.SeriesA.s == "skipped" and sec.active.rounds.SeriesA.bp == 0 and sec.active.rounds.SeriesA.extra == 1)
-check("rounds: a fractional bp is malformed too", sec.active.rounds.SeriesB.bp == 0 and sec.active.rounds.SeriesB.s == "skipped")
-check("rounds: an unknown stage is kept whole", sec.active.rounds.Future.bp == 500 and warned == 3, warned)
+check("rounds: a record of a known stage that isn't a table counts as settled (skipped, no dilution)", (sec.active.rounds.Seed or {}).s == "skipped" and (sec.active.rounds.Seed or {}).bp == 0)
+check("rounds: a malformed record counts as settled with bp 0, its unknown fields stay", (sec.active.rounds.SeriesA or {}).s == "skipped" and (sec.active.rounds.SeriesA or {}).bp == 0 and (sec.active.rounds.SeriesA or {}).extra == 1)
+check("rounds: a fractional bp is malformed too", (sec.active.rounds.SeriesB or {}).bp == 0 and (sec.active.rounds.SeriesB or {}).s == "skipped")
+check("rounds: an unknown stage is kept whole", (sec.active.rounds.Future or {}).bp == 500 and warned == 3, warned)
 check("dilution: an unknown stage's valid bp counts, a malformed one counts 0", CC.dilution(sec.active.rounds) == 500 and CC.stakeOf(sec.active.rounds) == 9500)
 check("dilution is capped (4,000 bp), the stake never falls under 6,000", CC.dilution({ A = { bp = 3000 }, B = { bp = 3000 } }) == 4000 and CC.stakeOf({ A = { bp = 9000 } }) == 6000)
 check("dilution ignores bad bp (negative, fractional, huge, NaN, a string)", CC.dilution({ A = { bp = -5 }, B = { bp = 1.5 }, C = { bp = 20000 }, D = { bp = 0 / 0 }, E = { bp = "9" }, F = "x", G = { bp = 7 } }) == 7)
@@ -4838,9 +4843,17 @@ local function env(change)
 	return e
 end
 local function placed(e, id, x, z, r)
-	local ok, why = CC.checkPlacement(e, id, x, z, r)
+	-- A check that throws is neither a yes nor a refusal: it returns nil (never == false), so `== false` checks fail by name
+	local called, ok, why = pcall(CC.checkPlacement, e, id, x, z, r)
+	if not called then return nil, "error: " .. tostring(ok) end
 	return ok, why
 end
+-- A refusal for exactly this reason (the text is the server's answer to the player)
+local function refusedFor(name, reason, e, id, x, z, r)
+	local ok, why = placed(e, id, x, z, r)
+	check(name, ok == false and why == reason, why)
+end
+local SPOT_BAD, TURN_BAD, NO_SIZE, NO_ZONES = "That spot isn't valid", "That turn isn't valid", "Your office isn't ready for that yet", "The office layout isn't available right now"
 check("the anchor: the plot's Floor is 60 deep and the plot center is 30 behind its front", CC.FloorDepth == PlotArt.Layout.floorSize[3] and CC.Buildings.Sizes[1].w == PlotArt.Layout.floorSize[1] and CC.Buildings.Sizes[1].d == PlotArt.Layout.floorSize[3])
 check("five nested buildings, each at least as big as the one before", #CC.Buildings.Sizes == 5 and (function()
 	for i = 2, 5 do
@@ -4896,16 +4909,17 @@ check("placement: a 39-character unknown id is still refused (it is not an item)
 check("placement: nil id", placed(e, nil, -20, -6, 0) == false)
 -- numbers
 for _, bad in ipairs({ 0 / 0, math.huge, -math.huge, "1", true, 1e9, -1e9, 1001 }) do
-	check("placement: x = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", bad, -6, 0) == false)
-	check("placement: z = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", -20, bad, 0) == false)
+	refusedFor("placement: x = " .. tostring(bad) .. " is refused (as not a valid spot)", SPOT_BAD, e, "Coffee Machine", bad, -6, 0)
+	refusedFor("placement: z = " .. tostring(bad) .. " is refused (as not a valid spot)", SPOT_BAD, e, "Coffee Machine", -20, bad, 0)
 end
 check("placement: a spot off the 0.5 grid is refused (the same spot on the grid is allowed)", placed(e, "Coffee Machine", -20.3, -6, 0) == false and placed(e, "Coffee Machine", -20, -6.25, 0) == false
 	and placed(e, "Coffee Machine", -20.25, -6, 0) == false and placed(e, "Coffee Machine", -20.5, -6, 0) == true and placed(e, "Coffee Machine", -20, -6.5, 0) == true)
-check("placement: a missing x or z is refused", placed(e, "Coffee Machine", nil, -6, 0) == false and placed(e, "Coffee Machine", -20, nil, 0) == false)
+refusedFor("placement: a missing x is refused (as not a valid spot)", SPOT_BAD, e, "Coffee Machine", nil, -6, 0)
+refusedFor("placement: a missing z is refused (as not a valid spot)", SPOT_BAD, e, "Coffee Machine", -20, nil, 0)
 for _, bad in ipairs({ -1, 8, 1.5, "1", true, 0 / 0, math.huge, 100 }) do
-	check("placement: r = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", -20, -6, bad) == false)
+	refusedFor("placement: r = " .. tostring(bad) .. " is refused (as not a valid turn)", TURN_BAD, e, "Coffee Machine", -20, -6, bad)
 end
-check("placement: a missing r is refused", placed(e, "Coffee Machine", -20, -6, nil) == false)
+refusedFor("placement: a missing r is refused (as not a valid turn)", TURN_BAD, e, "Coffee Machine", -20, -6, nil)
 -- ownership
 local none = env(function(x) x.owned = {} end)
 check("placement: an upgrade you don't own is refused", placed(none, "Coffee Machine", -20, -6, 0) == false)
@@ -4924,7 +4938,9 @@ check("placement: turned 90 degrees, the sides swap", placed(e, "Coffee Machine"
 check("placement: turned 45 degrees takes more room (the corners)", placed(e, "Coffee Machine", -28.5, -6, 1) == false)
 local big = env(function(x) x.building = 5 end)
 check("placement: building 5 (78 x 82) is bigger: x -36.5 fits there and not in building 1", placed(big, "Coffee Machine", -36.5, -6, 0) == true and placed(e, "Coffee Machine", -36.5, -6, 0) == false)
-check("placement: a building number with no size is refused", placed(env(function(x) x.building = 6 end), "Desk", -23, -40, 0) == false and placed(env(function(x) x.building = 0 end), "Desk", -23, -40, 0) == false)
+refusedFor("placement: building 6 has no size: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = 6 end), "Desk", -23, -40, 0)
+refusedFor("placement: building 0 has no size: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = 0 end), "Desk", -23, -40, 0)
+refusedFor("placement: no building at all: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = nil end), "Desk", -23, -40, 0)
 -- zones
 check("placement: the walking lane down the middle is reserved", placed(e, "Coffee Machine", 0, -35, 0) == false)
 check("placement: the spawn is reserved", placed(e, "Coffee Machine", 0, -18, 0) == false)
@@ -4936,7 +4952,8 @@ _, why = placed(e, "Desk", -23, -28, 0)
 check("placement: ... and says so", string.find(tostring(why), "reserved", 1, true) ~= nil, why)
 check("placement: your own slot is yours (the Laptop in the Desk's slot is not)", placed(e, "Desk", -23, -40, 0) == true and placed(e, "Laptop", -23, -40, 0) == false)
 check("placement: a slot's owner can move around inside it", placed(e, "Desk", -22, -41, 0) == true)
-check("placement: without the plot's zones the server refuses (it can't know what is reserved)", placed(env(function(x) x.zones = nil end), "Coffee Machine", -20, -6, 0) == false)
+refusedFor("placement: without the plot's zones the server refuses (it can't know what is reserved)", NO_ZONES, env(function(x) x.zones = nil end), "Coffee Machine", -20, -6, 0)
+refusedFor("placement: zones that are not a table are refused the same way", NO_ZONES, env(function(x) x.zones = true end), "Coffee Machine", -20, -6, 0)
 check("placement: an empty zone list is not 'unknown': nothing is reserved", placed(env(function(x) x.zones = {} end), "Coffee Machine", 0, -35, 0) == true)
 -- overlap, with the 0.1 stud tolerance
 local with = env(function(x) x.objects = { { id = "Coffee Machine", x = -20, z = -6, r = 0 } } end)
@@ -5136,7 +5153,7 @@ COMPANY_MUTATIONS = [
     ("replays (a second completion isn't counted)", ("\t\tentry.replays += 1\n", "\t\tentry.replays += 0\n"),
      "a replay: Platinum stays Platinum, replays + 1, firstAt kept, best engaged is the larger"),
     ("the card (it doesn't keep the rounds)", ("rounds = deepCopy(active.rounds),\n\t\tstake", "rounds = {},\n\t\tstake"),
-     "run < count: the card keeps the building, decor, items, rounds and sx as they were"),
+     "run < count: the card keeps the rounds (the Seed round, 300 bp)"),
     ("the card (the stake ignores the dilution)", ("stake = CompanyConfig.stakeOf(active.rounds),", "stake = TOTAL_BP,"),
      "run < count: the stake is 10,000 minus the dilution, what is unknown is 0"),
     ("the Launch goal (a sector that can't be picked counts)", ("if not (SectorConfig.isEnabled(key) and typeof(other) == \"table\" and other.state == \"done\") then", "if not (typeof(other) == \"table\" and other.state == \"done\") then"),
@@ -5194,7 +5211,8 @@ COMPANY_MUTATIONS = [
     ("the dilution sum (unknown stages ignored)", ("if typeof(round) == \"table\" and isWhole(round.bp, 0, TOTAL_BP) then", "if typeof(round) == \"table\" and STAGE_KEYS[_] and isWhole(round.bp, 0, TOTAL_BP) then"),
      "dilution: an unknown stage's valid bp counts, a malformed one counts 0"),
     # Placement
-    ("the coordinate check", ("if not isNumber(x) or not isNumber(z) or math.abs(x) > limit or math.abs(z) > limit then", "if false then")),
+    ("the coordinate check", ("if not isNumber(x) or not isNumber(z) or math.abs(x) > limit or math.abs(z) > limit then", "if false then"),
+     "placement: x = "),
     ("the grid check on placement", ("if (x / CompanyConfig.Grid) % 1 ~= 0 or (z / CompanyConfig.Grid) % 1 ~= 0 then", "if false then")),
     ("the rotation check", ("if not isWhole(r, 0, CompanyConfig.MaxRotation) then", "if false then")),
     ("the rotation range (0 to 8)", ("if not isWhole(r, 0, CompanyConfig.MaxRotation) then", "if not isWhole(r, 0, CompanyConfig.MaxRotation + 1) then"),
@@ -5204,7 +5222,7 @@ COMPANY_MUTATIONS = [
     ("the ownership check (furniture)", ("elseif not (env.decor and (env.decor[key] or 0) >= copy) then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building", "elseif false then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building"),
      "furniture: Chair#1 and Chair#2 are yours, Chair#3 is not"),
     ("the building check (a size that doesn't exist)", ("if not building then\n\t\treturn false, \"Your office isn't ready for that yet\"", "if false then\n\t\treturn false, \"Your office isn't ready for that yet\""),
-     "placement: a building number with no size is refused"),
+     "placement: building 6 has no size: refused (the office isn't ready)"),
     ("the zones check (missing zones accepted)", ("if typeof(env.zones) ~= \"table\" then", "if false then"),
      "placement: without the plot's zones the server refuses (it can't know what is reserved)"),
     ("the inside-the-building check (the back wall)", ("or corner[2] < -building.d - EPSILON or corner[2] > EPSILON then", "or corner[2] > EPSILON then"),
@@ -5365,6 +5383,20 @@ for _, inst in ipairs(CREATED) do
 	if inst.Name == "CompanyRemotes" then folderName = inst end
 end
 check("init builds CompanyRemotes with a CompanyAction remote and nothing else", action ~= nil and folderName ~= nil)
+-- Every request goes through a wrapper: a handler that throws is recorded and answers nil (never == false, never a refusal),
+-- so a broken rule fails its own named check instead of stopping the program.
+local THROWS = {}
+do
+	local handler = action
+	action = function(...)
+		local called, a, b, c = pcall(handler, ...)
+		if not called then
+			table.insert(THROWS, tostring(a))
+			return nil, "error: " .. tostring(a)
+		end
+		return a, b, c
+	end
+end
 check("... and exactly two Instances were made (the folder and the remote)", #CREATED == 2)
 
 local function newPlayer(saved, opts)
@@ -5404,7 +5436,7 @@ check("serialize: no data.pokedex, no section", CompanyServer.serialize({}) == n
 local saved = deepCopy(out)
 saved.studio = nil
 p, d = newPlayer(deepCopy(saved), { count = 4 })
-check("join: an older version ran an IPO (run 3, count 4): Bronze and a card", CompanyServer.serialize(d).sectors.Software.stamp == 1 and CompanyServer.serialize(d).run == 4 and anyWarning("older version ran an IPO"))
+check("join: an older version ran an IPO (run 3, count 4): Bronze and a card", (CompanyServer.serialize(d).sectors.Software or {}).stamp == 1 and CompanyServer.serialize(d).run == 4 and anyWarning("older version ran an IPO"))
 p, d = newPlayer(deepCopy(saved), { count = 0 })
 check("join: the count went down (Studio IpoReset): no stamp, run follows, the company stays", CompanyServer.serialize(d).sectors.Software == nil and CompanyServer.serialize(d).run == 0 and anyWarning("IPO reset in Studio"))
 p, d = newPlayer(deepCopy(saved), { count = 3 })
@@ -5420,20 +5452,32 @@ p, d = newPlayer(deepCopy(V2), { count = 5 })
 check("v 2: locked", CompanyServer.isLocked(d) == true)
 check("v 2: the save writes it back deep-equal, even from a Studio server", deepEqual(CompanyServer.serialize(d), V2))
 for _, request in ipairs({ { "Place", "Desk", -23, -40, 0 }, { "Store", "Desk" }, { "Sync" } }) do
-	local ok, why = tap(p, table.unpack(request))
-	check("v 2: " .. request[1] .. " is refused and says why", ok == false and string.find(tostring(why), "newer version", 1, true) ~= nil, why)
+	local called, ok, why = pcall(tap, p, table.unpack(request)) -- a request that throws is not a refusal
+	check("v 2: " .. request[1] .. " is refused and says why", called and ok == false and string.find(tostring(why), "newer version", 1, true) ~= nil, called and why or ok)
 end
 check("v 2: nothing changed", deepEqual(CompanyServer.serialize(d), V2))
--- a load that throws: the section is kept as it was
+-- a load that throws: the section is kept as it was. The stub throws only for a saved section (a real new founding still
+-- works), so code that answers a throw with a new company would lose the section: setupPlayer is called through pcall.
 local realLoad = CC.load
-CC.load = function() error("boom") end
+CC.load = function(saved, ctx) if saved ~= nil then error("boom") end return realLoad(saved, ctx) end
 local broken = { v = 1, run = 0, active = "whatever", precious = { x = 1 } }
-p, d = newPlayer(deepCopy(broken), { count = 0 })
+local brokenPlayer = { Name = "P" }
+local brokenData = { ready = true, loaded = true, owned = {}, ipo = { count = 0 } }
+brokenPlayer.data = brokenData
+WARNINGS = {}
+local joinedOk, joinError = pcall(CompanyServer.setupPlayer, brokenPlayer, brokenData, deepCopy(broken))
 CC.load = realLoad
-check("a load that throws: locked, warned, written back as it was", CompanyServer.isLocked(d) and anyWarning("boom") and deepEqual(CompanyServer.serialize(d), broken))
+check("a load that throws: setupPlayer itself doesn't throw", joinedOk, joinError)
+check("a load that throws: locked, warned, written back as it was", joinedOk and CompanyServer.isLocked(brokenData) and anyWarning("boom") and deepEqual(CompanyServer.serialize(brokenData), broken))
 -- an unknown sector in the active company
 p, d = newPlayer({ v = 1, run = 0, active = { sector = "Energy" } }, { count = 0 })
 check("an unknown active sector: locked and written back as it was", CompanyServer.isLocked(d) and deepEqual(CompanyServer.serialize(d), { v = 1, run = 0, active = { sector = "Energy" } }))
+for _, request in ipairs({ { "Place", "Desk", -23, -40, 0 }, { "Store", "Desk" }, { "Sync" } }) do
+	local called, ok = pcall(tap, p, table.unpack(request))
+	check("unknown sector: " .. request[1] .. " is refused (through pcall: a throw is not a refusal)", called and ok == false, ok)
+end
+check("unknown sector: Place, Store and Sync are refused and the section is unchanged",
+	#d.pokedex.section.active.objects == 0 and next(d.pokedex.section.active.stored) == nil and deepEqual(CompanyServer.serialize(d), { v = 1, run = 0, active = { sector = "Energy" } }))
 
 -- 3. Requests: who may ask, and when -------------------------------------------------------------
 p, d = newPlayer(nil)
@@ -5493,7 +5537,7 @@ check("sync: the zones are measured from the anchor (the walking lane ends at th
 end)())
 ok, msg, info = tap(p, "Place", "Coffee Machine", -20, -6, 2)
 check("place: an owned upgrade in a free spot", ok == true and msg == "Placed Coffee Machine" and info.x == -20 and info.r == 2)
-check("place: the company has it, saved on the next save (not on every request)", CompanyServer.serialize(d).active.objects[1].id == "Coffee Machine" and SAVES == 0)
+check("place: the company has it, saved on the next save (not on every request)", (CompanyServer.serialize(d).active.objects[1] or {}).id == "Coffee Machine" and SAVES == 0)
 check("place: Cash, Income and the valuation are untouched", d.cash.Value == 500 and d.income.Value == 10 and d.ipo.valuation == 700 and d.ipo.lifetime == 900)
 ok, msg = tap(p, "Place", "Coffee Machine", -14, -6, 0)
 check("place: placing it again moves it, never two entries", ok and #CompanyServer.serialize(d).active.objects == 1 and CompanyServer.serialize(d).active.objects[1].x == -14)
@@ -5527,8 +5571,8 @@ ok, msg, info = tap(p, "Sync")
 check("sync: lists the inventory sorted", #info.stored == 1 and info.stored[1] == "Laptop" and #info.objects == 1)
 check("place, store and sync never saved by themselves (autosave does it)", SAVES == 0)
 local objectsCopy = info.objects
-objectsCopy[1].x = 99
-check("sync: the answer is a copy (changing it never changes the company)", CompanyServer.serialize(d).active.objects[1].x ~= 99)
+local changedAnswer = pcall(function() objectsCopy[1].x = 99 end)
+check("sync: the answer is a copy (changing it never changes the company)", changedAnswer and CompanyServer.serialize(d).active.objects[1].x ~= 99)
 -- without the plot's zones the server can't know what is reserved
 do
 	local bare = buildCompanyServer()
@@ -5573,7 +5617,7 @@ for _, action_ in ipairs({ "Place", "Store" }) do
 		end
 	end
 end
-check("fuzz: bad Place and Store requests never throw", errors == 0)
+check("fuzz: bad Place and Store requests never throw", errors == 0 and #THROWS == 0, THROWS[1])
 check("fuzz: ... and none of them was accepted", changed == 0 and deepEqual(snapshotOf(d), before))
 
 -- 7. An IPO done by this version: run follows the count (no stamp, no card, no run-check event) --------------------
@@ -5619,6 +5663,8 @@ local okCalls = pcall(function()
 	CompanyServer.onIpo({ pokedex = { locked = false } }, 1)
 end)
 check("writeIpoRun and onIpo never throw (no data, no section, no payload)", okCalls)
+
+check("no request ever threw (a handler that throws is a bug, not a refusal)", #THROWS == 0, THROWS[1])
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
@@ -6108,10 +6154,11 @@ def pokedex_wiring_checks():
     for call in (".init(", ".setupPlayer("):
         order = ["IpoServer", "ShopServer", "EmployeeServer", "PoachServer", "OnboardingServer", "CompanyServer", "TaskServer", "DailyServer"] if call == ".init(" else \
             ["IpoServer", "EmployeeServer", "PoachServer", "OnboardingServer", "CompanyServer", "TaskServer", "DailyServer"]
-        positions = [code.index(name + call) for name in order]
+        positions = [code.find(name + call) for name in order] # find: a missing call is -1 and fails the order check by name
         check("TycoonCore: %s%s calls run in the order %s" % ("<module>", call, " > ".join(order)), positions == sorted(positions), positions)
-    check("TycoonCore: CompanyServer.setupPlayer runs before DailyServer.setupPlayer (Daily stays last)", code.index("CompanyServer.setupPlayer(") < code.index("DailyServer.setupPlayer("))
-    check("TycoonCore: CompanyServer.setupPlayer runs after IpoServer.setupPlayer (the run check reads the IPO count)", code.index("IpoServer.setupPlayer(") < code.index("CompanyServer.setupPlayer("))
+    check("TycoonCore: CompanyServer.setupPlayer is called exactly once", code.count("CompanyServer.setupPlayer(") == 1, code.count("CompanyServer.setupPlayer("))
+    check("TycoonCore: CompanyServer.setupPlayer runs before DailyServer.setupPlayer (Daily stays last)", 0 <= code.find("CompanyServer.setupPlayer(") < code.find("DailyServer.setupPlayer("))
+    check("TycoonCore: CompanyServer.setupPlayer runs after IpoServer.setupPlayer (the run check reads the IPO count)", 0 <= code.find("IpoServer.setupPlayer(") < code.find("CompanyServer.setupPlayer("))
     setups = re.findall(r"(\w+Server)\.setupPlayer\(", code)
     check("TycoonCore: DailyServer is the last module set up for a player", setups[-1] == "DailyServer", setups)
     check("TycoonCore: CompanyServer is required with the other modules", 'local CompanyServer = require(script.Parent:WaitForChild("CompanyServer"))' in core)
@@ -6159,9 +6206,9 @@ def pokedex_wiring_checks():
           not re.search(r"data\.(cash|income|owned|ipo|team|shop|poach|daily|tasks|onboarding|fixedHires)\b\s*(\.\w+\s*)*(=[^=]|\+=|-=)", server)
           and not re.search(r"\.Value\s*(=[^=]|\+=|-=)", server))
     check("CompanyServer: it never calls core.save (autosave and the leave save write placements; a purchase is not involved)", "core.save" not in server)
-    check("CompanyServer: Place and Store change data only after CompanyConfig.checkPlacement / checkStore", server.index("CompanyConfig.checkPlacement(") < server.index("CompanyConfig.applyPlace(") and server.index("CompanyConfig.checkStore(") < server.index("CompanyConfig.applyStore("))
-    check("CompanyServer: the Studio-only switch is checked before any change", server.index("CompanyConfig.isPlacementActive()") < server.index("CompanyConfig.applyPlace("))
-    check("CompanyServer: the request limit is checked before the switch and the checks", server.index("CompanyConfig.takeToken(") < server.index("CompanyConfig.isPlacementActive()"))
+    check("CompanyServer: Place and Store change data only after CompanyConfig.checkPlacement / checkStore", 0 <= server.find("CompanyConfig.checkPlacement(") < server.find("CompanyConfig.applyPlace(") and 0 <= server.find("CompanyConfig.checkStore(") < server.find("CompanyConfig.applyStore("))
+    check("CompanyServer: the Studio-only switch is checked before any change", 0 <= server.find("CompanyConfig.isPlacementActive()") < server.find("CompanyConfig.applyPlace("))
+    check("CompanyServer: the request limit is called exactly once, before the switch and the checks", server.count("CompanyConfig.takeToken(") == 1 and 0 <= server.find("CompanyConfig.takeToken(") < server.find("CompanyConfig.isPlacementActive()"))
     config = code_only(read("CompanyConfig.lua"))
     check("CompanyConfig: the placement switch is on and Studio only (nothing is drawn until the office screen exists)", re.search(r"CompanyConfig\.Placement = \{\s*Enabled = true,\s*StudioOnly = true,", config) is not None)
     check("CompanyConfig: the Pokedex format version is 1", "CompanyConfig.Version = 1" in config)
@@ -6195,7 +6242,16 @@ WIRING_MUTATIONS = [
     ("a write to lifetime in EmployeeServer", "EmployeeServer.lua", "return EmployeeServer\n", "local ipo = {}\nipo.lifetime = 0\nreturn EmployeeServer\n"),
     ("a write to best through brackets in TaskServer", "TaskServer.lua", "return TaskServer\n", "local ipo = {}\nipo[\"best\"] = 0\nreturn TaskServer\n"),
     ("a new valuation write in IpoServer", "IpoServer.lua", "return IpoServer\n", "local ipo = {}\nipo.valuation = 1\nreturn IpoServer\n"),
-    ("CompanyServer set up after DailyServer", "TycoonCore.lua", "\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer\n", ""),
+    ("CompanyServer set up after DailyServer (moved)", "TycoonCore.lua", [
+        ("\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer\n", ""),
+        ("\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n",
+         "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex)\n")], None),
+    ("CompanyServer set up before IpoServer (moved: the run check would read no IPO count)", "TycoonCore.lua", [
+        ("\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer\n", ""),
+        ("\t\tIpoServer.setupPlayer(", "\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex)\n\t\tIpoServer.setupPlayer(")], None),
+    ("CompanyServer never set up", "TycoonCore.lua", "\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer\n", ""),
+    ("CompanyServer set up twice", "TycoonCore.lua", "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n",
+     "\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex)\n\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n"),
     ("DailyServer no longer last", "TycoonCore.lua", "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n", "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n\t\tOnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok)\n"),
     ("CompanyServer.init before OnboardingServer.init", "TycoonCore.lua", "OnboardingServer.init({\n", "CompanyServer.init({ getData = function() end, save = save, plotZones = function() end })\nOnboardingServer.init({\n"),
     ("CompanyServer yields", "CompanyServer.lua", "return CompanyServer\n", "task.wait(1)\nreturn CompanyServer\n"),
@@ -6220,7 +6276,12 @@ WIRING_MUTATIONS = [
     ("placement open on live servers", "CompanyConfig.lua", "\tStudioOnly = true,\n}\n\nfunction CompanyConfig.isPlacementActive", "\tStudioOnly = false,\n}\n\nfunction CompanyConfig.isPlacementActive"),
     ("a second remote in CompanyServer", "CompanyServer.lua", "return CompanyServer\n", "local extra = Instance.new(\"RemoteEvent\")\nreturn CompanyServer\n"),
     ("the request handler takes a price", "CompanyServer.lua", "local function onAction(player, action, id, x, z, r)", "local function onAction(player, action, id, x, z, r, price)"),
-    ("the request limit after the checks", "CompanyServer.lua", "if not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n", ""),
+    ("the request limit after the checks (moved)", "CompanyServer.lua", [
+        ("\tif not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n", ""),
+        ("\tif not CompanyConfig.isPlacementActive() then\n\t\treturn false, \"Not available yet\"\n\tend\n",
+         "\tif not CompanyConfig.isPlacementActive() then\n\t\treturn false, \"Not available yet\"\n\tend\n\tif not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n")], None),
+    ("no request limit at all", "CompanyServer.lua", "\tif not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n", ""),
+    ("the request limit twice", "CompanyServer.lua", "\tif action ~= \"Place\" and action ~= \"Store\"", "\tif not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n\tif action ~= \"Place\" and action ~= \"Store\""),
 ]
 
 
@@ -6238,23 +6299,26 @@ def wiring_mutation_run(label, filename, old, new):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new)
         else:
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
-            if text.count(old) != 1:
-                raise SystemExit("wiring mutation target not found exactly once in %s: %r" % (filename, old))
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text.replace(old, new, 1))
+            pairs = old if isinstance(old, list) else [(old, new)] # a list of (old, new) steps makes a real move
+            for step_old, step_new in pairs:
+                with open(path, encoding="utf-8") as f:
+                    text = f.read()
+                if text.count(step_old) != 1:
+                    raise SystemExit("wiring mutation target not found exactly once in %s: %r" % (filename, step_old))
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text.replace(step_old, step_new, 1))
         real_root, ROOT = ROOT, folder
         out = io.StringIO()
         try:
             with contextlib.redirect_stdout(out):
-                try:
-                    results = [task_wiring_checks(), pokedex_wiring_checks(), pads_gone_checks()]
-                except (ValueError, IndexError):
-                    return True # a rule that can't even find its anchor text fails too
+                results = [task_wiring_checks(), pokedex_wiring_checks(), pads_gone_checks()]
+        except (ValueError, IndexError) as error:
+            # A check that crashes on the mutated text didn't fail by name: that is a hole in the check, not a catch
+            print("FAIL: the source checks crashed on a mutant (%s: %s) instead of failing a named check" % (label, repr(error)))
+            return False
         finally:
             ROOT = real_root
-        return any(failed for _, failed in results)
+        return any(failed for _, failed in results) and any(line.startswith("FAIL: ") for line in out.getvalue().split("\n"))
 
 
 def sanitize_source():
@@ -6310,6 +6374,19 @@ def run_luau(luau, source):
     finally:
         os.remove(path)
     return result
+
+
+def mutant_verdict(mutant, expected, what, label):
+    """None when the mutated program is caught, else the FAIL line to print. A mutant is caught only by a NAMED check: at
+    least one "FAIL: <name>" line in its output (a crash, a timeout or a program that doesn't compile proves nothing, and a
+    crash never skips the named-check test below). When the mutation names its test, that test must be among the failures."""
+    failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
+    if "SyntaxError" in mutant.stderr or not failures:
+        how = "it crashed with no failed check: " + (mutant.stderr.strip().split("\n")[0] if mutant.stderr.strip() else "no output") if "passed," not in mutant.stdout and "SyntaxError" not in mutant.stderr else "no check failed"
+        return "FAIL: mutation not caught: the %s tests do not notice a broken %s (%s)" % (what, label, how)
+    if expected and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
+        return "FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0])
+    return None
 
 
 def main():
@@ -6450,15 +6527,9 @@ def main():
     company_caught = 0
     for label, mutation, *expected in COMPANY_MUTATIONS:
         mutant = run_luau(luau, company_source(mutation))
-        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
-        # A broken rule is caught by a failed check. A run that crashes after the first failed checks counts too (the
-        # real run fails as well), but a program that doesn't even compile proves nothing.
-        crashed = "passed," not in mutant.stdout
-        if "SyntaxError" in mutant.stderr or (not failures and (not crashed or " 0 failed" in mutant.stdout)):
-            print("FAIL: mutation not caught: the Pokedex tests do not notice a broken " + label)
-            code = 1
-        elif expected and not crashed and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
-            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+        problem = mutant_verdict(mutant, expected, "Pokedex", label)
+        if problem:
+            print(problem)
             code = 1
         else:
             company_caught += 1
@@ -6470,13 +6541,9 @@ def main():
     server_caught = 0
     for label, mutation, *expected in SERVER_MUTATIONS:
         mutant = run_luau(luau, company_server_source(mutation))
-        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
-        crashed = "passed," not in mutant.stdout
-        if "SyntaxError" in mutant.stderr or (not failures and (not crashed or " 0 failed" in mutant.stdout)):
-            print("FAIL: mutation not caught: the CompanyServer tests do not notice a broken " + label)
-            code = 1
-        elif expected and not crashed and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
-            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+        problem = mutant_verdict(mutant, expected, "CompanyServer", label)
+        if problem:
+            print(problem)
             code = 1
         else:
             server_caught += 1
