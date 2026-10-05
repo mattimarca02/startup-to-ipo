@@ -11,7 +11,11 @@
 -- Rules for the section (CLAUDE.md rule A10 and docs/CUSTOMIZE_PROPOSAL.md 1.2):
 --   * Old saves keep loading: every field is optional and gets a default. A bad value is skipped with a warning.
 --   * Unknown fields are KEPT at every level (the section, active, objects[i], rounds[k], sectors[k], card, ...) and
---     written back as they were: code that doesn't know a field never deletes it.
+--     written back as they were: code that doesn't know a field never deletes it. One exception: what the DataStore can't hold.
+--     SetAsync is believed to refuse a table that mixes list and string keys and to lose what comes after a hole (a review's finding;
+--     docs/CUSTOMIZE_PR1_NOTES.md has the Studio test that settles it, not run yet). So a list
+--     (card.owned, the placed items) is tidied on load into a plain list 1 .. n, and a key that can't sit next to the named fields
+--     or next to a list is dropped, each with a warning, never written back as it was.
 --   * `v` rises only when a field changes meaning. A higher `v` is kept opaque and unchanged, and the session
 --     refuses everything that would change the company (a placement, a store, an IPO).
 -- PR 1 is invisible to players: nothing here changes how the game plays, and the placement actions only work in Studio.
@@ -437,10 +441,39 @@ local function note(ctx, text)
 	ctx.warn("Skipped in " .. ctx.who .. "'s pokedex: " .. text)
 end
 
-local function copyUnknown(raw, known, out)
+-- The unknown fields of a table that has named fields: kept as they were. A key that isn't a string can't sit next to the named
+-- fields in a saved table (the store refuses a table that mixes keys), so it is dropped, with a warning.
+local function copyUnknown(ctx, where, raw, known, out)
 	for key, value in pairs(raw) do
-		if not known[key] then
+		if typeof(key) ~= "string" then
+			note(ctx, "a key in " .. where .. " that isn't a name, dropped (" .. tostring(key) .. ")")
+		elseif not known[key] then
 			out[key] = deepCopy(value)
+		end
+	end
+end
+
+-- A list the store can hold has exactly the keys 1, 2, 3 ... in a row; a map has only string keys; a table with both, or with
+-- a gap, is refused. splitKeys gives the positive whole keys of a table in order, and every other key, for the readers
+-- of lists below to tidy it: the values under the positive keys go into a plain list, in key order, gaps closed.
+local function splitKeys(value)
+	local indexes, others = {}, {}
+	for key in pairs(value) do
+		if isWhole(key, 1) then
+			table.insert(indexes, key)
+		else
+			table.insert(others, key)
+		end
+	end
+	table.sort(indexes)
+	return indexes, others
+end
+
+local function noteGap(ctx, where, indexes)
+	for position, index in ipairs(indexes) do
+		if index ~= position then
+			note(ctx, where .. " had a gap in its list: what comes after it moved up")
+			return
 		end
 	end
 end
@@ -558,9 +591,11 @@ end
 
 -- The placed items: { id, x, z, r } with unknown fields kept. An entry that isn't well formed, repeats an id
 -- or is over the limit is skipped. An id this version has no item for is KEPT (a newer version's item): it just
--- has no footprint here. A table that is not a plain list (a key that isn't 1, 2, 3 ... in a row) is a shape this
--- version doesn't know: it sets ctx.foreign and CompanyConfig.load keeps the whole section as it was (locked), because
--- a list can't carry such keys back to the save.
+-- has no footprint here. The list is tidied on load: the entries are read in key order and written back as a plain list
+-- 1 .. n (a gap is closed, with a warning), and a key that can't sit next to a list (a string, 0, a negative or fractional
+-- number) is dropped, with a warning, because the store refuses a table that mixes keys or has holes. A table with ONLY
+-- string keys (a map: a shape this version doesn't know, and one the store can hold) sets ctx.foreign and CompanyConfig.load
+-- keeps the whole section as it was (locked), because a list can't carry it back.
 local function readObjects(ctx, where, raw, key)
 	local value = raw[key]
 	local out = {}
@@ -571,9 +606,23 @@ local function readObjects(ctx, where, raw, key)
 		note(ctx, "a bad " .. where .. "." .. key)
 		return out
 	end
+	local indexes, others = splitKeys(value)
+	if #indexes == 0 and #others > 0 then
+		local onlyStrings = true
+		for _, other in ipairs(others) do
+			if typeof(other) ~= "string" then
+				onlyStrings = false
+			end
+		end
+		if onlyStrings then
+			ctx.foreign = ctx.foreign or (where .. "." .. key .. " is not a plain list")
+			return out
+		end
+	end
+	noteGap(ctx, where .. "." .. key, indexes)
 	local seen = {}
-	for i = 1, #value do
-		local entry = value[i]
+	for _, index in ipairs(indexes) do
+		local entry = value[index]
 		local limit = CompanyConfig.MaxCoordinate
 		local good = typeof(entry) == "table"
 			and typeof(entry.id) == "string" and #entry.id >= 1 and #entry.id <= CompanyConfig.MaxIdLength
@@ -581,7 +630,7 @@ local function readObjects(ctx, where, raw, key)
 			and isNumber(entry.z) and math.abs(entry.z) <= limit and (entry.z / CompanyConfig.Grid) % 1 == 0
 			and isWhole(entry.r, 0, CompanyConfig.MaxRotation)
 		if not good then
-			note(ctx, "a bad item in " .. where .. "." .. key .. " (number " .. i .. ")")
+			note(ctx, "a bad item in " .. where .. "." .. key .. " (number " .. index .. ")")
 		elseif seen[entry.id] then
 			note(ctx, "a repeated item in " .. where .. "." .. key .. ": " .. entry.id)
 		elseif #out >= CompanyConfig.MaxObjects then
@@ -589,15 +638,12 @@ local function readObjects(ctx, where, raw, key)
 		else
 			seen[entry.id] = true
 			local object = { id = entry.id, x = entry.x, z = entry.z, r = entry.r }
-			copyUnknown(entry, OBJECT_KNOWN, object)
+			copyUnknown(ctx, where .. "." .. key .. "[" .. index .. "]", entry, OBJECT_KNOWN, object)
 			table.insert(out, object)
 		end
 	end
-	for index in pairs(value) do
-		if not (isWhole(index, 1) and index <= #value) then
-			ctx.foreign = ctx.foreign or (where .. "." .. key .. " is not a plain list")
-			break
-		end
+	for _, other in ipairs(others) do
+		note(ctx, "a key in " .. where .. "." .. key .. " that can't sit next to a list, dropped (" .. tostring(other) .. ")")
 	end
 	return out
 end
@@ -650,11 +696,11 @@ local function readRound(ctx, where, value)
 		and (value.studio == nil or typeof(value.studio) == "boolean")
 	if not good then
 		note(ctx, "a bad " .. where .. ", counted as settled with no dilution")
-		copyUnknown(value, ROUND_KNOWN, settled)
+		copyUnknown(ctx, where, value, ROUND_KNOWN, settled)
 		return settled
 	end
 	local round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }
-	copyUnknown(value, ROUND_KNOWN, round)
+	copyUnknown(ctx, where, value, ROUND_KNOWN, round)
 	return round
 end
 
@@ -680,10 +726,12 @@ local function readRounds(ctx, where, raw, key)
 	return out
 end
 
--- The upgrade names on a card: a list of strings. Names this version has no upgrade for are kept. So is anything under a
--- key that isn't the list's 1, 2, 3 ... in a row (`future = "GamingRig"`, or [5] after a gap): it is written back as it was,
--- the way the maps keep unknown keys (a newer version's data must come back unchanged). Only a value inside the list that
--- isn't a name (not a string, empty, over 39 characters) or a name past the limit is skipped, with a warning.
+-- The upgrade names on a card: a list of strings (it is a set of names, so their order is not data). Names this version has no
+-- upgrade for are kept. The list is tidied on load, because the store refuses a table that mixes list and string keys, and a
+-- list with holes loses what comes after a hole: every valid name goes into a plain list 1 .. n in key order (a gap is closed,
+-- with a warning), and any other key (a string, 0, a negative or fractional number) is dropped, with a warning. A table with
+-- ONLY string keys (no name at all) is kept as it is. A value that isn't a name (not a string, empty, over 39 characters) or a
+-- name past the limit is skipped, with a warning; a repeated name is kept, as it always was.
 local function readOwnedNames(ctx, where, raw, key)
 	local value = raw[key]
 	local out = {}
@@ -694,21 +742,21 @@ local function readOwnedNames(ctx, where, raw, key)
 		note(ctx, "a bad " .. where .. "." .. key)
 		return out
 	end
-	local listed = 0 -- the list is 1 .. listed (the first gap ends it; `#` is not exact for a table with gaps)
-	while value[listed + 1] ~= nil do
-		listed += 1
-	end
-	for i = 1, listed do
-		local name = value[i]
+	local indexes, others = splitKeys(value)
+	noteGap(ctx, where .. "." .. key, indexes)
+	for _, index in ipairs(indexes) do
+		local name = value[index]
 		if typeof(name) == "string" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then
 			table.insert(out, name)
 		else
 			note(ctx, "a bad name in " .. where .. "." .. key)
 		end
 	end
-	for index, inner in pairs(value) do
-		if not (isWhole(index, 1) and index <= listed) then
-			out[index] = deepCopy(inner) -- never collides with the list: the key after `listed` is empty, and `out` has at most `listed` names
+	for _, other in ipairs(others) do
+		if #out == 0 and typeof(other) == "string" then
+			out[other] = deepCopy(value[other]) -- no names at all: a map, kept as it is
+		else
+			note(ctx, "a key in " .. where .. "." .. key .. " that can't sit next to a list, dropped (" .. tostring(other) .. ")")
 		end
 	end
 	return out
@@ -739,7 +787,7 @@ local function readCard(ctx, where, value)
 		shares = readNumber(ctx, here, value, "shares", 0, 0, nil, true),
 		sx = readWhole(ctx, here, value, "sx"),
 	}
-	copyUnknown(value, CARD_KNOWN, card)
+	copyUnknown(ctx, here, value, CARD_KNOWN, card)
 	return card
 end
 
@@ -778,7 +826,7 @@ local function readSectorEntry(ctx, key, value)
 	entry.firstAt = readNumber(ctx, where, value, "firstAt", 0, 0, nil, true)
 	entry.bestEngaged = readNumber(ctx, where, value, "bestEngaged", 0, 0)
 	entry.card = readCard(ctx, where .. ".card", value.card)
-	copyUnknown(value, SECTOR_KNOWN, entry)
+	copyUnknown(ctx, where, value, SECTOR_KNOWN, entry)
 	return entry
 end
 
@@ -856,7 +904,7 @@ local function readActive(ctx, raw)
 		rounds = readRounds(ctx, where, value, "rounds"),
 		sx = readWhole(ctx, where, value, "sx"),
 	}
-	copyUnknown(value, ACTIVE_KNOWN, active)
+	copyUnknown(ctx, where, value, ACTIVE_KNOWN, active)
 	return active, not SectorConfig.isKnown(active.sector)
 end
 
@@ -973,7 +1021,7 @@ function CompanyConfig.load(saved, ctx)
 	if saved.studio ~= nil then
 		section.studio = readBoolean(ctx, "pokedex", saved, "studio", false)
 	end
-	copyUnknown(saved, TOP_KNOWN, section)
+	copyUnknown(ctx, "pokedex", saved, TOP_KNOWN, section)
 	state.section = section
 
 	if unknownSector then
