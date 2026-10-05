@@ -150,6 +150,51 @@ for stage = 1, #PlotArt.Stages do
 end
 ```
 
+## (d) Addendum: customize PR 1 (branch `customize-pr1`, the `pokedex` save section)
+
+Nothing here touches Roblox: it is the list of what the Mac has to do. **Three new scripts and one changed one.** Every other script is identical to `main`. The `TycoonCore` row here **replaces** the `TycoonCore` row in (a) (that one is the visuals-garage version, already on `main`). Last code commit: see `git log` of `customize-pr1`; only docs changed after the scripts below.
+
+| Script | Studio type and place | State | sha256 | Bytes |
+|---|---|---|---|---|
+| `SectorConfig` | ModuleScript, **ReplicatedStorage** | **new** | `60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b` | 3194 |
+| `CompanyConfig` | ModuleScript, **ReplicatedStorage** | **new** | `d778c46a1a6ae523ec676e8b87a3fc65ec396c6d52149567b69a6957966b05f4` | 36346 |
+| `CompanyServer` | ModuleScript, **ServerScriptService** | **new** | `ff69bab5a2a6899cd08ad265bf6ef37cbac42f8e4ed5760df634be2e85825325` | 6990 |
+| `TycoonCore` | Script, ServerScriptService | changed | `c40fe0fe81df122856a48d57d3485344130392f7beecc8f4d4b88543366c56dc` | 35827 |
+
+The Studio MCP cannot create scripts inside services, so the three new ones are made **by hand** (names are exact, capital letters included).
+
+### Steps on the Mac (in this order)
+
+1. **Pull.** In a terminal in the project folder: `git fetch`, `git checkout customize-pr1`, `git pull`. Check `git log --oneline -1` shows the newest commit of this branch.
+2. **Create the three ModuleScripts first.** In Studio's Explorer: hover **ReplicatedStorage**, click **+**, choose **ModuleScript**, press F2 and name it exactly `SectorConfig`. Do the same for `CompanyConfig` in **ReplicatedStorage**, and then for `CompanyServer` in **ServerScriptService**.
+3. **Paste the sources, in this order:** `SectorConfig.lua` into `SectorConfig`, then `CompanyConfig.lua` into `CompanyConfig`, then `CompanyServer.lua` into `CompanyServer` (open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste). `CompanyConfig` waits for `SectorConfig` and `IpoConfig`, and `CompanyServer` waits for `CompanyConfig`, all with no time limit: so a missing one hangs the server script.
+4. **Only then paste `TycoonCore.lua`** into the existing `TycoonCore` Script (ServerScriptService). `TycoonCore` requires `CompanyServer` the same way.
+5. **Verify the hashes.** Open the **command bar** (View > Command Bar), paste the first part of the block in (c) step 3 above (the `K` table and the `sha256` function, down to the closing `end` of `sha256`), then paste the block below after it and press Enter. Every line must say `OK`.
+6. **Playtest (F5)**, read the Output: no red errors; no "Could not set up", no warnings from `pokedex`. Join, leave and rejoin. Check that nothing looks or plays differently. The Output must **not** say "Keeping a part of ... save this version doesn't know: pokedex" (it is a known section now).
+7. Before Publish: **View > Drafts**, commit every draft. Publish with **Shut down all servers** (docs/PUBLISH_RULES.md 2d), never Migrate.
+
+```lua
+local SSS = game:GetService("ServerScriptService")
+local RS = game:GetService("ReplicatedStorage")
+local WANT = {
+	SectorConfig = { RS, "60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b", 3194 },
+	CompanyConfig = { RS, "d778c46a1a6ae523ec676e8b87a3fc65ec396c6d52149567b69a6957966b05f4", 36346 },
+	CompanyServer = { SSS, "ff69bab5a2a6899cd08ad265bf6ef37cbac42f8e4ed5760df634be2e85825325", 6990 },
+	TycoonCore = { SSS, "c40fe0fe81df122856a48d57d3485344130392f7beecc8f4d4b88543366c56dc", 35827 },
+}
+for name, want in pairs(WANT) do
+	local script = want[1]:FindFirstChild(name)
+	if not script then
+		print(name, "MISSING (create it)")
+	else
+		local source = script.Source
+		local same = sha256(source) == want[2] and #source == want[3]
+		local withNewline = sha256(source .. "\n") == want[2] and #source + 1 == want[3]
+		print(name, (same or withNewline) and "OK" or "DIFFERENT", #source, "bytes")
+	end
+end
+```
+
 ## What is not in Studio-only any more
 
 Everything above is now written down. What this file cannot capture: anything changed in Studio by hand that nobody wrote down (the `ColorCorrection` values are in (b)). If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").

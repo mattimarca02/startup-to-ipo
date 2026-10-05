@@ -88,7 +88,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| TycoonCore | ServerScriptService | free | | |
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -112,23 +112,23 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
-| CLAUDE.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
-| docs/STUDIO_SYNC.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
-| CompanyServer | ServerScriptService | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
-| CompanyConfig | ReplicatedStorage | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
-| SectorConfig | ReplicatedStorage | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
-| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | customize-pr1 | 2026-10-05 |
+| CompanyServer | ServerScriptService | free | | |
+| CompanyConfig | ReplicatedStorage | free | | |
+| SectorConfig | ReplicatedStorage | free | | |
+| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |

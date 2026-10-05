@@ -22,7 +22,7 @@ M4 has never been published, so **the version live today is older than M4, and s
   - `V_old` (live before launch, below the floor): ______
   - `V_launch` (the floor): ______
 - A rollback to an allowed version is still lossless only if every update follows CLAUDE.md's rule that new saved data gets its own top-level section (A10).
-- The newest section is `tasks` (section 2b, task engine PR 1: only written once there is something to keep). The newest *live* section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
+- The newest section is `pokedex` (section 2d, customize PR 1: written for every player). The newest one written only once there is something to keep is `tasks` (section 2b, task engine PR 1). The newest *live* section is `fixedHires` (FR-13, D9 option B: the fixed hire order's counter per egg, only written once a restricted player has hatched an egg). Code from M4 on keeps it unchanged if it doesn't know it. But a version without D9 rolls eggs randomly for players in restricted regions again (Paid Random Items policy): once D9 is live, never restore a version without it.
 - **Perk levels 6 and up (D1, the 1,770-Share shop):** a rollback to a version with the shorter shop caps every perk level 6+ back to 5, and the Shares spent on those levels are lost (not refunded). It is a one-way change, forward only. Same as docs/D1_SHOP_OPTIONS.md (Rollback row).
 - If saves were already damaged: Roblox keeps older versions of each DataStore key for a limited time (about 30 days); one player's save can be restored by hand from a version. Slow and manual.
 
@@ -68,6 +68,30 @@ The Office tab, the removal of the walk-on pads and the tidy layout add **no sav
 - **Studio sync order:** paste the server scripts first (`TycoonCore`, `ShopServer`, `PoachServer`, `IpoServer`, `OnboardingServer`, `EmployeeServer`, `PlotArt`, `PlotVisuals`), then the clients (`ShopClient`, `PoachClient`). An old client with the new server just has no Office tab; a new client with an old server shows the "not available" line (ShopClient) or "Unknown action" (PoachClient's Buy HR button).
 - **A rollback to a version with the pads** keeps working: the saves are the same. The pads come back, and the Office tab is gone.
 - Nothing is bought by touching the world any more (the three pads are gone). The one remaining `Touched` handler is the VIP Lounge door in ShopServer: it only opens Roblox's own purchase confirmation for the VIP pass.
+
+## 2d. The `pokedex` save section (customize PR 1)
+
+PR 1 of docs/CUSTOMIZE_PROPOSAL.md (branch `customize-pr1`: `CompanyServer`, `CompanyConfig`, `SectorConfig`) adds a **new top-level save section `pokedex`** (rule A10), in `KNOWN_SECTIONS` and in the save gate (`data.pokedex`). It is written for **every** player (a new founding if they had none), about 1 KB:
+
+```lua
+pokedex = {
+  v = 1,            -- format version
+  run = number,     -- the IPO count the active company belongs to
+  active = { sector = "Software", picked, name, foundedAt, engaged, passSeconds, building, decor, objects, stored, told, rounds, sx },
+  sectors = { [Software | Gaming | Fintech | Biotech] = { state, stamp, replays, firstAt, bestEngaged, card } },
+  kept = {}, hall = {}, dust = 0,
+  studio = true,    -- only if a Studio server saved it; never cleared
+}
+```
+
+It changes **nothing players can see or earn**: the picker is off (`SectorConfig.PickerEnabled = false`), every company is a Software company, and nothing reads the section yet except its own rules. The three office requests (`CompanyRemotes.CompanyAction`: `"Place"`, `"Store"`, `"Sync"`) exist on live servers but refuse everything outside Studio (`CompanyConfig.Placement.StudioOnly = true`).
+
+- **Needs "Shut down all servers"** (new section): an old server still running would drop it on its next save. Never Migrate.
+- **Rollback floor stays `V_launch`.** From M4 on, older code keeps a section it doesn't know unchanged. Rolling back to a version without PR 1 (but at or after `V_launch`) loses nothing: `pokedex` stays frozen. If a player goes public on that older version, their `ipo.count` rises and `pokedex.run` doesn't; the next join with PR 1 runs the **run check**: the active company is completed (Bronze for its sector if it had none, a card) and a new one starts, once. Code older than M4 deletes the section, like every other (section 2).
+- **A newer version is never overwritten.** `v` rises only when a field changes meaning. A section with a higher `v` (or an active sector this version doesn't know, or one that can't be read) is written back exactly as it was, and that player can't go public on this version (the IPO is refused) or change their office. So after a rollback below a future format change nobody loses their Pokedex; they just wait for the newer version.
+- **Studio and live share the save key** (section 2b): every Studio save sets `pokedex.studio = true`, for good, so a Studio save can never reach the leaderboard that comes in a later PR. Studio's Debug "IpoReset" lowers the IPO count: at the next join the run check sees `run > count`, sets `run` to the count, keeps the company, gives no stamp or card, and sets `studio`.
+- **Loading is defensive:** a bad value is skipped with a warning (the rest of the section and every other section are untouched), and unknown fields are kept at every level and written back.
+- **Studio sync order** (docs/STUDIO_SYNC.md addendum (d)): create `SectorConfig`, then `CompanyConfig` (ReplicatedStorage), then `CompanyServer` (ServerScriptService), and only then paste the new `TycoonCore`. `TycoonCore` requires `CompanyServer` with `WaitForChild` and **no timeout**, and `CompanyServer` and `CompanyConfig` wait for their modules the same way: a missing one hangs the server script ("Infinite yield possible") and nobody can load a save.
 
 ## 3. Old and new servers must never run at the same time (FR-19)
 
