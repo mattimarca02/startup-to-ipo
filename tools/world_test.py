@@ -922,6 +922,173 @@ def world_source(art=None, visuals=None):
     return PRELUDE + text
 
 
+INTEGRATION_TESTS = r"""-- Tests: the two blocks docs/world_pass_integration.patch inserts into TycoonCore, run as they are ----------------
+local MODS = {
+	WorldArt = (function()
+__WORLDART__
+	end)(),
+	WorldVisuals = (function()
+__WORLDVISUALS__
+	end)(),
+}
+local WARNED = {}
+local function warn(text) table.insert(WARNED, tostring(text)) end
+-- What TycoonCore's script.Parent:WaitForChild(name, 5) finds in ServerScriptService
+local function scriptIn(present)
+	local container = {}
+	function container.WaitForChild(_, name, timeout)
+		if not present[name] then return nil end
+		local module = newInstance("ModuleScript")
+		module.Name = name
+		MODULES[module] = present[name]
+		return module
+	end
+	return { Parent = container }
+end
+local function runPatch(present)
+	for _, c in ipairs(workspace:GetChildren()) do if c.Name == "World" then c:Destroy() end end
+	table.clear(WARNED)
+	local script = scriptIn(present)
+	local ok, err = pcall(function()
+__E1__
+__CONSTANTS__
+__PLOTCENTER__
+__E2__
+	end)
+	local worlds = {}
+	for _, c in ipairs(workspace:GetChildren()) do if c.Name == "World" then table.insert(worlds, c) end end
+	return ok, err, worlds
+end
+local function anyMatch(list, word) for _, p in ipairs(list) do if string.find(p, word, 1, true) then return true end end return false end
+
+local ok, err, worlds = runPatch({ WorldArt = MODS.WorldArt, WorldVisuals = MODS.WorldVisuals })
+check("integration: with both modules the patched TycoonCore builds one World in the Workspace, without an error or a warning", ok and #worlds == 1 and #WARNED == 0, err or WARNED[1])
+if worlds[1] then
+	local site = MODS.WorldVisuals.site(MODS.WorldArt)
+	local problems = MODS.WorldVisuals.check(worlds[1], MODS.WorldArt, site)
+	check("integration: that World passes every named check", #problems == 0, problems[1])
+	check("integration: it was built from TycoonCore's own numbers (spacing 90, 6 plots)", worlds[1]:GetAttribute("Spacing") == 90 and worlds[1]:GetAttribute("Plots") == 6)
+	check("integration: one street sign per plot", worlds[1]:FindFirstChild("StreetSign6", true) ~= nil and worlds[1]:FindFirstChild("StreetSign7", true) == nil)
+end
+ok, err, worlds = runPatch({ WorldArt = MODS.WorldArt })
+check("integration: without WorldVisuals there is one warning, no World and no error", ok and #worlds == 0 and #WARNED == 1 and anyMatch(WARNED, "World visuals are off"), err or WARNED[1])
+ok, err, worlds = runPatch({ WorldVisuals = MODS.WorldVisuals })
+check("integration: without WorldArt there is one warning, no World and no error", ok and #worlds == 0 and #WARNED == 1 and anyMatch(WARNED, "World visuals are off"), err or WARNED[1])
+local broken = table.clone(MODS.WorldArt)
+broken.Layout = nil
+ok, err, worlds = runPatch({ WorldArt = broken, WorldVisuals = MODS.WorldVisuals })
+check("integration: a broken WorldArt gives a warning, no World and no error (the game runs on)", ok and #worlds == 0 and anyMatch(WARNED, "the world could not be built"), err or WARNED[1])
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def patched_tycoon():
+    """main's TycoonCore.lua with docs/world_pass_integration.patch applied in a scratch folder, or None without git."""
+    try:
+        base = subprocess.run(["git", "show", BASE + ":TycoonCore.lua"], cwd=ROOT, capture_output=True)
+    except OSError:
+        return None
+    if base.returncode != 0:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "TycoonCore.lua"), "wb") as f:
+            f.write(base.stdout)
+        applied = subprocess.run(["git", "apply", os.path.join(ROOT, "docs", "world_pass_integration.patch")], cwd=tmp, capture_output=True, text=True)
+        if applied.returncode != 0:
+            raise SystemExit("world_test: docs/world_pass_integration.patch does not apply to TycoonCore.lua at %s: %s" % (BASE, applied.stderr.strip()))
+        with open(os.path.join(tmp, "TycoonCore.lua"), encoding="utf-8") as f:
+            return f.read()
+
+
+def patch_hunks():
+    """The lines each hunk of the integration patch adds (without their leading +)."""
+    hunks, current = [], None
+    for line in read("docs/world_pass_integration.patch").split("\n"):
+        if line.startswith("@@"):
+            current = []
+            hunks.append(current)
+        elif current is not None and line.startswith("+") and not line.startswith("+++"):
+            current.append(line[1:])
+    return ["\n".join(h) for h in hunks]
+
+
+def patched_blocks(patched):
+    """The two blocks the patch inserts, read from the patched TycoonCore by their first comment line."""
+    e1_start = patched.index("-- The world around the plots (the spawn plaza")
+    e1_end = patched.index("\tWorldVisuals, WorldArt = nil, nil\nend\n", e1_start) + len("\tWorldVisuals, WorldArt = nil, nil\nend\n")
+    e2_start = patched.index("-- The world around the plots, built once")
+    e2_end = patched.index("\nPlayers.PlayerAdded:Connect(onPlayerAdded)", e2_start)
+    return patched[e1_start:e1_end], patched[e2_start:e2_end]
+
+
+def integration_source(patched):
+    e1, e2 = patched_blocks(patched)
+    constants = "\n".join(l for l in patched.split("\n") if re.match(r"local (PLOT_SPACING|MAX_PLOTS) = ", l))
+    text = (INTEGRATION_TESTS.replace("__WORLDART__", read("WorldArt.lua")).replace("__WORLDVISUALS__", read("WorldVisuals.lua"))
+            .replace("__E1__", e1).replace("__CONSTANTS__", constants)
+            .replace("__PLOTCENTER__", extract_function(patched, "local function plotCenter(slot)")).replace("__E2__", e2))
+    return PRELUDE + text
+
+
+def patch_checks(patched):
+    """Source checks on the patch itself and on the patched TycoonCore."""
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    patch = read("docs/world_pass_integration.patch")
+    files = re.findall(r"^\+\+\+ b/(\S+)", patch, re.M)
+    check("integration patch: it changes TycoonCore.lua and nothing else", files == ["TycoonCore.lua"], files)
+    removed = [l for l in patch.split("\n") if l.startswith("-") and not l.startswith("---")]
+    check("integration patch: it only adds lines (nothing of TycoonCore is removed or rewritten)", removed == [], removed[:2])
+    hunks = patch_hunks()
+    check("integration patch: two blocks, of 10 and 12 lines", len(hunks) == 2 and len(hunks[0].split("\n")) == 10 and len(hunks[1].split("\n")) == 12, [len(h.split("\n")) for h in hunks])
+    added = "\n".join(hunks)
+    for word in ("Touched", "Instance.new", "DataStore", "addEarnings", "Remote", "SetAttribute", "playerData", "data."):
+        check("integration patch: the added lines never use %s" % word, word not in added)
+    check("integration patch: both modules are required inside pcall with a 5 s wait, like PlotVisuals",
+          'pcall(require, script.Parent:WaitForChild("WorldVisuals", 5))' in added and 'pcall(require, script.Parent:WaitForChild("WorldArt", 5))' in added)
+    check("integration patch: the build runs inside pcall and only warns on failure", "pcall(function()" in hunks[1] and "warn(" in hunks[1])
+    check("integration patch: the world is built from TycoonCore's PLOT_SPACING, MAX_PLOTS and plotCenter",
+          "WorldVisuals.site(WorldArt, PLOT_SPACING, MAX_PLOTS, plotCenter)" in hunks[1])
+    if patched is not None:
+        check("integration patch: the patched TycoonCore still builds the world before players are set up",
+              patched.index("WorldVisuals.build(") < patched.index("Players.PlayerAdded:Connect(onPlayerAdded)") and patched.index("local function plotCenter(") < patched.index("WorldVisuals.build("))
+        check("integration patch: the patched TycoonCore has no Touched handler (tools/daily_test.py's rule)", "Touched" not in patched)
+    return passed, failed
+
+
+def integration_suites(luau):
+    """Optional (--integration): a scratch copy of the repo with the patch applied runs tools/daily_test.py and this test."""
+    with tempfile.TemporaryDirectory() as tmp:
+        files = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT, capture_output=True).stdout.split(b"\0")
+        for raw in files:
+            if not raw:
+                continue
+            name = raw.decode()
+            target = os.path.join(tmp, name)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            if os.path.exists(os.path.join(ROOT, name)):
+                shutil.copy(os.path.join(ROOT, name), target)
+        with open(os.path.join(tmp, "TycoonCore.lua"), "w", encoding="utf-8") as f:
+            f.write(patched_tycoon())
+        env = dict(os.environ, LUAU=luau)
+        ok = True
+        for script in ("tools/daily_test.py", "tools/world_test.py"):
+            result = subprocess.run([sys.executable, os.path.join(tmp, script)], cwd=tmp, capture_output=True, text=True, env=env)
+            bad = [l for l in result.stdout.split("\n") if l.startswith("FAIL") and "no existing file is edited" not in l] if script.endswith("world_test.py") else \
+                [l for l in result.stdout.split("\n") if "FAIL" in l or (" failed" in l and " 0 failed" not in l)]
+            print("  with the patch applied, %s: %s" % (script, "all pass" if not bad and (result.returncode == 0 or script.endswith("world_test.py")) else "FAILS " + "; ".join(bad[:3])))
+            ok = ok and not bad
+        return ok
+
+
 def static_checks():
     """Source checks on the new files: looks only, pure data, no services, no randomness, no assets, no emoji, no odds words,
     and no existing file edited."""
@@ -964,7 +1131,8 @@ def static_checks():
         print("note: git or the base commit %s is not available here, so the 'no existing file edited' checks are skipped" % BASE)
     else:
         changed = subprocess.run(["git", "diff", "--name-only", "--diff-filter=MDRT", BASE, "--"], cwd=ROOT, capture_output=True, text=True).stdout.split()
-        check("no existing file is edited: against %s only CONTRIBUTING.md differs" % BASE, [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
+        check("no existing file is edited: against %s only CONTRIBUTING.md differs (the integration patch is not applied)" % BASE,
+              [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
         diff = subprocess.run(["git", "diff", "-U0", BASE, "--", "CONTRIBUTING.md"], cwd=ROOT, capture_output=True, text=True).stdout
         edits = [l for l in diff.split("\n") if l[:1] in ("+", "-") and not l.startswith(("+++", "---"))]
         check("CONTRIBUTING.md: only rows of the Ownership table change (the claims)", all(l[1:].startswith("| ") for l in edits), [l for l in edits if not l[1:].startswith("| ")][:2])
@@ -1109,6 +1277,26 @@ def main():
     total += static_passed
     if static_failed:
         code = 1
+    if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
+        patched = patched_tycoon()
+        if patched is None:
+            print("note: git or the base commit %s is not available here, so the integration blocks are not run" % BASE)
+        else:
+            result = run_luau(luau, integration_source(patched))
+            print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
+            m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+            if not m or m.group(2) != "0":
+                code = 1
+            total += int(m.group(1)) if m else 0
+        patch_passed, patch_failed = patch_checks(patched)
+        print("Integration patch source checks: %d passed, %d failed" % (patch_passed, patch_failed))
+        total += patch_passed
+        if patch_failed:
+            code = 1
+        if "--integration" in sys.argv:
+            print("Integration: both test suites on a scratch copy with the patch applied:")
+            if not integration_suites(luau):
+                code = 1
     runs = caught = 0
     for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B)):
         got, problems = run_mutants(luau, mutants, group)

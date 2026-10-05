@@ -1,0 +1,66 @@
+World pass integration (branch world-icons-pass): NOT APPLIED. It needs the owner's approval.
+
+What it does: TycoonCore builds the world around the plots once, when the server starts, from WorldArt and
+WorldVisuals. It passes its own PLOT_SPACING, MAX_PLOTS and plotCenter, so the world moves with the plots if
+those ever change. Both modules are required inside pcall with a 5 second wait, the same way as PlotVisuals and
+PlotArt: if either is missing or broken there is one warning and the game runs exactly as today. No save, no
+remote, no player data, no touch handler, nothing runs per player.
+
+The two edits, in TycoonCore.lua at main e3c9e67 (TycoonCore is the only file this changes):
+  E1  after line 61 (the end of the "Plot visuals are off" block, lines 56-61): 10 lines that require
+      WorldVisuals and WorldArt inside pcall and warn if they are missing.
+  E2  between line 839 (the end of onPlayerAdded) and line 840 (Players.PlayerAdded:Connect(onPlayerAdded)):
+      12 lines that build the world once inside pcall, from PLOT_SPACING (line 74), MAX_PLOTS (line 76) and
+      plotCenter (lines 123-126).
+
+Studio steps by hand, in this order (nothing syncs by itself):
+  1. ServerScriptService: create a ModuleScript named exactly WorldArt and paste WorldArt.lua into it.
+  2. ServerScriptService: create a ModuleScript named exactly WorldVisuals and paste WorldVisuals.lua into it.
+     Do both before pasting TycoonCore (it waits 5 s for each inside pcall, so it never hangs, but without
+     them the world is simply not built).
+  3. Only after approval: apply this patch (git apply docs/world_pass_integration.patch on a branch that claims
+     TycoonCore), then paste the new TycoonCore.lua into the Script TycoonCore (ServerScriptService).
+  4. Delete Workspace.PREVIEW_WORLD if it exists (the preview would lie on top of the real world), then F5.
+  5. View > Drafts: commit every draft. Publish with Shut down all servers, as always.
+
+Checked by tools/world_test.py --integration: the patch applies to main's TycoonCore.lua, the patched file
+passes tools/daily_test.py and tools/world_test.py, and the two inserted blocks build the world in the fake.
+
+--- a/TycoonCore.lua
++++ b/TycoonCore.lua
+@@ -60,6 +60,16 @@ if not (visualsOk and artOk) then
+ 	PlotVisuals, PlotArt = nil, nil
+ end
+ 
++-- The world around the plots (the spawn plaza, paths to every plot, lamps, trees, a street sign per plot):
++-- WorldVisuals builds it from the data in WorldArt (both in ServerScriptService). Only looks, never saved.
++-- Loaded inside pcall: if either is missing or broken, the game runs as before on the bare Baseplate.
++local worldVisualsOk, WorldVisuals = pcall(require, script.Parent:WaitForChild("WorldVisuals", 5))
++local worldArtOk, WorldArt = pcall(require, script.Parent:WaitForChild("WorldArt", 5))
++if not (worldVisualsOk and worldArtOk) then
++	warn("World visuals are off: " .. tostring(worldVisualsOk and WorldArt or WorldVisuals))
++	WorldVisuals, WorldArt = nil, nil
++end
++
+ -- Upgrades are bought in this order, in the shop's Office tab (ShopClient). cost = Cash, income = Cash per second.
+ -- icon is only for that tab.
+ local UPGRADES = {
+@@ -837,6 +847,18 @@ local function onPlayerAdded(player)
+ 		task.spawn(teleportToPlot, player.Character, slot)
+ 	end
+ end
++
++-- The world around the plots, built once from this script's own plot numbers (a new PLOT_SPACING or MAX_PLOTS
++-- moves it with the plots). Looks only: if it fails, a warning, and the game runs without it.
++if WorldVisuals then
++	local worldOk, worldError = pcall(function()
++		WorldVisuals.build(workspace, WorldArt, WorldVisuals.site(WorldArt, PLOT_SPACING, MAX_PLOTS, plotCenter))
++	end)
++	if not worldOk then
++		warn("World visuals: the world could not be built: " .. tostring(worldError))
++	end
++end
++
+ Players.PlayerAdded:Connect(onPlayerAdded)
+ -- Players already in the server (they joined while this script was still starting) are set up too
+ for _, existing in ipairs(Players:GetPlayers()) do

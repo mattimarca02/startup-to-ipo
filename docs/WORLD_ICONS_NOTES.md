@@ -20,7 +20,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep): 213 checks (154 in Luau, 59 source checks)
 - [x] 2.5 World mutants, group A: 29 runs on `WorldVisuals.lua` (builder breakages and weakened checks), 29 caught by their named checks
 - [x] 2.6 World mutants, group B: 24 runs on `WorldArt.lua` (data rules, copied numbers, Studio facts); 53 in all, every one caught by its named check
-- [ ] 2.7 `docs/world_pass_integration.patch` (not applied)
+- [x] 2.7 `docs/world_pass_integration.patch` (not applied): two blocks in TycoonCore (10 lines after line 61, 12 before line 840); `tools/world_test.py` runs both blocks in the fake and, with `--integration`, both suites on a patched copy
 - [ ] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
 
 **Phase 3: icons**
