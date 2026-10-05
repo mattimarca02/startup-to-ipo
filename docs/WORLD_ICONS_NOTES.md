@@ -39,7 +39,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 **Phase 4: Studio sync and wrap-up**
 - [x] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, hash block, previews, delete list, what to look at); `tools/world_test.py` runs its hash block on the real files
 - [x] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks, what was not tested, results)
-- [ ] 4.3 Release every claim in `CONTRIBUTING.md`
+- [x] 4.3 Release every claim in `CONTRIBUTING.md` (the 13 rows stay, set to free, like the design branches did)
 
 ## Studio facts (measured by the owner, not in the repo)
 
