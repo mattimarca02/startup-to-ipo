@@ -140,6 +140,25 @@ function CompanyServer.serialize(data)
 	return CompanyConfig.toSave(state, RunService:IsStudio())
 end
 
+-- An IPO done by this version (TycoonCore.commitIpo): the company's run follows the IPO count. PR 1 has no IPO
+-- transform (no stamp, no card, no sector completion: PR 4 turns those on), so run just moves with the count and a
+-- later join never mistakes this version's own IPO for one an older version ran (the run check, CompanyConfig.load).
+-- Two steps, because the IPO's save is built before the count rises and a crash right after it must not leave run behind:
+--   writeIpoRun(data, payload, count)  inside the IPO's save transform: the payload that gets written carries the new run
+--   onIpo(data, count)                 only after that save worked: the section in memory follows
+-- Neither changes anything for a locked section (commitIpo refuses to go public then) and neither can throw.
+function CompanyServer.writeIpoRun(data, payload, count)
+	local state = data and data.pokedex
+	if state == nil or state.locked or typeof(payload) ~= "table" or typeof(payload.pokedex) ~= "table" then return end
+	payload.pokedex.run = count
+end
+
+function CompanyServer.onIpo(data, count)
+	local state = data and data.pokedex
+	if state == nil or state.locked or typeof(state.section) ~= "table" then return end
+	state.section.run = count
+end
+
 -- True while this session must not change the company: the section is from a newer version (or its sector is), or
 -- it couldn't be read. TycoonCore refuses to go public then (the IPO would reset a company this version can't stamp).
 function CompanyServer.isLocked(data)

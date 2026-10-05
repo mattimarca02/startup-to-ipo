@@ -5576,6 +5576,50 @@ end
 check("fuzz: bad Place and Store requests never throw", errors == 0)
 check("fuzz: ... and none of them was accepted", changed == 0 and deepEqual(snapshotOf(d), before))
 
+-- 7. An IPO done by this version: run follows the count (no stamp, no card, no run-check event) --------------------
+-- TycoonCore.commitIpo calls writeIpoRun inside the IPO's save (the payload is built before the count rises) and onIpo
+-- once that save worked. The IPO transform itself (stamps, cards) is PR 4: until then run just moves with the count.
+p, d = newPlayer(nil, { count = 0 })
+tap(p, "Place", "Coffee Machine", -20, -6, 2)
+local activeBefore = deepCopy(CompanyServer.serialize(d).active)
+local ipo1 = { pokedex = CompanyServer.serialize(d) }
+CompanyServer.writeIpoRun(d, ipo1, 1)
+check("an IPO by this version: the saved payload carries run = the new count", ipo1.pokedex.run == 1, ipo1.pokedex.run)
+check("an IPO by this version: the section in memory is not changed by the payload step (only after the save worked)", CompanyServer.serialize(d).run == 0)
+-- a crash right after that save: the next join sees only the payload
+local joined, joinedData = newPlayer(deepCopy(ipo1.pokedex), { count = 1 })
+local after = CompanyServer.serialize(joinedData)
+check("an IPO by this version: the next join has no run-check event and no warning, and no stamp or card",
+	joinedData.pokedex.event == nil and #WARNINGS == 0 and next(after.sectors) == nil and after.run == 1, WARNINGS[1])
+check("an IPO by this version: the company is the same one (no completion, no new company)", deepEqual(after.active, activeBefore))
+CompanyServer.onIpo(d, 1)
+check("an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)", CompanyServer.serialize(d).run == 1)
+-- a second IPO in the same session
+local ipo2 = { pokedex = CompanyServer.serialize(d) }
+check("two IPOs in one session: the autosave between them kept run = 1", ipo2.pokedex.run == 1)
+CompanyServer.writeIpoRun(d, ipo2, 2)
+CompanyServer.onIpo(d, 2)
+check("two IPOs in one session: each one moves run (the second payload and the section in memory say 2)", ipo2.pokedex.run == 2 and CompanyServer.serialize(d).run == 2)
+joined, joinedData = newPlayer(deepCopy(ipo2.pokedex), { count = 2 })
+check("two IPOs in one session: the next join has no run-check event and no warning, and no stamp or card",
+	joinedData.pokedex.event == nil and #WARNINGS == 0 and next(CompanyServer.serialize(joinedData).sectors) == nil and CompanyServer.serialize(joinedData).run == 2, WARNINGS[1])
+-- a locked section (a newer version's) is never touched, and bad arguments never throw
+p, d = newPlayer(deepCopy(V2), { count = 5 })
+local lockedPayload = { pokedex = CompanyServer.serialize(d) }
+CompanyServer.writeIpoRun(d, lockedPayload, 6)
+CompanyServer.onIpo(d, 6)
+check("a locked section: writeIpoRun and onIpo change nothing", deepEqual(lockedPayload.pokedex, V2) and deepEqual(CompanyServer.serialize(d), V2))
+local okCalls = pcall(function()
+	CompanyServer.writeIpoRun(nil, {}, 1)
+	CompanyServer.writeIpoRun({}, {}, 1)
+	CompanyServer.writeIpoRun({ pokedex = { locked = false } }, nil, 1)
+	CompanyServer.writeIpoRun({ pokedex = { locked = false, section = {} } }, {}, 1)
+	CompanyServer.onIpo(nil, 1)
+	CompanyServer.onIpo({}, 1)
+	CompanyServer.onIpo({ pokedex = { locked = false } }, 1)
+end)
+check("writeIpoRun and onIpo never throw (no data, no section, no payload)", okCalls)
+
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -5636,6 +5680,18 @@ SERVER_MUTATIONS = [
      "sync: the answer is a copy (changing it never changes the company)"),
     ("the zones (never measured from the anchor)", ("zonesCache = CompanyConfig.anchorZones(raw, floorDepth)", "zonesCache = raw"),
      "sync: the reserved zones come with it (so the client can preview)"),
+    ("the run in the IPO's save (never written)", ("\tpayload.pokedex.run = count\n", "\tpayload.pokedex.run = payload.pokedex.run\n"),
+     "an IPO by this version: the saved payload carries run = the new count"),
+    ("the run in the IPO's save (the wrong value)", ("\tpayload.pokedex.run = count\n", "\tpayload.pokedex.run = count - 1\n"),
+     "an IPO by this version: the saved payload carries run = the new count"),
+    ("the run in the IPO's save (written into the section in memory too early)", ("\tpayload.pokedex.run = count\n", "\tpayload.pokedex.run = count\n\tstate.section.run = count\n"),
+     "an IPO by this version: the section in memory is not changed by the payload step (only after the save worked)"),
+    ("the run in memory after an IPO (never set)", ("\tstate.section.run = count\nend\n\n-- True while", "\tstate.section.run = state.section.run\nend\n\n-- True while"),
+     "an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)"),
+    ("the run in memory after an IPO (the wrong value)", ("\tstate.section.run = count\nend\n\n-- True while", "\tstate.section.run = count - 1\nend\n\n-- True while"),
+     "an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)"),
+    ("the lock guard of the IPO's run", ("if state == nil or state.locked or typeof(payload) ~= \"table\"", "if state == nil or typeof(payload) ~= \"table\""),
+     "a locked section: writeIpoRun and onIpo change nothing"),
 ]
 
 
@@ -6070,6 +6126,14 @@ def pokedex_wiring_checks():
     commit = code[code.index("local function commitIpo("):]
     commit = commit[:commit.index("local resets")]
     check("TycoonCore: an IPO is refused first of all while the pokedex is locked (a newer version's, or unreadable)", "CompanyServer.isLocked(data)" in commit and "return false" in commit)
+    commit_all = code[code.index("local function commitIpo("):]
+    commit_all = commit_all[:commit_all.index("\nend\n")]
+    save_guard = commit_all.find("if not ok or playerData[player] ~= data then")
+    run_call = "CompanyServer.writeIpoRun(data, payload, newIpo.count)"
+    check("TycoonCore: commitIpo writes the pokedex's run (the new count) inside the IPO's save transform, after the new ipo section",
+          commit_all.count(run_call) == 1 and 0 <= commit_all.find("payload.ipo = newIpo") < commit_all.find(run_call) < save_guard)
+    check("TycoonCore: commitIpo moves the pokedex's run in memory (the new count) only after the save worked",
+          commit_all.count("CompanyServer.onIpo(data, newIpo.count)") == 1 and 0 <= save_guard < commit_all.find("CompanyServer.onIpo(data, newIpo.count)"))
     check("TycoonCore: the zones come through looks() (a broken plot visuals never stops the game)", 'looks("zones", PlotVisuals.zones, PlotArt.Layout)' in code)
     check("TycoonCore: DataStore name and key untouched, still one DataStore", code.count("GetDataStore(") == 1 and 'GetDataStore("StartupTycoon_v1")' in code and '"player_" .. player.UserId' in code)
 
@@ -6145,6 +6209,11 @@ WIRING_MUTATIONS = [
     ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex) then", "data.tasks) then"),
     ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true }", "tasks = true }"),
     ("the payload without the pokedex", "TycoonCore.lua", "pokedex = CompanyServer.serialize(data),", "pokedex = nil,"),
+    ("commitIpo no longer writes the pokedex's run in the IPO's save", "TycoonCore.lua", "\t\tCompanyServer.writeIpoRun(data, payload, newIpo.count) -- the pokedex's run follows the new count in this very save\n", ""),
+    ("commitIpo writes the wrong run in the IPO's save", "TycoonCore.lua", "CompanyServer.writeIpoRun(data, payload, newIpo.count)", "CompanyServer.writeIpoRun(data, payload, newIpo.count - 1)"),
+    ("commitIpo no longer moves the run in memory", "TycoonCore.lua", "\tCompanyServer.onIpo(data, newIpo.count) -- the save worked: the section in memory follows too (the next autosave keeps it)\n", ""),
+    ("commitIpo moves the run in memory before the save worked", "TycoonCore.lua", "\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo", "\tCompanyServer.onIpo(data, newIpo.count)\n\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo"),
+    ("commitIpo moves the wrong run in memory", "TycoonCore.lua", "CompanyServer.onIpo(data, newIpo.count)", "CompanyServer.onIpo(data, newIpo.count + 1)"),
     ("a second DataStore", "TycoonCore.lua", "local plotOwners = {}", "local other = DataStoreService:GetDataStore(\"Other\")\nlocal plotOwners = {}"),
     ("the picker switched on", "SectorConfig.lua", "SectorConfig.PickerEnabled = false", "SectorConfig.PickerEnabled = true"),
     ("a second sector enabled", "SectorConfig.lua", "Fintech = { name = \"Fintech\", icon = \"💳\", enabled = false,", "Fintech = { name = \"Fintech\", icon = \"💳\", enabled = true,"),

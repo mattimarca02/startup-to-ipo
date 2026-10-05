@@ -569,10 +569,12 @@ local function commitIpo(player, newIpo)
 			payload.poach.hrLevel = 0
 		end
 		payload.ipo = newIpo
+		CompanyServer.writeIpoRun(data, payload, newIpo.count) -- the pokedex's run follows the new count in this very save
 	end)
 	if not ok or playerData[player] ~= data then
 		return ok
 	end
+	CompanyServer.onIpo(data, newIpo.count) -- the save worked: the section in memory follows too (the next autosave keeps it)
 
 	if resets.Cash then
 		data.cash.Value = IpoConfig.StartingCash
