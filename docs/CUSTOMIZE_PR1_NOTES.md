@@ -175,3 +175,26 @@ if not okRun then
 	warn("the cases stopped early: " .. short(runError))
 end
 ```
+
+## Review fix C notes (branch `customize-pr1-fix-c`, independent review of `customize-pr1` at `7f968b9`)
+
+**Owner decisions (recorded).**
+- **Tidy `card.owned` on load.** A list is rebuilt as a plain list 1 to n: every valid name goes in, in key order, including the names after a gap (`owned` is a set of names, so nothing is lost); any other key is dropped with a warning (a string key while the list has names; 0, a negative or a fractional number); a table with ONLY string keys is kept as it is. Duplicates, values over 39 characters and more than 200 names behave as before, with the same warnings. A stamp above 3 stays clamped (3).
+- **Nobody edits saves through Open Cloud.** So a mixed or holed table cannot come out of a store (if the reviewer's reading of `SetAsync` is right, no version could have written one); the tidy is a safety net, and it keeps the tests honest (the test store is now as strict as the reviewer says the real one is).
+- **No locked-player IPO message before PR 4.** A locked player still sees IpoServer's generic "The IPO couldn't be saved" until PR 4.
+
+**What each loader does with a table that can't be stored (the cases checked, in `CompanyConfig.lua`).**
+
+| Table | Shape it can carry | Written back |
+|---|---|---|
+| `card.owned` | list of names | tidied: plain list 1 to n, key order, gap closed (warning), other keys dropped (warning per key). Only string keys and no names: kept as it is |
+| `objects` (active and card) | list of `{ id, x, z, r }` | the same tidy (entries read in key order, gap closed, other keys dropped, warnings). **New in fix C:** a list with a gap or extra keys no longer locks the section (it is something the store refuses). A table with ONLY string keys is a map this version doesn't know and the store can hold: the whole section is kept as it was (locked), as before |
+| `objects[i]`, `rounds[k]`, `sectors[k]`, `card`, `active`, the section | map, named fields plus unknown fields (`copyUnknown`) | **New in fix C:** an unknown key that is not a string (a number: 99, 0, -3, 1.5) is dropped with a warning; unknown string keys are kept as before |
+| `decor`, `kept`, `passSeconds`, `told`, `hall`, `stored`, `rounds`, `sectors` | maps of string keys (`readMap`, `readStored`, `readRounds`, `readSectors`) | already fine: a key that is not a string was skipped with a warning before; the written table has only string keys |
+| `sx`, an unknown sector, an unknown stage, an unknown value in a map, a locked section's raw | opaque (`deepCopy` / the saved table as it was loaded) | kept whole, as it came from the store. Not tidied: this version doesn't know its shape, and what came out of a store can be stored again |
+
+`CompanyConfig.completeCompany` copies `extra.owned` into the card for PR 4: **PR 4 must pass a plain list of names** (nothing calls it with one today).
+
+**What the tests do now.** The fake `SetAsync` refuses, like the reviewer says the real one does, a table that mixes list and string keys and a list with holes (or keys 0, negative, fractional), recursively through the whole payload (and a function value, and a table that contains itself). It is used where a payload goes to `SetAsync` (the `commitIpo` / `save()` test, including the locked-section runtime test, and the `buildPayload` test) and as a screen on every section any test serializes (the Pokedex loader's `toSave`, `CompanyServer.serialize`, and `DailyServer`, `IpoServer`, `TaskServer` and `fixedHires` serialize); there is a named check that the fake itself refuses each bad shape. The locked-section tests now use a storable unknown shape (a map) where they used a mixed table, because the store can't hold a mixed one.
+
+**Order of the merges.** The docs PR first, then the sims PR, and `customize-pr1` **last, after the Studio test** (the command-bar block above and the steps in docs/STUDIO_SYNC.md (d)). A small conflict in the claim rows of CONTRIBUTING.md is expected between the branches; the second branch to merge must re-run `python3 tools/daily_test.py` (the claim rows are the only thing that should conflict).
