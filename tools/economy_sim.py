@@ -2656,10 +2656,11 @@ def sim_s5(n):
 PK_SPREAD = 0.20                      # ASSUMPTION: players of one profile differ in task skill: each seed's task bonus is x (1 +- 20%), so a profile is a population, not one point
 
 
-def pk_pop(kind, n, loops, o, spread=PK_SPREAD):
-    """n players of one profile: the same options, but each seed has its own task skill (f x (1 + spread x u), u from -1 to 1, fixed per seed)."""
+def pk_pop(kind, n, loops, o, spread=PK_SPREAD, first=0):
+    """n players of one profile: the same options, but each seed has its own task skill (f x (1 + spread x u), u from -1 to 1, fixed per seed).
+    first = the first seed (0 = the players of every table so far; another value draws new players, a held-out population)."""
     outs = []
-    for sd in range(n):
+    for sd in range(first, first + n):
         u = (zlib.crc32(f"pop{sd}".encode()) % 2001) / 1000 - 1
         outs.append(pk_run(kind, sd, loops, replace(o, f_mult=o.f_mult * (1 + spread * u))))
     return outs
@@ -2761,8 +2762,75 @@ def sim_s6(n):
                 sweep_ok[label] = sh
         print(f"| {label} | " + " / ".join(f"{100 * a / b:.1f}" for a, b in zip(h1, h0)) + " | " + " | ".join(cells) + " |")
     print(f"\n(The player with no pass has Gold on {typ_g:.0f}%. Shrinks that land within 5 points: " + (", ".join(f"{k} {v:.0%}" for k, v in sweep_ok.items()) or "none of the four") + ".)")
-    print(f"\n**Result.** Gold on {typ_g:.0f}% of the regular typical player's replays (mark: at least 50%): {'PASS' if typ_g >= 50 else 'FAIL'}. "
-          f"Platinum on {dedi:.0f}% of the dedicated fast hunter's replays (mark: at least 20%): {'PASS' if dedi >= 20 else 'FAIL; the smallest rule change that reaches 20%: ' + (ok[0] if ok else 'none tried')}. "
+    # ---- review additions: the Gold test is a tautology, and Platinum for every kind of player ----
+    print("\n### Gold: the first test is a tautology (T is the median of the same players), so Gold is also measured against T the players did not set (regular typical, Software, replays IPO 2-4)")
+    print("| What T is compared with | Gold or better % |")
+    print("|---|---|")
+    hold = pk_pop("regular", n, 4, pk_opts("Software", None, **base), first=100)
+    g_same = typ_g
+    g_hold = pk_tier_rates(hold)[0]
+    lg_T = (57.0, 51.5, 52.0)                  # LONG_GAME section 1 (no raise); loop 3 uses the last value, as the engine does for any loop beyond the list
+    g_lg_raise = pk_tier_rates(pk_pop("regular", n, 4, pk_opts("Software", None, **{**base, "T": lg_T})))[0]
+    g_lg_none = pk_tier_rates(pk_pop("regular", n, 4, pk_opts("Software", None, **{**base, "T": lg_T, "rounds": 0})))[0]
+    for lab, v in (("T = the median of these same 16 players (the table above): 50% by construction, PASS means nothing", g_same),
+                   (f"the same T, {n} NEW players (seeds 100-{99 + n}, T not refitted)", g_hold),
+                   (f"LONG_GAME's T ({' / '.join(f'{x:g}' for x in lg_T)} h), the players raise Medium every round", g_lg_raise),
+                   (f"LONG_GAME's T ({' / '.join(f'{x:g}' for x in lg_T)} h), no round (what LONG_GAME's hours describe)", g_lg_none)):
+        print(f"| {lab} | {v:.0f} |")
+    print("\n### Platinum for every kind of player, not only the dedicated fast hunter (Software, all hunting, population of %d, replays IPO 2-4)" % n)
+    print("'Reach' = the stamp-clock hours at which the IPO-ready ratio first reaches the ratio, as a multiple of the loop's T (the shrunk T for a pass owner), median (p10 to p90) over the replays; a Platinum needs reach <= the rule's time (and a stake of 70%). "
+          "Platinum % = measured by running the rule itself: the doc's rule (0.8 T, ratio 1.25, 15% shrink for the Cash pass) and the S6 fix (1.0 T, ratio 1.20, 6% shrink).")
+    print("| Player | ratio 1.25 reached at (x T) | ratio 1.20 reached at (x T) | Platinum %, the doc's rule 0.8 T / 1.25 | Platinum %, the fix 1.0 T / 1.20 |")
+    print("|---|---|---|---|---|")
+    prow = (("regular, typical", "regular", dict(skill="typical"), {}),
+            ("dedicated, typical", "dedicated", dict(skill="typical"), {}),
+            ("regular, fast", "regular", dict(skill="expert"), {}),
+            ("dedicated, fast", "dedicated", dict(skill="expert"), {}),
+            ("regular, slow", "regular", dict(skill="typical", f_mult=0.5), {}),
+            ("dedicated, slow", "dedicated", dict(skill="typical", f_mult=0.5), {}),
+            ("regular, typical, 2x Cash pass", "regular", dict(skill="typical"), dict(cash_mult=2.0, pass_share=1.0)),
+            ("dedicated, typical, 2x Cash pass", "dedicated", dict(skill="typical"), dict(cash_mult=2.0, pass_share=1.0)),
+            ("regular, typical, Shareholder pass", "regular", dict(skill="typical"), dict(shareholder=True, pass_share=1.0)),
+            ("regular, typical, 2x Cash + VIP (x3)", "regular", dict(skill="typical"), dict(cash_mult=3.0, pass_share=1.0)))
+    plat = {}
+    for label, kind, skw, extra in prow:
+        has_pass = bool(extra)
+        cells = []
+        for pr_ in (1.25, 1.20):
+            o = pk_opts("Software", None, **{**base, **skw, **extra, "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=99.0, plat_ratio=pr_, pass_shrink=0.06 if has_pass else 0.15)})
+            outs = pk_pop(kind, n, 4, o)
+            reach = [lp["stamp_h"] / lp["T_eff"] for r in outs for i, lp in enumerate(r["loops"]) if i >= 1 and lp["T_eff"]]
+            cell = _pdist(reach, "{:.2f}")
+            if has_pass:      # the same hours in multiples of the loop's UNSHRUNK T, so a pass owner can be compared with the others on one scale
+                unshrunk = [lp["stamp_h"] / (lp["T_eff"] / (1 - 0.06 * extra.get("pass_share", 0.0))) for r in outs for i, lp in enumerate(r["loops"]) if i >= 1 and lp["T_eff"]]
+                cell += f" = {_pdist(unshrunk, '{:.2f}')} x unshrunk T"
+            cells.append(cell)
+        rule_a = pk_tier_rates(pk_pop(kind, n, 4, pk_opts("Software", None, **{**base, **skw, **extra, "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=0.8, plat_ratio=1.25, pass_shrink=0.15)})))[1]
+        rule_b = pk_tier_rates(pk_pop(kind, n, 4, pk_opts("Software", None, **{**base, **skw, **extra, "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=1.0, plat_ratio=1.20, pass_shrink=0.06 if has_pass else 0.15)})))[1]
+        plat[label] = (rule_a, rule_b)
+        print(f"| {label} | {cells[0]} | {cells[1]} | {rule_a:.0f} | {rule_b:.0f} |")
+    print("\n### Other Platinum rules for the dedicated hunters (Software; Platinum %, replays IPO 2-4; the pass owner has the 6% shrink)")
+    print("| Rule (time, ratio) | dedicated typical | dedicated fast | dedicated slow | dedicated typical, 2x Cash pass |")
+    print("|---|---|---|---|---|")
+    grid = []
+    for pf, pr_ in ((0.8, 1.25), (1.0, 1.25), (1.0, 1.20), (1.0, 1.15), (1.0, 1.10), (1.1, 1.25), (1.1, 1.20), (1.2, 1.25), (1.2, 1.20)):
+        cells = []
+        for skw, extra in ((dict(skill="typical"), {}), (dict(skill="expert"), {}), (dict(skill="typical", f_mult=0.5), {}), (dict(skill="typical"), dict(cash_mult=2.0, pass_share=1.0))):
+            o = pk_opts("Software", None, **{**base, **skw, **extra, "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=pf, plat_ratio=pr_, pass_shrink=0.06 if extra else 0.15)})
+            cells.append(pk_tier_rates(pk_pop("dedicated", n, 4, o))[1])
+        grid.append(((pf, pr_), cells))
+        print(f"| {pf} T, ratio {pr_} | " + " | ".join(f"{c:.0f}" for c in cells) + " |")
+    both = [f"{pf} T / {pr_}" for (pf, pr_), c in grid if c[0] >= 20 and c[1] >= 20]
+    print(f"\nRules that give at least 20% to both the dedicated typical and the dedicated fast hunter (the mark is 'at least 20% of dedicated players'): " + (", ".join(both) if both else "none of those tried") + ".")
+    mark = "the mark is Platinum on at least 20% of dedicated players"
+    ded_txt = ", ".join(k.split(", ", 1)[1] + " " + format(v[1], ".0f") + "%" for k, v in plat.items() if k.startswith("dedicated"))
+    print(f"\nUnder the fix, Platinum is {ded_txt} for the dedicated players ({mark}).")
+    ded_fast = plat["dedicated, fast"][1]
+    ded_typ = plat["dedicated, typical"][1]
+    print(f"\n**Result.** Gold on {typ_g:.0f}% of the regular typical player's replays (mark: at least 50%): {'PASS' if typ_g >= 50 else 'FAIL'}, but that test is a tautology (T is the median of the same players: 50% by construction); "
+          f"on {n} new players with the same T it is {g_hold:.0f}%, against LONG_GAME's T it is {g_lg_raise:.0f}% with a raise and {g_lg_none:.0f}% without. "
+          f"Platinum on {dedi:.0f}% of the dedicated fast hunter's replays under the doc's rule (mark: at least 20%): {'PASS' if dedi >= 20 else 'FAIL; the smallest rule change that reaches 20% for that player: ' + (ok[0] if ok else 'none tried')}; "
+          f"under that fix the dedicated typical player gets {ded_typ:.0f}% and the dedicated fast one {ded_fast:.0f}% ({'PASS' if min(ded_typ, ded_fast) >= 20 else 'the fix reaches 20% only for the fast player: FAIL for the typical one'}; rules that give at least 20% to both: {', '.join(both) if both else 'none of those tried'}). "
           f"Pass owners (2x Cash, shrunk) Gold {shrunk:.0f}% against {typ_g:.0f}% without the pass: {'PASS' if abs(shrunk - typ_g) <= 5 else 'FAIL'} (mark: within 5 points); pass-blind targets give {blind:.0f}%.")
     return {"s6_gold": typ_g, "s6_plat": dedi, "s6_pass": shrunk}
 

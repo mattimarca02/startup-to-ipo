@@ -41,7 +41,7 @@ Checks the docs ask for inside these sims, all covered below: round Cash is a gi
 | S3 parity | `--s3` | **FAIL as written, marginal after 2 changes** | Typical skill: every schedule within +-3%. Slow and fast players are 6% off, check-in 26% off. Fix B (launch revenue x0.6) plus an away-bank fix brings all but two cells inside +-5%. |
 | S4 bots | `--s4` | **FAIL by +0.38% on the doc's strict mark; PASS within an invented 5%** | Task-bot 10.4 days in both sectors, Gaming at most +0.38% faster (Smash, update under half); a macro never finishes in either. |
 | S5 hopping | `--s5` | **PASS** | 10 IPOs: 543 h Software, 544 h Gaming, alternating 543-544 h (mark 3%). |
-| S6 tiers | `--s6` | **FAIL** | Gold 50% (by construction); **Platinum 0%** for everyone; the Cash pass shortens a replay by 6%, not 15%, so the shrink must be 6%. |
+| S6 tiers | `--s6` | **FAIL** | Gold 50% is a tautology (46% on new players with the same T; 69% / 52% against LONG_GAME's T); **Platinum 0%** for typical, fast, slow and pass owners under the doc's rule; 1.0 T / 1.20 helps only fast players (typical 0%), 1.1 T / 1.25 gives typical 29% / fast 69%; the Cash pass shortens a replay by 6%, not 15%, so the shrink must be 6%. |
 | S7 board | `--s7` | **PASS in hours; FAIL in points (this sim's own reading); the bot PASSES on the doc's own metric, fails only on an invented one** | New sector 99.6% of a replay's hours; points per hour 2x apart (a sector caps at 3 points); **Collection total: bot 4004 = human 4004 at the median (never above: PASS)**; per "Collection per stamp-clock hour" (invented) the bot is +7.5% and a heavy human (5 h a day) +4.9%: the cause is more than 3 h a day, not being a bot. |
 | S8 round size | `--s8` | **mixed** | Tables reproduced, nothing dominated, Large saves 5.0-5.6% of a loop; but the price per hour is not constant (Pre-IPO Large 31.8 against 2.5, 12.7 times), the maximum is best for everyone except 2x Cash owners, and a table fitted to the measured savings never makes the stake line bite. |
 | S9 launch policy | `--s9` | **FAIL (launch-spam)** | Smash +2.6% with 'every update' (-0.4% with the smarter rule: about 1% faster than Hit), Solid +8.3%, Flop +14.8% all inside their marks; Game-Jam spam is 1.7% faster than the typical player (mark 1%); k = 0.4 fixes it. |
@@ -281,15 +281,16 @@ Regular player, typical skill, 10 seeds, 10 IPOs, with the placeholder seed (10%
 **Result.** Alternating gains at most +0.00% over the faster single sector (mark: under 3%): PASS. The two single sectors differ by 0.12%.
 
 
-### S6. Stamp tiers: Gold PASS; Platinum FAIL; pass owners FAIL (the 15% shrink is too big)
+### S6. Stamp tiers: Gold PASS only as a tautology; Platinum FAIL for every kind of player; pass owners FAIL (the 15% shrink is too big)
 
 **Finding.**
-- **Gold: PASS, but only by construction.** T is the regular typical player's own median, so 50% of that player's replays are Gold (mark: at least 50%). A fast player gets Gold on 81% of replays, a slow one on 0%. The rate is hypersensitive: the same T gives **69% in Gaming against 50% in Software** because Gaming's replays are 0.2% faster (S3), which moves a tight population across the median.
-- **Platinum: FAIL, 0% for everyone** (mark: at least 20% of dedicated players). Reaching 1.25 x the IPO-ready valuation within 0.8 T needs about 1.5x the typical speed (if valuation grew in a straight line); the fastest human profile (expert at tasks, dedicated, hunting) gets Gold on 81% of replays but reaches ratio 1.25 within 1.0 T on only 15%, and within 0.9 T on none. **Smallest rule change that gives 20%: 1.0 T with ratio 1.20 (25%)**; 1.0 T with ratio 1.25 gives 15%, 1.0 T with 1.10 gives 67%, and keeping 0.8 T gives 0% at any ratio tried (0.9 T / ratio 1.10 gives 4%).
+- **Gold: PASS, but the test is a tautology.** T is the median of the same 16 players (the same seeds) whose Gold rate is then measured, so exactly 50% of that player's replays are Gold whatever the economy does (mark: at least 50%): it cannot fail. Against a T the players did not set: **16 new players (seeds 100-115) with the same T: 46%**; **LONG_GAME's own T (57 / 51.5 / 52 h): 69% when the players raise Medium every round, 52% with no round** (what LONG_GAME's hours describe). A fast player gets Gold on 81% of replays, a slow one on 0%. The rate is hypersensitive: the same T gives **69% in Gaming against 50% in Software** because Gaming's replays are 0.2% faster (S3), which moves a tight population across the median.
+- **Platinum: FAIL under the doc's rule (0.8 T, ratio 1.25) for every kind of player, 0% each** (mark: at least 20% of dedicated players): typical, fast, slow, 2x Cash, Shareholder and Cash + VIP owners, regular and dedicated alike (regular and dedicated come out identical per engaged hour). The hours at which the ratio is reached, as a multiple of T, median (p10 to p90): **ratio 1.25: typical 1.14 (1.05 to 1.23), fast 1.08 (0.98 to 1.17), slow 1.51 (1.43 to 1.59)**; **ratio 1.20: typical 1.11 (1.02 to 1.20), fast 1.05 (0.96 to 1.14), slow 1.47 (1.39 to 1.55), 2x Cash owners 1.12 (1.03 to 1.21) of their shrunk T = 1.05 (0.97 to 1.14) of the unshrunk T**. Nobody gets within 0.8 T: even the fastest tenth of the fast players is at 0.98 T. (The review quoted typical 1.01 / 1.09 / 1.20, fast 0.95 / 1.03 / 1.13, slow 1.38 / 1.46 / 1.54, pass owners 0.95 / 1.03 / 1.13: reproduced to within 0.02, the pass-owner row being in multiples of the unshrunk T.)
+  **The earlier "smallest rule change: 1.0 T with ratio 1.20 (25%)" holds only for the dedicated fast hunter.** Under 1.0 T / 1.20 the dedicated **typical player gets 0%, the slow player 0%, the 2x Cash owner 0% and the Shareholder owner 4%**; the fast player 25% (the review found 33% with other seeds: 12 against 16 replays of 48, inside the noise). The mark is "at least 20% of dedicated players", so a rule must work for the typical dedicated player, not only the fast one. Grid (dedicated hunters, Platinum %, typical / fast / slow / 2x Cash owner with the 6% shrink): 1.0 T / 1.25: 0 / 15 / 0 / 0; 1.0 T / 1.20: 0 / 25 / 0 / 0; 1.0 T / 1.10: 25 / 67 / 0 / 25; **1.1 T / 1.25: 29 / 69 / 0 / 27**; 1.1 T / 1.20: 44 / 75 / 0 / 44; 1.2 T / 1.25: 77 / 100 / 0 / 75. **Smallest single-number change that gives at least 20% to the typical and the fast dedicated hunter: the Platinum time 0.8 T -> 1.1 T with the ratio kept at 1.25.** The slow player gets 0% under every rule tried (they need 1.47 T): that is a rule about speed, not a failure of one placeholder.
 - **Pass owners: FAIL.** The 2x Cash pass shortens a replay by only **6.1%** (not the 15% LONG_GAME measures for IPO 1: kept employees make later loops less Cash-bound), so the rule "targets shrink by 15% x the share with the pass" puts Cash-pass owners at **0% Gold against 50%** (pass-blind targets: 81%). **A shrink of 6% puts them within 5 points** (54% against 50%). The **Shareholder pass** is not covered by the doc's rule and also speeds replays (2.6% / 5.3% / 8.5% at IPO 2 / 3 / 4, through the speed perks coming sooner): 83% Gold with no shrink, **48% with a 6% shrink**. Cash + VIP (x3) needs about 6% too (67% at 6%, 44% at 8%).
 - **Stake.** A Large raise in every round (stake 69.6%) keeps Gold (stake minimum 55%) and, because Platinum is unreachable here, cannot lose a Platinum; the stake effect on Platinum is S8 section F.
 
-**Placeholder changes that fix it.** Pass shrink 15% -> **6%** (Cash pass, and the same 6% for the Shareholder pass); Platinum 0.8 T and ratio 1.25 -> **1.0 T and ratio 1.20**.
+**Placeholder changes that fix it.** Pass shrink 15% -> **6%** (Cash pass, and the same 6% for the Shareholder pass); Platinum 0.8 T and ratio 1.25 -> **1.1 T and ratio 1.25** (replaces the earlier 1.0 T / 1.20, which only helps fast players). Gold's test needs a T the players did not set (the 50% is a tautology).
 
 **Assumptions.** T measured per loop (55.5 / 50.4 / 51.2 / 51.6 h for IPO 1-4 with a typical raise, not LONG_GAME's 57 / 51.5 / 52); a profile is a population with +-20% task skill; the pass is owned for the whole run (share 1).
 
@@ -331,7 +332,47 @@ Population: 16 players per profile, task skill spread +-20% (assumption), replay
 
 (The player with no pass has Gold on 50%. Shrinks that land within 5 points: 2x Cash 6%, Shareholder (x2 Shares) 6%.)
 
-**Result.** Gold on 50% of the regular typical player's replays (mark: at least 50%): PASS. Platinum on 0% of the dedicated fast hunter's replays (mark: at least 20%): FAIL; the smallest rule change that reaches 20%: 1.0 T, ratio 1.20. Pass owners (2x Cash, shrunk) Gold 0% against 50% without the pass: FAIL (mark: within 5 points); pass-blind targets give 81%.
+### Gold: the first test is a tautology (T is the median of the same players), so Gold is also measured against T the players did not set (regular typical, Software, replays IPO 2-4)
+| What T is compared with | Gold or better % |
+|---|---|
+| T = the median of these same 16 players (the table above): 50% by construction, PASS means nothing | 50 |
+| the same T, 16 NEW players (seeds 100-115, T not refitted) | 46 |
+| LONG_GAME's T (57 / 51.5 / 52 h), the players raise Medium every round | 69 |
+| LONG_GAME's T (57 / 51.5 / 52 h), no round (what LONG_GAME's hours describe) | 52 |
+
+### Platinum for every kind of player, not only the dedicated fast hunter (Software, all hunting, population of 16, replays IPO 2-4)
+'Reach' = the stamp-clock hours at which the IPO-ready ratio first reaches the ratio, as a multiple of the loop's T (the shrunk T for a pass owner), median (p10 to p90) over the replays; a Platinum needs reach <= the rule's time (and a stake of 70%). Platinum % = measured by running the rule itself: the doc's rule (0.8 T, ratio 1.25, 15% shrink for the Cash pass) and the S6 fix (1.0 T, ratio 1.20, 6% shrink).
+| Player | ratio 1.25 reached at (x T) | ratio 1.20 reached at (x T) | Platinum %, the doc's rule 0.8 T / 1.25 | Platinum %, the fix 1.0 T / 1.20 |
+|---|---|---|---|---|
+| regular, typical | 1.14 (1.05 to 1.23) | 1.11 (1.02 to 1.20) | 0 | 0 |
+| dedicated, typical | 1.14 (1.05 to 1.23) | 1.11 (1.02 to 1.20) | 0 | 0 |
+| regular, fast | 1.08 (0.98 to 1.17) | 1.05 (0.96 to 1.14) | 0 | 25 |
+| dedicated, fast | 1.08 (0.98 to 1.17) | 1.05 (0.96 to 1.14) | 0 | 25 |
+| regular, slow | 1.51 (1.43 to 1.59) | 1.47 (1.39 to 1.55) | 0 | 0 |
+| dedicated, slow | 1.51 (1.43 to 1.59) | 1.47 (1.39 to 1.55) | 0 | 0 |
+| regular, typical, 2x Cash pass | 1.15 (1.06 to 1.24) = 1.08 (0.99 to 1.17) x unshrunk T | 1.12 (1.03 to 1.21) = 1.05 (0.97 to 1.14) x unshrunk T | 0 | 0 |
+| dedicated, typical, 2x Cash pass | 1.15 (1.06 to 1.24) = 1.08 (0.99 to 1.17) x unshrunk T | 1.12 (1.03 to 1.21) = 1.05 (0.97 to 1.14) x unshrunk T | 0 | 0 |
+| regular, typical, Shareholder pass | 1.14 (1.05 to 1.24) = 1.07 (0.98 to 1.17) x unshrunk T | 1.12 (1.02 to 1.21) = 1.05 (0.96 to 1.14) x unshrunk T | 0 | 4 |
+| regular, typical, 2x Cash + VIP (x3) | 1.14 (1.05 to 1.24) = 1.08 (0.99 to 1.16) x unshrunk T | 1.12 (1.02 to 1.20) = 1.05 (0.96 to 1.13) x unshrunk T | 0 | 0 |
+
+### Other Platinum rules for the dedicated hunters (Software; Platinum %, replays IPO 2-4; the pass owner has the 6% shrink)
+| Rule (time, ratio) | dedicated typical | dedicated fast | dedicated slow | dedicated typical, 2x Cash pass |
+|---|---|---|---|---|
+| 0.8 T, ratio 1.25 | 0 | 0 | 0 | 0 |
+| 1.0 T, ratio 1.25 | 0 | 15 | 0 | 0 |
+| 1.0 T, ratio 1.2 | 0 | 25 | 0 | 0 |
+| 1.0 T, ratio 1.15 | 12 | 44 | 0 | 12 |
+| 1.0 T, ratio 1.1 | 25 | 67 | 0 | 25 |
+| 1.1 T, ratio 1.25 | 29 | 69 | 0 | 27 |
+| 1.1 T, ratio 1.2 | 44 | 75 | 0 | 44 |
+| 1.2 T, ratio 1.25 | 77 | 100 | 0 | 75 |
+| 1.2 T, ratio 1.2 | 90 | 100 | 0 | 88 |
+
+Rules that give at least 20% to both the dedicated typical and the dedicated fast hunter (the mark is 'at least 20% of dedicated players'): 1.0 T / 1.1, 1.1 T / 1.25, 1.1 T / 1.2, 1.2 T / 1.25, 1.2 T / 1.2.
+
+Under the fix, Platinum is typical 0%, fast 25%, slow 0%, typical, 2x Cash pass 0% for the dedicated players (the mark is Platinum on at least 20% of dedicated players).
+
+**Result.** Gold on 50% of the regular typical player's replays (mark: at least 50%): PASS, but that test is a tautology (T is the median of the same players: 50% by construction); on 16 new players with the same T it is 46%, against LONG_GAME's T it is 69% with a raise and 52% without. Platinum on 0% of the dedicated fast hunter's replays under the doc's rule (mark: at least 20%): FAIL; the smallest rule change that reaches 20% for that player: 1.0 T, ratio 1.20; under that fix the dedicated typical player gets 0% and the dedicated fast one 25% (the fix reaches 20% only for the fast player: FAIL for the typical one; rules that give at least 20% to both: 1.0 T / 1.1, 1.1 T / 1.25, 1.1 T / 1.2, 1.2 T / 1.25, 1.2 T / 1.2). Pass owners (2x Cash, shrunk) Gold 0% against 50% without the pass: FAIL (mark: within 5 points); pass-blind targets give 81%.
 
 ### S7. Leaderboard: new sector against replay PASS in hours, FAIL in points; the task-bot PASSES on the doc's own metric (Collection total ties) and fails only on a metric this sim invented
 
@@ -651,7 +692,7 @@ Always-engaged reference player, IPO 1 (the engaged hours of each event come fro
 | SECTORS 2.10 Smash | "5% faster, 54 h" | Smash with 'every update' is slower than Hit (58.5 h against 57.5 h), with 'update under half' it is 1.1% faster; Hit 57.5, Solid 61.8, Flop 65.5, never 71.6 h. To make Smash matter: cap above 0.8 | S9 |
 | SECTORS 2.10 titles to IPO 1 | about 40 | **49** (4 / 7 / 8 / 7 / 14 / 9) | S3 |
 | SECTORS 2.2 cycle | decisions at Pitch, Playtest, Launch | add a **checkpoint verb every 12 engaged minutes** while a title is in development | S10 |
-| CUSTOMIZE 1.5 Platinum | 0.8 T and ratio 1.25 | **1.0 T and ratio 1.20** (25% of dedicated hunters) | S6 |
+| CUSTOMIZE 1.5 Platinum | 0.8 T and ratio 1.25 | **1.1 T and ratio 1.25** (typical 29%, fast 69% of dedicated hunters; 1.0 T / 1.20 gives typical 0%, fast 25%, so it only helps fast players) | S6 |
 | CUSTOMIZE 1.5 pass shrink | 15% (Cash pass only) | **6%** for the 2x Cash pass, **6%** for the Shareholder pass | S6 |
 | CUSTOMIZE 1.5 T | 57 / 51.5 / 52 h | **55.5 / 50.4 / 51.2 / 51.6 h** with a typical raise (Medium) and the seed | S6 |
 | CUSTOMIZE 1.5 stamp clock | weighted like the valuation | optional: **raw engaged hours** (not needed for the doc's mark: the bot ties the human on Collection total; it takes tiers from every player over 3 h a day) | S7 |
