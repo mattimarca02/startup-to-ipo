@@ -21,7 +21,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 2.5 World mutants, group A: 29 runs on `WorldVisuals.lua` (builder breakages and weakened checks), 29 caught by their named checks
 - [x] 2.6 World mutants, group B: 24 runs on `WorldArt.lua` (data rules, copied numbers, Studio facts); 53 in all, every one caught by its named check
 - [x] 2.7 `docs/world_pass_integration.patch` (not applied): two blocks in TycoonCore (10 lines after line 61, 12 before line 840); `tools/world_test.py` runs both blocks in the fake and, with `--integration`, both suites on a patched copy
-- [ ] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
+- [x] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in a fake place by `tools/world_test.py` (23 checks)
 
 **Phase 3: icons**
 - [ ] 3.1 `IconArt.lua` (pure data, style sheet)
@@ -62,6 +62,7 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 - **World: the Studio preview rooms** (`PREVIEW_STAGES`, x -630 to -290) are a keep-out only at spacing 90: they were placed for it. At spacing 112 plot 1 itself would stand on them, so the preview snippet in docs/STUDIO_SYNC.md would have to move (to about x -700) first.
 - **World: font.** The arch uses `FredokaOne`, not PlotArt's `LuckiestGuy`: the rule against the four odds words in strings also catches that font's name.
 - **World: a missing palette color** builds bright magenta instead of stopping the build (a sector palette with a gap still gives a world); the `palette` check names the gap.
+- **World preview:** it requires a clone of each ModuleScript, so a module pasted a moment ago is used even if the command bar required the old one before (WorldArt and WorldVisuals require nothing themselves, so a clone works alone). It stops at once with a message if the two ModuleScripts don't exist, instead of waiting forever.
 - **World: decor streaming.** Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default).
 
 ## OWNER CHOICE

@@ -315,6 +315,25 @@ function Methods.GetService(t, name)
 	return s
 end
 local MODULES = {}
+function Methods.WaitForChild(t, name) return t:FindFirstChild(name) end
+function Methods.IsDescendantOf(t, ancestor)
+	local p = t.Parent
+	while p do
+		if p == ancestor then return true end
+		p = p.Parent
+	end
+	return false
+end
+function Methods.Clone(t)
+	local c = newInstance(t.ClassName)
+	c.Name = t.Name
+	local from, to = rawget(t, "_props"), rawget(c, "_props")
+	if from and to then for k, v in pairs(from) do to[k] = v end end
+	for k, v in pairs(t._attrs) do c._attrs[k] = v end
+	if MODULES[t] ~= nil then MODULES[c] = MODULES[t] end
+	for _, child in ipairs(t._children) do child:Clone().Parent = c end
+	return c
+end
 local function require(module)
 	local m = MODULES[module]
 	if m == nil then error("require of an unknown module " .. tostring(module and module.Name)) end
@@ -982,6 +1001,104 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+PREVIEW_TESTS = r"""-- Tests: the world preview block of docs/STUDIO_SYNC_WORLD.md, run as it is in a fake place ------------------------
+local WorldArtModule = (function()
+__WORLDART__
+end)()
+local WorldVisualsModule = (function()
+__WORLDVISUALS__
+end)()
+local SSS = SERVICES.ServerScriptService
+for name, module in pairs({ WorldArt = WorldArtModule, WorldVisuals = WorldVisualsModule }) do
+	local script = newInstance("ModuleScript")
+	script.Name = name
+	script.Parent = SSS
+	MODULES[script] = module
+end
+-- The plot visuals' own preview rooms stand in the place too (Studio only): a few parts where they are
+local stages = newInstance("Folder")
+stages.Name = "PREVIEW_STAGES"
+stages.Parent = workspace
+for stage = 1, 5 do
+	local floor = newInstance("Part")
+	floor.Name = "Floor"
+	floor.Size = vec(60, 1, 60)
+	floor.Position = vec(-600 + (stage - 1) * 70, 0.5, 150)
+	floor.Parent = stages
+end
+local function has(prefix)
+	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #prefix) == prefix then return true end end
+	return false
+end
+local function runPreview()
+	table.clear(PRINTED)
+	return pcall(function()
+__PREVIEW__
+	end)
+end
+local spawnBefore, baseBefore = spawnPad.CFrame, baseplate.Size
+local ok, err = runPreview()
+check("preview: the block runs in the fake place without an error", ok, err)
+local folder = workspace:FindFirstChild("PREVIEW_WORLD")
+check("preview: it builds Workspace.PREVIEW_WORLD holding the World and the ghosts", folder ~= nil and folder:FindFirstChild("World") ~= nil and folder:FindFirstChild("Ghosts") ~= nil)
+for _, name in ipairs(WorldVisualsModule.CHECKS) do
+	check("preview: it prints OK for the check " .. name, has("OK " .. name), PRINTED[1])
+end
+check("preview: it prints OK for the Studio facts (the SpawnLocation and the Baseplate where the owner measured them)", has("OK studio facts"))
+check("preview: it prints OK for untouched (the SpawnLocation and the Baseplate as they were)", has("OK untouched"))
+check("preview: it prints OK for clashes (the plot visuals' preview rooms are not in the way)", has("OK clashes with parts already in the Workspace"))
+do
+	local empty = newInstance("Folder")
+	local saved = {}
+	for _, c in ipairs(SSS:GetChildren()) do table.insert(saved, c); c.Parent = empty end
+	local missingOk, missingErr = runPreview()
+	check("preview: without the two ModuleScripts it stops at once with a clear message (it never waits forever)",
+		not missingOk and string.find(tostring(missingErr), "First create the ModuleScripts", 1, true) ~= nil, missingErr)
+	for _, c in ipairs(saved) do c.Parent = SSS end
+	runPreview()
+end
+check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 268 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
+check("preview: the SpawnLocation and the Baseplate were not changed", spawnPad.CFrame == spawnBefore and baseplate.Size == baseBefore and spawnPad.Parent == workspace and baseplate.Parent == workspace)
+check("preview: the ghosts are see-through and never solid", (function()
+	for _, g in ipairs(folder:FindFirstChild("Ghosts"):GetChildren()) do
+		if g.Transparency < 0.5 or g.CanCollide or g.CanQuery or g.CanTouch then return false end
+	end
+	return #folder:FindFirstChild("Ghosts"):GetChildren() == 7
+end)())
+runPreview()
+local n = 0
+for _, c in ipairs(workspace:GetChildren()) do if c.Name == "PREVIEW_WORLD" then n += 1 end end
+check("preview: running it again replaces the old preview (one PREVIEW_WORLD)", n == 1)
+spawnPad.Position = vec(-1, 0.5, 9)
+runPreview()
+check("preview: a SpawnLocation away from the measured spot prints PROBLEM studio facts", has("PROBLEM studio facts"))
+spawnPad.Position = vec(-1, 0.5, -1)
+local stray = newInstance("Part")
+stray.Name = "OldFence"
+stray.Size = vec(10, 4, 1)
+stray.Position = vec(0, 2, 195)
+stray.Parent = workspace
+runPreview()
+check("preview: a hand-placed part standing on the front street is listed as a NOTE", has("NOTE clashes with parts already in the Workspace"))
+stray.Parent = nil
+runPreview()
+check("preview: with it gone, OK again", has("OK clashes with parts already in the Workspace") and has("OK studio facts"))
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def doc_block(heading):
+    """The first ```lua block after a heading of docs/STUDIO_SYNC_WORLD.md."""
+    text = read("docs/STUDIO_SYNC_WORLD.md")
+    start = text.index("```lua\n", text.index(heading)) + len("```lua\n")
+    return text[start:text.index("```", start)]
+
+
+def preview_source():
+    block = "\n".join("\t\t" + line if line.strip() else line for line in doc_block("## The world preview (command bar)").split("\n"))
+    return PRELUDE + PREVIEW_TESTS.replace("__WORLDART__", read("WorldArt.lua")).replace("__WORLDVISUALS__", read("WorldVisuals.lua")).replace("__PREVIEW__", block)
+
+
 def patched_tycoon():
     """main's TycoonCore.lua with docs/world_pass_integration.patch applied in a scratch folder, or None without git."""
     try:
@@ -1277,6 +1394,13 @@ def main():
     total += static_passed
     if static_failed:
         code = 1
+    if os.path.exists(os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")):
+        result = run_luau(luau, preview_source())
+        print("World preview block (docs/STUDIO_SYNC_WORLD.md) in a fake place: " + (result.stdout.strip() or result.stderr.strip()))
+        m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+        if not m or m.group(2) != "0":
+            code = 1
+        total += int(m.group(1)) if m else 0
     if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
         patched = patched_tycoon()
         if patched is None:
