@@ -867,7 +867,38 @@ MUTANTS_A = [
     ("the coverage check never misses an icon", V, 'problem(group .. " " .. tostring(key) .. " has no icon")', "",
      "negative coverage: a shop item without a recipe"),
 ]
-MUTANTS_B = []
+# Group B: IconArt.lua. The data breaks the style sheet or a rule, or stops matching the game (the named check must fail).
+MUTANTS_B = [
+    ("a shape color the palette doesn't have", A, 'S("circle", "Coin", 16, 16, 68, 68, "gold",', 'S("circle", "Coin", 16, 16, 68, 68, "goldd",',
+     "icons at 56 px: check palette"),
+    ("an emoji on the coin", A, '{ text = "2x" }', '{ text = "\\u{1F4B0}" }', "icons at 56 px: check texts"),
+    ("a percent on the coin", A, '{ text = "2x" }', '{ text = "50%" }', "icons at 56 px: check texts"),
+    ("a label on the clover", A, 'S("circle", "Heart", 42, 40, 16, 16, "cloverDark"),',
+     'S("circle", "Heart", 42, 40, 16, 16, "cloverDark"),\n\t\tS("text", "Tag", 30, 30, 40, 40, "white", { text = "2x" }),',
+     "icons at 56 px: check texts"),
+    ("a target that reaches out of the grid", A, 'S("circle", "RingOuter", 14, 14, 72, 72,', 'S("circle", "RingOuter", 2, 2, 96, 96,', "icons at 56 px: check grid"),
+    ("the desk copy drifting from PlotArt", A, 'P("DeskTop", "Block", { 6.2, 0.3, 3 }', 'P("DeskTop", "Block", { 6.4, 0.3, 3 }', "props: the Desk icon is PlotArt's"),
+    ("a laptop with a part PlotArt doesn't have", A, 'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric"),',
+     'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric"),\n\t\tP("ExtraLeaf", "Ball", { 0.5, 0.5, 0.5 }, { -1.1, 3.9, -0.5 }, "leaf", "Fabric"),',
+     "props: the Laptop icon is PlotArt's"),
+    ("the cap raised to 30 ViewportFrames", A, "viewportCap = 8,", "viewportCap = 30,", "data: at most 8 3D icons"),
+    ("a plate under a HUD icon", A, 'Eggs = { name = "HudEgg", kind = "ui", shapes', 'Eggs = { name = "HudEgg", kind = "ui", plate = "plateCream", shapes',
+     "icons at 56 px: check style"),
+    ("a common creature on the epic plate", A, 'CodingCat = creature("CodingCat", "Common"),', 'CodingCat = creature("CodingCat", "Epic"),',
+     "icons at 56 px: check coverage"),
+    ("the light from the bottom-right", A, "lightRotation = 45,", "lightRotation = 225,", "data: one light direction for every icon"),
+    ("the Startup egg in another blue than CreatureConfig's", A, "eggStartup = { 60, 150, 255 }", "eggStartup = { 60, 150, 200 }",
+     "coverage: the Startup egg icon has CreatureConfig's egg color"),
+    ("a shop item's recipe under the wrong key", A, 'PoachShield = { name = "Shield",', 'PoachShieldOld = { name = "Shield",', "icons at 56 px: check coverage"),
+    ("the props seen from straight above", A, "local PROP_VIEW = { yaw = -28, pitch = 22 }", "local PROP_VIEW = { yaw = -28, pitch = 75 }",
+     "icons at 56 px: check data"),
+    ("a squashed circle", A, 'S("circle", "Bullseye", 43, 43, 14, 14, "white"),', 'S("circle", "Bullseye", 43, 43, 14, 10, "white"),',
+     "icons at 56 px: check data"),
+    ("no outline color in the palette", A, "outline = { 28, 30, 38 }, shine", "outlines = { 28, 30, 38 }, shine", "icons at 56 px: check palette"),
+    ("a creature CreatureConfig doesn't have", A, 'VentureDragon = creature("VentureDragon", "Legendary"),',
+     'VentureDragon = { name = "VentureDragon", kind = "creature", creature = "VentureDragonX", plate = "plateLegendary", view = CREATURE_VIEW },',
+     "icons at 56 px: check style"),
+]
 
 
 def run_mutants(luau, mutants, group):

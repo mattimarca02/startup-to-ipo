@@ -28,7 +28,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions, the cache with the cap of 8, taps, named checks)
 - [x] 3.3 `tools/icon_test.py`: 154 checks (97 in Luau, 57 source checks)
 - [x] 3.4 Icon mutants, group A: 17 runs on `IconVisuals.lua` (style, light, framing, the cap plan, reuse, plates, taps, weakened checks), 17 caught by their named checks
-- [ ] 3.5 Icon mutants, group B (20 or more in all)
+- [x] 3.5 Icon mutants, group B: 17 runs on `IconArt.lua` (palette gaps, an emoji, a percent, a label on the clover, the grid, prop copies drifting from PlotArt, the cap, plates, rarity plates, light side, egg colors, keys, views, squashed circles, unknown creatures); 34 in all, every one caught by its named check
 - [ ] 3.6 Icon preview block (`StarterGui.PREVIEW_ICONS`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
 
 **Phase 3b: previews (SVG text)**
