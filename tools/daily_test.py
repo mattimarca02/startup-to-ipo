@@ -5737,6 +5737,35 @@ local okCalls = pcall(function()
 end)
 check("writeIpoRun and onIpo never throw (no data, no section, no payload)", okCalls)
 
+-- 7b. The same IPO when the section holds fields this version doesn't know (top level, and every level below it the plan lists:
+-- active, decor, passSeconds, objects[i], stored, told, rounds, rounds[k], sectors, sectors[k], card, card.owned, card.decor,
+-- card.objects[i], card.rounds[k], kept, hall, sx): the run is still written and moved, and every unknown field comes back unchanged.
+do
+	local FAT = __FATPOKEDEX__
+	local fatPlayer, fatData = newPlayer(deepCopy(FAT), { count = FAT.run })
+	check("unknown fields: the join is clean (no warning, no run check, not locked)", #WARNINGS == 0 and fatData.pokedex.event == nil and not CompanyServer.isLocked(fatData), WARNINGS[1])
+	local expected = deepCopy(FAT)
+	expected.run = FAT.run + 1
+	expected.studio = true -- a Studio server marks every save
+	local fatPayload = { pokedex = CompanyServer.serialize(fatData) }
+	CompanyServer.writeIpoRun(fatData, fatPayload, FAT.run + 1)
+	check("an IPO by this version, a section with unknown fields: the saved payload carries run = the new count", fatPayload.pokedex.run == FAT.run + 1, fatPayload.pokedex.run)
+	check("an IPO by this version, a section with unknown fields: every unknown field is written back unchanged, at every level", deepEqual(fatPayload.pokedex, expected))
+	check("an IPO by this version, a section with unknown fields: the section in memory is not changed by the payload step", CompanyServer.serialize(fatData).run == FAT.run)
+	CompanyServer.onIpo(fatData, FAT.run + 1)
+	check("an IPO by this version, a section with unknown fields: the section in memory follows (run = the new count)", CompanyServer.serialize(fatData).run == FAT.run + 1, CompanyServer.serialize(fatData).run)
+	check("an IPO by this version, a section with unknown fields: its unknown fields are unchanged in memory", deepEqual(CompanyServer.serialize(fatData), expected))
+	-- only a top-level unknown field (the smallest case), and only a nested one
+	for name, saved in pairs({ ["a top-level unknown field"] = { v = 1, run = 0, newThing = { 1, 2 } }, ["a nested unknown field"] = { v = 1, run = 0, active = { sector = "Software", newThing = 7 } } }) do
+		local _, data = newPlayer(deepCopy(saved), { count = 0 })
+		local payload = { pokedex = CompanyServer.serialize(data) }
+		CompanyServer.writeIpoRun(data, payload, 1)
+		CompanyServer.onIpo(data, 1)
+		check("an IPO by this version, " .. name .. ": run = 1 in the payload and in memory, the field is kept", payload.pokedex.run == 1 and CompanyServer.serialize(data).run == 1
+			and (payload.pokedex.newThing ~= nil or payload.pokedex.active.newThing == 7) and deepEqual(CompanyServer.serialize(data).active, payload.pokedex.active))
+	end
+end
+
 check("no request ever threw (a handler that throws is a bug, not a refusal)", #THROWS == 0, THROWS[1])
 
 print_real(string.format("%d passed, %d failed", passed, failed))
@@ -5759,7 +5788,7 @@ def company_server_source(mutation=None):
     return (SERVER_TESTS.replace("__UPGRADES__", upgrades_lua_names())
             .replace("__SECTORCONFIG__", parts["SectorConfig"]).replace("__IPOCONFIG__", parts["IpoConfig"])
             .replace("__COMPANYCONFIG__", parts["CompanyConfig"]).replace("__PLOTVISUALS__", parts["PlotVisuals"])
-            .replace("__PLOTART__", parts["PlotArt"]).replace("__COMPANYSERVER__", parts["CompanyServer"]))
+            .replace("__PLOTART__", parts["PlotArt"]).replace("__COMPANYSERVER__", parts["CompanyServer"]).replace("__FATPOKEDEX__", FAT_POKEDEX_LUA))
 
 
 SERVER_MUTATIONS = [
@@ -5813,6 +5842,10 @@ SERVER_MUTATIONS = [
      "an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)"),
     ("the lock guard of the IPO's run", ("if state == nil or state.locked or typeof(payload) ~= \"table\"", "if state == nil or typeof(payload) ~= \"table\""),
      "a locked section: writeIpoRun and onIpo change nothing"),
+    ("the run in the IPO's save (skipped when the section has an unknown top-level field)", ("\tpayload.pokedex.run = count\n", "\tfor key in pairs(payload.pokedex) do\n\t\tif key ~= \"v\" and key ~= \"run\" and key ~= \"active\" and key ~= \"sectors\" and key ~= \"kept\" and key ~= \"hall\" and key ~= \"dust\" and key ~= \"studio\" then return end\n\tend\n\tpayload.pokedex.run = count\n"),
+     "an IPO by this version, a section with unknown fields: the saved payload carries run = the new count"),
+    ("the run in memory after an IPO (skipped when the section has an unknown top-level field)", ("\tstate.section.run = count\nend\n\n-- True while", "\tfor key in pairs(state.section) do\n\t\tif key ~= \"v\" and key ~= \"run\" and key ~= \"active\" and key ~= \"sectors\" and key ~= \"kept\" and key ~= \"hall\" and key ~= \"dust\" and key ~= \"studio\" then return end\n\tend\n\tstate.section.run = count\nend\n\n-- True while"),
+     "an IPO by this version, a section with unknown fields: the section in memory follows (run = the new count)"),
 ]
 
 
