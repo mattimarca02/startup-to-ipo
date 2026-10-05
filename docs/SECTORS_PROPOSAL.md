@@ -1,32 +1,22 @@
 # Sectors at launch: Software and Gaming (proposal, design only)
 
-Design only (2026-10-05, branch `design-customize`). No script, config or test changed. For the owner and the Claude sessions that will build it. Line numbers are for this branch (`main` `9798388` merged), checked 2026-10-05. **(unverified)** = not checked in code; **(estimate)** = not measured; **(placeholder)** = sized by the sims. `CUST` = docs/CUSTOMIZE_PROPOSAL.md, `FUND` = docs/FUNDING_ROUNDS_PROPOSAL.md, `LG` = docs/LONG_GAME_PROPOSAL.md, `BIBLE` = docs/CONTENT_BIBLE.md (branch `content-bible`).
+Design only (2026-10-05, branch `design-customize`). No script, config or test changed. Line numbers are for this branch (`main` `9798388` merged), checked 2026-10-05. **(unverified)** = not checked in code; **(estimate)** = not measured; **(placeholder)** = sized by the sims. `CUST` = docs/CUSTOMIZE_PROPOSAL.md, `FUND` = docs/FUNDING_ROUNDS_PROPOSAL.md, `LG` = docs/LONG_GAME_PROPOSAL.md, `BIBLE` = docs/CONTENT_BIBLE.md (branch `content-bible`).
 
 **Decided by the owner (D-G, 2026-10-05):** the game launches with **two sectors, Software/SaaS and Gaming**, each with truly different gameplay. **Fintech and Biotech are post-launch updates.** The main goal at launch is completing both launch sectors (Hall of Fame); the game goes on with higher stamps and the leaderboard. Everything in a sector relates to the real-life field.
 
 ## 0. One engine, two packages
 
-The sector package is CUST section 2's format: `Sector<Name>` (data and hooks) and `SectorArt<Name>` (art in PlotArt's `P(...)` format, PlotArt.lua:9-23). The shared engine never names a sector (a test fails on a sector key in engine code, CUST 2).
+The engine and the package are CUST section 2's split (the engine never names a sector; a test fails on a sector key in engine code): `Sector<Name>` (data and hooks) and `SectorArt<Name>` (art in PlotArt's `P(...)` format, PlotArt.lua:9-23). Sectors add to the engine: task rows with a `sector` field (`TaskConfig.Rows`; the task engine, budget, flags and engaged clock stay shared), display names and jobs for creatures and eggs (keys unchanged), and `CompanyAction("Sector", verb, token, choice)`, routed to the active sector's `verbs`.
 
-| Shared engine (one copy) | Per sector (`Sector<Name>`) |
-|---|---|
-| `pokedex`, picker, IPO flow, stamps, seed, bonus, funding rounds, board (CUST 1) | key, name, icon, palette, 12+ company names |
-| buildings, placement, inventory, SHOP > Office (CUST 4) | 5 buildings, their upgrades (own keys), desks, furniture, decor |
-| the task engine, its budget, flags and engaged clock (TaskServer) | task rows (`TaskConfig.Rows` with a `sector` field), texts, caller or review lines |
-| creatures, eggs, odds, `fixedHire` (D9), poaching | creature display names and jobs, egg display names (keys unchanged) |
-| the income loop's one `addEarnings` call (TycoonCore.lua:866) | an income model: `extra(data, seconds)` (0 for Software) |
-| `CompanyAction("Sector", verb, token, choice)`: routed to the active sector | `verbs`, `action(...)`, `load`/`serialize` of `pokedex.active.sx`, `card(sx)`, `onTask(...)` |
-| daily, onboarding, tutorial, HUD, the sim | bundles with fixed contents (`id = 0`) |
-
-**Hooks** (new; Software implements none and gets the defaults): `extra` (CUST 2), `onTask(data, rowKey, grade)` (a graded task's project effect), `action` (a sector verb), `load`/`serialize` (the sector's own state `pokedex.active.sx`, kept whole by the engine, CUST 1.2), `card(sx)` (a summary on the Pokedex card).
+**Hooks** (new; Software implements none and gets the defaults): `extra(data, seconds)` (income on the income loop's one `addEarnings` call, TycoonCore.lua:866; 0 for Software; CUST 2), `onTask(data, rowKey, grade)` (a graded task's project effect), `action` (a sector verb), `load`/`serialize` (the sector's own state `pokedex.active.sx`, kept whole by the engine, CUST 1.2), `card(sx)` (a summary on the Pokedex card).
 
 **Upgrades are safe across versions.** `owned` keeps any string name, known or not (TycoonCore.lua:316-322, 770-772, written back at 417-419), and `totalIncome` only counts names in `UPGRADES` (:137-145). So a rollback to Software-only code keeps a Gaming company's upgrades (they earn nothing there until forward again). Upgrade keys are unique across sectors and never reused (CLAUDE.md "Config-driven items").
 
 ## 1. Software / SaaS
 
-**1.1 Fantasy.** A software company that sells a product businesses pay for every month. Customers call, ask for features and report bugs; you keep them happy and the subscriptions keep coming. It is today's game: CUST 2 says "Software (today)".
+**1.1 Fantasy.** A software company that sells a product businesses pay for every month. Customers call, ask for features and report bugs; you keep them happy and the subscriptions keep coming. It is today's game.
 
-**1.2 Core loop, minute to minute.** *Reactive and steady.* Work comes to you: a call rings every 20-40 s and must be answered within 8 s (TaskConfig.lua:49-58), a chain raises the reward, a missed call breaks it. Between calls the player buys the next upgrade in SHOP > Office, hatches eggs and arranges the office. From Seed on, more task kinds wake up (BIBLE:285-296): Bug Storm (tap the bugs), Ship a Feature (press in the green zone), Interview (pick 1 of 3); later support tickets, demos, Board requests (Series C+D) and the Roadshow (Pre-IPO). *What makes it Software:* many short tasks that arrive on their own, a fast tempo, money that never stops.
+**1.2 Core loop, minute to minute.** *Reactive and steady.* Work comes to you: a call rings every 20-40 s and must be answered within 8 s (TaskConfig.lua:49-58), a chain raises the reward, a missed call breaks it. Between calls the player buys the next upgrade in SHOP > Office, hatches eggs and arranges the office. From Seed on, more task kinds wake up (BIBLE:285-296): Bug Storm (tap the bugs), Ship a Feature (press in the green zone), Interview (pick 1 of 3); later support tickets, demos, Board requests (Series C+D) and the Roadshow (Pre-IPO).
 
 **1.3 Income model.** Steady Income: upgrades plus employees (TycoonCore.lua:137-152), paid every second by the income loop (:865-866). `extra` = 0. Every number is LONG_GAME's (LG section 3). Software is the **reference**: the other sector is fitted to it (S3).
 
@@ -52,8 +42,6 @@ The sector package is CUST section 2's format: `Sector<Name>` (data and hooks) a
 5. **Trailer** (once, optional, before Launch): a 3-beat timing task; each good beat adds wishlists.
 6. **Launch:** the tier (section 2.3) sets the live game's revenue peak. **Review** messages start arriving.
 7. **Live:** revenue falls as players move on (a half-life in engaged minutes). A **Live Update** (Content Patch, Seasonal Event or Balance Patch) lifts it back; each later update lifts less. When the next title launches, the old one joins the **back catalog** (a small, capped, permanent share). A Hit adds **fans** to its genre: the next title in that genre (a sequel) starts with more wishlists.
-
-*What makes it Gaming:* you set the pace, every title is a plan with a trade-off (ship now or polish), money comes in waves, and the result is visible before you commit.
 
 **2.3 The launch outcome: deterministic (D9).** Nothing in a launch is random, and nothing about it is sold for Robux.
 - **Quality** Q (0-100) = 50 x min(1, Fun / FunTarget) + 50 x min(1, Polish / PolishTarget), plus the Playtest fix. Targets come from the scope (data).
@@ -184,7 +172,7 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 
 **`content-bible`, docs/CONTENT_BIBLE.md** (`BIBLE:`):
 - **Sections 1-6 (BIBLE:12-241)** are Software's package; the industry skins (:247) go (CUST 7).
-- **"The first 5 hours" (:253-283), "What each rung adds" (:285-296), "Approve or rename" (:298-361)** are Software's. Gaming needs all three in a new section 7 (or its own file): **about 214 names (estimate)**: 7 offices, 42 upgrades, 18 desks, 18 creature names and jobs, 6 egg names, 22 decor, 5 bundles, 9 titles, 12 events, 8 publisher requests, 48 review lines, 6 genres, 36 game names, 7 task names, 12 company names; game names checked against real games.
+- **"The first 5 hours" (:253-283), "What each rung adds" (:285-296), "Approve or rename" (:298-361)** are Software's. Gaming needs all three in a new section 7 (or its own file): **about 214 names (estimate)**: 7 offices, 42 upgrades, 18 desks, 18 creature names and jobs, 6 egg names, 22 decor, 5 bundles, 9 titles, 12 events, 8 publisher requests, 6 groups of 8 review lines, 6 genres, 36 game names, 7 task names, 12 company names; game names checked against real games.
 - **Choice 1 (:365):** creature keys stay locked; Gaming names are display strings, not a save migration. **Choice 9 (:373)** is replaced by sectors.
 
 **docs/LONG_GAME_PROPOSAL.md** (`LG:`):
