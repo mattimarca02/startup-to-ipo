@@ -1,0 +1,69 @@
+# World and icons pass: notes and progress
+
+Branch `world-icons-pass` (from `main` at `e3c9e67`), worktree `../world-icons`. New files only; the one existing-file edit is the claim rows in `CONTRIBUTING.md`. No Studio, no MCP: everything here was written and tested outside Studio, with the free `luau` command-line tool and fake Roblox objects.
+
+## Progress (the source of truth when this job is resumed)
+
+Each item is one commit, pushed right after. An item is ticked in the same commit that does it.
+
+**Phase 0: set-up**
+- [x] 0.1 Claim every new file in `CONTRIBUTING.md`
+- [x] 0.2 This notes file with the checklist
+
+**Phase 1: shop UX (docs only)**
+- [ ] 1.1 `docs/SHOP_UX_PROPOSAL.md`
+
+**Phase 2: world pass**
+- [ ] 2.1 `docs/WORLD_PASS_PROPOSAL.md`
+- [ ] 2.2 `WorldArt.lua` (pure data)
+- [ ] 2.3 `WorldVisuals.lua` (builder, named checks, pure geometry)
+- [ ] 2.4 `tools/world_test.py` (fake Roblox, checks, parameter sweep)
+- [ ] 2.5 World mutants, group A
+- [ ] 2.6 World mutants, group B (25 or more in all)
+- [ ] 2.7 `docs/world_pass_integration.patch` (not applied)
+- [ ] 2.8 World preview block (`Workspace.PREVIEW_WORLD`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
+
+**Phase 3: icons**
+- [ ] 3.1 `IconArt.lua` (pure data, style sheet)
+- [ ] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions)
+- [ ] 3.3 `tools/icon_test.py`
+- [ ] 3.4 Icon mutants, group A
+- [ ] 3.5 Icon mutants, group B (20 or more in all)
+- [ ] 3.6 Icon preview block (`StarterGui.PREVIEW_ICONS`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
+
+**Phase 3b: previews (SVG text)**
+- [ ] 3b.1 `tools/render_previews.py`
+- [ ] 3b.2 `docs/previews/world_topdown.svg`
+- [ ] 3b.3 `docs/previews/icons_sheet.svg`
+
+**Phase 4: Studio sync and wrap-up**
+- [ ] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, previews, delete list, what to look at)
+- [ ] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks)
+- [ ] 4.3 Release every claim in `CONTRIBUTING.md`
+
+## Studio facts (measured by the owner, not in the repo)
+
+These are placed by hand in Studio. They are treated as fixed constants in `WorldArt.Site` (marked "Studio fact") and the tests use them as they are; nothing parses them from a `.lua` file because no script creates these two objects.
+
+| Object | Size | Position | What follows |
+|---|---|---|---|
+| `Workspace.Baseplate` | 2048 x 16 x 2048 | (0, -8, 0) | its top is y = 0, it spans x and z from -1024 to 1024 |
+| `Workspace.SpawnLocation` | 12 x 1 x 12 | (-1, 0.5, -1) | the pad covers x -7 to 5, z -7 to 5, y 0 to 1 |
+
+The world builder never moves, resizes, replaces or deletes either of them, and nothing it builds covers the spawn pad. The Studio preview block reads both objects (read only) and prints whether they still match these numbers.
+
+## Judgment calls
+
+(Filled in as the work goes.)
+
+## OWNER CHOICE
+
+(Defaults picked where the owner's taste decides; each one is implemented and can be changed in one place.)
+
+## Blocked
+
+(Nothing blocked so far.)
+
+## Risks
+
+(Filled in as the work goes.)
