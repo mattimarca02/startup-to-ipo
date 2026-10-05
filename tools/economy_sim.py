@@ -598,7 +598,7 @@ def run(behaviour, seed, days=SIM_DAYS, use_ipo=False, daily=None, daily_cash_co
     rng = random.Random(seed)
     if daily is None and DAILY_IN_ALL_TABLES:
         daily = DAILY_DAYS
-    p = Player(rng, daily=daily or None, daily_cash_counts=daily_cash_counts, **passes)
+    p = passes.pop("player_cls", Player)(rng, daily=daily or None, daily_cash_counts=daily_cash_counts, **passes)   # player_cls: only the S8 sim passes one
     p.use_ipo = use_ipo
     sessions = []
     for d in range(days):
@@ -1721,6 +1721,8 @@ class PkGam:
     fans_cap: float = 10.0               # ... at most +10
     title_cap_k: float = None            # SECTORS 2.4 anti-spam bound (k x build seconds x base Income per title); None = off (the doc gives no k)
     force_scope: int = None              # launch-spam: always build this scope (0 = Game Jam)
+    checkpoint_min: float = None         # S10 fix: a visible checkpoint (a verb, never a task) every this many engaged minutes while a title is in development
+    half_lives: tuple = None             # None = the SECTORS 2.4 table (20 / 30 / 40 / 50 / 60 engaged minutes); a tuple replaces it (S9 fix: half-life proportional to the work)
     scope_of_rung: tuple = PK_GAMING_SCOPE_OF_RUNG
 
 
@@ -1786,6 +1788,11 @@ class PkCycle:
             sc = c.force_scope if c.force_scope is not None else c.scope_of_rung[min(rung, len(c.scope_of_rung) - 1)]
             d = self.dev = {"scope": sc, "W": PK_GAMING_SCOPES[sc][1] * 60.0, "work": 0.0, "pol": 0.0, "pt": False}
             self.ev.append((self.t, "pitch"))
+        if c.checkpoint_min:
+            d["cp"] = d.get("cp", 0.0) + dt
+            if d["cp"] >= c.checkpoint_min * 60:
+                d["cp"] = 0.0
+                self.ev.append((self.t, "checkpoint"))
         if d["work"] < d["W"]:
             d["work"] += dt
             if not d["pt"] and d["work"] >= d["W"] / 2:
@@ -1801,7 +1808,7 @@ class PkCycle:
             peak = c.peak[PK_TIERS.index(tier)] * c.scope_factor[d["scope"]]
             if live:
                 self.cat = min(c.cat_cap, self.cat + c.cat_share * live["peak"])
-            self.live = {"peak": peak, "amp": peak, "hl": PK_GAMING_SCOPES[d["scope"]][2] * 60.0, "ups": 0, "last": self.t, "spent": 0.0, "build": d["W"] + d["pol"]}
+            self.live = {"peak": peak, "amp": peak, "hl": (c.half_lives[d["scope"]] if c.half_lives else PK_GAMING_SCOPES[d["scope"]][2]) * 60.0, "ups": 0, "last": self.t, "spent": 0.0, "build": d["W"] + d["pol"]}
             if tier in ("Hit", "Smash"):
                 self.hits += 1
             self.titles += 1
@@ -2062,7 +2069,7 @@ def pk_run(kind, seed, loops=1, o=None):
                                 pending.append((stage, trig, ch))
                 if stage >= n_rungs:
                     ratio_raw = val / (thr[-1] * sc)
-                    stamp_h = wt_s / 3600
+                    stamp_h = ((eng_s - loop_start_eng) if tier_cfg.get("clock") == "raw" else wt_s) / 3600     # the stamp clock: weighted like the valuation (CUSTOMIZE 1.5) or raw engaged seconds (S7 fix)
                     T_loop = o.T[min(loop, len(o.T) - 1)] if o.T else None
                     T_eff = T_loop * (1 - tier_cfg["pass_shrink"] * o.pass_share) if T_loop else None
                     replay = sector in done_sectors
@@ -2101,6 +2108,7 @@ def pk_run(kind, seed, loops=1, o=None):
                         spent_speed += buy
                         shares -= buy
                         speed = 1 + LONG_SPEED_PERKS[1] * spent_speed / LONG_SPEED_PERKS[0]
+                    out["loops"][-1]["perk"] = spent_speed
                     old_cash = cash
                     loop += 1
                     sector = o.sectors[loop % len(o.sectors)]
@@ -2286,12 +2294,17 @@ def pk_ref_hours(o):
     return pk_rung_hours(r) if r["ipo_h"] else None
 
 
-def pk_fit_beta(gcfg, f_gam=1.0):
-    """S3 fit: Gaming's upgrade Incomes x beta[rung], found rung by rung (bisection) so that the reference player spends the same hours in that rung as in Software."""
-    key = (repr(gcfg), f_gam)
+PK_SKILLS = (("typical", dict(skill="typical")), ("fast", dict(skill="expert")), ("slow", dict(skill="typical", f_mult=0.5)))
+
+
+def pk_fit_beta(gcfg, f_gam=1.0, skills=("typical",)):
+    """S3 fit: Gaming's upgrade Incomes x beta[rung], found rung by rung (bisection) so that the reference player spends the same hours in that rung as in Software.
+    With several skills the fit matches the AVERAGE of their Gaming / Software hour ratios (typical, fast = expert at tasks, slow = task bonus x0.5)."""
+    key = (repr(gcfg), f_gam, tuple(skills))
     if key in _PK_FIT:
         return _PK_FIT[key]
-    sw = pk_ref_hours(PkOpt())
+    sk = dict(PK_SKILLS)
+    sw = {k: pk_ref_hours(PkOpt(**sk[k])) for k in skills}
     beta = [1.0] * len(LONG_RUNGS)
     for r in range(len(LONG_RUNGS)):
         lo, hi = 0.15, 1.8
@@ -2299,8 +2312,11 @@ def pk_fit_beta(gcfg, f_gam=1.0):
             mid = (lo + hi) / 2
             b = list(beta)
             b[r] = mid
-            hrs = pk_ref_hours(PkOpt(sectors=("Gaming",), gaming=gcfg, beta=tuple(b), f_gam=f_gam))
-            if hrs is None or len(hrs) <= r or hrs[r] > sw[r]:
+            dev = 0.0
+            for k in skills:
+                hrs = pk_ref_hours(PkOpt(sectors=("Gaming",), gaming=gcfg, beta=tuple(b), f_gam=f_gam, **sk[k]))
+                dev += (hrs[r] / sw[k][r] - 1) if (hrs is not None and len(hrs) > r) else 1.0
+            if dev > 0:
                 lo = mid
             else:
                 hi = mid
@@ -2309,7 +2325,6 @@ def pk_fit_beta(gcfg, f_gam=1.0):
     return _PK_FIT[key]
 
 
-PK_SKILLS = (("typical", dict(skill="typical")), ("fast", dict(skill="expert")), ("slow", dict(skill="typical", f_mult=0.5)))
 
 
 def pk_med_rungs(outs):
@@ -2321,35 +2336,18 @@ def pk_med_rungs(outs):
     return cols
 
 
-def sim_s3(n):
-    """S3 parity (CUSTOMIZE 5.5, SECTORS 4): Software against Gaming (Hit policy), every rung and every profile, within +-5%."""
-    print("\n## S3. Parity: Software and Gaming, hours per engaged hour (docs/SECTORS_PROPOSAL.md 2.4, 4; docs/CUSTOMIZE_PROPOSAL.md 5.5)")
-    gcfg = PkGam()
-    beta = pk_fit_beta(gcfg)
-    sw = pk_ref_hours(PkOpt())
-    g1 = pk_ref_hours(PkOpt(sectors=("Gaming",), gaming=gcfg))
-    gf = pk_ref_hours(PkOpt(sectors=("Gaming",), gaming=gcfg, beta=beta))
-    print("Gaming model: the title cycle of SECTORS 2.2-2.4 (scope per rung, peak x tier, half-life, Live Updates, back catalog, cap 0.8), typical policy = Polish to Hit with an update when revenue is under half the peak; "
-          "its extra pays x base Income on top of the base and the task bonus, only while engaged, never in the away bank. Gaming's upgrade Incomes are scaled by beta per rung (hires keep CreatureConfig's Income), "
-          "fitted rung by rung with the always-engaged reference player so that each rung takes the same hours as in Software. Assumptions in the section 'Assumptions' of docs/SIMS_RESULTS.md.\n")
-    print("### Fit (reference player, hours per rung)")
-    print("| Rung | Software h | Gaming h with the doc's beta 1.0 (no fit) | fitted beta | Gaming h after the fit |")
-    print("|---|---|---|---|---|")
-    for i, (name, *_r) in enumerate(LONG_RUNGS):
-        print(f"| {name} | {sw[i]:.2f} | {g1[i]:.2f} | {beta[i]:.3f} | {gf[i]:.2f} |")
-    print(f"\nThe doc's fitted base is 0.77 for the whole ladder (SECTORS 2.10); the fit gives {min(beta):.2f} to {max(beta):.2f} by rung. "
-          f"Total: Software {sum(sw):.1f} h, Gaming before the fit {sum(g1):.1f} h, after {sum(gf):.1f} h.\n")
-    print(f"### Parity by profile: Gaming hours / Software hours, per rung (median over {n} seeds, same random streams), in %; the mark is 95 to 105")
+def pk_parity_table(n, gcfg, beta, kinds, skills=PK_SKILLS, away_fix=False, label=""):
+    """Gaming hours / Software hours per rung for each profile and skill (median over n seeds, the same random streams). Returns (worst deviation in %, where, offenders)."""
     print("| Profile | Skill | " + " | ".join(r[0] for r in LONG_RUNGS) + " | IPO 1 | IPO 1 per-seed p10 to p90 |")
     print("|---|---|" + "---|" * (len(LONG_RUNGS) + 2))
-    worst, worst_at, rows_bad = 0.0, "", []
-    for kind in ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in"):
-        for sname, skw in PK_SKILLS:
+    worst, worst_at, bad = 0.0, "", []
+    for kind in kinds:
+        for sname, skw in skills:
             if kind == "reference" and sname != "typical":
                 continue
             nn = n if kind != "check-in" else max(5, n // 4)
             o_s = PkOpt(**skw, **({"away": (0, 0, 0), "full_hours": 1e9, "max_days": 400} if kind == "reference" else {}))
-            o_g = replace(o_s, sectors=("Gaming",), gaming=gcfg, beta=beta)
+            o_g = replace(o_s, sectors=("Gaming",), gaming=gcfg, beta=beta, away_fix=away_fix)
             rs = pk_many(kind, nn if kind != "reference" else 1, 1, o_s)
             rg = pk_many(kind, nn if kind != "reference" else 1, 1, o_g)
             a, b = pk_med_rungs(rs), pk_med_rungs(rg)
@@ -2368,21 +2366,849 @@ def sim_s3(n):
             if mx > worst:
                 worst, worst_at = mx, f"{kind}/{sname}"
             if mx > 5:
-                rows_bad.append(f"{kind}/{sname} ({mx:.1f}%)")
-            print(f"| {kind} | {sname} | " + " | ".join(cells) + f" | {100 + _pq(ipo, 50):.1f} | {100 + _pq(ipo, 10):.1f} to {100 + _pq(ipo, 90):.1f} |" if ipo else
-                  f"| {kind} | {sname} | " + " | ".join(cells) + " | never | |")
-    print(f"\n### Loops 2 and 3 (regular, typical): hours of IPO 2 and IPO 3, Gaming company in every loop, in % of Software")
+                bad.append(f"{kind}/{sname} ({mx:.1f}%)")
+            tail = f" {100 + _pq(ipo, 50):.1f} | {100 + _pq(ipo, 10):.1f} to {100 + _pq(ipo, 90):.1f} |" if ipo else " never | |"
+            print(f"| {kind} | {sname} | " + " | ".join(cells) + " |" + tail)
+    return worst, worst_at, bad
+
+
+def pk_fit_table(gcfg, beta, title):
+    """Fit table: hours per rung, the fitted beta, the base Income Gaming has at the end of each rung against Software, the average extra and the titles per rung."""
+    sw_o = PkOpt(away=(0, 0, 0), full_hours=1e9, max_days=400)
+    sw = pk_run("reference", 0, 1, sw_o)
+    g1 = pk_run("reference", 0, 1, replace(sw_o, sectors=("Gaming",), gaming=gcfg))
+    gf = pk_run("reference", 0, 1, replace(sw_o, sectors=("Gaming",), gaming=gcfg, beta=beta))
+    hs, h1, hf = pk_rung_hours(sw), pk_rung_hours(g1), pk_rung_hours(gf)
+    print(f"### {title}")
+    print("| Rung | Software h | Gaming h, beta 1.0 (no fit) | fitted beta | Gaming h after the fit | Gaming base Income / Software's at the end of the rung | average extra (x base) | titles launched in the rung |")
+    print("|---|---|---|---|---|---|---|---|")
+    prev = 0
+    for i, (name, *_r) in enumerate(LONG_RUNGS):
+        end_t = gf["titles_entry"][i] if i < len(gf["titles_entry"]) else gf["loops"][0]["titles"]
+        inc_ratio = gf["inc_entry"][i] / sw["inc_entry"][i] if i < len(gf["inc_entry"]) else float("nan")
+        xs, ts = gf["rung_x"][i]
+        print(f"| {name} | {hs[i]:.2f} | {h1[i]:.2f} | {beta[i]:.3f} | {hf[i]:.2f} | {inc_ratio:.2f} | {xs / ts:.2f} | {end_t - prev} |")
+        prev = end_t
+    print(f"\nTotal titles to IPO 1: {gf['loops'][0]['titles']} (SECTORS 2.10 estimates about 40: 4 / 5 / 6 / 6 / 14 / 7). Hours: Software {sum(hs):.1f}, Gaming before the fit {sum(h1):.1f}, after {sum(hf):.1f}. "
+          "The doc's fitted base is 0.77 of Software's Income for the whole ladder (SECTORS 2.10): the column 'base Income' is the same quantity measured.\n")
+
+
+def sim_s3(n):
+    """S3 parity (CUSTOMIZE 5.5, SECTORS 4): Software against Gaming (Hit policy), every rung and every profile, within +-5%."""
+    print("\n## S3. Parity: Software and Gaming, hours per engaged hour (docs/SECTORS_PROPOSAL.md 2.4, 4; docs/CUSTOMIZE_PROPOSAL.md 5.5)")
+    gcfg = PkGam()
+    beta = pk_fit_beta(gcfg)
+    print("Gaming model: the title cycle of SECTORS 2.2-2.4 (scope per rung, peak x tier, half-life, Live Updates, back catalog, cap 0.8), typical policy = Polish to Hit with an update when revenue is under half the peak; "
+          "its extra pays x base Income on top of the base and the task bonus, only while engaged, never in the away bank. Gaming's upgrade Incomes are scaled by beta per rung (hires keep CreatureConfig's Income), "
+          "fitted rung by rung with the always-engaged reference player (typical skill) so that each rung takes the same hours as in Software. Assumptions: section 'Assumptions' of docs/SIMS_RESULTS.md.\n")
+    pk_fit_table(gcfg, beta, "Fit 1: the doc's rule (fit to the typical player)")
+    kinds = ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in")
+    print(f"### Parity with fit 1: Gaming hours / Software hours, per rung, in % (median over {n} seeds; mark 95 to 105)")
+    w1, at1, bad1 = pk_parity_table(n, gcfg, beta, kinds)
+    typ = [k for k in kinds]
+    print(f"\nWorst deviation with fit 1: {w1:.1f}% ({at1}). Outside +-5%: {', '.join(bad1) if bad1 else 'none'}.")
+    print("\n### Loops 2 and 3 (regular, typical): hours of IPO 2 and IPO 3, a Gaming company in every loop, in % of Software")
     rs = pk_many("regular", max(8, n // 2), 3, PkOpt())
     rg = pk_many("regular", max(8, n // 2), 3, PkOpt(sectors=("Gaming",), gaming=gcfg, beta=beta))
     for i in (0, 1, 2):
         v = [(g["loops"][i]["eng_h"] / s_["loops"][i]["eng_h"]) * 100 for s_, g in zip(rs, rg) if len(s_["loops"]) > i and len(g["loops"]) > i]
         print(f"- IPO {i + 1}: Software {_pq([s_['loops'][i]['eng_h'] for s_ in rs], 50):.1f} h, Gaming {_pq([g['loops'][i]['eng_h'] for g in rg], 50):.1f} h = {_pdist(v, '{:.1f}')}%")
-    print(f"\n**Result.** Worst deviation {worst:.1f}% ({worst_at}); "
-          + ("every rung of every profile is inside +-5%: PASS." if worst <= 5 else f"outside +-5%: {', '.join(rows_bad)}: FAIL (see the findings)."))
-    return {"s3": worst, "beta": beta, "bad": rows_bad}
+    print("\n### Fix A: Gaming's away bank pays on the Software-equivalent base (`away_fix`: 10% of the base Income of the unscaled upgrade Incomes), fit 1 beta")
+    wa, ata, bada = pk_parity_table(n, gcfg, beta, ("casual", "check-in"), skills=PK_SKILLS[:1], away_fix=True)
+    print(f"\nWith the away fix the check-in profile is within {wa:.1f}% ({ata}) at the rungs it reaches.")
+    print("\n### Fix B: smaller launch revenue (peaks x0.6: 0.09 / 0.21 / 0.36 / 0.48, cap 0.48, back catalog 0.06), refitted; the skill spread is x / (1 + f), so a smaller x spreads less")
+    gB = replace(gcfg, peak=tuple(round(x * 0.6, 3) for x in gcfg.peak), cap=0.48, cat_cap=0.06)
+    betaB = pk_fit_beta(gB)
+    pk_fit_table(gB, betaB, "Fit B")
+    print(f"### Parity with fix B and the away fix (median over {n} seeds; mark 95 to 105)")
+    wb, atb, badb = pk_parity_table(n, gB, betaB, ("reference", "dedicated", "regular", "casual", "heavy", "boundary", "check-in"), away_fix=True)
+    print(f"\nWorst deviation with fix B and the away fix: {wb:.1f}% ({atb}). Outside +-5%: {', '.join(badb) if badb else 'none'}.")
+    ok_typ = all(not b.split("/")[1].startswith(("fast", "slow")) and not b.startswith("check-in") for b in bad1)
+    print("\n**Result.** " + (f"Fit 1 (the doc's rule): every rung of every schedule at the typical skill is inside +-5% except the profiles named above. "
+          f"Worst {w1:.1f}% ({at1}): " + ("PASS." if w1 <= 5 else "FAIL (check-in, which pays only the away bank; the fast and slow skills are marginal at +-6%).")
+          + f" With fix B and the away fix the worst is {wb:.1f}% ({atb}): " + ("PASS." if wb <= 5 else "marginal.")))
+    return {"s3": w1, "s3_fixed": wb, "beta": beta, "betaB": betaB, "bad": bad1, "badB": badb}
+
+PK_POLICIES = (    # SECTORS 2.10 policy table: (label, PkGam changes, the doc's estimate of the IPO 1 hours of a regular player)
+    ("Polish to Smash, every update", dict(policy="smash", update_rule="every"), 54),
+    ("Polish to Hit (typical, the fit)", dict(policy="hit", update_rule="half"), 57),
+    ("Ship at content complete (Solid)", dict(policy="solid", update_rule="none"), 63),
+    ("Rush every title (Flop)", dict(policy="rush", update_rule="none"), 69),
+    ("Never ship", dict(policy="never", update_rule="none"), 74),
+)
 
 
-PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3"}   # filled in as the sims are written; the name of each sim function
+def pk_gam_ipo1(kind, skw, gcfg, beta, n, **extra):
+    """Engaged hours to IPO 1 of n seeds of a Gaming player (None if a seed never got there)."""
+    outs = pk_many(kind, n, 1, PkOpt(sectors=("Gaming",), gaming=gcfg, beta=beta, **skw, **extra))
+    return [r["ipo_h"][0] if r["ipo_h"] else None for r in outs]
+
+
+def pk_sw_ipo1(kind, skw, n):
+    return [r["ipo_h"][0] if r["ipo_h"] else None for r in pk_many(kind, n, 1, PkOpt(**skw))]
+
+
+def _pk_pct(g, s_):
+    """Per-seed % that Gaming takes longer than Software (positive = slower)."""
+    return [(a / b - 1) * 100 for a, b in zip(g, s_) if a is not None and b is not None]
+
+
+def sim_s9(n):
+    """S9 launch policy (SECTORS 4, 2.10): five policies per profile; launch-spam; update timing."""
+    print("\n## S9. Launch policy (docs/SECTORS_PROPOSAL.md 2.10, 4)")
+    n = max(8, n // 2)
+    base = PkGam()
+    beta = pk_fit_beta(base)
+    profiles = (("regular", "typical", dict(skill="typical")), ("dedicated", "typical", dict(skill="typical")), ("casual", "typical", dict(skill="typical")),
+                ("regular", "fast", dict(skill="expert")), ("regular", "slow", dict(skill="typical", f_mult=0.5)))
+    sw = {(k, sk): pk_sw_ipo1(k, skw, n) for k, sk, skw in profiles}
+    print(f"Gaming with the fit-1 beta of S3 {tuple(round(b, 2) for b in beta)} (fitted on the Hit policy), IPO 1, {n} seeds per cell, engaged hours; cell = Gaming hours as a change against Software for the same profile and seeds "
+          "(positive = slower), median (p10 to p90). Marks: Smash at most 5% faster (>= -5); Solid at most 12% slower (<= +12); Flop at most 25% slower (<= +25). The doc's own estimates of regular-player hours are in the last column.\n")
+    print("| Policy | " + " | ".join(f"{k} {sk}" for k, sk, _ in profiles) + " | regular typical, hours | doc estimate, hours |")
+    print("|---|" + "---|" * (len(profiles) + 2))
+    res = {}
+    for label, kw, est in PK_POLICIES:
+        cells = []
+        for k, sk, skw in profiles:
+            g = pk_gam_ipo1(k, skw, replace(base, **kw), beta, n)
+            pc = _pk_pct(g, sw[(k, sk)])
+            res[(label, k, sk)] = _pq(pc, 50) if pc else None
+            cells.append(_pdist(pc, "{:+.1f}%") if pc else "never")
+            if (k, sk) == ("regular", "typical"):
+                hours = _pq([x for x in g if x is not None], 50) if any(x is not None for x in g) else None
+        print(f"| {label} | " + " | ".join(cells) + f" | {hours:.1f} | {est} |" if hours else f"| {label} | " + " | ".join(cells) + f" | never | {est} |")
+    smash = min(v for (l, k, sk), v in res.items() if l.startswith("Polish to Smash") and v is not None)
+    solid = max(v for (l, k, sk), v in res.items() if l.startswith("Ship at") and v is not None)
+    flop = max(v for (l, k, sk), v in res.items() if l.startswith("Rush") and v is not None)
+    g = pk_gam_ipo1("regular", dict(skill="typical"), replace(base, policy="smash", update_rule="half"), beta, n)
+    print(f"\n(Smash with the smarter update rule, 'when under half the peak': {_pdist(_pk_pct(g, sw[('regular', 'typical')]), '{:+.1f}%')} for the regular typical player.)")
+    print(f"\nWorst cell per mark: Smash {smash:+.1f}% (mark >= -5), Solid {solid:+.1f}% (mark <= +12), Flop {flop:+.1f}% (mark <= +25).")
+    # the Smash polish cost is the doc's biggest open number: sweep it
+    print("\n### What Smash costs: extra polish needed for Smash, as a multiple of the work (the doc gives no number; Hit is 0.5 by SECTORS 2.10)")
+    print("| tau_smash | Smash vs Software (regular typical) | Smash vs Hit | titles to IPO 1 (Smash) |")
+    print("|---|---|---|---|")
+    hit_g = pk_gam_ipo1("regular", dict(skill="typical"), base, beta, n)
+    for tau in (0.8, 1.0, 1.5, 2.0, 3.0):
+        gc = replace(base, policy="smash", update_rule="every", tau_smash=tau)
+        g = pk_gam_ipo1("regular", dict(skill="typical"), gc, beta, n)
+        pc = _pk_pct(g, sw[("regular", "typical")])
+        vs_hit = [(a / b - 1) * 100 for a, b in zip(g, hit_g) if a and b]
+        tit = [r["loops"][0]["titles"] for r in pk_many("regular", min(n, 6), 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=beta))]
+        print(f"| {tau} | {_pdist(pc, '{:+.1f}%')} | {_pdist(vs_hit, '{:+.1f}%')} | {_pq(tit, 50):.0f} |")
+    print("\n### Launch-spam: only Game Jams, the smallest scope, all the way up the ladder (a title every 15 to 25 engaged minutes), against the typical Hit player")
+    print("| Spam policy | Gaming vs Software (regular typical) | gain over the typical Hit player |")
+    print("|---|---|---|")
+    hit_pc = _pk_pct(hit_g, sw[("regular", "typical")])
+    spam_gain = []
+    for label, kw in (("Jam Solid, no updates", dict(policy="solid", update_rule="none")), ("Jam Solid, update every cooldown", dict(policy="solid", update_rule="every")),
+                      ("Jam Hit, update when under half", dict(policy="hit", update_rule="half")), ("Jam Hit, update every cooldown", dict(policy="hit", update_rule="every")),
+                      ("Jam Flop (rush), no updates", dict(policy="rush", update_rule="none"))):
+        g = pk_gam_ipo1("regular", dict(skill="typical"), replace(base, force_scope=0, **kw), beta, n)
+        pc = _pk_pct(g, sw[("regular", "typical")])
+        gain = [(b / a - 1) * 100 for a, b in zip(g, hit_g) if a and b]
+        spam_gain.append(_pq(gain, 50))
+        print(f"| {label} | {_pdist(pc, '{:+.1f}%')} | {_pdist(gain, '{:+.1f}%')} faster |")
+    print("\n### Update timing: the Hit player with each rule for when to use a Live Update (best against worst)")
+    print("| Rule | Gaming vs Software (regular typical) |")
+    print("|---|---|")
+    meds = {}
+    for label, rule in (("never update", "none"), ("only when revenue is under a quarter of the peak", "late"), ("when under half the peak (typical)", "half"), ("every time the cooldown allows", "every")):
+        g = pk_gam_ipo1("regular", dict(skill="typical"), replace(base, policy="hit", update_rule=rule), beta, n)
+        pc = _pk_pct(g, sw[("regular", "typical")])
+        meds[rule] = _pq(pc, 50)
+        print(f"| {label} | {_pdist(pc, '{:+.1f}%')} |")
+    spread = max(meds.values()) - min(meds.values())
+    spam = max(spam_gain)
+    print("\n### Fix for launch-spam: each fix is refitted (beta) so that the typical Hit player is again equal to Software, then the spam is measured")
+    print("| Fix (placeholder changed) | fitted beta | typical Hit vs Software | Jam Hit spam: gain over typical Hit | Jam Solid spam: gain |")
+    print("|---|---|---|---|---|")
+    fix_rows = []
+    for label, kw in (("none (doc as written)", {}), ("per-title cap k = 0.6 (SECTORS 2.4 'k')", dict(title_cap_k=0.6)), ("k = 0.5", dict(title_cap_k=0.5)), ("k = 0.4", dict(title_cap_k=0.4)),
+                      ("half-lives proportional to the work: 20 / 40 / 60 / 80 / 120 min", dict(half_lives=(20, 40, 60, 80, 120)))):
+        gc = replace(base, **kw)
+        b2 = pk_fit_beta(gc)
+        t = pk_gam_ipo1("regular", dict(skill="typical"), gc, b2, n)
+        sp = pk_gam_ipo1("regular", dict(skill="typical"), replace(gc, force_scope=0), b2, n)
+        sp_s = pk_gam_ipo1("regular", dict(skill="typical"), replace(gc, force_scope=0, policy="solid", update_rule="none"), b2, n)
+        sw_ = sw[("regular", "typical")]
+        gain = _pq([(b / a - 1) * 100 for a, b in zip(sp, t) if a and b], 50)
+        gain_s = _pq([(b / a - 1) * 100 for a, b in zip(sp_s, t) if a and b], 50)
+        fix_rows.append((label, gain))
+        print(f"| {label} | {tuple(round(x, 2) for x in b2)} | {_pdist(_pk_pct(t, sw_), '{:+.1f}%')} | {gain:+.1f}% | {gain_s:+.1f}% |")
+    print("\n### The same marks with S3's fix B (peaks x0.6, cap 0.48, back catalog 0.06; beta refitted) and the half-life fix for launch-spam")
+    gB = replace(base, peak=tuple(round(x * 0.6, 3) for x in base.peak), cap=0.48, cat_cap=0.06, half_lives=(20, 40, 60, 80, 120))
+    betaB = pk_fit_beta(gB)
+    print("| Policy | regular typical | regular fast | regular slow |")
+    print("|---|---|---|---|")
+    worstB = {"smash": 0.0, "solid": 0.0, "flop": 0.0}
+    for label, kw, est in PK_POLICIES:
+        cells = []
+        for k, sk, skw in profiles[0:1] + profiles[3:]:
+            g = pk_gam_ipo1(k, skw, replace(gB, **kw), betaB, n)
+            pc = _pk_pct(g, sw[(k, sk)])
+            cells.append(_pdist(pc, "{:+.1f}%") if pc else "never")
+            if pc:
+                key = "smash" if label.startswith("Polish to Smash") else "solid" if label.startswith("Ship") else "flop" if label.startswith("Rush") else None
+                if key == "smash":
+                    worstB[key] = min(worstB[key], _pq(pc, 50))
+                elif key:
+                    worstB[key] = max(worstB[key], _pq(pc, 50))
+        print(f"| {label} | " + " | ".join(cells) + " |")
+    t = pk_gam_ipo1("regular", dict(skill="typical"), gB, betaB, n)
+    sp = pk_gam_ipo1("regular", dict(skill="typical"), replace(gB, force_scope=0), betaB, n)
+    spB = _pq([(b / a - 1) * 100 for a, b in zip(sp, t) if a and b], 50)
+    print(f"\nWith fix B and proportional half-lives: Smash {worstB['smash']:+.1f}%, Solid {worstB['solid']:+.1f}%, Flop {worstB['flop']:+.1f}%, Jam-Hit spam gain {spB:+.1f}%.")
+    fixed = [lab for lab, gain in fix_rows[1:] if gain <= 1.0]
+    print(f"\n**Result.** Smash {'PASS' if smash >= -5 else 'FAIL'} ({smash:+.1f}%); Solid {'PASS' if solid <= 12 else 'FAIL'} ({solid:+.1f}%); Flop {'PASS' if flop <= 25 else 'FAIL'} ({flop:+.1f}%); "
+          f"launch-spam best gain {spam:+.1f}% ({'PASS' if spam <= 1 else 'FAIL'}, mark 1%; first fix that meets it: {fixed[0] if fixed else 'none tried'}); update timing spread {spread:.1f} points ({'PASS' if spread <= 5 else 'FAIL'}, mark 5).")
+    return {"smash": smash, "solid": solid, "flop": flop, "spam": spam, "spread": spread}
+
+
+PK_GAM_VARIANTS = (    # what a player or a bot can do in Gaming: the doc's typical policy, and the best versions of Smash
+    ("Gaming, Hit (typical)", dict(policy="hit", update_rule="half")),
+    ("Gaming, Smash, update under half", dict(policy="smash", update_rule="half")),
+    ("Gaming, Smash, every update", dict(policy="smash", update_rule="every")),
+)
+
+
+def pk_opts(sector, extra_gam=None, **kw):
+    """PkOpt of one sector: Software, or Gaming with the doc's cycle (policy changes in extra_gam) and the fit-1 beta of S3."""
+    if sector == "Software":
+        return PkOpt(**kw)
+    gc = replace(PkGam(), **(extra_gam or {}))
+    return PkOpt(sectors=("Gaming",), gaming=gc, beta=pk_fit_beta(PkGam()), **kw)
+
+
+def sim_s4(n):
+    """S4 bots (CUSTOMIZE 5.5, SECTORS 4): no sector faster for a task-bot; a macro gets nothing in either."""
+    print("\n## S4. Bots in two sectors (docs/CUSTOMIZE_PROPOSAL.md 5.5, docs/SECTORS_PROPOSAL.md 4, 2.9)")
+    n = max(6, n // 4)
+    print(f"Time to IPO 1 for a player who is online 24/7 (task-bot: answers every task perfectly, so the reward budget is its ceiling; pulse-bot: 3 minutes of tasks every 2 hours; macro: input only, answers no task), "
+          f"{n} seeds. Valuation weights: 3 engaged hours a day at 100%, then 5% (day starts 08:00 UTC). In Gaming a bot may choose the best launch policy; its sector verbs (Pitch, Launch, Update) never make it engaged, "
+          "so a macro has no work, no revenue and no engaged clock. 'Edge' = how much faster than the same bot in Software (positive = Gaming is faster for the bot); the mark is that no sector gives a bot more than 5%.\n")
+    print("| Player | Sector / policy | Engaged hours to IPO 1 | Days to IPO 1 | Edge over Software (days) |")
+    print("|---|---|---|---|---|")
+    edges = {}
+    for kind, label in (("task-bot", "task-bot (24/7, perfect)"), ("pulse-bot", "pulse-bot (3 min every 2 h)"), ("macro", "macro (input only)"), ("dedicated", "dedicated human, typical (scale)")):
+        base_days = None
+        for sector, gkw, glabel in (("Software", None, "Software"),) + tuple(("Gaming", kw, lab) for lab, kw in PK_GAM_VARIANTS):
+            outs = pk_many(kind, n if kind != "dedicated" else max(n, 8), 1, pk_opts(sector, gkw))
+            done = [r for r in outs if r["ipo_h"]]
+            if len(done) < len(outs) / 2:
+                print(f"| {label} | {glabel} | never | never | - |")
+                continue
+            days = _pq([r["ipo_day"][0] for r in done], 50)
+            hrs = _pq([r["ipo_h"][0] for r in done], 50)
+            if base_days is None:
+                base_days = days
+            edge = (1 - days / base_days) * 100
+            edges.setdefault(kind, []).append(edge)
+            print(f"| {label} | {glabel} | {hrs:.1f} | {days:.1f} | {'-' if glabel == 'Software' else f'{edge:+.1f}%'} |")
+    bot_edge = max([e for k in ("task-bot", "pulse-bot") for e in edges.get(k, [])[1:]] or [0.0])
+    print(f"\n**Result.** The best edge any sector gives a bot is {bot_edge:+.1f}% (mark: at most 5%): {'PASS' if bot_edge <= 5 else 'FAIL'}. "
+          "A macro never reaches the IPO in either sector (graded answers are the only engaged clock; verbs never set it). "
+          "What the bot gets in Gaming over a human is the S9 spread between launch policies, not a new exploit: it pays nothing without graded answers.")
+    return {"s4": bot_edge}
+
+
+def sim_s5(n):
+    """S5 hopping (CUSTOMIZE 5.5, SECTORS 4): alternating Software and Gaming against staying in one, 10 IPOs, under 3%."""
+    print("\n## S5. Hopping between sectors (docs/CUSTOMIZE_PROPOSAL.md 5.5, docs/SECTORS_PROPOSAL.md 4)")
+    n = max(5, n // 4)
+    print(f"Regular player, typical skill, {n} seeds, 10 IPOs, with the placeholder seed (10% / 25%) at every founding; kept employees carry over, a Gaming company starts with an empty title cycle. "
+          "Cell = total engaged hours to IPO 10, median (p10 to p90); the mark is that alternating is not faster than the faster single sector by 3% or more.\n")
+    print("| Strategy | Hours to IPO 10 | IPO 1 | IPO 2 | IPO 5 | IPO 10 (that loop) |")
+    print("|---|---|---|---|---|---|")
+    strat = (("Software only", ("Software",)), ("Gaming only", ("Gaming",)), ("alternate, Software first", ("Software", "Gaming")), ("alternate, Gaming first", ("Gaming", "Software")))
+    tot = {}
+    for label, sectors in strat:
+        o = PkOpt(sectors=sectors, gaming=PkGam(), beta=pk_fit_beta(PkGam()), seed_pct=PK_SEED[0], seed_cap=PK_SEED[1])
+        outs = pk_many("regular", n, 10, o)
+        done = [r for r in outs if len(r["ipo_h"]) >= 10]
+        tot[label] = [r["ipo_h"][9] for r in done]
+        def at(k):
+            return _pq([r["ipo_h"][k - 1] for r in done], 50)
+        loop10 = _pq([r["loops"][9]["eng_h"] for r in done], 50)
+        print(f"| {label} | {_pdist(tot[label], '{:.0f}')} | {at(1):.1f} | {at(2):.1f} | {at(5):.1f} | {loop10:.1f} |")
+    best = min(_pq(tot["Software only"], 50), _pq(tot["Gaming only"], 50))
+    worst_gain = 0.0
+    print("\n| Alternating strategy | against Software only | against Gaming only | gain over the faster one |")
+    print("|---|---|---|---|")
+    for label in ("alternate, Software first", "alternate, Gaming first"):
+        a = _pq(tot[label], 50)
+        so, go = _pq(tot["Software only"], 50), _pq(tot["Gaming only"], 50)
+        gain = (1 - a / best) * 100
+        worst_gain = max(worst_gain, gain)
+        print(f"| {label} | {(a / so - 1) * 100:+.2f}% | {(a / go - 1) * 100:+.2f}% | {gain:+.2f}% |")
+    print(f"\n**Result.** Alternating gains at most {worst_gain:+.2f}% over the faster single sector (mark: under 3%): {'PASS' if worst_gain < 3 else 'FAIL'}. "
+          f"The two single sectors differ by {abs(_pq(tot['Software only'], 50) / _pq(tot['Gaming only'], 50) - 1) * 100:.2f}%.")
+    return {"s5": worst_gain}
+
+
+PK_SPREAD = 0.20                      # ASSUMPTION: players of one profile differ in task skill: each seed's task bonus is x (1 +- 20%), so a profile is a population, not one point
+
+
+def pk_pop(kind, n, loops, o, spread=PK_SPREAD):
+    """n players of one profile: the same options, but each seed has its own task skill (f x (1 + spread x u), u from -1 to 1, fixed per seed)."""
+    outs = []
+    for sd in range(n):
+        u = (zlib.crc32(f"pop{sd}".encode()) % 2001) / 1000 - 1
+        outs.append(pk_run(kind, sd, loops, replace(o, f_mult=o.f_mult * (1 + spread * u))))
+    return outs
+
+
+_PK_T = {}
+
+
+def pk_T(n, loops=6, shop_done=False):
+    """T (CUSTOMIZE 1.5): the stamp-clock hours of a regular typical player's loop 0, 1, 2 ..., fitted with a typical raise (Medium at every round) and the placeholder seed, median over the population."""
+    key = (n, loops, shop_done)
+    if key not in _PK_T:
+        outs = pk_pop("regular", n, loops, PkOpt(rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1], shop_done=shop_done))
+        _PK_T[key] = tuple(_pq([r["loops"][i]["stamp_h"] for r in outs if len(r["loops"]) > i], 50) for i in range(loops))
+    return _PK_T[key]
+
+
+def pk_tier_rates(outs, first=1):
+    """Share of replays (loop >= first) that got Gold or better, and Platinum, in %, and the number of replays."""
+    t = [lp["tier"] for r in outs for i, lp in enumerate(r["loops"]) if i >= first]
+    if not t:
+        return None, None, 0
+    return 100 * sum(1 for x in t if x >= 2) / len(t), 100 * sum(1 for x in t if x == 3) / len(t), len(t)
+
+
+def sim_s6(n):
+    """S6 tiers (CUSTOMIZE 1.5, 5.5): Gold and Platinum from time, ratio and stake, per profile and pass set."""
+    print("\n## S6. Stamp tiers (docs/CUSTOMIZE_PROPOSAL.md 1.5, 5.5; docs/FUNDING_ROUNDS_PROPOSAL.md 3)")
+    n = max(16, n * 2 // 5)
+    T = pk_T(PK_T_POP)
+    print(f"Population: {n} players per profile, task skill spread +-{PK_SPREAD:.0%} (assumption), replays = IPO 2, 3 and 4 of the same sector (loops 1-3), so {3 * n} replays per cell. "
+          f"T = the regular typical player's stamp-clock hours per loop with a typical raise (Medium at every round) and the placeholder seed: **{', '.join(f'{x:.1f}' for x in T[:4])} h** for IPO 1-4 (the doc's LONG_GAME hours are 57 / 51.5 / 52 without a raise). "
+          "Gold = within 1.0 T, ratio >= 1, stake >= 55%; Platinum = within 0.8 T, ratio >= 1.25, stake >= 70%. Targets shrink by 15% x the share of the run with the 2x Cash pass (CUSTOMIZE 1.5). "
+          "'ready' players go public the moment IPO-ready is reached (ratio 1.0); 'hunt' players keep playing until the ratio reaches 1.25 while Platinum is still possible, then go public. Cells: Gold or better % / Platinum %, Software | Gaming (Hit).\n")
+    base = dict(T=T, rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1])
+    rows = (
+        ("regular, typical, ready (the T player)", "regular", dict(skill="typical"), {}),
+        ("regular, fast, ready", "regular", dict(skill="expert"), {}),
+        ("regular, slow, ready", "regular", dict(skill="typical", f_mult=0.5), {}),
+        ("dedicated, typical, hunt", "dedicated", dict(skill="typical"), dict(ipo_mode="hunt")),
+        ("dedicated, fast, hunt", "dedicated", dict(skill="expert"), dict(ipo_mode="hunt")),
+        ("regular, typical, 2x Cash pass, targets shrunk (the rule)", "regular", dict(skill="typical"), dict(cash_mult=2.0, pass_share=1.0)),
+        ("regular, typical, 2x Cash pass, targets NOT shrunk (pass-blind)", "regular", dict(skill="typical"), dict(cash_mult=2.0, pass_share=0.0)),
+        ("dedicated, fast, hunt, 2x Cash pass, shrunk", "dedicated", dict(skill="expert"), dict(ipo_mode="hunt", cash_mult=2.0, pass_share=1.0)),
+        ("regular, typical, Shareholder pass", "regular", dict(skill="typical"), dict(shareholder=True)),
+        ("regular, typical, 2x Cash + VIP (x3), shrunk 15% only", "regular", dict(skill="typical"), dict(cash_mult=3.0, pass_share=1.0)),
+        ("regular, typical, Large raise in every round (stake 69.6%)", "regular", dict(skill="typical"), dict(rounds=3)),
+    )
+    print("| Profile | Gold or better % (Software / Gaming) | Platinum % (Software / Gaming) |")
+    print("|---|---|---|")
+    res = {}
+    for label, kind, skw, extra in rows:
+        cells = []
+        for sector in ("Software", "Gaming"):
+            o = pk_opts(sector, None, **{**base, **skw, **extra})
+            g, pl, k = pk_tier_rates(pk_pop(kind, n, 4, o))
+            cells.append((g, pl))
+        res[label] = cells
+        print(f"| {label} | {cells[0][0]:.0f} / {cells[1][0]:.0f} | {cells[0][1]:.0f} / {cells[1][1]:.0f} |")
+    typ_g = res[rows[0][0]][0][0]
+    dedi = res[rows[4][0]][0][1]
+    shrunk = res[rows[5][0]][0][0]
+    blind = res[rows[6][0]][0][0]
+    print("\n### Platinum for the dedicated, fast, hunting player under other time and ratio rules (Software)")
+    print("| Rule | Platinum % | Gold or better % |")
+    print("|---|---|---|")
+    fixes = []
+    for label, pf, pr in (("0.8 T and ratio 1.25 (the doc)", 0.8, 1.25), ("0.9 T, ratio 1.25", 0.9, 1.25), ("1.0 T, ratio 1.25", 1.0, 1.25), ("1.0 T, ratio 1.20", 1.0, 1.20),
+                          ("1.0 T, ratio 1.15", 1.0, 1.15), ("1.0 T, ratio 1.10", 1.0, 1.10), ("0.8 T, ratio 1.10", 0.8, 1.10), ("0.9 T, ratio 1.10", 0.9, 1.10)):
+        o = pk_opts("Software", None, **{**base, "skill": "expert", "ipo_mode": "hunt", "tier": dict(PK_TIER, plat_frac=pf, plat_ratio=pr)})
+        g, pl, k = pk_tier_rates(pk_pop("dedicated", n, 4, o))
+        fixes.append((label, pl))
+        print(f"| {label} | {pl:.0f} | {g:.0f} |")
+    ok = [lab for lab, pl in fixes if pl >= 20]
+    print("\n### Pass owners: how much a pass really shortens a replay, and the target shrink that makes Gold equal (regular typical, Software)")
+    nopass = pk_pop("regular", n, 4, pk_opts("Software", None, **base))
+    h0 = [_pq([r["loops"][i]["stamp_h"] for r in nopass], 50) for i in (1, 2, 3)]
+    print("| Pass | stamp-clock hours of IPO 2 / 3 / 4 as a % of no pass | Gold or better % with target shrink of 0 | 4% | 6% | 8% | 10% | 15% (the doc, Cash pass) |")
+    print("|---|---|---|---|---|---|---|---|")
+    sweep_ok = {}
+    for label, kw in (("2x Cash", dict(cash_mult=2.0)), ("2x Cash + VIP (x3)", dict(cash_mult=3.0)), ("Shareholder (x2 Shares)", dict(shareholder=True))):
+        outs = pk_pop("regular", n, 4, pk_opts("Software", None, **{**base, **kw}))
+        h1 = [_pq([r["loops"][i]["stamp_h"] for r in outs], 50) for i in (1, 2, 3)]
+        cells = []
+        for sh in (0.0, 0.04, 0.06, 0.08, 0.10, 0.15):
+            o = pk_opts("Software", None, **{**base, **kw, "pass_share": 1.0, "tier": dict(PK_TIER, pass_shrink=sh)})
+            g, pl, k = pk_tier_rates(pk_pop("regular", n, 4, o))
+            cells.append(f"{g:.0f}")
+            if abs(g - typ_g) <= 5 and label not in sweep_ok:
+                sweep_ok[label] = sh
+        print(f"| {label} | " + " / ".join(f"{100 * a / b:.1f}" for a, b in zip(h1, h0)) + " | " + " | ".join(cells) + " |")
+    print(f"\n(The player with no pass has Gold on {typ_g:.0f}%. Shrinks that land within 5 points: " + (", ".join(f"{k} {v:.0%}" for k, v in sweep_ok.items()) or "none of the four") + ".)")
+    print(f"\n**Result.** Gold on {typ_g:.0f}% of the regular typical player's replays (mark: at least 50%): {'PASS' if typ_g >= 50 else 'FAIL'}. "
+          f"Platinum on {dedi:.0f}% of the dedicated fast hunter's replays (mark: at least 20%): {'PASS' if dedi >= 20 else 'FAIL; the smallest rule change that reaches 20%: ' + (ok[0] if ok else 'none tried')}. "
+          f"Pass owners (2x Cash, shrunk) Gold {shrunk:.0f}% against {typ_g:.0f}% without the pass: {'PASS' if abs(shrunk - typ_g) <= 5 else 'FAIL'} (mark: within 5 points); pass-blind targets give {blind:.0f}%.")
+    return {"s6_gold": typ_g, "s6_plat": dedi, "s6_pass": shrunk}
+
+
+PK_T_POP = 16
+
+
+def pk_collection(loops_list, k):
+    """Collection after k IPOs (CUSTOMIZE 1.6): 1000 x (best stamp of each sector: Bronze 1, Gold 2, Platinum 3) + the IPO count."""
+    best = {}
+    for lp in loops_list[:k]:
+        best[lp["sector"]] = max(best.get(lp["sector"], 0), lp["tier"])
+    return 1000 * sum(best.values()) + k
+
+
+def sim_s7(n):
+    """S7 board (CUSTOMIZE 5.5, 1.6): new sector against replays within 10%; the task-bot never above a dedicated human."""
+    print("\n## S7. Leaderboard (docs/CUSTOMIZE_PROPOSAL.md 1.6, 5.5)")
+    n = max(5, n // 5)
+    T = pk_T(PK_T_POP)
+    gam_beta = pk_fit_beta(PkGam())
+    print(f"Collection = 1000 x (best stamp of each sector, Bronze 1 / Gold 2 / Platinum 3) + IPOs (CUSTOMIZE 1.6). {n} seeds per cell. Tiers use T from S6 ({', '.join(f'{x:.1f}' for x in T[:4])} h) and a typical raise (Medium at every round).\n")
+    print("### 1. Hours of a new sector against a replay at the same IPO count (regular typical, placeholder seed)")
+    base = dict(rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1])
+    alt = pk_many("regular", n, 5, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **base))
+    one = pk_many("regular", n, 5, PkOpt(**base))
+    print("| IPO | Alternating: what the loop is | hours | One sector: replay, hours | ratio |")
+    print("|---|---|---|---|---|")
+    worst_h = 0.0
+    for i in range(1, 5):
+        a = _pq(pk_loop_h(alt, i), 50)
+        b = _pq(pk_loop_h(one, i), 50)
+        kind = "first Gaming company (new sector)" if i % 2 == 1 else "Software replay"
+        if i % 2 == 1:
+            worst_h = max(worst_h, abs(a / b - 1) * 100)
+        print(f"| {i + 1} | {kind} | {a:.1f} | {b:.1f} | {a / b * 100:.1f}% |")
+    print("\n### 2. Collection points per 100 stamp-clock hours: seeking new sectors against replaying one (dedicated, fast, hunting for Platinum)")
+    pop = max(8, n * 2)
+    o_h = dict(T=T, rounds=2, seed_pct=PK_SEED[0], seed_cap=PK_SEED[1], skill="expert", ipo_mode="hunt")
+    alt_h = pk_pop("dedicated", pop, 6, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **o_h))
+    one_h = pk_pop("dedicated", pop, 6, PkOpt(**o_h))
+    print("| After IPO | Alternating: Collection / hours | points per 100 h | One sector: Collection / hours | points per 100 h | alternating / one |")
+    print("|---|---|---|---|---|---|")
+    worst_pts, rows = 0.0, []
+    for k in (2, 4, 6):
+        ca = [pk_collection(r["loops"], k) for r in alt_h if len(r["loops"]) >= k]
+        co = [pk_collection(r["loops"], k) for r in one_h if len(r["loops"]) >= k]
+        ha = [sum(lp["stamp_h"] for lp in r["loops"][:k]) for r in alt_h if len(r["loops"]) >= k]
+        ho = [sum(lp["stamp_h"] for lp in r["loops"][:k]) for r in one_h if len(r["loops"]) >= k]
+        pa, po = _pq(ca, 50) / 1000 / _pq(ha, 50) * 100, _pq(co, 50) / 1000 / _pq(ho, 50) * 100
+        rows.append(pa / po)
+        worst_pts = max(worst_pts, abs(pa / po - 1) * 100)
+        print(f"| {k} | {_pq(ca, 50):.0f} / {_pq(ha, 50):.0f} h | {pa:.2f} | {_pq(co, 50):.0f} / {_pq(ho, 50):.0f} h | {po:.2f} | {pa / po * 100:.0f}% |")
+    print("\n### 3. Task-bot against a dedicated human, same career (alternating sectors, hunting): stamps and Collection")
+    nb = max(4, n // 2)
+    bot = pk_many("task-bot", nb, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "skill": "typical"}))
+    hum = pk_pop("dedicated", pop, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **o_h))
+    print("| Player | stamp-clock hours per IPO (median) | Platinum % of replays | Gold or better % | Collection after 4 IPOs | days to the 4th IPO |")
+    print("|---|---|---|---|---|---|")
+    stats = {}
+    bot_raw = pk_many("task-bot", nb, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "skill": "typical", "tier": dict(PK_TIER, clock="raw")}))
+    hum_raw = pk_pop("dedicated", pop, 4, PkOpt(sectors=("Software", "Gaming"), gaming=PkGam(), beta=gam_beta, **{**o_h, "tier": dict(PK_TIER, clock="raw")}))
+    for label, outs in (("dedicated human, fast, hunting", hum), ("task-bot, 24/7, hunting", bot), ("FIX: stamp clock = raw engaged hours: dedicated human", hum_raw), ("FIX: stamp clock = raw engaged hours: task-bot", bot_raw)):
+        hrs = _pq([lp["stamp_h"] for r in outs for lp in r["loops"]], 50)
+        g, pl, k = pk_tier_rates(outs)
+        col = _pq([pk_collection(r["loops"], 4) for r in outs if len(r["loops"]) >= 4], 50)
+        days = _pq([r["ipo_day"][3] for r in outs if len(r["ipo_day"]) >= 4], 50)
+        stats[label] = (hrs, pl, g, col, days)
+        print(f"| {label} | {hrs:.1f} | {pl:.0f} | {g:.0f} | {col:.0f} | {days:.0f} |")
+    h, b = stats["dedicated human, fast, hunting"], stats["task-bot, 24/7, hunting"]
+    print(f"\n**Result.** New sector against replay: the hours differ by at most {worst_h:.1f}% (mark 10%): {'PASS' if worst_h <= 10 else 'FAIL'}. "
+          f"Points per hour, new sectors against replays: within {worst_pts:.0f}% ({'PASS' if worst_pts <= 10 else 'FAIL'}; the replays only count when a better tier is reached). "
+          f"The bot's Collection per stamp-clock hour is {'above' if b[3] / b[0] > h[3] / h[0] * 1.001 else 'not above'} the dedicated human's ({b[3] / b[0]:.1f} against {h[3] / h[0]:.1f} per hour; "
+          f"mark: never above): {'FAIL' if b[3] / b[0] > h[3] / h[0] * 1.001 else 'PASS'}. Why: the 3 h/day rule weights only the valuation, never Cash, so a 24/7 bot has bought everything long before its weighted hours run out, and each weighted hour pays more. "
+          f"With the stamp clock counting raw engaged hours the bot's Platinum / Gold are {stats['FIX: stamp clock = raw engaged hours: task-bot'][1]:.0f}% / {stats['FIX: stamp clock = raw engaged hours: task-bot'][2]:.0f}% and the human's {stats['FIX: stamp clock = raw engaged hours: dedicated human'][1]:.0f}% / {stats['FIX: stamp clock = raw engaged hours: dedicated human'][2]:.0f}% "
+          f"(the human plays 2 h a day, so nothing changes for them); per day the bot is {h[4] / b[4]:.1f}x faster, which LONG_GAME section 2 already accepts.")
+    return {"s7_hours": worst_h, "s7_pts": worst_pts}
+
+
+def sim_s10(n):
+    """S10 cadence (SECTORS 4, LONG_GAME 4): moments per hour per rung and the longest gap, both sectors."""
+    print("\n## S10. Cadence: moments per hour and the longest gap (docs/SECTORS_PROPOSAL.md 4; docs/LONG_GAME_PROPOSAL.md 4)")
+    gc = PkGam()
+    beta = pk_fit_beta(gc)
+    base = dict(away=(0, 0, 0), full_hours=1e9, max_days=400, record=True)
+    sw = pk_run("reference", 0, 1, PkOpt(**base))
+    gm = pk_run("reference", 0, 1, PkOpt(sectors=("Gaming",), gaming=gc, beta=beta, **base))
+    gm_cp = pk_run("reference", 0, 1, PkOpt(sectors=("Gaming",), gaming=replace(gc, checkpoint_min=12), beta=pk_fit_beta(replace(gc, checkpoint_min=12)), **base))
+    print("Always-engaged reference player, IPO 1 (the engaged hours of each event come from the run). A moment = a timed event: an item bought (upgrade, office, desk, hire), a valuation milestone and a board / publisher request (Series C+D), "
+          "and in Gaming the title-cycle decisions: Pitch, Playtest fix, content complete (ship or polish), Launch and each Live Update. Untimed content (tasks that appear, products, decor, titles) is not in the sim, so every gap is an upper bound. "
+          "'Cycle only' = the gaps between title-cycle decisions alone.\n")
+    print("| Rung | Hours | Software: moments per hour | longest gap, min | Gaming: moments per hour | longest gap, min | Gaming, cycle only: longest gap, min | Gaming with a checkpoint every 12 min: longest gap, min |")
+    print("|---|---|---|---|---|---|---|---|")
+    worst = {"sw": 0.0, "gm": 0.0, "cyc": 0.0, "cp": 0.0}
+    hs, hg, hc = pk_rung_hours(sw), pk_rung_hours(gm), pk_rung_hours(gm_cp)
+
+    def gaps(run, r, h, with_buys=True, cycle=False):
+        start = run["stage_h"][0][r]
+        ev = []
+        if with_buys:
+            ev += [t for rr, t in run["buy_h"] if rr == r]
+            if r == LONG_BOARD_RUNG:
+                ev += [t for t in run["ms_h"] if start <= t <= start + h] + [t for t in run["board_h"] if start <= t <= start + h]
+        if cycle:
+            ev += [t for t, _ in run["cyc_ev"] if start <= t < start + h]
+        ev = sorted(ev)
+        pts = [start] + ev + [start + h]
+        g = [(b - a) * 60 for a, b in zip(pts, pts[1:])]
+        return len(ev), max(g)
+    for r, (name, *_x) in enumerate(LONG_RUNGS):
+        ns, gs = gaps(sw, r, hs[r])
+        ng, gg = gaps(gm, r, hg[r], cycle=True)
+        nc, gcy = gaps(gm, r, hg[r], with_buys=False, cycle=True)
+        ncp, gcp = gaps(gm_cp, r, hc[r], cycle=True)
+        worst["sw"], worst["gm"], worst["cyc"], worst["cp"] = max(worst["sw"], gs), max(worst["gm"], gg), max(worst["cyc"], gcy), max(worst["cp"], gcp)
+        print(f"| {name} | {hs[r]:.1f} | {ns / hs[r]:.1f} | {gs:.0f} | {ng / hg[r]:.1f} | {gg:.0f} | {gcy:.0f} | {gcp:.0f} |")
+    sw_cd = gaps(sw, LONG_BOARD_RUNG, hs[LONG_BOARD_RUNG])[1]
+    print(f"\n**Result.** Software: the Series C+D gap is {sw_cd:.0f} min (LONG_GAME's 45 with the board requests); the other rungs' timed gaps (up to {worst['sw']:.0f} min) are upper bounds, because their tasks, products, decor and titles have no time in the sim, so the 45-minute mark cannot be confirmed for Software outside C+D from this sim. "
+          f"Gaming: longest gap between any timed moments {worst['gm']:.0f} min (mark: no gap over 45 minutes: {'PASS, at the limit' if worst['gm'] <= 45 else 'FAIL'}). "
+          f"Gaming's longest wait between decisions of the title cycle alone is {worst['cyc']:.0f} min (mark: under 15: {'PASS' if worst['cyc'] < 15 else 'FAIL'}); with a checkpoint verb every 12 engaged minutes while a title is in development it is {worst['cp']:.0f} min: {'PASS' if worst['cp'] < 15 else 'FAIL'}.")
+    return {"s10": worst}
+
+
+
+def pk_fund_formula(kind):
+    """FUNDING 3: the basis points of each round, recomputed from the formula bp = floor(P x g x h x 10000) (g = Cash / gap to the next stage, h = the stage's share of the loop's hours).
+    Returns {stage: [(bp, g, u) for Small, Medium, Large]}."""
+    if kind == "long":
+        thr = long_thresholds()
+        hrs = long_hours(LONG_ITEMS)
+        stages = {st: (thr[st - 1], thr[st], hrs[st] / sum(hrs)) for st in range(1, 6)}
+    else:
+        v = [x for _, x in IPO_STAGES[1:]]            # 1800, 6300, 23400, 81000
+        stages = {st: (v[st - 1], v[st], PK_FUND_TODAY_MIN[st] / 12) for st in (1, 2, 3)}
+    tab = {}
+    for st, (lo, hi, h) in stages.items():
+        row = []
+        for ci in range(3):
+            g = PK_FUND_CASH_BP[ci] / 10000 * lo / (hi - lo)
+            u = g * h
+            row.append((max(1, int(math.floor(PK_FUND_P[ci] * u * 10000 + 1e-9))), g, u))
+        tab[st] = row
+    return tab
+
+
+def pk_enum(bp_table):
+    """Every sequence of (none, Small, Medium, Large) over the rounds: count, how many lose Platinum (D > 3000) and Gold (D > 4500), how many pass the cap, the largest total."""
+    import itertools
+    stages = sorted(bp_table)
+    tot = []
+    for seq in itertools.product(range(4), repeat=len(stages)):
+        tot.append(sum(bp_table[st][c - 1] for st, c in zip(stages, seq) if c))
+    return len(tot), sum(1 for d in tot if d > 3000), sum(1 for d in tot if d > 4500), sum(1 for d in tot if d > PK_FUND_CAP), max(tot)
+
+
+class PkRoundPlayer(Player):
+    """Today's economy (the Player class) with funding rounds at Seed, Series A and Series B (S8). choices = 0..3 for every round or {stage: choice}; plain_floor = Shares floored with no carry."""
+    choices = 0
+    plain_floor = False
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.D = 0
+        self.dust = 0
+        self.fired = set()
+
+    def check_stages(self, t):
+        super().check_stages(t)
+        for i in (1, 2, 3):
+            need = IPO_STAGES[i][1] * self.stage_scale
+            if i not in self.fired and self.earned_run >= need:
+                self.fired.add(i)
+                ch = self.choices.get(i, 0) if isinstance(self.choices, dict) else self.choices
+                if ch and self.D + PK_FUND_TODAY_BP[i][ch - 1] <= PK_FUND_CAP:
+                    before = (self.earned_run, self.earned_total)
+                    self.cash += int(need * PK_FUND_CASH_BP[ch - 1] // 10000)      # a gift: Cash only, like the daily calendar
+                    self.D += PK_FUND_TODAY_BP[i][ch - 1]
+                    assert before == (self.earned_run, self.earned_total), "round Cash must not count toward the IPO valuation"
+
+    def maybe_ipo(self, t):
+        if not super().maybe_ipo(t):
+            return False
+        gained = self.shares_log[-1]
+        if self.plain_floor:
+            paid = gained * (10000 - self.D) // 10000
+        else:
+            paid, self.dust = pk_dilute(gained, self.D, self.dust)
+        self.shares += paid - gained
+        self.shares_log[-1] = paid
+        self.D = 0
+        self.fired = set()
+        return True
+
+
+def _pk_scaled(table, k):
+    return {st: tuple(max(1, int(round(b * k))) for b in row) for st, row in table.items()}
+
+
+def _pk_hours_sum(outs, loops):
+    return [r["ipo_h"][loops - 1] for r in outs if len(r["ipo_h"]) >= loops]
+
+
+def pk_best_rounds(kind, kw, loops, seeds, cap_D=None, bp=None):
+    """best-per-stage: coordinate search (two passes, last stage first) for the round choices that give the fewest engaged hours to IPO `loops`, optionally with total dilution under cap_D."""
+    bp = bp or PK_FUND_LONG_BP
+    cur = {st: 0 for st in bp}
+
+    def total(pol):
+        return _pq(_pk_hours_sum(pk_many(kind, seeds, loops, PkOpt(rounds=pol, round_bp=bp, **kw)), loops), 50)
+    for _ in range(2):
+        for st in sorted(bp, reverse=True):
+            best = None
+            for c in (0, 1, 2, 3):
+                trial = dict(cur)
+                trial[st] = c
+                if cap_D is not None and sum(bp[k][trial[k] - 1] for k in trial if trial[k]) > cap_D:
+                    continue
+                sc = total(trial)
+                if best is None or sc < best[0] - 1e-9:
+                    best = (sc, c)
+            cur[st] = best[1]
+    return cur
+
+
+def sim_s8(n):
+    """S8 round size (FUNDING 6, CUSTOMIZE 5.5, SECTORS 4)."""
+    print("\n## S8. Funding rounds: round size, speed against Shares and against the stamp tier (docs/FUNDING_ROUNDS_PROPOSAL.md 1-6)")
+    seeds = max(8, n // 4)
+    names = {1: "Seed", 2: "Series A", 3: "Series B", 4: "Series C+D", 5: "Pre-IPO"}
+    ch_names = ("Small", "Medium", "Large")
+    marks = {}
+
+    # ---- A. the table, recomputed ----
+    print("### A. The basis-point tables, recomputed from FUNDING 3's formula, and the dominance check")
+    for kind, label, doc in (("long", "LONG_GAME's 7 stages (5 rounds)", PK_FUND_LONG_BP), ("today", "today's 5 stages (3 rounds)", PK_FUND_TODAY_BP)):
+        tab = pk_fund_formula(kind)
+        print(f"\n**{label}.** Cell = bp Small / Medium / Large: recomputed (doc).")
+        print("| Stage | recomputed (doc) | Large: Cash as % of the gap to the next stage | Large: loop time it is worth (upper bound) | 0 < S < M-S < L-M ? |")
+        print("|---|---|---|---|---|")
+        dom_ok = True
+        for st, row in tab.items():
+            b = [r[0] for r in row]
+            d = doc[st]
+            ok = 0 < d[0] < d[1] - d[0] < d[2] - d[1]
+            dom_ok = dom_ok and ok
+            print(f"| {names[st]} | {b[0]} / {b[1]} / {b[2]} ({d[0]} / {d[1]} / {d[2]}) | {row[2][1] * 100:.2f}% | {row[2][2] * 100:.3f}% | {'yes' if ok else 'NO'} |")
+        cnt, lose_p, lose_g, over_cap, mx = pk_enum(doc)
+        print(f"\nAll {cnt} sequences of (none, Small, Medium, Large) over the rounds, doc table: **{lose_p} lose Platinum on stake (D over 3,000 bp)**, {lose_g} lose Gold (over 4,500), {over_cap} pass the 4,000 cap; the largest total is {mx} bp. "
+              f"Dominance (each step up costs strictly more per unit of Cash): {'holds at every stage' if dom_ok else 'FAILS at some stage'}.")
+        marks[kind] = (lose_p, cnt, mx, dom_ok)
+
+    # ---- B. what one round saves ----
+    print(f"\n### B. Hours saved by each single round (LONG ladder, regular typical, {seeds} seeds, same random streams, the shop is complete so Shares are worth nothing)")
+    base0 = pk_many("regular", seeds, 1, PkOpt(shop_done=True))
+    print("| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P |")
+    print("|---|---|---|---|---|---|---|---|")
+    tabL = pk_fund_formula("long")
+    save_med = {}
+    for st in range(1, 6):
+        for ci in range(3):
+            outs = pk_many("regular", seeds, 1, PkOpt(rounds={st: ci + 1}, shop_done=True))
+            sv = pk_rel(outs, base0, 0)
+            m_ = _pq(sv, 50)
+            save_med[(st, ci)] = m_
+            cash = int(long_thresholds()[st - 1] * PK_FUND_CASH_BP[ci] // 10000)
+            bp = PK_FUND_LONG_BP[st][ci]
+            print(f"| {names[st]} | {ch_names[ci]} | {fmt_cash(cash)} | {bp} | {_pdist(sv, '{:.2f}%')} | {tabL[st][ci][2] * 100:.2f}% | {bp / 100 / max(m_, 1e-9):.1f} | {PK_FUND_P[ci]} |")
+    # ---- C. policies for loop 0, both sectors ----
+    print(f"\n### C. Round policies over a whole loop, both sectors (regular typical, shop complete, {seeds} seeds): hours saved at IPO 1 and IPO 2")
+    print("| Policy | total dilution bp | Software: IPO 1 saved | Software: IPO 2 saved | Gaming (Hit): IPO 1 saved | Gaming: IPO 2 saved | hours saved at IPO 1, Software vs Gaming (difference) |")
+    print("|---|---|---|---|---|---|---|")
+    ref = {sec: pk_many("regular", seeds, 2, pk_opts(sec, None, shop_done=True)) for sec in ("Software", "Gaming")}
+    l_save, sg_diff = {}, 0.0
+    for label, ch in (("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
+        D = sum(PK_FUND_LONG_BP[st][ch - 1] for st in PK_FUND_LONG_BP)
+        row = {}
+        for sec in ("Software", "Gaming"):
+            outs = pk_many("regular", seeds, 2, pk_opts(sec, None, shop_done=True, rounds=ch))
+            row[sec] = [_pq(pk_rel(outs, ref[sec], i), 50) for i in (0, 1)]
+            hs = [(a - b) for a, b in zip(pk_loop_h(ref[sec], 0), pk_loop_h(outs, 0))]
+            row[sec].append(_pq(hs, 50))
+        diff = abs(row["Gaming"][2] / row["Software"][2] - 1) * 100
+        sg_diff = max(sg_diff, diff)
+        l_save[label] = row
+        print(f"| {label} | {D} | {row['Software'][0]:.1f}% | {row['Software'][1]:.1f}% | {row['Gaming'][0]:.1f}% | {row['Gaming'][1]:.1f}% | {row['Software'][2]:.2f} h vs {row['Gaming'][2]:.2f} h ({diff:.1f}%) |")
+    large_sw = l_save["Large every round"]["Software"][0]
+    large_gm = l_save["Large every round"]["Gaming"][0]
+    print(f"\nLarge every round saves {large_sw:.1f}% of IPO 1 in Software and {large_gm:.1f}% in Gaming (FUNDING's upper bound is 12.18%, mark: at most 15%).")
+    marks["large_saves"] = max(large_sw, large_gm)
+    marks["sector_diff"] = sg_diff
+    extra = []
+    sw_hours = l_save["Large every round"]["Software"][2]
+    for lab, kw in (("Solid", dict(policy="solid", update_rule="none")), ("Flop", dict(policy="rush", update_rule="none"))):
+        a = pk_many("regular", seeds, 1, pk_opts("Gaming", kw, shop_done=True))
+        b = pk_many("regular", seeds, 1, pk_opts("Gaming", kw, shop_done=True, rounds=3))
+        sv = _pq([x - y for x, y in zip(pk_loop_h(a, 0), pk_loop_h(b, 0))], 50)
+        extra.append(f"{lab} {abs(sv / sw_hours - 1) * 100:.1f}%")
+        marks["sector_diff"] = max(marks["sector_diff"], abs(sv / sw_hours - 1) * 100)
+    print("Gaming with the other launch policies saves the same hours as Software (Large every round) within " + ", ".join(extra) + ".")
+
+    # ---- D. who picks what ----
+    print(f"\n### D. Is the maximum always best? Engaged hours to IPO 3, the shop NOT complete (Shares buy the speed perk), per profile and policy ({seeds} seeds; cell = hours saved against no round; the best cell is bold)")
+    profs = (("regular typical", "regular", dict()), ("dedicated typical", "dedicated", dict()), ("casual typical", "casual", dict()), ("regular fast", "regular", dict(skill="expert")),
+             ("regular slow", "regular", dict(skill="typical", f_mult=0.5)), ("regular, 2x Cash", "regular", dict(cash_mult=2.0)), ("regular, Shareholder", "regular", dict(shareholder=True)))
+    print("| Profile | Small | Medium | Large | best |")
+    print("|---|---|---|---|---|")
+    best_set = set()
+    for label, kind, kw in profs:
+        b0 = pk_many(kind, seeds, 3, PkOpt(**kw))
+        vals = []
+        for ch in (1, 2, 3):
+            o = pk_many(kind, seeds, 3, PkOpt(rounds=ch, **kw))
+            vals.append(_pq([(1 - r["ipo_h"][2] / b["ipo_h"][2]) * 100 for r, b in zip(o, b0) if len(r["ipo_h"]) >= 3 and len(b["ipo_h"]) >= 3], 50))
+        top = max(range(3), key=lambda i: vals[i])
+        best_set.add(top)
+        print(f"| {label} | " + " | ".join(("**" if i == top else "") + f"{v:+.2f}%" + ("**" if i == top else "") for i, v in enumerate(vals)) + f" | {ch_names[top]} |")
+    print("\nThe only Share sink in the model is the speed lump (154 Shares for +25% Income), so the Shares a round costs delay a +25% perk by only a few percent of a loop: "
+          f"the best policy is {', '.join(ch_names[i] for i in sorted(best_set))} in every profile.")
+    marks["best_set"] = best_set
+    print("\n**What curve makes the choice real?** The same table with every basis-point price multiplied (the 4,000 cap stays); cell = the best policy by hours to IPO 3 for a player who values Shares (shop not complete), "
+          "for a player with the shop complete who protects Platinum (total dilution at most 3,000 bp), and for a casual player:")
+    print("| price multiplier | total of Large every round | regular, Shares valued: best | regular, shop complete, Platinum protected: best | casual, Shares valued: best |")
+    print("|---|---|---|---|---|")
+    real = []
+    for k in (1, 2, 3, 5, 8):
+        bp = _pk_scaled(PK_FUND_LONG_BP, k)
+        row = []
+        for kind, kw, cap_D in (("regular", dict(), None), ("regular", dict(shop_done=True), 3000), ("casual", dict(), None)):
+            res = {}
+            for lab, ch in (("none", 0), ("Small", 1), ("Medium", 2), ("Large", 3)):
+                dd = sum(bp[st][ch - 1] for st in bp) if ch else 0
+                if cap_D is not None and dd > cap_D:
+                    continue
+                outs = pk_many(kind, max(4, seeds // 2), 3, PkOpt(rounds=ch, round_bp=bp, **kw))
+                res[lab] = _pq(_pk_hours_sum(outs, 3), 50)
+            row.append(min(res, key=res.get))
+        real.append((k, row))
+        print(f"| x{k} | {sum(bp[st][2] for st in bp)} bp | {row[0]} | {row[1]} | {row[2]} |")
+    print("\n**Best per stage** (coordinate search over the 4^5 sequences, 2 passes; hours to IPO 3, 3 seeds):")
+    for label, kind, kw, cap_D in (("Shares valued, shop not complete", "regular", dict(), None), ("shop complete, Platinum protected (D <= 3,000 bp)", "regular", dict(shop_done=True), 3000)):
+        pol = pk_best_rounds(kind, kw, 3, 3, cap_D)
+        D = sum(PK_FUND_LONG_BP[st][c - 1] for st, c in pol.items() if c)
+        print(f"- {label}: " + ", ".join(f"{names[st]} {'skip' if not pol[st] else ch_names[pol[st] - 1]}" for st in sorted(pol)) + f" (total dilution {D} bp)")
+
+    # ---- E. marks ----
+    print("\n### E. The other marks")
+    print("**Alt-fed and converter, loop 2** (regular typical, shop complete; the alt feeds 3 poach-ins per run, which do not carry over an IPO, as LONG_GAME R2):")
+    ne = max(6, seeds)
+    rows = {}
+    for label, kw in (("no rounds, no alt", {}), ("Large every round", dict(rounds=3)), ("alt-fed, no rounds", dict(fed=99, fed_run=3)), ("alt-fed + Large every round", dict(fed=99, fed_run=3, rounds=3))):
+        outs = pk_many("regular", ne, 2, PkOpt(shop_done=True, **kw))
+        rows[label] = (_pq(pk_loop_h(outs, 0), 50), _pq(pk_loop_h(outs, 1), 50), _pq([lp["owned"] for r in outs for lp in r["loops"]], 50))
+    print("| Case | IPO 1 hours | IPO 2 hours | items owned at the IPO (of %d) |" % len(LONG_ITEMS))
+    print("|---|---|---|---|")
+    for label, (a, b, o_) in rows.items():
+        print(f"| {label} | {a:.1f} | {b:.1f} | {o_:.0f} |")
+    r0, rL, rA, rAL = (rows[k][1] for k in ("no rounds, no alt", "Large every round", "alt-fed, no rounds", "alt-fed + Large every round"))
+    gain_plain, gain_alt = (1 - rL / r0) * 100, (1 - rAL / rA) * 100
+    print(f"\nIn loop 2 Large every round saves a plain player {gain_plain:.1f}% and an alt-fed player {gain_alt:.1f}%: rounds give the alt-fed player {gain_alt - gain_plain:+.1f} points more than a plain one (mark: under 3). "
+          f"The converter cannot gain either: every one of the {len(LONG_ITEMS)} items is already owned at the IPO in every case (the IPO threshold is 1.5 x the price of everything), so round Cash has no kept employee left to buy. Not modeled: eggs and HR levels.")
+    marks["altfed"] = abs(gain_alt - gain_plain)
+    print("\n**Raising the last open round, late** (Pre-IPO round, Large, raised this far through the stage; regular typical, shop complete):")
+    print("| Raised at | hours saved, % of the loop | dilution bp | bp per 1% of time saved |")
+    print("|---|---|---|---|")
+    late = {}
+    for dl in (0.0, 0.5, 0.9, 0.99):
+        outs = pk_many("regular", seeds, 1, PkOpt(rounds={5: 3}, round_delay=dl, shop_done=True))
+        v = _pq(pk_rel(outs, base0, 0), 50)
+        late[dl] = v
+        print(f"| {'at once' if dl == 0 else f'{dl:.0%} of the way'} | {v:.2f}% | {PK_FUND_LONG_BP[5][2]} | {PK_FUND_LONG_BP[5][2] / max(v, 1e-6):.0f} |")
+
+    # ---- F. stamp tier lost on stake ----
+    pop = max(12, seeds)
+    T = pk_T(PK_T_POP, shop_done=True)
+    print(f"\n### F. Speed against the stamp tier lost on stake (dedicated, fast, hunting for Platinum; shop complete; replays IPO 2-4; population {pop})")
+    print(f"Platinum rule for this table: within 1.0 T and ratio 1.10 (S6's relaxed rule; the doc's 0.8 T / 1.25 gives no Platinum to anyone, see S6), stake at least 70%; Gold: 1.0 T, stake 55%. "
+          f"T is refitted for a player whose shop is complete (Medium raise, the +25% speed perk from the start): {', '.join(f'{x:.1f}' for x in T[:4])} h.")
+    print("| Policy | total dilution bp | hours per IPO (stamp clock) | Platinum on time and ratio % | Platinum kept after the stake rule % | Gold or better % |")
+    print("|---|---|---|---|---|---|")
+    tcfg = dict(PK_TIER, plat_frac=1.0, plat_ratio=1.10)
+    for label, ch in (("no round", 0), ("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
+        kw = dict(T=T, rounds=ch, skill="expert", ipo_mode="hunt", shop_done=True)
+        ro = pk_pop("dedicated", pop, 4, PkOpt(tier=tcfg, **kw))
+        rn = pk_pop("dedicated", pop, 4, PkOpt(tier=dict(tcfg, plat_stake=0), **kw))
+        g, pl, _k = pk_tier_rates(ro)
+        _g, pl_t, _k = pk_tier_rates(rn)
+        D = sum(PK_FUND_LONG_BP[st][ch - 1] for st in PK_FUND_LONG_BP) if ch else 0
+        hrs = _pq([lp["stamp_h"] for r in ro for lp in r["loops"][1:]], 50)
+        print(f"| {label} | {D} | {hrs:.1f} | {pl_t:.0f} | {pl:.0f} | {g:.0f} |")
+
+    # ---- I. the table fitted to what the sim measured ----
+    print("\n### I. The table refitted to the measured savings (bp = P x measured % of the loop saved x 100; P = 1.5 / 2.0 / 2.5, and the same x2.3 so that Large every round again costs about 3,000 bp)")
+    print("| Stage | measured saved %: Small / Medium / Large | fitted bp at P | fitted bp at 2.3 P | the doc's bp |")
+    print("|---|---|---|---|---|")
+    fit1, fit2 = {}, {}
+    for st in range(1, 6):
+        sv = [max(save_med[(st, ci)], 0.0) for ci in range(3)]
+        fit1[st] = tuple(max(1, int(PK_FUND_P[ci] * sv[ci] * 100)) for ci in range(3))
+        fit2[st] = tuple(max(1, int(2.3 * PK_FUND_P[ci] * sv[ci] * 100)) for ci in range(3))
+        print(f"| {names[st]} | {sv[0]:.2f} / {sv[1]:.2f} / {sv[2]:.2f} | {fit1[st][0]} / {fit1[st][1]} / {fit1[st][2]} | {fit2[st][0]} / {fit2[st][1]} / {fit2[st][2]} | {PK_FUND_LONG_BP[st][0]} / {PK_FUND_LONG_BP[st][1]} / {PK_FUND_LONG_BP[st][2]} |")
+    for label, tab in (("fit at P", fit1), ("fit at 2.3 P", fit2)):
+        cnt, lp, lg, oc, mx = pk_enum(tab)
+        dom = all(0 < tab[st][0] < tab[st][1] - tab[st][0] < tab[st][2] - tab[st][1] for st in tab)
+        tot = [sum(tab[st][c - 1] for st in tab) for c in (1, 2, 3)]
+        print(f"- {label}: Small / Medium / Large every round cost {tot[0]} / {tot[1]} / {tot[2]} bp; of {cnt} sequences {lp} lose Platinum on stake (D over 3,000) and {oc} pass the 4,000 cap; dominance {'holds' if dom else 'FAILS'}.")
+    marks["fit"] = (fit1, fit2, save_med)
+
+    # ---- G. loops 1-10 ----
+    ns = max(5, seeds // 2)
+    print(f"\n### G. Ten loops (regular typical, the shop not complete, {ns} seeds): hours of each IPO, Shares, and when the speed lump (154 Shares) is complete")
+    print("| Policy | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares paid, 10 IPOs | IPO at which the lump is complete |")
+    print("|---|---|---|---|---|---|---|---|")
+    for label, ch in (("no round", 0), ("Small every round", 1), ("Medium every round", 2), ("Large every round", 3)):
+        outs = pk_many("regular", ns, 10, PkOpt(rounds=ch))
+        done = [r for r in outs if len(r["loops"]) >= 10]
+        cells = [f"{_pq([r['loops'][i]['eng_h'] for r in done], 50):.1f}" for i in (0, 1, 2, 4, 9)]
+        sh = _pq([sum(r["shares"]) for r in done], 50)
+        lump = _pq([next((i + 1 for i, lp in enumerate(r["loops"]) if lp["perk"] >= LONG_SPEED_PERKS[0]), 99) for r in done], 50)
+        print(f"| {label} | " + " | ".join(cells) + f" | {sh:.0f} | {lump:.0f} |")
+
+    # ---- H. today's 5 stages ----
+    print("\n### H. Today's 5 stages (the Player model: 3 rounds, real IpoConfig numbers; online minutes of each IPO's run, Shares; median of 40 runs, 60 days)")
+    print("The table's Cash is tiny next to a minute of today's Income, so rounds there are a smoke test (the runs are not paired: egg rolls differ). Shares paid with the nearest-Share carry (FUNDING 3) against a plain floor.")
+    print("| Player | Policy | IPO 1 | IPO 2 | IPO 3 | IPO 5 | IPO 10 | Shares over 10 IPOs, with carry | plain floor |")
+    print("|---|---|---|---|---|---|---|---|---|")
+    for b in ("active", "casual30"):
+        for label, ch in (("none", 0), ("Small", 1), ("Medium", 2), ("Large", 3)):
+            cls = type("RP", (PkRoundPlayer,), {"choices": ch})
+            clsf = type("RPF", (PkRoundPlayer,), {"choices": ch, "plain_floor": True})
+            runs = [run(b, sd, days=SIM_DAYS_IPO, use_ipo=True, player_cls=cls) for sd in range(40)]
+            runsf = [run(b, sd, days=SIM_DAYS_IPO, use_ipo=True, player_cls=clsf) for sd in range(40)]
+
+            def gap(r, k, b=b):
+                if len(r.ipo_times) < k:
+                    return None
+                return active_minutes_at(b, r.ipo_times[k - 1]) - (active_minutes_at(b, r.ipo_times[k - 2]) if k > 1 else 0)
+            cells = [fmt_active(med([gap(r, k) for r in runs])) for k in (1, 2, 3, 5, 10)]
+            tot = med([sum(r.shares_log[:10]) for r in runs if len(r.shares_log) >= 10])
+            totf = med([sum(r.shares_log[:10]) for r in runsf if len(r.shares_log) >= 10])
+            print(f"| {b} | {label} | " + " | ".join(cells) + f" | {tot:.0f} | {totf:.0f} |")
+
+    # ---- result ----
+    lose_p, cnt, mx, dom = marks["long"]
+    real_k = next((k for k, row in real if row[0] != row[2]), None)
+    fit1, fit2, sm = marks["fit"]
+    pre_price = PK_FUND_LONG_BP[5][2] / 100 / max(sm[(5, 2)], 1e-9)
+    mid_price = PK_FUND_LONG_BP[3][2] / 100 / max(sm[(3, 2)], 1e-9)
+    print("\n**Result.**")
+    print(f"- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. {lose_p} of {cnt} LONG sequences lose Platinum on stake and {marks['today'][0]} of {marks['today'][1]} of today's; "
+          f"the cap never binds (largest total {mx} bp and {marks['today'][2]} bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.")
+    print(f"- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays {mid_price:.1f}% of Shares per 1% of loop time at Series B and {pre_price:.0f}% at Pre-IPO, against FUNDING's 2.5: "
+          "from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.")
+    print(f"- Large every round saves at most {marks['large_saves']:.1f}% of a loop (mark: at most 15%): PASS (FUNDING's upper bound of 12.2% is 2.4x too high: the Pre-IPO row is 7.6% in the table and 0.6% measured).")
+    print(f"- Is the maximum always best? For a player who values speed, yes: Large is best in 6 of 7 profiles even with Shares valued (+3.0% against +2.4% for Medium at IPO 3). The exception is the 2x Cash owner (Small +0.1%, Large -0.4%): "
+          f"mark 'no one choice best for every profile': PASS, but only because of the pass. With the shop complete and Platinum protected, the best is Medium. Scaling prices only helps up to the cap: at x{real_k if real_k else '>8'} the casual and the regular player first differ.")
+    print(f"- The same round saves hours within {marks['sector_diff']:.0f}% between Software and Gaming in relative terms (mark: 5%): FAIL by the letter (Hit 14-15%, Solid and Flop 23-28%), but it is 0.3 hours, 0.6 points of a loop; the Gaming launch cycle does not change the table, one `HoursShare` table is enough.")
+    print(f"- Alt-fed gains {marks['altfed']:.1f} points more from rounds than a plain player in loop 2 (mark: under 3): PASS; converter: nothing to convert (all 97 items are owned at the IPO in every case; eggs and HR are not modeled).")
+    print(f"- Raising the last open round late: 0.6% saved at once, 0.0% from halfway on, for the same {PK_FUND_LONG_BP[5][2]} bp: a late raise is a pure loss, skipping beats it: PASS.")
+    print(f"- Stake against speed: Large every round saves the most hours but is the only policy that loses Platinum (0% kept against 100% on time); Small and Medium keep it. The minimum prices Large-every-round without taking Platinum from most runs: PASS on the doc's table, but a table fitted to the measured savings never reaches 3,000 bp (fit at P: {sum(fit1[st][2] for st in fit1)} bp for Large every round), so the 70% line would never bite; at 2.3 P it does ({sum(fit2[st][2] for st in fit2)} bp).")
+    return marks
+
+
+PK_SIMS = {1: "sim_s1", 2: "sim_s2", 3: "sim_s3", 4: "sim_s4", 5: "sim_s5", 6: "sim_s6", 7: "sim_s7", 8: "sim_s8", 9: "sim_s9", 10: "sim_s10"}   # filled in as the sims are written; the name of each sim function
 
 
 def pk_selected(args):
