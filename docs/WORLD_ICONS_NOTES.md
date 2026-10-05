@@ -26,7 +26,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 **Phase 3: icons**
 - [x] 3.1 `IconArt.lua` (pure data, style sheet): 38 recipes (6 Office props copied from PlotArt, 3 eggs, 12 creatures, 12 shop items, 5 HUD buttons)
 - [x] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions, the cache with the cap of 8, taps, named checks)
-- [ ] 3.3 `tools/icon_test.py`
+- [x] 3.3 `tools/icon_test.py`: 154 checks (97 in Luau, 57 source checks)
 - [ ] 3.4 Icon mutants, group A
 - [ ] 3.5 Icon mutants, group B (20 or more in all)
 - [ ] 3.6 Icon preview block (`StarterGui.PREVIEW_ICONS`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
@@ -63,7 +63,11 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 - **World: font.** The arch uses `FredokaOne`, not PlotArt's `LuckiestGuy`: the rule against the four odds words in strings also catches that font's name.
 - **World: a missing palette color** builds bright magenta instead of stopping the build (a sector palette with a gap still gives a world); the `palette` check names the gap.
 - **World preview:** it requires a clone of each ModuleScript, so a module pasted a moment ago is used even if the command bar required the old one before (WorldArt and WorldVisuals require nothing themselves, so a clone works alone). It stops at once with a message if the two ModuleScripts don't exist, instead of waiting forever.
-- **World: decor streaming.** Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default).
+- **Icons: the Office props are copied.** `IconArt.Models` holds the six PlotArt props part for part (at their drawn size: PlotArt scales them by 1.2 to 1.5 for the room). PlotArt lives in ServerScriptService, which the client can't read, and moving it is an edit to an existing file. `tools/icon_test.py` fails if a copy drifts from PlotArt (names, shapes, sizes and offsets up to the scale, colors, materials, turns). Texts (BIG IDEAS, STARTUP) and the coffee steam are left out: a ViewportFrame draws neither SurfaceGuis nor particles.
+- **Icons: creature models use CreatureModels' sphere meshes.** `CreatureModels.build` stretches round parts with a `SpecialMesh` of type Sphere (built in, no mesh or texture file). That is the only mesh object any icon contains; the `assets` check allows it only in creature icons, with no `MeshId` or `TextureId`.
+- **Icons: eggs are drawn shapes, not 3D.** A Ball part is always round, so a 3D egg would need a SpecialMesh; an outlined, shaded oval reads as an egg at 56 px and costs no ViewportFrame.
+- **Icons: the clover recipe's key.** Icons are looked up by the ShopConfig key, so the clover's recipe sits under that product's key, written as a Lua field name (never a quoted string); the recipe is named `Clover`, which is what an instance or a preview caption shows. No quoted string in the four new Lua files contains the words random, chance, odds or luck (`tools/world_test.py` and `tools/icon_test.py` check every string literal).
+- **Icons: the cap is 8 live ViewportFrames.** The shop shows at most 3 to 4 cards at once on a phone (242 px of page in landscape, 350 in portrait, section 3.10 of the shop proposal), plus one 72 px hero icon and the details sheet: 6 at most on screen. 8 leaves room to scroll back and forth without rebuilding, and a ViewportFrame off screen is kept out of the game tree (it draws nothing). Past the cap a card shows its plate until a model can be dropped (least recently seen first). Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default).
 
 ## OWNER CHOICE
 
