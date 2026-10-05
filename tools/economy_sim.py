@@ -3201,6 +3201,8 @@ def sim_s8(n):
     fit1, fit2, sm = marks["fit"]
     pre_price = PK_FUND_LONG_BP[5][2] / 100 / max(sm[(5, 2)], 1e-9)
     mid_price = PK_FUND_LONG_BP[3][2] / 100 / max(sm[(3, 2)], 1e-9)
+    pre_p = [PK_FUND_LONG_BP[5][ci] / 100 / max(sm[(5, ci)], 1e-9) for ci in range(3)]                   # the Pre-IPO row: the measured price (% of Shares per 1% of loop time) ...
+    pre_x = [pre_p[ci] / PK_FUND_P[ci] for ci in range(3)]                                                 # ... and as a multiple of FUNDING's P (the multiple is not the price)
     print("\n**Result.**")
     print(f"- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. {lose_p} of {cnt} LONG sequences lose Platinum on stake and {marks['today'][0]} of {marks['today'][1]} of today's; "
           f"the cap never binds (largest total {mx} bp and {marks['today'][2]} bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.")
@@ -3286,8 +3288,6 @@ def main():
     if args.ipo:
         report_real_ipo(n, args.days)
         return
-    pre_p = [PK_FUND_LONG_BP[5][ci] / 100 / max(sm[(5, ci)], 1e-9) for ci in range(3)]                   # the Pre-IPO row: the measured price (% of Shares per 1% of loop time) ...
-    pre_x = [pre_p[ci] / PK_FUND_P[ci] for ci in range(3)]                                                 # ... and as a multiple of FUNDING's P (the multiple is not the price)
     report_main(n)
     report_slots_pass(n)
     report_passes(n)
