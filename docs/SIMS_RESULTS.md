@@ -43,7 +43,7 @@ Checks the docs ask for inside these sims, all covered below: round Cash is a gi
 | S5 hopping | `--s5` | **PASS** | 10 IPOs: 543 h Software, 544 h Gaming, alternating 543-544 h (mark 3%). |
 | S6 tiers | `--s6` | **FAIL** | Gold 50% (by construction); **Platinum 0%** for everyone; the Cash pass shortens a replay by 6%, not 15%, so the shrink must be 6%. |
 | S7 board | `--s7` | **PASS in hours, FAIL in points and for the bot** | New sector 99.6% of a replay's hours; points per hour 2x apart (a sector caps at 3 points); the bot is 7% above a human per stamp-clock hour: use raw engaged hours. |
-| S8 round size | `--s8` | **mixed** | Tables reproduced, nothing dominated, Large saves 5.0-5.6% of a loop; but the price per hour is not constant (Pre-IPO 32 against 2.5), the maximum is best for everyone except 2x Cash owners, and a table fitted to the measured savings never makes the stake line bite. |
+| S8 round size | `--s8` | **mixed** | Tables reproduced, nothing dominated, Large saves 5.0-5.6% of a loop; but the price per hour is not constant (Pre-IPO Large 31.8 against 2.5, 12.7 times), the maximum is best for everyone except 2x Cash owners, and a table fitted to the measured savings never makes the stake line bite. |
 | S9 launch policy | `--s9` | **FAIL (launch-spam)** | Smash +2.6% with 'every update' (-0.4% with the smarter rule: about 1% faster than Hit), Solid +8.3%, Flop +14.8% all inside their marks; Game-Jam spam is 1.7% faster than the typical player (mark 1%); k = 0.4 fixes it. |
 | S10 cadence | `--s10` | **FAIL (cycle gap)** | Gaming has no gap over 45 min but its own cycle leaves 45-minute waits (mark: under 15); a 12-minute checkpoint verb gives 12. Software outside Series C+D cannot be confirmed (untimed content). |
 
@@ -381,7 +381,7 @@ Collection = 1000 x (best stamp of each sector, Bronze 1 / Gold 2 / Platinum 3) 
 - **Raising the last open round late:** the Pre-IPO round saves 0.60% when raised at once and **0.00% from halfway on**, for the same 1,909 bp: a late raise is all cost, skipping beats it: PASS.
 
 **What fails or needs a decision.**
-1. **FUNDING 3's claim "the price per hour saved is the same at every stage" is false (FAIL).** Measured, a Large round costs 1.7 / 2.3 / 2.8 % of Shares per 1% of loop time at Series A / B / C+D (close to the doc's 2.5) but **32% at Pre-IPO**: its Cash can only buy that rung's items, which pay back in tens of hours, so the round saves 0.6% of a loop where the table promises 7.6%. The Pre-IPO row (381 / 1,018 / 1,909 bp) is 10 to 30 times too dear, and it is the row that makes Large-every-round lose Platinum. Refitted to the measured savings (bp = P x saved% x 100) the Pre-IPO row is **56 / 109 / 150 bp** and Large every round costs 1,344 bp in all, so **the 70% stake line would never bite**. With the prices x2.3 (Large every round 3,095 bp) it bites again (5 sequences lose Platinum), at **Seed 8 / 22 / 48, Series A 117 / 313 / 571, Series B 200 / 509 / 919, Series C+D 258 / 673 / 1,212, Pre-IPO 130 / 252 / 345**; but that refit **fails dominance at Pre-IPO** (the measured savings flatten: 0.38 / 0.55 / 0.60%). The owner has to choose: keep the doc's table (Pre-IPO is a trap: 19% of Shares for 0.6% of a loop, which keeps the stake rule meaningful but teaches players to skip the last round), or the x2.3 table with a Pre-IPO row set by hand to stay convex.
+1. **FUNDING 3's claim "the price per hour saved is the same at every stage" is false (FAIL).** Measured, a Large round costs 1.7 / 2.3 / 2.8 % of Shares per 1% of loop time at Series A / B / C+D (close to the doc's 2.5) but **32% at Pre-IPO**: its Cash can only buy that rung's items, which pay back in tens of hours, so the round saves 0.6% of a loop where the table promises 7.6%. The Pre-IPO row (381 / 1,018 / 1,909 bp) is **6.7 / 9.3 / 12.7 times too dear** for Small / Medium / Large (the measured prices are 10.1 / 18.5 / 31.8 % of Shares per 1% of loop time against FUNDING's 1.5 / 2.0 / 2.5: the three figures 10 / 18 / 32 are prices, not multiples; an earlier draft of this sentence read them as multiples and said "10 to 30 times"), and it is the row that makes Large-every-round lose Platinum. Refitted to the measured savings (bp = P x saved% x 100) the Pre-IPO row is **56 / 109 / 150 bp** and Large every round costs 1,344 bp in all, so **the 70% stake line would never bite**. With the prices x2.3 (Large every round 3,095 bp) it bites again (5 sequences lose Platinum), at **Seed 8 / 22 / 48, Series A 117 / 313 / 571, Series B 200 / 509 / 919, Series C+D 258 / 673 / 1,212, Pre-IPO 130 / 252 / 345**; but that refit **fails dominance at Pre-IPO** (the measured savings flatten: 0.38 / 0.55 / 0.60%). The owner has to choose: keep the doc's table (Pre-IPO is a trap: 19% of Shares for 0.6% of a loop, which keeps the stake rule meaningful but teaches players to skip the last round), or the x2.3 table with a Pre-IPO row set by hand to stay convex.
 2. **Is the maximum always best? Yes, for speed.** Large wins in 6 of 7 profiles even when Shares are valued (+3.0% against +2.4% for Medium at IPO 3), because the Shares it costs only delay a +25% perk. The exceptions: the **2x Cash owner** (Small +0.1%, Large -0.4%: the round Cash is worth less to them), and a player with the shop complete who protects Platinum (Medium; best per stage then: Large in Seed to C+D and Small at Pre-IPO, 1,514 bp). Mark "no one choice best for every profile": PASS, but because of one pass and the stake rule. **Which curve makes the choice real?** Multiplying all prices does not, beyond what the cap allows: at x2 the cap of 4,000 bp locks Large, and the speed-valuing regular and casual player only differ at x5. The stake minimum is what makes the choice real.
 3. **Same round, same hours in both sectors (marginal).** The hours a round saves differ by 14-15% between Software and Gaming (Hit), 23-28% with Solid and Flop, as a ratio of the saved hours; in absolute terms it is 0.3 hours, 0.6 points of a loop. Read as a ratio this fails the 5% mark; as a share of the loop it is under one point and **one `HoursShare` table serves both sectors**. FUNDING open question 2: keep one table.
 4. **Dilution rounding is real but small.** Today's economy: with the nearest-Share carry the 10-IPO Shares are 512 / 474 / 427 (Small / Medium / Large) against 507 / 469 / 424 with a plain floor, so the carry returns 3-6 Shares (1%), and Large costs 20% of the Shares. At today's scale rounds change nothing measurable in time (the Cash is minutes of Income).
@@ -414,23 +414,23 @@ All 1024 sequences of (none, Small, Medium, Large) over the rounds, doc table: *
 All 64 sequences of (none, Small, Medium, Large) over the rounds, doc table: **0 lose Platinum on stake (D over 3,000 bp)**, 0 lose Gold (over 4,500), 0 pass the 4,000 cap; the largest total is 1999 bp. Dominance (each step up costs strictly more per unit of Cash): holds at every stage.
 
 ### B. Hours saved by each single round (LONG ladder, regular typical, 10 seeds, same random streams, the shop is complete so Shares are worth nothing)
-| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P |
-|---|---|---|---|---|---|---|---|
-| Seed | Small | 19.71K | 3 | 0.02% (0.01% to 0.04%) | 0.02% | 1.2 | 1.5 |
-| Seed | Medium | 39.42K | 8 | 0.05% (0.04% to 0.08%) | 0.04% | 1.6 | 2.0 |
-| Seed | Large | 59.13K | 15 | 0.09% (0.06% to 0.10%) | 0.06% | 1.8 | 2.5 |
-| Series A | Small | 649.71K | 34 | 0.34% (0.32% to 0.36%) | 0.23% | 1.0 | 1.5 |
-| Series A | Medium | 1.30M | 91 | 0.68% (0.67% to 0.70%) | 0.46% | 1.3 | 2.0 |
-| Series A | Large | 1.95M | 170 | 0.99% (0.96% to 1.00%) | 0.68% | 1.7 | 2.5 |
-| Series B | Small | 3.75M | 73 | 0.58% (0.55% to 0.60%) | 0.49% | 1.3 | 1.5 |
-| Series B | Medium | 7.50M | 195 | 1.11% (1.09% to 1.13%) | 0.98% | 1.8 | 2.0 |
-| Series B | Large | 11.25M | 366 | 1.60% (1.56% to 1.61%) | 1.47% | 2.3 | 2.5 |
-| Series C+D | Small | 15.25M | 116 | 0.75% (0.73% to 0.77%) | 0.77% | 1.5 | 1.5 |
-| Series C+D | Medium | 30.51M | 310 | 1.47% (1.44% to 1.48%) | 1.55% | 2.1 | 2.0 |
-| Series C+D | Large | 45.76M | 582 | 2.11% (2.09% to 2.12%) | 2.32% | 2.8 | 2.5 |
-| Pre-IPO | Small | 93.73M | 381 | 0.38% (0.38% to 0.40%) | 2.54% | 10.1 | 1.5 |
-| Pre-IPO | Medium | 187.47M | 1018 | 0.55% (0.53% to 0.56%) | 5.07% | 18.5 | 2.0 |
-| Pre-IPO | Large | 281.20M | 1909 | 0.60% (0.59% to 0.61%) | 7.61% | 31.8 | 2.5 |
+| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P | measured price / P (above 1 = too dear) |
+|---|---|---|---|---|---|---|---|---|
+| Seed | Small | 19.71K | 3 | 0.02% (0.01% to 0.04%) | 0.02% | 1.2 | 1.5 | 0.8x |
+| Seed | Medium | 39.42K | 8 | 0.05% (0.04% to 0.08%) | 0.04% | 1.6 | 2.0 | 0.8x |
+| Seed | Large | 59.13K | 15 | 0.09% (0.06% to 0.10%) | 0.06% | 1.8 | 2.5 | 0.7x |
+| Series A | Small | 649.71K | 34 | 0.34% (0.32% to 0.36%) | 0.23% | 1.0 | 1.5 | 0.7x |
+| Series A | Medium | 1.30M | 91 | 0.68% (0.67% to 0.70%) | 0.46% | 1.3 | 2.0 | 0.7x |
+| Series A | Large | 1.95M | 170 | 0.99% (0.96% to 1.00%) | 0.68% | 1.7 | 2.5 | 0.7x |
+| Series B | Small | 3.75M | 73 | 0.58% (0.55% to 0.60%) | 0.49% | 1.3 | 1.5 | 0.8x |
+| Series B | Medium | 7.50M | 195 | 1.11% (1.09% to 1.13%) | 0.98% | 1.8 | 2.0 | 0.9x |
+| Series B | Large | 11.25M | 366 | 1.60% (1.56% to 1.61%) | 1.47% | 2.3 | 2.5 | 0.9x |
+| Series C+D | Small | 15.25M | 116 | 0.75% (0.73% to 0.77%) | 0.77% | 1.5 | 1.5 | 1.0x |
+| Series C+D | Medium | 30.51M | 310 | 1.47% (1.44% to 1.48%) | 1.55% | 2.1 | 2.0 | 1.1x |
+| Series C+D | Large | 45.76M | 582 | 2.11% (2.09% to 2.12%) | 2.32% | 2.8 | 2.5 | 1.1x |
+| Pre-IPO | Small | 93.73M | 381 | 0.38% (0.38% to 0.40%) | 2.54% | 10.1 | 1.5 | 6.7x |
+| Pre-IPO | Medium | 187.47M | 1018 | 0.55% (0.53% to 0.56%) | 5.07% | 18.5 | 2.0 | 9.3x |
+| Pre-IPO | Large | 281.20M | 1909 | 0.60% (0.59% to 0.61%) | 7.61% | 31.8 | 2.5 | 12.7x |
 
 ### C. Round policies over a whole loop, both sectors (regular typical, shop complete, 10 seeds): hours saved at IPO 1 and IPO 2
 | Policy | total dilution bp | Software: IPO 1 saved | Software: IPO 2 saved | Gaming (Hit): IPO 1 saved | Gaming: IPO 2 saved | hours saved at IPO 1, Software vs Gaming (difference) |
@@ -530,7 +530,7 @@ The table's Cash is tiny next to a minute of today's Income, so rounds there are
 
 **Result.**
 - No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. 4 of 1024 LONG sequences lose Platinum on stake and 0 of 64 of today's; the cap never binds (largest total 3042 bp and 1999 bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.
-- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays 2.3% of Shares per 1% of loop time at Series B and 32% at Pre-IPO, against FUNDING's 2.5: from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.
+- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays 2.3% of Shares per 1% of loop time at Series B and 32% at Pre-IPO, against FUNDING's 2.5 (that is 12.7 times too dear for Large; the Pre-IPO row as a whole is 6.7 / 9.3 / 12.7 times too dear for Small / Medium / Large, and the prices themselves are 10.1 / 18.5 / 31.8 against 1.5 / 2.0 / 2.5): from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.
 - Large every round saves at most 5.6% of a loop (mark: at most 15%): PASS (FUNDING's upper bound of 12.2% is 2.4x too high: the Pre-IPO row is 7.6% in the table and 0.6% measured).
 - Is the maximum always best? For a player who values speed, yes: Large is best in 6 of 7 profiles even with Shares valued (+3.0% against +2.4% for Medium at IPO 3). The exception is the 2x Cash owner (Small +0.1%, Large -0.4%): mark 'no one choice best for every profile': PASS, but only because of the pass. With the shop complete and Platinum protected, the best is Medium. Scaling prices only helps up to the cap: at x5 the casual and the regular player first differ.
 - The same round saves hours within 28% between Software and Gaming in relative terms (mark: 5%): FAIL by the letter (Hit 14-15%, Solid and Flop 23-28%), but it is 0.3 hours, 0.6 points of a loop; the Gaming launch cycle does not change the table, one `HoursShare` table is enough.

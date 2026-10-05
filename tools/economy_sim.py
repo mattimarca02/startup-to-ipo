@@ -3000,8 +3000,8 @@ def sim_s8(n):
     # ---- B. what one round saves ----
     print(f"\n### B. Hours saved by each single round (LONG ladder, regular typical, {seeds} seeds, same random streams, the shop is complete so Shares are worth nothing)")
     base0 = pk_many("regular", seeds, 1, PkOpt(shop_done=True))
-    print("| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P |")
-    print("|---|---|---|---|---|---|---|---|")
+    print("| Stage | Choice | Cash | dilution bp | hours saved, % of the loop (median, p10 to p90) | upper bound (the table's u) | % of Shares paid per 1% of loop time saved | FUNDING's price P | measured price / P (above 1 = too dear) |")
+    print("|---|---|---|---|---|---|---|---|---|")
     tabL = pk_fund_formula("long")
     save_med = {}
     for st in range(1, 6):
@@ -3012,7 +3012,7 @@ def sim_s8(n):
             save_med[(st, ci)] = m_
             cash = int(long_thresholds()[st - 1] * PK_FUND_CASH_BP[ci] // 10000)
             bp = PK_FUND_LONG_BP[st][ci]
-            print(f"| {names[st]} | {ch_names[ci]} | {fmt_cash(cash)} | {bp} | {_pdist(sv, '{:.2f}%')} | {tabL[st][ci][2] * 100:.2f}% | {bp / 100 / max(m_, 1e-9):.1f} | {PK_FUND_P[ci]} |")
+            print(f"| {names[st]} | {ch_names[ci]} | {fmt_cash(cash)} | {bp} | {_pdist(sv, '{:.2f}%')} | {tabL[st][ci][2] * 100:.2f}% | {bp / 100 / max(m_, 1e-9):.1f} | {PK_FUND_P[ci]} | {bp / 100 / max(m_, 1e-9) / PK_FUND_P[ci]:.1f}x |")
     # ---- C. policies for loop 0, both sectors ----
     print(f"\n### C. Round policies over a whole loop, both sectors (regular typical, shop complete, {seeds} seeds): hours saved at IPO 1 and IPO 2")
     print("| Policy | total dilution bp | Software: IPO 1 saved | Software: IPO 2 saved | Gaming (Hit): IPO 1 saved | Gaming: IPO 2 saved | hours saved at IPO 1, Software vs Gaming (difference) |")
@@ -3196,8 +3196,8 @@ def sim_s8(n):
     print("\n**Result.**")
     print(f"- No choice is dominated at any stage, for LONG_GAME's 7 stages and today's 5: PASS on the doc's table (0 < S < M-S < L-M at every stage). A table refitted to the measured savings FAILS at Pre-IPO, where the measured savings flatten (0.38 / 0.55 / 0.60%) and Large costs less per extra Cash than Medium. {lose_p} of {cnt} LONG sequences lose Platinum on stake and {marks['today'][0]} of {marks['today'][1]} of today's; "
           f"the cap never binds (largest total {mx} bp and {marks['today'][2]} bp against 4,000), so only the 70% line bites. The cap is not redundant only as a safety net.")
-    print(f"- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays {mid_price:.1f}% of Shares per 1% of loop time at Series B and {pre_price:.0f}% at Pre-IPO, against FUNDING's 2.5: "
-          "from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.")
+    print(f"- **The price is not the same at every stage (FUNDING 3 says it is): FAIL.** Measured, a Large round pays {mid_price:.1f}% of Shares per 1% of loop time at Series B and {pre_price:.0f}% at Pre-IPO, against FUNDING's 2.5 (that is {pre_price / PK_FUND_P[2]:.1f} times too dear for Large; the Pre-IPO row as a whole is {pre_x[0]:.1f} / {pre_x[1]:.1f} / {pre_x[2]:.1f} times too dear for Small / Medium / Large, "
+          f"and the prices themselves are {pre_p[0]:.1f} / {pre_p[1]:.1f} / {pre_p[2]:.1f} against {PK_FUND_P[0]} / {PK_FUND_P[1]} / {PK_FUND_P[2]}): from Series C+D on, buying Cash is a poor deal, and at Pre-IPO nearly a pure loss, because the Cash can only buy the current rung's items, which pay back in tens of hours. Seed to Series B (0.1-1.6% of a loop) are close to the doc's price.")
     print(f"- Large every round saves at most {marks['large_saves']:.1f}% of a loop (mark: at most 15%): PASS (FUNDING's upper bound of 12.2% is 2.4x too high: the Pre-IPO row is 7.6% in the table and 0.6% measured).")
     print(f"- Is the maximum always best? For a player who values speed, yes: Large is best in 6 of 7 profiles even with Shares valued (+3.0% against +2.4% for Medium at IPO 3). The exception is the 2x Cash owner (Small +0.1%, Large -0.4%): "
           f"mark 'no one choice best for every profile': PASS, but only because of the pass. With the shop complete and Platinum protected, the best is Medium. Scaling prices only helps up to the cap: at x{real_k if real_k else '>8'} the casual and the regular player first differ.")
@@ -3278,6 +3278,8 @@ def main():
     if args.ipo:
         report_real_ipo(n, args.days)
         return
+    pre_p = [PK_FUND_LONG_BP[5][ci] / 100 / max(sm[(5, ci)], 1e-9) for ci in range(3)]                   # the Pre-IPO row: the measured price (% of Shares per 1% of loop time) ...
+    pre_x = [pre_p[ci] / PK_FUND_P[ci] for ci in range(3)]                                                 # ... and as a multiple of FUNDING's P (the multiple is not the price)
     report_main(n)
     report_slots_pass(n)
     report_passes(n)
