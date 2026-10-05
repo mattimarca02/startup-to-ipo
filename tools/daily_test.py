@@ -5853,6 +5853,10 @@ def task_wiring_checks():
             if re.search(r"addEarnings\s*\(", line) and not re.search(r"function\s+[\w.]*addEarnings\s*\(", line):
                 calls += 1
         check("%s has %d addEarnings call(s)" % (filename, count), calls == count, calls)
+    # A file that isn't in the list has none (the new files are scanned too: a new call site fails here until it is reviewed)
+    for filename in sorted(n for n in os.listdir(ROOT) if n.endswith(".lua") and n not in expected):
+        calls = len(addearnings_calls(code_only(read(filename))))
+        check("%s has no addEarnings call (it is not in the reviewed list)" % filename, calls == 0, calls)
 
     server = code_only(read("TaskServer.lua"))
     check("TaskServer pays only through core.addEarnings (never IpoServer directly)", server.count("core.addEarnings(") == 1 and "IpoServer.addEarnings" not in server)
@@ -5863,7 +5867,7 @@ def task_wiring_checks():
     check("TaskConfig: Enabled and StudioOnly are on (PR 1 runs only in Studio)", "TaskConfig.Enabled = true" in config and "TaskConfig.StudioOnly = true" in config)
 
     forbidden = ("odds", "chance", "luck", "random", "probab", "%")
-    for filename in ("TaskClient.lua", "TaskServer.lua"):
+    for filename in ("TaskClient.lua", "TaskServer.lua", "CompanyServer.lua", "CompanyConfig.lua", "SectorConfig.lua"):
         found = None
         for literal in re.findall(r'"((?:[^"\\\n]|\\.)*)"', code_only(read(filename))):
             for word in forbidden:
@@ -5982,6 +5986,206 @@ def visuals_wiring_checks():
     check("TycoonCore: no new remote, DataStore or save field for the looks",
           code.count('Instance.new("Remote') == 0 and code.count("GetDataStore(") == 1 and "looks =" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
     return passed, failed
+
+
+def addearnings_calls(code):
+    """The lines of (comment-free) Lua that call addEarnings (a function definition is not a call)."""
+    import re
+    return [line for line in code.split("\n")
+            if re.search(r"addEarnings\s*\(", line) and not re.search(r"function\s+[\w.]*addEarnings\s*\(", line)]
+
+
+def ipo_number_writes(code):
+    """The lines of (comment-free) Lua that assign to a .valuation, .lifetime or .best (=, +=, -=, also inside a multiple
+    assignment, also as ["valuation"]). Only IpoServer may; DailyServer's daily.best is the streak record, not the IPO."""
+    import re
+    hits = []
+    for line in code.split("\n"):
+        for statement in line.split(";"):
+            match = re.search(r"(?<![=~<>])[-+*/]?=(?!=)", statement)
+            if match and re.search(r"(\.|\[\s*[\"'])(valuation|lifetime|best)\b", statement[:match.start()]):
+                hits.append(statement.strip())
+    return hits
+
+
+def scanner_selftests():
+    """The two scanners above must be able to fail: lines they have to flag, and lines they must leave alone."""
+    passed, failed = 0, 0
+    flagged_writes = ["ipo.valuation += amount", "ipo.lifetime = 0", "data.ipo.best -= 1", "ipo.count, ipo.valuation = 0, 0",
+                      "a, ipo.best, b = 1, 2, 3", "data.ipo[\"lifetime\"] = 5", "local ipo = data.ipo; ipo.valuation = 7"]
+    clean_writes = ["if ipo.valuation == 5 then", "local x = ipo.best", "ipo.best_of = 3", "math.max(ipo.best, ipo.valuation)",
+                    "if a.best ~= b.best then", "if a.lifetime >= 3 then", "tbl.valuations = 3", "local value = ipo.lifetime + 1"]
+    flagged_calls = ["core.addEarnings(player, 5)", "addEarnings(player, n)", "IpoServer.addEarnings (player, 1)"]
+    clean_calls = ["local function addEarnings(player, amount)", "function IpoServer.addEarnings(player, amount)", "addEarnings = addEarnings,", "local pay = core.addEarnings"]
+    cases = ([(line, ipo_number_writes(line), True) for line in flagged_writes] + [(line, ipo_number_writes(line), False) for line in clean_writes]
+             + [(line, addearnings_calls(line), True) for line in flagged_calls] + [(line, addearnings_calls(line), False) for line in clean_calls])
+    for line, found, should in cases:
+        if bool(found) == should:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: scanner self-test: %r should %sbe flagged" % (line, "" if should else "not "))
+    return passed, failed
+
+
+def pokedex_wiring_checks():
+    """Checks on the source text for the Pokedex (customize PR 1): module order, no way to earn or pay, only IpoServer writes
+    the valuation, nothing the client can send but id, x, z and r, and nothing that yields or saves by itself."""
+    import re
+    passed, failed = scanner_selftests()
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    core = read("TycoonCore.lua")
+    code = code_only(core)
+    # Order: the module is plugged in after OnboardingServer and before TaskServer, and DailyServer stays last
+    for call in (".init(", ".setupPlayer("):
+        order = ["IpoServer", "ShopServer", "EmployeeServer", "PoachServer", "OnboardingServer", "CompanyServer", "TaskServer", "DailyServer"] if call == ".init(" else \
+            ["IpoServer", "EmployeeServer", "PoachServer", "OnboardingServer", "CompanyServer", "TaskServer", "DailyServer"]
+        positions = [code.index(name + call) for name in order]
+        check("TycoonCore: %s%s calls run in the order %s" % ("<module>", call, " > ".join(order)), positions == sorted(positions), positions)
+    check("TycoonCore: CompanyServer.setupPlayer runs before DailyServer.setupPlayer (Daily stays last)", code.index("CompanyServer.setupPlayer(") < code.index("DailyServer.setupPlayer("))
+    check("TycoonCore: CompanyServer.setupPlayer runs after IpoServer.setupPlayer (the run check reads the IPO count)", code.index("IpoServer.setupPlayer(") < code.index("CompanyServer.setupPlayer("))
+    setups = re.findall(r"(\w+Server)\.setupPlayer\(", code)
+    check("TycoonCore: DailyServer is the last module set up for a player", setups[-1] == "DailyServer", setups)
+    check("TycoonCore: CompanyServer is required with the other modules", 'local CompanyServer = require(script.Parent:WaitForChild("CompanyServer"))' in core)
+    check("TycoonCore: pokedex is a known section and the payload is built with CompanyServer.serialize", re.search(r"local KNOWN_SECTIONS = \{[^}]*\bpokedex = true", core) is not None and "pokedex = CompanyServer.serialize(data)" in core)
+    init_block = code[code.index("CompanyServer.init({"):]
+    init_block = init_block[:init_block.index("\n})")]
+    check("TycoonCore: CompanyServer.init gets no addEarnings (it can never earn or pay)", "addEarnings" not in init_block and "updateIncome" not in init_block, init_block)
+    daily_block = code[code.index("DailyServer.init({"):]
+    daily_block = daily_block[:daily_block.index("\n})")]
+    check("TycoonCore: DailyServer.init gets no addEarnings either (a gift is never an earning)", "addEarnings" not in daily_block)
+    check("TycoonCore: CompanyServer.init gets only getData, save and plotZones", re.findall(r"^\t(\w+) = ", init_block, re.M) == ["getData", "save", "plotZones"], re.findall(r"^\t(\w+) = ", init_block, re.M))
+    commit = code[code.index("local function commitIpo("):]
+    commit = commit[:commit.index("local resets")]
+    check("TycoonCore: an IPO is refused first of all while the pokedex is locked (a newer version's, or unreadable)", "CompanyServer.isLocked(data)" in commit and "return false" in commit)
+    check("TycoonCore: the zones come through looks() (a broken plot visuals never stops the game)", 'looks("zones", PlotVisuals.zones, PlotArt.Layout)' in code)
+    check("TycoonCore: DataStore name and key untouched, still one DataStore", code.count("GetDataStore(") == 1 and 'GetDataStore("StartupTycoon_v1")' in code and '"player_" .. player.UserId' in code)
+
+    # The new files
+    names = ("CompanyServer.lua", "CompanyConfig.lua", "SectorConfig.lua")
+    for name in names:
+        raw = read(name)
+        text = code_only(raw)
+        check("%s never mentions addEarnings, in code or in a comment (it can't earn)" % name, "addEarnings" not in raw)
+        for word in ("DataStore", "SetAsync", "GetAsync", "UpdateAsync", "OrderedDataStore", "MarketplaceService", "PromptProductPurchase", "grantShares", "grantEgg", "Touched", "TeleportService"):
+            check("%s never uses %s" % (name, word), word not in text)
+        for word in ("math.random", "Random.new", "os.date", "tick("):
+            check("%s has nothing random or clock-dependent (%s)" % (name, word), word not in text)
+        check("%s writes no valuation, lifetime or best" % name, ipo_number_writes(text) == [])
+        check("%s never yields or starts a thread (a check and its change are one step)" % name, not re.search(r"task\.(wait|spawn|defer|delay)|:Wait\(|wait\(", text))
+    for name in ("CompanyServer.lua", "CompanyConfig.lua"):
+        text = code_only(read(name))
+        check("%s names no sector (the engine never does: a sector key is data in SectorConfig)" % name, not re.search(r'"(Software|Gaming|Fintech|Biotech)"', text))
+    server = code_only(read("CompanyServer.lua"))
+    check("CompanyServer: the only remotes are CompanyRemotes and its one CompanyAction", server.count('Instance.new("Remote') == 1 and 'Instance.new("RemoteFunction")' in server and 'Name = "CompanyRemotes"' in server.replace("folder.Name = ", 'Name = ') and 'remotes.action.Name = "CompanyAction"' in server)
+    check("CompanyServer: the request handler takes only the action, id, x, z and r", "local function onAction(player, action, id, x, z, r)" in server)
+    check("CompanyServer: it never writes another module's data (no data.cash, income, owned, ipo, team, shop, poach, daily, tasks or onboarding)",
+          not re.search(r"data\.(cash|income|owned|ipo|team|shop|poach|daily|tasks|onboarding|fixedHires)\b\s*(\.\w+\s*)*(=[^=]|\+=|-=)", server)
+          and not re.search(r"\.Value\s*(=[^=]|\+=|-=)", server))
+    check("CompanyServer: it never calls core.save (autosave and the leave save write placements; a purchase is not involved)", "core.save" not in server)
+    check("CompanyServer: Place and Store change data only after CompanyConfig.checkPlacement / checkStore", server.index("CompanyConfig.checkPlacement(") < server.index("CompanyConfig.applyPlace(") and server.index("CompanyConfig.checkStore(") < server.index("CompanyConfig.applyStore("))
+    check("CompanyServer: the Studio-only switch is checked before any change", server.index("CompanyConfig.isPlacementActive()") < server.index("CompanyConfig.applyPlace("))
+    check("CompanyServer: the request limit is checked before the switch and the checks", server.index("CompanyConfig.takeToken(") < server.index("CompanyConfig.isPlacementActive()"))
+    config = code_only(read("CompanyConfig.lua"))
+    check("CompanyConfig: the placement switch is on and Studio only (nothing is drawn until the office screen exists)", re.search(r"CompanyConfig\.Placement = \{\s*Enabled = true,\s*StudioOnly = true,", config) is not None)
+    check("CompanyConfig: the Pokedex format version is 1", "CompanyConfig.Version = 1" in config)
+    sector = code_only(read("SectorConfig.lua"))
+    check("SectorConfig: the picker is off, and only Software is enabled", "SectorConfig.PickerEnabled = false" in sector and len(re.findall(r"enabled = true", sector)) == 1 and re.search(r"Software = \{[^}]*enabled = true", sector, re.S) is not None)
+
+    # Nothing but IpoServer writes the valuation (a Pokedex or a round must never raise it by itself)
+    writes = {}
+    for name in sorted(n for n in os.listdir(ROOT) if n.endswith(".lua")):
+        found = ipo_number_writes(code_only(read(name)))
+        if found:
+            writes[name] = found
+    allowed_daily = {"daily.best = math.max(daily.best, daily.streak)", "daily.lastClaimDay, daily.streak, daily.best, daily.claims, daily.fakeDays = 0, 0, 0, 0, 0"}
+    check("no .lua file but IpoServer assigns .valuation, .lifetime or .best (DailyServer's daily.best is the streak record)",
+          set(writes) <= {"IpoServer.lua", "DailyServer.lua"} and set(writes.get("DailyServer.lua", [])) <= allowed_daily, writes.keys())
+    check("DailyServer's three daily.best writes are all there is outside IpoServer", len(writes.get("DailyServer.lua", [])) == 3, writes.get("DailyServer.lua"))
+    check("IpoServer's own valuation, lifetime and best writes are pinned (10 lines): a new one fails until it is reviewed", len(writes.get("IpoServer.lua", [])) == 10, len(writes.get("IpoServer.lua", [])))
+    return passed, failed
+
+
+# Each of these breaks one wiring rule in a copy of the .lua files; the source checks must notice (a check that can't fail proves
+# nothing). (label, file, old, new): `old` None creates the file with `new`; "return X\n" lines are used to add code at the end.
+WIRING_MUTATIONS = [
+    ("a call to addEarnings in CompanyServer", "CompanyServer.lua", "return CompanyServer\n", "core.addEarnings(1, 5)\nreturn CompanyServer\n"),
+    ("an alias of addEarnings in CompanyServer", "CompanyServer.lua", "return CompanyServer\n", "local pay = core.addEarnings\nreturn CompanyServer\n"),
+    ("addEarnings handed to CompanyServer.init", "TycoonCore.lua", "\tsave = save,\n\tplotZones", "\tsave = save,\n\taddEarnings = addEarnings,\n\tplotZones"),
+    ("addEarnings handed to DailyServer.init", "TycoonCore.lua", "DailyServer.init({\n\tgetData", "DailyServer.init({\n\taddEarnings = addEarnings,\n\tgetData"),
+    ("a fourth addEarnings call in TycoonCore", "TycoonCore.lua", "\t\t\t\tsyncRoom(data)\n", "\t\t\t\taddEarnings(player, 1)\n\t\t\t\tsyncRoom(data)\n"),
+    ("an addEarnings call in a file nobody reviewed", "Extra.lua", None, "local x = core.addEarnings(player, 5)\nreturn x\n"),
+    ("a write to the valuation in CompanyServer", "CompanyServer.lua", "return CompanyServer\n", "data.ipo.valuation += 5\nreturn CompanyServer\n"),
+    ("a write to lifetime in EmployeeServer", "EmployeeServer.lua", "return EmployeeServer\n", "local ipo = {}\nipo.lifetime = 0\nreturn EmployeeServer\n"),
+    ("a write to best through brackets in TaskServer", "TaskServer.lua", "return TaskServer\n", "local ipo = {}\nipo[\"best\"] = 0\nreturn TaskServer\n"),
+    ("a new valuation write in IpoServer", "IpoServer.lua", "return IpoServer\n", "local ipo = {}\nipo.valuation = 1\nreturn IpoServer\n"),
+    ("CompanyServer set up after DailyServer", "TycoonCore.lua", "\t\tCompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer\n", ""),
+    ("DailyServer no longer last", "TycoonCore.lua", "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n", "\t\tDailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg\n\t\tOnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok)\n"),
+    ("CompanyServer.init before OnboardingServer.init", "TycoonCore.lua", "OnboardingServer.init({\n", "CompanyServer.init({ getData = function() end, save = save, plotZones = function() end })\nOnboardingServer.init({\n"),
+    ("CompanyServer yields", "CompanyServer.lua", "return CompanyServer\n", "task.wait(1)\nreturn CompanyServer\n"),
+    ("CompanyServer writes Cash", "CompanyServer.lua", "return CompanyServer\n", "data.cash.Value += 1\nreturn CompanyServer\n"),
+    ("CompanyServer saves by itself", "CompanyServer.lua", "return CompanyServer\n", "core.save(1)\nreturn CompanyServer\n"),
+    ("CompanyServer with a Touched handler", "CompanyServer.lua", "return CompanyServer\n", "part.Touched:Connect(print)\nreturn CompanyServer\n"),
+    ("CompanyServer names a sector", "CompanyServer.lua", "return CompanyServer\n", "local k = \"Gaming\"\nreturn CompanyServer\n"),
+    ("a D9 word in CompanyServer", "CompanyServer.lua", "\"Too fast\"", "\"Good luck\""),
+    ("a DataStore in CompanyConfig", "CompanyConfig.lua", "return CompanyConfig\n", "local s = game:GetService(\"DataStoreService\"):GetDataStore(\"Other\")\nreturn CompanyConfig\n"),
+    ("an IPO allowed while the pokedex is locked", "TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n", "\tif false then\n"),
+    ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex) then", "data.tasks) then"),
+    ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true }", "tasks = true }"),
+    ("the payload without the pokedex", "TycoonCore.lua", "pokedex = CompanyServer.serialize(data),", "pokedex = nil,"),
+    ("a second DataStore", "TycoonCore.lua", "local plotOwners = {}", "local other = DataStoreService:GetDataStore(\"Other\")\nlocal plotOwners = {}"),
+    ("the picker switched on", "SectorConfig.lua", "SectorConfig.PickerEnabled = false", "SectorConfig.PickerEnabled = true"),
+    ("a second sector enabled", "SectorConfig.lua", "Fintech = { name = \"Fintech\", icon = \"💳\", enabled = false,", "Fintech = { name = \"Fintech\", icon = \"💳\", enabled = true,"),
+    ("placement open on live servers", "CompanyConfig.lua", "\tStudioOnly = true,\n}\n\nfunction CompanyConfig.isPlacementActive", "\tStudioOnly = false,\n}\n\nfunction CompanyConfig.isPlacementActive"),
+    ("a second remote in CompanyServer", "CompanyServer.lua", "return CompanyServer\n", "local extra = Instance.new(\"RemoteEvent\")\nreturn CompanyServer\n"),
+    ("the request handler takes a price", "CompanyServer.lua", "local function onAction(player, action, id, x, z, r)", "local function onAction(player, action, id, x, z, r, price)"),
+    ("the request limit after the checks", "CompanyServer.lua", "if not CompanyConfig.takeToken(state.bucket, os.clock()) then\n\t\treturn false, \"Too fast\"\n\tend\n", ""),
+]
+
+
+def wiring_mutation_run(label, filename, old, new):
+    """Copies the .lua files to a temp folder, applies one mutation and runs the source checks there. True if one failed."""
+    import contextlib
+    import io
+    global ROOT
+    with tempfile.TemporaryDirectory() as folder:
+        for name in os.listdir(ROOT):
+            if name.endswith(".lua"):
+                shutil.copy(os.path.join(ROOT, name), os.path.join(folder, name))
+        path = os.path.join(folder, filename)
+        if old is None:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new)
+        else:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            if text.count(old) != 1:
+                raise SystemExit("wiring mutation target not found exactly once in %s: %r" % (filename, old))
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text.replace(old, new, 1))
+        real_root, ROOT = ROOT, folder
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                try:
+                    results = [task_wiring_checks(), pokedex_wiring_checks(), pads_gone_checks()]
+                except (ValueError, IndexError):
+                    return True # a rule that can't even find its anchor text fails too
+        finally:
+            ROOT = real_root
+        return any(failed for _, failed in results)
 
 
 def sanitize_source():
@@ -6208,6 +6412,18 @@ def main():
         else:
             server_caught += 1
     print("CompanyServer mutations: %d of %d broken rules caught" % (server_caught, len(SERVER_MUTATIONS)))
+    pokedex_passed, pokedex_failed = pokedex_wiring_checks()
+    print("Pokedex wiring check: %d passed, %d failed" % (pokedex_passed, pokedex_failed))
+    if pokedex_failed:
+        code = 1
+    wiring_caught = 0
+    for label, filename, old, new in WIRING_MUTATIONS:
+        if wiring_mutation_run(label, filename, old, new):
+            wiring_caught += 1
+        else:
+            print("FAIL: mutation not caught: the source checks do not notice " + label)
+            code = 1
+    print("Source check mutations: %d of %d broken rules caught" % (wiring_caught, len(WIRING_MUTATIONS)))
     pads_passed, pads_failed = pads_gone_checks()
     print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
     if pads_failed:

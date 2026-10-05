@@ -6,8 +6,8 @@
 -- section up on join, writes it back on every save, and answers the three office requests.
 --
 -- PR 1 is invisible to players. The active company's live state stays where it is (cash, owned, team, ipo.valuation);
--- nothing here changes Income, Cash or the valuation, and it never calls addEarnings. The office requests only work in
--- Studio until the office screen exists (CompanyConfig.Placement.StudioOnly).
+-- nothing here changes Income, Cash or the valuation (it has no way to pay or earn anything). The office requests only
+-- work in Studio until the office screen exists (CompanyConfig.Placement.StudioOnly).
 -- The client (later) can ask for exactly three things on CompanyRemotes.CompanyAction:
 --   "Place", id, x, z, r   -> put an item you own at x, z (from the plot's front-center), turned r x 45 degrees
 --   "Store", id            -> put an item in the inventory
