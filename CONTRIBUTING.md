@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | mattimarca02 (Claude) | customize-pr1-fix-c | 2026-10-05 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -119,16 +119,16 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | mattimarca02 (Claude) | customize-pr1-fix-c | 2026-10-05 |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
-| docs/STUDIO_SYNC.md | (repo only) | free | | |
+| docs/STUDIO_SYNC.md | (repo only) | mattimarca02 (Claude) | customize-pr1-fix-c | 2026-10-05 |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
 | CompanyServer | ServerScriptService | free | | |
-| CompanyConfig | ReplicatedStorage | free | | |
+| CompanyConfig | ReplicatedStorage | mattimarca02 (Claude) | customize-pr1-fix-c | 2026-10-05 |
 | SectorConfig | ReplicatedStorage | free | | |
-| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
+| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | mattimarca02 (Claude) | customize-pr1-fix-c | 2026-10-05 |
