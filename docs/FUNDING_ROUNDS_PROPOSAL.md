@@ -88,7 +88,7 @@ Large every round saves at most 12.18% / 8.00% (formula, LONG / today; S8 mark: 
 | Medium every round | 717 | 92.83% | kept |
 
 All 4^5 = 1,024 sequences enumerated (whole bp): **4 lose Platinum**, all Large at Series A, B, C+D **and** Pre-IPO (Seed any: 1,289 / 1,292 / 1,297 / 1,304 bp), the same 4 as before. With the measured row (56 / 109 / 150) the same 4 lose (1,268-1,283 bp; the next total, 1,242, keeps it). Order doesn't matter, only the total. Platinum lost on stake falls to Gold when Gold's time and ratio hold (CUST 1.5). **The line bites by a thin margin** (a 43 bp gap, 1,246 to 1,289 bp): the S8 re-run on the decided table re-checks it and may move the line inside the gap.
-- **The cap and Platinum's minimum are consistent.** 1,250 < 1,304 < 4,000: the 87.5% line bites; the 4,000 bp cap never binds (no raise is refused; the worst total leaves 86.96%), a safety net in case the table grows (owner question 2).
+- **The cap and Platinum's minimum are consistent.** 1,250 < 1,304 < 4,000: the 87.5% line bites; the 4,000 bp cap never binds (no raise is refused; the worst total leaves 86.96%), a safety net in case the table grows (owner question 3).
 - **Tests (plan; not written, docs only):** (1) a run that meets Platinum's time and ratio (1.0 T, 1.20) but ends with a stake under 8,750 bp gets Gold. **Gold: no stake requirement:** a Gold run whose stake is low (4,000 bp, or the cap ignored) still gets Gold. (2) The tier uses the stake, T and targets **at the IPO**: after the transform, changing `CompanyConfig` (cap, minimum, bp table), T or the targets, Debug "clear rounds", or a rejoin or run check never regrades the saved stamp, and `card.stake` equals the stake at that IPO. (3) **Bronze never requires a stake:** a first completion at stake 4,000 bp, or the cap ignored, still gets Bronze. (4) The boundary: exactly 8,750 bp keeps Platinum, 8,749 does not (a table test with whole bp). (5) Mutation: an extra `stake` argument in `GoPublic` is ignored. (6) The bp table test passes on the decided Pre-IPO row (56 / 113 / 171).
 
 **Interactions:** Shareholder (ShopConfig.lua:81-88): x2 is inside `base`, the same proportional loss. Perks: prices unchanged; fewer Shares only delay them (the IPO multiplier counts IPOs). Daily Shares (`grantShares`, IpoServer.lua:140-148) and pitch Shares (LONG_GAME, undiluted base) are never diluted. Stamps read the stake (above); rounds save engaged hours, so T (G1, CUST 5.6) uses the typical raise.
@@ -133,8 +133,8 @@ Same rules as CUST 6 (claim, daily_test passes, F5 clean, Shut down all servers)
 ## 9. Open questions (unresolved, most important first)
 
 1. **Round rules:** 3 fixed choices, open rounds kept until IPO-ready, Skip final (recommend), or rounds that expire at the next stage? Numbers stay S8's.
-2. **The 4,000 bp cap:** it never binds at this table. Keep it as a safety net (recommend), or lower it to about 1,500 bp?
-3. **If a rung's hours differ by more than 5% between Software and Gaming:** refit Gaming so one `HoursShare` table serves both (recommend), or a per-sector table?
+2. **If a rung's hours differ by more than 5% between Software and Gaming:** refit Gaming so one `HoursShare` table serves both (recommend), or a per-sector table?
+3. **The 4,000 bp cap:** it never binds at this table. Keep it as a safety net (recommend), or lower it to about 1,500 bp?
 
 ## What I did not verify
 
