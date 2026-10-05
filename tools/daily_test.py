@@ -644,6 +644,11 @@ local TaskServer = { serialize = function(data)
 	if FAIL == "tasks" then error("tasks exploded") end
 	return TASKS
 end }
+local POKEDEX = { v = 1, run = 0 } -- what CompanyServer.serialize returns
+local CompanyServer = { serialize = function(data)
+	if FAIL == "pokedex" then error("pokedex exploded") end
+	return POKEDEX
+end }
 __BUILDSAVE__
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -656,7 +661,9 @@ end
 local data = newData()
 local payload = buildPayload(data, nil, "P")
 check("normal build returns the payload", payload ~= nil and payload.cash == 250 and #payload.owned == 2)
-check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily and payload.tasks)
+check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily and payload.tasks and payload.pokedex)
+check("... the pokedex section is the one CompanyServer.serialize gave", payload.pokedex.v == 1 and payload.pokedex == POKEDEX)
+check("pokedex is a known section (saved by its own serialize, never kept as unknown)", KNOWN_SECTIONS.pokedex == true)
 check("... the tasks section is the one TaskServer.serialize gave", payload.tasks.done == 3)
 TASKS = nil
 check("no tasks section for a player who never had tasks (nothing is invented)", buildPayload(newData(), nil, "P").tasks == nil)
@@ -678,7 +685,7 @@ check("a save from before D9 has nothing unknown (every section it has is known)
 	return true
 end)())
 
-for _, name in ipairs({ "shop", "team", "poach", "ipo", "onboarding", "daily", "fixedHires", "tasks" }) do
+for _, name in ipairs({ "shop", "team", "poach", "ipo", "onboarding", "daily", "fixedHires", "tasks", "pokedex" }) do
 	data = newData()
 	FAIL = name
 	WARNINGS = {}
@@ -5265,6 +5272,373 @@ COMPANY_MUTATIONS = [
 ]
 
 
+SERVER_TESTS = r"""-- Tests for CompanyServer: the real module with the real CompanyConfig, SectorConfig, PlotVisuals and PlotArt, and a fake Roblox ----
+-- (customize PR 1). Join (new founding, run check, a newer or unreadable section kept as it was), saving, and the three requests
+-- on CompanyRemotes.CompanyAction: Place, Store and Sync. Every refusal must change nothing.
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local NOW = 1760000000
+local CLOCK = 100
+local os = { time = function() return NOW end, clock = function() return CLOCK end }
+local IS_STUDIO = true
+local MODULES = {}
+local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local SERVICES = {
+	ReplicatedStorage = token("ReplicatedStorage"),
+	RunService = { IsStudio = function() return IS_STUDIO end },
+}
+local game = { GetService = function(_, n) return SERVICES[n] end }
+local script = { Parent = token("ReplicatedStorage") }
+local CREATED = {}
+local Instance = { new = function(c) local i = { ClassName = c }; table.insert(CREATED, i); return i end }
+local task = { wait = function() error("CompanyServer must never yield") end, spawn = function() error("CompanyServer must never spawn") end }
+
+MODULES.SectorConfig = (function()
+__SECTORCONFIG__
+end)()
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.CompanyConfig = (function()
+__COMPANYCONFIG__
+end)()
+local PlotVisuals = (function()
+__PLOTVISUALS__
+end)()
+local PlotArt = (function()
+__PLOTART__
+end)()
+local function buildCompanyServer()
+__COMPANYSERVER__
+end
+MODULES.CompanyServer = buildCompanyServer()
+local UPGRADES = __UPGRADES__
+local CC = MODULES.CompanyConfig
+local CompanyServer = MODULES.CompanyServer
+
+local function deepEqual(a, b)
+	if typeof(a) ~= typeof(b) then return false end
+	if typeof(a) == "number" and a ~= a and b ~= b then return true end
+	if typeof(a) ~= "table" then return a == b end
+	for k, v in pairs(a) do
+		if not deepEqual(v, b[k]) then return false end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then return false end
+	end
+	return true
+end
+local function deepCopy(v)
+	if typeof(v) ~= "table" then return v end
+	local c = {}
+	for k, inner in pairs(v) do c[k] = deepCopy(inner) end
+	return c
+end
+local function anyWarning(text)
+	for _, w in ipairs(WARNINGS) do
+		if string.find(w, text, 1, true) then return true end
+	end
+	return false
+end
+
+local SAVES = 0
+local ZONES_ON = true
+local coreApi = {
+	getData = function(p) return p.data end,
+	save = function() SAVES += 1; return true end,
+	plotZones = function()
+		if not ZONES_ON then return nil end
+		return PlotVisuals.zones(PlotArt.Layout), PlotArt.Layout.floorSize[3]
+	end,
+}
+CompanyServer.init(coreApi)
+local action
+local folderName
+for _, inst in ipairs(CREATED) do
+	if inst.Name == "CompanyAction" then action = inst.OnServerInvoke end
+	if inst.Name == "CompanyRemotes" then folderName = inst end
+end
+check("init builds CompanyRemotes with a CompanyAction remote and nothing else", action ~= nil and folderName ~= nil)
+check("... and exactly two Instances were made (the folder and the remote)", #CREATED == 2)
+
+local function newPlayer(saved, opts)
+	opts = opts or {}
+	local player = { Name = "P" }
+	local owned = {}
+	for _, name in ipairs(opts.owned or UPGRADES) do owned[name] = true end
+	local data = {
+		ready = opts.ready ~= false, loaded = true, owned = owned,
+		cash = { Value = 500 }, income = { Value = 10 },
+		ipo = { count = opts.count or 0, valuation = 700, lifetime = 900, best = 800, shares = 4 },
+	}
+	player.data = data
+	WARNINGS = {}
+	CompanyServer.setupPlayer(player, data, saved)
+	return player, data
+end
+local function snapshotOf(data) return deepCopy(CC.toSave(data.pokedex, true)) end -- always as a Studio server would write it: comparable
+local function tap(player, ...)
+	CLOCK += 1 -- one request a second: never the rate limit unless a test wants it
+	return action(player, ...)
+end
+
+-- 1. Join ---------------------------------------------------------------------------------------
+local p, d = newPlayer(nil, { count = 3 })
+check("join: a new player gets data.pokedex, no warning", d.pokedex ~= nil and #WARNINGS == 0)
+local out = CompanyServer.serialize(d)
+check("join: a new founding: v 1, run = the IPO count, Software, building 1", out.v == 1 and out.run == 3 and out.active.sector == "Software" and out.active.building == 1)
+check("join: a Studio server marks the section (it never reaches a live board)", out.studio == true)
+IS_STUDIO = false
+check("join: a live server doesn't", CompanyServer.serialize(d).studio == nil)
+IS_STUDIO = true
+check("join: the player is not locked", CompanyServer.isLocked(d) == false and CompanyServer.isLocked(nil) == false and CompanyServer.isLocked({}) == false)
+check("join: nothing changed Cash, Income or the valuation", d.cash.Value == 500 and d.income.Value == 10 and d.ipo.valuation == 700 and d.ipo.lifetime == 900 and d.ipo.best == 800 and d.ipo.shares == 4)
+check("serialize: no data.pokedex, no section", CompanyServer.serialize({}) == nil)
+-- the run check, through setupPlayer (the IPO count comes from data.ipo)
+local saved = deepCopy(out)
+saved.studio = nil
+p, d = newPlayer(deepCopy(saved), { count = 4 })
+check("join: an older version ran an IPO (run 3, count 4): Bronze and a card", CompanyServer.serialize(d).sectors.Software.stamp == 1 and CompanyServer.serialize(d).run == 4 and anyWarning("older version ran an IPO"))
+p, d = newPlayer(deepCopy(saved), { count = 0 })
+check("join: the count went down (Studio IpoReset): no stamp, run follows, the company stays", CompanyServer.serialize(d).sectors.Software == nil and CompanyServer.serialize(d).run == 0 and anyWarning("IPO reset in Studio"))
+p, d = newPlayer(deepCopy(saved), { count = 3 })
+check("join: same count: nothing happens", #WARNINGS == 0 and next(CompanyServer.serialize(d).sectors) == nil)
+d.ipo = nil
+WARNINGS = {}
+CompanyServer.setupPlayer(p, d, nil)
+check("join: no data.ipo reads as count 0", CompanyServer.serialize(d).run == 0)
+
+-- 2. A newer or unreadable section is kept as it was ----------------------------------------------
+local V2 = { v = 2, run = 0, active = { sector = "Software", future = { 1, 2 } }, other = { a = 1 } }
+p, d = newPlayer(deepCopy(V2), { count = 5 })
+check("v 2: locked", CompanyServer.isLocked(d) == true)
+check("v 2: the save writes it back deep-equal, even from a Studio server", deepEqual(CompanyServer.serialize(d), V2))
+for _, request in ipairs({ { "Place", "Desk", -23, -40, 0 }, { "Store", "Desk" }, { "Sync" } }) do
+	local ok, why = tap(p, table.unpack(request))
+	check("v 2: " .. request[1] .. " is refused and says why", ok == false and string.find(tostring(why), "newer version", 1, true) ~= nil, why)
+end
+check("v 2: nothing changed", deepEqual(CompanyServer.serialize(d), V2))
+-- a load that throws: the section is kept as it was
+local realLoad = CC.load
+CC.load = function() error("boom") end
+local broken = { v = 1, run = 0, active = "whatever", precious = { x = 1 } }
+p, d = newPlayer(deepCopy(broken), { count = 0 })
+CC.load = realLoad
+check("a load that throws: locked, warned, written back as it was", CompanyServer.isLocked(d) and anyWarning("boom") and deepEqual(CompanyServer.serialize(d), broken))
+-- an unknown sector in the active company
+p, d = newPlayer({ v = 1, run = 0, active = { sector = "Energy" } }, { count = 0 })
+check("an unknown active sector: locked and written back as it was", CompanyServer.isLocked(d) and deepEqual(CompanyServer.serialize(d), { v = 1, run = 0, active = { sector = "Energy" } }))
+
+-- 3. Requests: who may ask, and when -------------------------------------------------------------
+p, d = newPlayer(nil)
+local before = snapshotOf(d)
+local function refused(name, ...)
+	local ok, why = tap(p, ...)
+	check(name .. ": refused", ok == false and typeof(why) == "string", why)
+	check(name .. ": nothing changed", deepEqual(snapshotOf(d), before))
+end
+for _, bad in ipairs({ 5, true, {}, 0 / 0, "" }) do
+	refused("an action that is " .. tostring(bad), bad, "Desk", -23, -40, 0)
+end
+check("no action at all is refused", select(1, tap(p)) == false and select(1, tap(p, nil)) == false)
+refused("an unknown action", "Buy", "Desk", -23, -40, 0)
+refused("an action in the wrong case", "place", "Desk", -23, -40, 0)
+refused("a price-looking request", "BuyBuilding", 2)
+d.ready = false
+refused("not ready (loading, or an IPO is being saved)", "Place", "Desk", -23, -40, 0)
+d.ready = true
+check("a player with no data is refused", select(1, action({ data = nil }, "Sync")) == false)
+check("a player with no pokedex is refused", select(1, action({ data = { ready = true } }, "Sync")) == false)
+IS_STUDIO = false
+refused("a live server (Studio only until the office screen exists): Place", "Place", "Desk", -23, -40, 0)
+refused("a live server: Store", "Store", "Desk")
+check("a live server: Sync is refused too", select(1, tap(p, "Sync")) == false)
+check("a live server says it isn't available yet", select(2, tap(p, "Sync")) == "Not available yet")
+IS_STUDIO = true
+check("in Studio Sync works", select(1, tap(p, "Sync")) == true)
+
+-- 4. The request limit ---------------------------------------------------------------------------
+p, d = newPlayer(nil)
+local oks, tooFast = 0, 0
+for _ = 1, 10 do
+	local ok, why = action(p, "Sync") -- the clock doesn't move
+	if ok then oks += 1 elseif why == "Too fast" then tooFast += 1 end
+end
+check("rate: 4 requests in the same instant, then 'Too fast'", oks == 4 and tooFast == 6, oks)
+CLOCK += 0.25
+check("rate: a quarter second later one more goes through", select(1, action(p, "Sync")) == true and select(1, action(p, "Sync")) == false)
+local before2 = snapshotOf(d)
+for _ = 1, 20 do action(p, "Place", "Desk", -23, -40, 0) end
+check("rate: a flood of Place requests changed nothing while limited", deepEqual(snapshotOf(d), before2))
+local second = newPlayer(nil)
+check("rate: another player has their own limit", select(1, action(second, "Sync")) == true)
+
+-- 5. Place, Store and Sync -----------------------------------------------------------------------
+p, d = newPlayer(nil)
+SAVES = 0
+local ok, msg, info = tap(p, "Sync")
+check("sync: building 1, a 60 x 60 office, nothing placed or stored", ok and info.building == 1 and info.size.w == 60 and info.size.d == 60 and #info.objects == 0 and #info.stored == 0 and info.sector == "Software")
+check("sync: the reserved zones come with it (so the client can preview)", typeof(info.zones) == "table" and #info.zones == 40 and info.zones[1].x0 ~= nil)
+check("sync: the zones are measured from the anchor (the walking lane ends at the front, z 0)", (function()
+	for _, zone in ipairs(info.zones) do
+		if zone.name == "WalkingLane" then return zone.z1 == 0 end
+	end
+	return false
+end)())
+ok, msg, info = tap(p, "Place", "Coffee Machine", -20, -6, 2)
+check("place: an owned upgrade in a free spot", ok == true and msg == "Placed Coffee Machine" and info.x == -20 and info.r == 2)
+check("place: the company has it, saved on the next save (not on every request)", CompanyServer.serialize(d).active.objects[1].id == "Coffee Machine" and SAVES == 0)
+check("place: Cash, Income and the valuation are untouched", d.cash.Value == 500 and d.income.Value == 10 and d.ipo.valuation == 700 and d.ipo.lifetime == 900)
+ok, msg = tap(p, "Place", "Coffee Machine", -14, -6, 0)
+check("place: placing it again moves it, never two entries", ok and #CompanyServer.serialize(d).active.objects == 1 and CompanyServer.serialize(d).active.objects[1].x == -14)
+ok = tap(p, "Place", "Laptop", -14, -6, 0)
+check("place: another item can't stand on it", ok == false and #CompanyServer.serialize(d).active.objects == 1)
+before = snapshotOf(d)
+refused("an item you don't own", "Place", "Gaming PC", -20, -6, 0)
+refused("a reserved spot (the walking lane)", "Place", "Laptop", 0, -35, 0)
+refused("outside the building", "Place", "Laptop", -40, -6, 0)
+refused("a spot off the grid", "Place", "Laptop", -20.3, -6, 0)
+refused("a bad turn", "Place", "Laptop", -20, -6, 9)
+refused("a NaN spot", "Place", "Laptop", 0 / 0, -6, 0)
+refused("a missing spot", "Place", "Laptop")
+refused("a table for an id", "Place", {}, -20, -6, 0)
+ok = tap(p, "Place", "Laptop", -20, -3, 0, "extra", { junk = true })
+check("extra arguments are ignored", ok == true)
+local p2, d2 = newPlayer(nil, { owned = { "Desk" } })
+check("place: owning only the Desk, the Laptop is refused and the Desk is accepted", select(1, tap(p2, "Place", "Laptop", -20, -6, 0)) == false and select(1, tap(p2, "Place", "Desk", -23, -40, 0)) == true)
+ok, msg = tap(p, "Store", "Coffee Machine")
+check("store: it leaves the office for the inventory", ok and #CompanyServer.serialize(d).active.objects == 1 and CompanyServer.serialize(d).active.stored["Coffee Machine"] == true)
+before = snapshotOf(d)
+refused("store: the same item again", "Store", "Coffee Machine")
+refused("store: an item you don't own", "Store", "Gaming PC")
+refused("store: no id", "Store")
+ok = tap(p, "Place", "Coffee Machine", -20, -6, 0)
+check("place: a stored item can be placed again, and leaves the inventory", ok and CompanyServer.serialize(d).active.stored["Coffee Machine"] == nil)
+ok, msg, info = tap(p, "Sync")
+check("sync: shows what was placed and stored", #info.objects == 2 and #info.stored == 0)
+tap(p, "Store", "Laptop")
+ok, msg, info = tap(p, "Sync")
+check("sync: lists the inventory sorted", #info.stored == 1 and info.stored[1] == "Laptop" and #info.objects == 1)
+check("place, store and sync never saved by themselves (autosave does it)", SAVES == 0)
+local objectsCopy = info.objects
+objectsCopy[1].x = 99
+check("sync: the answer is a copy (changing it never changes the company)", CompanyServer.serialize(d).active.objects[1].x ~= 99)
+-- without the plot's zones the server can't know what is reserved
+do
+	local bare = buildCompanyServer()
+	local bareCore = { getData = coreApi.getData, save = coreApi.save, plotZones = function() return nil end }
+	local before = #CREATED
+	bare.init(bareCore)
+	local bareAction
+	for i = before + 1, #CREATED do
+		if CREATED[i].Name == "CompanyAction" then bareAction = CREATED[i].OnServerInvoke end
+	end
+	local bp = { Name = "B" }
+	local bd = { ready = true, loaded = true, owned = { ["Coffee Machine"] = true }, ipo = { count = 0 } }
+	bp.data = bd
+	bare.setupPlayer(bp, bd, nil)
+	local bok, bwhy = bareAction(bp, "Place", "Coffee Machine", -20, -6, 0)
+	check("no zones: Place is refused (the server can't know what is reserved)", bok == false and #bd.pokedex.section.active.objects == 0, bwhy)
+	local sok, _, sinfo = bareAction(bp, "Sync")
+	check("no zones: Sync still answers, with zones = false", sok == true and sinfo.zones == false)
+end
+-- the building number decides the room
+p, d = newPlayer(nil)
+d.pokedex.section.active.building = 5
+check("place: in building 5 (78 x 82) the left side reaches further", select(1, tap(p, "Place", "Coffee Machine", -36.5, -6, 0)) == true)
+d.pokedex.section.active.building = 1
+check("place: back in building 1 the same spot is outside", select(1, tap(p, "Place", "Laptop", -36.5, -6, 0)) == false)
+d.pokedex.section.active.building = 9
+check("place: a building number this version has no size for is refused", select(1, tap(p, "Place", "Laptop", -20, -6, 0)) == false)
+
+-- 6. Fuzz: bad requests never change anything and never throw -------------------------------------
+p, d = newPlayer(nil)
+tap(p, "Place", "Desk", -23, -40, 0)
+before = snapshotOf(d)
+local WEIRD = { 0 / 0, math.huge, -math.huge, -1, 0, 1.5, 2 ^ 53, "", "x", true, false, {}, 1e308, -23, -40 }
+local errors, changed = 0, 0
+for _, action_ in ipairs({ "Place", "Store" }) do
+	for _, a in ipairs(WEIRD) do
+		for _, b in ipairs(WEIRD) do
+			CLOCK += 1
+			local ok2, r1 = pcall(action, p, action_, a, b, b, a)
+			if not ok2 then errors += 1; print_real("FAIL fuzz error: " .. action_ .. " " .. tostring(a) .. " " .. tostring(b) .. " -- " .. tostring(r1)) end
+			if r1 == true and action_ == "Place" then changed += 1 end
+		end
+	end
+end
+check("fuzz: bad Place and Store requests never throw", errors == 0)
+check("fuzz: ... and none of them was accepted", changed == 0 and deepEqual(snapshotOf(d), before))
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def company_server_source(mutation=None):
+    """The SERVER_TESTS program with the real CompanyServer, CompanyConfig, SectorConfig, IpoConfig, PlotVisuals and PlotArt.
+    mutation = (old, new) breaks one rule of CompanyServer (`old` must be in it exactly once)."""
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    parts = {name: read(name + ".lua") for name in ("SectorConfig", "IpoConfig", "CompanyConfig", "PlotVisuals", "PlotArt", "CompanyServer")}
+    if mutation:
+        old, new = mutation
+        if parts["CompanyServer"].count(old) != 1:
+            raise SystemExit("mutation target not found exactly once in CompanyServer: " + old)
+        parts["CompanyServer"] = parts["CompanyServer"].replace(old, new, 1)
+    return (SERVER_TESTS.replace("__UPGRADES__", upgrades_lua_names())
+            .replace("__SECTORCONFIG__", parts["SectorConfig"]).replace("__IPOCONFIG__", parts["IpoConfig"])
+            .replace("__COMPANYCONFIG__", parts["CompanyConfig"]).replace("__PLOTVISUALS__", parts["PlotVisuals"])
+            .replace("__PLOTART__", parts["PlotArt"]).replace("__COMPANYSERVER__", parts["CompanyServer"]))
+
+
+SERVER_MUTATIONS = [
+    ("the ready check", ("if not state or not data.ready then", "if not state then"),
+     "not ready (loading, or an IPO is being saved): refused"),
+    ("the request limit", ("if not CompanyConfig.takeToken(state.bucket, os.clock()) then", "if false then"),
+     "rate: 4 requests in the same instant, then 'Too fast'"),
+    ("the request limit (shared by every player)", ("state.bucket = CompanyConfig.newBucket(os.clock()) -- the request limit (not saved)", "state.bucket = sharedBucket or CompanyConfig.newBucket(os.clock())\n\tsharedBucket = state.bucket"),
+     "rate: another player has their own limit"),
+    ("the Studio-only switch", ("if not CompanyConfig.isPlacementActive() then", "if false then"),
+     "a live server (Studio only until the office screen exists): Place: refused"),
+    ("the lock on a newer version", ("if state.locked then\n\t\treturn false, \"Your office", "if false then\n\t\treturn false, \"Your office"),
+     "v 2: Place is refused and says why"),
+    ("the unknown action check", ("if action ~= \"Place\" and action ~= \"Store\" and action ~= \"Sync\" then", "if false then"),
+     "an unknown action: nothing changed"),
+    ("the placement check", ("local ok, reason = CompanyConfig.checkPlacement(env, id, x, z, r)\n\t\tif not ok then return false, reason end", "local ok = true"),
+     "an item you don't own: refused"),
+    ("the ownership (every upgrade owned)", ("owned = data.owned,", "owned = setmetatable({}, { __index = function() return true end }),"),
+     "place: owning only the Desk, the Laptop is refused and the Desk is accepted"),
+    ("the store check", ("local ok, reason = CompanyConfig.checkStore(env, active, id)\n\tif not ok then return false, reason end", "local ok = true"),
+     "store: the same item again: refused"),
+    ("a save on every request", ("\t\tCompanyConfig.applyPlace(active, id, x, z, r)\n", "\t\tCompanyConfig.applyPlace(active, id, x, z, r)\n\t\tcore.save(player)\n"),
+     "place, store and sync never saved by themselves (autosave does it)"),
+    ("the building (always 1)", ("building = active.building,\n\t\tzones = zones(),", "building = 1,\n\t\tzones = zones(),"),
+     "place: in building 5 (78 x 82) the left side reaches further"),
+    ("the Studio mark on save", ("return CompanyConfig.toSave(state, RunService:IsStudio())", "return CompanyConfig.toSave(state, false)"),
+     "join: a Studio server marks the section (it never reaches a live board)"),
+    ("the Studio mark on a live server", ("return CompanyConfig.toSave(state, RunService:IsStudio())", "return CompanyConfig.toSave(state, true)"),
+     "join: a live server doesn't"),
+    ("the IPO count for the run check", ("ipoCount = data.ipo and data.ipo.count or 0,", "ipoCount = 0,"),
+     "join: an older version ran an IPO (run 3, count 4): Bronze and a card"),
+    ("the unreadable section guard", ("state = { locked = true, raw = savedPokedex }", "state = CompanyConfig.load(nil, ctx)"),
+     "a load that throws: locked, warned, written back as it was"),
+    ("the lock query", ("return state ~= nil and state.locked == true", "return false"),
+     "v 2: locked"),
+    ("the sync answer (live tables)", ("table.insert(list, { id = object.id, x = object.x, z = object.z, r = object.r })", "list = objects"),
+     "sync: the answer is a copy (changing it never changes the company)"),
+    ("the zones (never measured from the anchor)", ("zonesCache = CompanyConfig.anchorZones(raw, floorDepth)", "zonesCache = raw"),
+     "sync: the reserved zones come with it (so the client can preview)"),
+]
+
+
 def code_only(text):
     """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
     lines = []
@@ -5412,7 +5786,7 @@ def pads_gone_checks():
     check("TycoonCore: spawning on a plot buys nothing (the character only lands and faces the sign)", "auto-buy" not in core and "Touched" not in core)
     sections = re.search(r"local KNOWN_SECTIONS = \{([^}]*)\}", core).group(1)
     check("TycoonCore: no new save section (the Office tab saves nothing: owned already is)",
-          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks".split()), sections)
+          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks pokedex".split()), sections)
     check("TycoonCore: nothing new is written to the save for the Office (no lastBuyAt or Upgrade attribute in the payload)",
           "lastBuyAt" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
 
@@ -5465,7 +5839,10 @@ def task_wiring_checks():
         check("TycoonCore: " + earlier + " runs before TaskServer.setupPlayer", core.index(earlier) < core.index("TaskServer.setupPlayer("))
     check("TycoonCore: tasks is a known section", re.search(r"local KNOWN_SECTIONS = \{[^}]*\btasks = true", core) is not None)
     check("TycoonCore: the payload is built with TaskServer.serialize", "tasks = TaskServer.serialize(data)" in core)
-    check("TycoonCore: a save needs data.tasks like every other part", "data.daily and data.tasks)" in core)
+    save_gate = re.search(r"if not \(data\.shop and[^\n]*\) then", core)
+    check("TycoonCore: a save needs data.tasks and data.pokedex like every other part",
+          save_gate is not None and all("data." + name in save_gate.group(0) for name in ("shop", "team", "poach", "ipo", "onboarding", "daily", "tasks", "pokedex")),
+          save_gate and save_gate.group(0))
     check("TycoonCore: DataStore name and key untouched", 'GetDataStore("StartupTycoon_v1")' in core and '"player_" .. player.UserId' in core)
 
     # Every addEarnings call site in the game. A new one fails here until it is reviewed (valuation!).
@@ -5813,6 +6190,24 @@ def main():
         else:
             company_caught += 1
     print("Pokedex rule mutations: %d of %d broken rules caught" % (company_caught, len(COMPANY_MUTATIONS)))
+    result21 = run_luau(luau, company_server_source())
+    print("CompanyServer check (join, saving, Place, Store, Sync): " + (result21.stdout.strip() or result21.stderr.strip()))
+    if result21.returncode != 0 or " 0 failed" not in result21.stdout:
+        code = 1
+    server_caught = 0
+    for label, mutation, *expected in SERVER_MUTATIONS:
+        mutant = run_luau(luau, company_server_source(mutation))
+        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
+        crashed = "passed," not in mutant.stdout
+        if "SyntaxError" in mutant.stderr or (not failures and (not crashed or " 0 failed" in mutant.stdout)):
+            print("FAIL: mutation not caught: the CompanyServer tests do not notice a broken " + label)
+            code = 1
+        elif expected and not crashed and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
+            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+            code = 1
+        else:
+            server_caught += 1
+    print("CompanyServer mutations: %d of %d broken rules caught" % (server_caught, len(SERVER_MUTATIONS)))
     pads_passed, pads_failed = pads_gone_checks()
     print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
     if pads_failed:

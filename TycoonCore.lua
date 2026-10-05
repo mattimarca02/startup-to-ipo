@@ -7,6 +7,7 @@
 -- The first minute for new players (free egg, arrow, goals) lives in OnboardingServer (ServerScriptService) and OnboardingConfig (ReplicatedStorage).
 -- The 7-day login calendar lives in DailyServer (ServerScriptService) and DailyConfig (ReplicatedStorage).
 -- The task engine (customer calls; Studio only until the economy core) lives in TaskServer (ServerScriptService) and TaskConfig (ReplicatedStorage).
+-- The company, its sector and the Pokedex (the `pokedex` save section) live in CompanyServer (ServerScriptService), CompanyConfig and SectorConfig (ReplicatedStorage).
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
@@ -47,6 +48,7 @@ local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
 local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
+local CompanyServer = require(script.Parent:WaitForChild("CompanyServer"))
 local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
 local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
@@ -81,10 +83,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true }
 
 local plotOwners = {} -- slot number -> player
-local playerData = {} -- player -> { owned, items, slot, folder, sign, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, unknownSections, loaded, ready, saving }
+local playerData = {} -- player -> { owned, items, slot, folder, sign, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, pokedex, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
 
@@ -429,6 +431,7 @@ local function buildPayload(data, transform, playerName)
 			onboarding = OnboardingServer.serialize(data),
 			daily = DailyServer.serialize(data),
 			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep: Studio only in PR 1
+			pokedex = CompanyServer.serialize(data), -- the company, its sector and the Pokedex (a locked newer section is written back as it was)
 			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
 		}
 		for key, value in pairs(data.unknownSections) do -- parts this version doesn't know: write them back as they were
@@ -478,7 +481,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -544,6 +547,11 @@ end
 local function commitIpo(player, newIpo)
 	local data = playerData[player]
 	if not data then return false end
+	if CompanyServer.isLocked(data) then
+		-- The Pokedex is from a newer version (or couldn't be read): going public would reset a company this version can't stamp
+		warn("Not going public for " .. player.Name .. ": their pokedex is kept as it is (a newer version's, or unreadable)")
+		return false
+	end
 	local resets = IpoConfig.Resets
 	local ok = save(player, function(payload)
 		if resets.Cash then
@@ -662,6 +670,21 @@ OnboardingServer.init({
 	nextUpgradeCost = function(data) -- what the next upgrade costs, or nil when everything is bought
 		local _, upg = nextUpgrade(data)
 		return upg and upg.cost
+	end,
+})
+
+-- Company and Pokedex (customize PR 1, invisible to players) ------------------
+-- Plugged in after OnboardingServer and before TaskServer. It gets no addEarnings: it never touches Cash or the valuation.
+
+CompanyServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	save = save,
+	plotZones = function() -- the plot's reserved gameplay zones from PlotVisuals (looks data), or nil when the plot visuals are off
+		local zones = PlotVisuals and PlotArt and looks("zones", PlotVisuals.zones, PlotArt.Layout)
+		if not zones then return nil end
+		return zones, PlotArt.Layout.floorSize[3]
 	end,
 })
 
@@ -795,6 +818,7 @@ local function onPlayerAdded(player)
 		EmployeeServer.setupPlayer(player, data, saved and saved.team) -- employees and eggs (after passes: slots)
 		PoachServer.setupPlayer(player, data, saved and saved.poach, ok and saved == nil) -- after employees
 		OnboardingServer.setupPlayer(player, data, saved and saved.onboarding, ok) -- tells new players from old ones
+		CompanyServer.setupPlayer(player, data, saved and saved.pokedex) -- after the IPO (the run check reads the IPO count); before TaskServer and DailyServer
 		TaskServer.setupPlayer(player, data, saved and saved.tasks) -- after employees (hires) and the IPO (rung); before DailyServer
 		DailyServer.setupPlayer(player, data, saved and saved.daily) -- after employees: a claim can grant an egg
 	end)
