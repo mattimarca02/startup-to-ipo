@@ -34,7 +34,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 **Phase 3b: previews (SVG text)**
 - [x] 3b.1 `tools/render_previews.py` (standard library; `--check` says whether the SVGs match the data)
 - [x] 3b.2 `docs/previews/world_topdown.svg` (an approximation: boxes seen from above)
-- [ ] 3b.3 `docs/previews/icons_sheet.svg`
+- [x] 3b.3 `docs/previews/icons_sheet.svg` (an approximation: shapes and flat-shaded box faces)
 
 **Phase 4: Studio sync and wrap-up**
 - [ ] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, previews, delete list, what to look at)
