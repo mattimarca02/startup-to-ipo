@@ -94,7 +94,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 | Art builds | ~75 **(estimate)** | ~75 **(estimate)** | | **~150** |
 | Task rows | 18 (+28 tiers, LG:74) | 7 (+ tiers) **(estimate)** | | 25 |
 
-Gaming's ~214 = Software's 153 kinds + 6 genres, 36 game names, 7 task names, 12 company names (SECT 5). Four sectors were ~723 names (168 + 3 x 185) and ~300 builds (4 x 75).
+Gaming's ~214 = Software's 153 kinds + 6 genres, 36 game names, 7 task names, 12 company names (SECT 5). Adding Fintech and Biotech later: ~723 names (168 + 3 x 185), ~300 builds (4 x 75).
 
 ## 3. Plot space (re-verified in the code)
 
