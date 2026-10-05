@@ -67,7 +67,8 @@ MODULES.IpoServer = {
 """
 
 TESTS = r"""-- Tests ---------------------------------------------------------------------
-local DailyServer = MODULES.DailyServer
+__STORABLE__
+local DailyServer = wrapSerialize(MODULES.DailyServer)
 local DailyConfig = MODULES.DailyConfig
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -320,6 +321,7 @@ check("old save: the new reset never allows a claim the old one didn't", extra =
 check("old save: first ready at 08:00 on day 20001 (hour 32 from the start of day 20000)", firstReady == 32, firstReady)
 NOW = savedNow
 
+check("every section DailyServer.serialize produced in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 0, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -614,8 +616,123 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+STORABLE_LUA = r"""-- A faithful DataStore (customize PR 1 review fix C). The real SetAsync refuses a table that mixes list and string keys, and a list with
+-- holes (or keys 0, negative, fractional) is not a list. The old fake stored anything, so these tests could not see that class of bug.
+-- storableProblems(value) lists, recursively through the whole payload, every table the store would refuse; newFaithfulStore() is a
+-- fake store whose SetAsync throws on one; screenStorable(value) is for sections that are serialized but never sent to a store here.
+local function storableProblems(value, path, problems, open)
+	path = path or "payload"
+	problems = problems or {}
+	open = open or {}
+	local kind = typeof(value)
+	if kind == "table" then
+		if open[value] then
+			table.insert(problems, path .. ": a table that contains itself")
+			return problems
+		end
+		open[value] = true
+		local strings, numbers, others = 0, 0, 0
+		for key in pairs(value) do
+			local keyKind = typeof(key)
+			if keyKind == "string" then
+				strings += 1
+			elseif keyKind == "number" then
+				numbers += 1
+			else
+				others += 1
+			end
+		end
+		if others > 0 then
+			table.insert(problems, path .. ": has a key that is neither a string nor a number")
+		end
+		if strings > 0 and numbers > 0 then
+			table.insert(problems, path .. ": mixes list and string keys")
+		elseif numbers > 0 then
+			for i = 1, numbers do
+				if value[i] == nil then
+					table.insert(problems, path .. ": is not a list 1 .. " .. numbers .. " in a row (a hole, or a key that is 0, negative or fractional)")
+					break
+				end
+			end
+		end
+		for key, inner in pairs(value) do
+			storableProblems(inner, path .. "[" .. tostring(key) .. "]", problems, open)
+		end
+		open[value] = nil
+	elseif kind ~= "string" and kind ~= "number" and kind ~= "boolean" then
+		table.insert(problems, path .. ": a " .. kind .. " can't be stored")
+	end
+	return problems
+end
+local function storeCopy(value)
+	if typeof(value) ~= "table" then return value end
+	local copy = {}
+	for key, inner in pairs(value) do copy[key] = storeCopy(inner) end
+	return copy
+end
+local function newFaithfulStore()
+	local store = { calls = 0, refused = 0, problem = nil, data = {} }
+	function store.SetAsync(self, key, payload)
+		self.calls += 1
+		local problems = storableProblems(payload)
+		if #problems > 0 then
+			self.refused += 1
+			self.problem = self.problem or problems[1]
+			error("105: Cannot store " .. problems[1] .. " in DataStore", 2)
+		end
+		self.data[key] = storeCopy(payload)
+	end
+	return store
+end
+local STORE_SCREEN = { on = true, seen = 0, bad = 0, first = nil }
+local function screenStorable(value)
+	if STORE_SCREEN.on and value ~= nil then
+		STORE_SCREEN.seen += 1
+		local problems = storableProblems(value)
+		if #problems > 0 then
+			STORE_SCREEN.bad += 1
+			STORE_SCREEN.first = STORE_SCREEN.first or problems[1]
+		end
+	end
+	return value
+end
+local function wrapSerialize(module, name)
+	name = name or "serialize"
+	local real = module[name]
+	module[name] = function(...) return screenStorable(real(...)) end
+	return module
+end
+-- The fake must refuse what the real store refuses (and accept a clean payload): named checks, so a broken fake is caught
+local function runStoreSelfTest(check)
+	local function refused(value) return not pcall(newFaithfulStore().SetAsync, newFaithfulStore(), "k", value) end
+	local function accepted(value) return pcall(newFaithfulStore().SetAsync, newFaithfulStore(), "k", value) end
+	check("the faithful store accepts a clean list", accepted({ "Desk", "Laptop" }))
+	check("the faithful store accepts a map of string keys", accepted({ future = "x", other = { a = 1 } }))
+	check("the faithful store accepts an empty table", accepted({}))
+	check("the faithful store accepts a clean nested payload", accepted({ cash = 5, owned = { "Desk" }, pokedex = { v = 1, sectors = { Software = { card = { owned = { "Desk" } } } } } }))
+	check("the faithful store refuses a list plus a string key", refused({ 1, 2, 3, foo = "x" }))
+	check("the faithful store refuses a list with a hole", refused({ [1] = "a", [2] = "b", [5] = "c" }))
+	check("the faithful store refuses a table with only [2]", refused({ [2] = "a" }))
+	check("the faithful store refuses a table with only [1] and [3]", refused({ [1] = "a", [3] = "b" }))
+	check("the faithful store refuses a fractional key", refused({ [1.5] = "a" }))
+	check("the faithful store refuses keys 0 and -3 next to a list", refused({ "Desk", [0] = "a", [-3] = "b" }))
+	check("the faithful store refuses a string key \"1\" next to [1]", refused({ "Desk", ["1"] = "x" }))
+	check("the faithful store refuses a mixed table three levels down", refused({ a = { b = { c = { 1, 2, foo = 3 } } } }))
+	check("the faithful store refuses a hole inside a list of maps", refused({ list = { { a = 1 }, nil, { a = 2 } } }))
+	check("the faithful store refuses a function value", refused({ f = function() end }))
+	check("the faithful store refuses a table that contains itself", (function() local t = {}; t.me = t; return refused(t) end)())
+	check("the faithful store says what it refused", (function()
+		local store = newFaithfulStore()
+		pcall(store.SetAsync, store, "k", { a = { 1, foo = 2 } })
+		return store.refused == 1 and store.problem ~= nil and string.find(store.problem, "payload[a]", 1, true) ~= nil and string.find(store.problem, "mixes", 1, true) ~= nil
+	end)())
+end
+"""
+
+
 BUILD_TESTS = r"""-- Tests for TycoonCore's buildPayload (the code between its BUILDSAVE markers) ----------
 local print_real = print
+__STORABLE__
 local WARNINGS = {}
 local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
 local NOW = 1700000000
@@ -663,6 +780,13 @@ local payload = buildPayload(data, nil, "P")
 check("normal build returns the payload", payload ~= nil and payload.cash == 250 and #payload.owned == 2)
 check("... every section is there", payload.shop and payload.team and payload.poach and payload.ipo and payload.onboarding and payload.daily and payload.tasks and payload.pokedex)
 check("... the pokedex section is the one CompanyServer.serialize gave", payload.pokedex.v == 1 and payload.pokedex == POKEDEX)
+do
+	local store = newFaithfulStore()
+	local okStore, problem = pcall(store.SetAsync, store, "player_1", payload)
+	check("the normal payload, every section of it, is accepted by the faithful store", okStore and store.refused == 0, problem)
+	local bad = { cash = 1, owned = { "Desk", future = "x" } }
+	check("... and the same store refuses a payload with a mixed list (so the check above can fail)", not pcall(store.SetAsync, store, "player_1", bad) and store.refused == 1)
+end
 check("pokedex is a known section (saved by its own serialize, never kept as unknown)", KNOWN_SECTIONS.pokedex == true)
 check("... the tasks section is the one TaskServer.serialize gave", payload.tasks.done == 3)
 TASKS = nil
@@ -1189,6 +1313,7 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 
 ROLL_TESTS = r"""-- Tests for EmployeeServer's roll and the fixedHires section (ROLL and FIXEDSAVE markers, FR-13, D9 option B) ----
 local print_real = print
+__STORABLE__
 local WARNINGS = {}
 local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
 local function typeof(v) return type(v) end
@@ -1211,6 +1336,7 @@ local EmployeeServer = {}
 local nextFixedHire
 __ROLL__
 __FIXEDSAVE__
+wrapSerialize(EmployeeServer, "serializeFixedHires")
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra and (" -- " .. tostring(extra)) or "")) end
@@ -1354,6 +1480,7 @@ check("a section that isn't a table: one warning, empty", #WARNINGS == 1 and nex
 WARNINGS = {}
 p, d = join({ counts = "lots" })
 check("counts that aren't a table: one warning, empty", #WARNINGS == 1 and next(d.fixedHires.counts) == nil)
+check("every section serializeFixedHires produced in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 0, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -1505,6 +1632,7 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 
 IPOSHOP_TESTS = r"""-- Tests for the IPO shop (IpoConfig.perks, the real IpoServer.lua with fakes) and D1: the 1,770-Share shop ----
 local print_real = print
+__STORABLE__
 local WARNINGS = {}
 local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
 local function typeof(v) return type(v) end
@@ -1550,6 +1678,7 @@ local IpoConfig = MODULES.IpoConfig
 local IpoServer = (function()
 __IPOSERVER__
 end)()
+wrapSerialize(IpoServer)
 check("the real IpoConfig loads without warnings", #WARNINGS == 0, WARNINGS[1])
 
 -- 1. The shop: size, frozen shipped levels, the new levels
@@ -1744,6 +1873,7 @@ check("a save with no IPO section loads with no perks", (function()
 	return next(d6.ipo.perks) == nil and d6.ipo.shares == 0
 end)())
 
+check("every section IpoServer.serialize produced in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 0, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -1776,6 +1906,7 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 
 TASK_TESTS = r"""-- Tests for the task engine: the real TaskConfig and TaskServer with a fake Roblox (PR 1) ----------
 local print_real = print
+__STORABLE__
 local NOW = 20000 * 86400 + 12 * 3600 -- noon UTC on day 20000
 local CLOCK = 1000
 local IS_STUDIO = true
@@ -1829,9 +1960,10 @@ __TASKCONFIG__
 end)()
 local CONFIG_WARNINGS = #WARNINGS
 MODULES.TaskConfig.BudgetBank = 1e9 -- most tests run without the reward budget; section 17 turns it on
-local function loadServer()
+local function loadServerRaw()
 __TASKSERVER__
 end
+local function loadServer() return wrapSerialize(loadServerRaw()) end
 
 -- Tests ---------------------------------------------------------------------
 local C = MODULES.TaskConfig
@@ -3026,6 +3158,7 @@ do
 	check("a loaded player starts with a fresh chain and no waiting calls", #waiting(q) == 0 and (lastState(q) == nil))
 end
 
+check("every section TaskServer.serialize produced in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 0, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -4418,6 +4551,13 @@ local function anyWarning(text)
 	end
 	return false
 end
+__STORABLE__
+-- Every section CompanyConfig.toSave hands out in these tests (the loader's result written back, by any test) is screened: it must be storable
+do
+	local realToSave = CC.toSave
+	CC.toSave = function(state, studio) return screenStorable(realToSave(state, studio)) end
+end
+runStoreSelfTest(check)
 
 -- 1. SectorConfig --------------------------------------------------------------------------
 check("four sector keys from day one, in order", deepEqual(SectorConfig.Order, { "Software", "Gaming", "Fintech", "Biotech" }))
@@ -4494,7 +4634,7 @@ local FULL = {
 			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
 			card = {
 				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
-				owned = { "Desk", "Laptop", "Gaming PC", future = "GamingRig", [5] = "Neon Logo" },
+				owned = { "Desk", "Laptop", "Gaming PC" },
 				decor = { Chair = 1, Future = 3 },
 				objects = objectsList("card object"),
 				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
@@ -4536,8 +4676,6 @@ local keptAt = {
 	["sectors[k] unknown field"] = function() return out.sectors.Software.futureSector.y == 2 end,
 	["card unknown field"] = function() return out.sectors.Software.card.futureCard == "keep" end,
 	["card.owned unknown upgrade name"] = function() return out.sectors.Software.card.owned[3] == "Gaming PC" end,
-	["card.owned name under a key"] = function() return out.sectors.Software.card.owned.future == "GamingRig" end,
-	["card.owned entry after a gap"] = function() return out.sectors.Software.card.owned[5] == "Neon Logo" and out.sectors.Software.card.owned[4] == nil end,
 	["card.decor unknown key"] = function() return out.sectors.Software.card.decor.Future == 3 end,
 	["card.objects[i] unknown field"] = function() return out.sectors.Software.card.objects[1].futureObj == "card object" end,
 	["card.rounds[k] unknown field"] = function() return out.sectors.Software.card.rounds.Seed.extra == 1 end,
@@ -4727,7 +4865,9 @@ sec, warned = loaded(function(d)
 	for i = 1, 45 do d.active.stored["Item" .. string.format("%02d", i)] = true end
 end)
 check("stored: at most 40 are kept, always the same ones", count(sec.active.stored) == 40 and sec.active.stored.Item40 == true and sec.active.stored.Item41 == nil and warned == 5, warned)
--- A list of placed items with keys that aren't 1, 2, 3 ... can't be carried back in a list: the whole section is kept as it was
+-- Placed items. A table with ONLY string keys (a shape this version doesn't know, and one the store can hold) can't be carried back in a
+-- list: the whole section is kept as it was. A list with a gap or with other keys is something the store refuses, so it is tidied on
+-- load: the entries in key order, the gap closed, every other key dropped, each with a warning (never written back as it was).
 do
 	local function keptAsItWas(name, change)
 		local saved = good()
@@ -4736,12 +4876,65 @@ do
 		local st = load(saved, 2)
 		check(name .. ": the section is kept as it was (locked, written back unchanged)", st.locked == true and deepEqual(CC.toSave(st, true), copy) and CC.toSave(st, true) == saved and anyWarning("not a plain list"))
 	end
-	keptAsItWas("objects with a key that isn't a list index", function(d) d.active.objects.future = { id = "Gaming PC", x = 0, z = 0, r = 0 } end)
 	keptAsItWas("objects that is a dictionary", function(d) d.active.objects = { first = { id = "Desk", x = 0, z = 0, r = 0 } } end)
-	keptAsItWas("objects with a gap in its indexes", function(d) d.active.objects[5] = { id = "Desk", x = 1, z = 1, r = 0 } end)
-	keptAsItWas("a card's objects with a key that isn't a list index", function(d) d.sectors.Software.card.objects.future = 1 end)
+	keptAsItWas("a card's objects that is a dictionary", function(d) d.sectors.Software.card.objects = { future = 1 } end)
+	local store = newFaithfulStore()
+	local function tidied(name, change, wantIds, wantWarnings, inCard)
+		local saved = good()
+		change(saved)
+		local st = load(saved, 2)
+		local nWarned = #WARNINGS
+		local out = save(st, false)
+		local list = inCard and out.sectors.Software.card.objects or out.active.objects
+		local ids, keys = {}, 0
+		for i = 1, #list do table.insert(ids, list[i].id) end
+		for _ in pairs(list) do keys += 1 end
+		check(name .. ": not locked, a plain list of the right entries in key order", st.locked == false and keys == #wantIds and table.concat(ids, ",") == table.concat(wantIds, ","), table.concat(ids, ","))
+		check(name .. ": " .. wantWarnings .. " warning(s)", nWarned == wantWarnings, nWarned)
+		local okStore, problem = pcall(store.SetAsync, store, "k", out)
+		check(name .. ": the saved section is accepted by the store", okStore, problem)
+	end
+	local GAP = { id = "Whiteboard", x = 1, z = 1, r = 0 }
+	tidied("objects with a string key next to the list", function(d) d.active.objects.future = { id = "Gaming PC", x = 0, z = 0, r = 0 } end, { "Desk", "Laptop" }, 1)
+	tidied("objects with a gap in its indexes", function(d) d.active.objects[5] = deepCopy(GAP) end, { "Desk", "Laptop", "Whiteboard" }, 1)
+	tidied("objects with keys 0 and -3", function(d) d.active.objects[0] = deepCopy(GAP); d.active.objects[-3] = deepCopy(GAP) end, { "Desk", "Laptop" }, 2)
+	tidied("objects with only [1] and [3]", function(d) d.active.objects = { [1] = { id = "Desk", x = -23, z = -40, r = 0 }, [3] = { id = "Laptop", x = -25.5, z = -30, r = 3 } } end, { "Desk", "Laptop" }, 1)
+	tidied("objects whose entries start after a gap (no [1])", function(d) d.active.objects = { [2] = { id = "Laptop", x = -25.5, z = -30, r = 3 }, [4] = deepCopy(GAP) } end, { "Laptop", "Whiteboard" }, 1)
+	tidied("a card's objects with a string key next to the list", function(d) d.sectors.Software.card.objects.future = 1 end, { "Desk", "Laptop" }, 1, true)
+	tidied("a card's objects with a gap in its indexes", function(d) d.sectors.Software.card.objects[7] = deepCopy(GAP) end, { "Desk", "Laptop", "Whiteboard" }, 1, true)
+	tidied("objects with a bad entry after a gap (skipped, then the gap is closed)", function(d) d.active.objects[5] = "junk" end, { "Desk", "Laptop" }, 2)
 	local clean = load(good(), 2)
 	check("objects: a plain list (even with bad entries) does not lock the section", clean.locked == false and #clean.section.active.objects == 2)
+end
+-- A key that isn't a string next to the named fields of a table (the section, active, a round, a placed item, a sector entry, a card ...)
+-- can't be saved there (the store refuses a table that mixes keys): it is dropped, with a warning, and the rest comes back unchanged.
+do
+	local store = newFaithfulStore()
+	local PLACES = {
+		{ "the section", function(d) return d end },
+		{ "active", function(d) return d.active end },
+		{ "an active round", function(d) return d.active.rounds.Seed end },
+		{ "a placed item", function(d) return d.active.objects[1] end },
+		{ "a sector entry", function(d) return d.sectors.Software end },
+		{ "a card", function(d) return d.sectors.Software.card end },
+		{ "a card's round", function(d) return d.sectors.Software.card.rounds.Seed end },
+		{ "a card's placed item", function(d) return d.sectors.Software.card.objects[1] end },
+	}
+	for _, place in ipairs(PLACES) do
+		local allGood, allWarned, allStored = true, true, true
+		for _, key in ipairs({ 99, 0, -3, 1.5 }) do
+			local saved = good()
+			place[2](saved)[key] = { z = 1 }
+			local st = load(saved, 2)
+			allWarned = allWarned and #WARNINGS == 1
+			local out = save(st, false)
+			allGood = allGood and deepEqual(out, FULL)
+			allStored = allStored and pcall(store.SetAsync, store, "k", out)
+		end
+		check("a number key (99, 0, -3, 1.5) next to the named fields of " .. place[1] .. " is dropped, with one warning each", allWarned)
+		check("... and the rest of " .. place[1] .. " is written back unchanged", allGood)
+		check("... and what is saved is accepted by the store (" .. place[1] .. ")", allStored)
+	end
 end
 sec, warned = loaded(function(d) d.active.told = { Seed = false, SeriesA = true } end)
 check("told: a known stage that isn't true is skipped", sec.active.told.Seed == nil and sec.active.told.SeriesA == true and warned == 1)
@@ -4779,49 +4972,87 @@ sec, warned = loaded(function(d) d.sectors.Software.card = "text" end)
 check("sectors: a card that isn't a table is skipped", sec.sectors.Software.card == nil and warned == 1)
 sec, warned = loaded(function(d) d.sectors.Software.card.stake = 20000; d.sectors.Software.card.ipoNumber = -1; d.sectors.Software.card.owned = { "Desk", 5 } end)
 check("card: a bad stake, ipoNumber and owned name are skipped", sec.sectors.Software.card.stake == 10000 and sec.sectors.Software.card.ipoNumber == 0 and #sec.sectors.Software.card.owned == 1 and warned == 3, warned)
--- card.owned (KEEP rule, docs/CUSTOMIZE_PROPOSAL.md): names are kept, and so is anything under a key that isn't the list's 1, 2, 3 ... in
--- a row. Only what is really dropped (a value that isn't a name, a name past the limit, a number above 3) is dropped, with a warning.
+-- card.owned is tidied on load. The store refuses a table that mixes list and string keys, and a list with holes loses what comes after a
+-- hole, so: every valid name goes into a plain list 1 .. n in key order (a gap is closed, with a warning), any other key (a string, 0, a
+-- negative or fractional number) is dropped with a warning, and a table with ONLY string keys is kept as it is. Duplicates, bad values
+-- and the limit of 200 behave as before.
 do
 	local function ownedWith(owned)
 		local saved = good()
 		saved.sectors.Software.card.owned = owned
-		local copy = deepCopy(saved)
 		local st = load(saved, 2)
-		return st, copy, #WARNINGS, saved
+		local nWarned = #WARNINGS
+		local out = save(st, false)
+		return st, out.sectors.Software.card.owned, nWarned, out
 	end
-	local extras = { "Desk", "Laptop", future = "GamingRig", [5] = "Neon Logo" }
-	local st, copy, nWarned = ownedWith(extras)
-	local out = save(st, false)
-	local owned = out.sectors.Software.card.owned
-	check("card.owned: keys outside the list (a name under a key, an entry after a gap) are kept and written back unchanged",
-		nWarned == 0 and st.locked == false and deepEqual(out, copy) and owned[1] == "Desk" and owned[2] == "Laptop" and owned[3] == nil and owned[4] == nil
-		and owned.future == "GamingRig" and owned[5] == "Neon Logo", nWarned)
-	check("card.owned: ... and loading what was saved changes nothing", (function()
+	local function plainList(t, n)
+		local keys = 0
+		for _ in pairs(t) do keys += 1 end
+		for i = 1, n do
+			if t[i] == nil then return false end
+		end
+		return keys == n
+	end
+	local function sameList(t, want)
+		if not plainList(t, #want) then return false end
+		for i, name in ipairs(want) do
+			if t[i] ~= name then return false end
+		end
+		return true
+	end
+	local store = newFaithfulStore()
+	local CASES = {
+		{ "a hole {Desk, nil, Laptop}", { "Desk", nil, "Laptop" }, { "Desk", "Laptop" }, 1 },
+		{ "a string key {Desk, Laptop, future}", { "Desk", "Laptop", future = "GamingRig" }, { "Desk", "Laptop" }, 1 },
+		{ "an entry after a gap {Desk, Laptop, [5]}", { "Desk", "Laptop", [5] = "Neon Logo" }, { "Desk", "Laptop", "Neon Logo" }, 1 },
+		{ "the review's mixed case {Desk, Laptop, future, [5]}", { "Desk", "Laptop", future = "GamingRig", [5] = "Neon Logo" }, { "Desk", "Laptop", "Neon Logo" }, 2 },
+		{ "[1] and [3]", { [1] = "a", [3] = "b" }, { "a", "b" }, 1 },
+		{ "[1], [3] and [4]", { [1] = "a", [3] = "b", [4] = "c" }, { "a", "b", "c" }, 1 },
+		{ "keys 0 and -3 next to a name", { "Desk", [0] = "Zero", [-3] = "Minus" }, { "Desk" }, 2 },
+		{ "key 1.5 next to names", { "Desk", "Laptop", [1.5] = "Half" }, { "Desk", "Laptop" }, 1 },
+		{ "a string key \"1\" next to [1]", { "Desk", ["1"] = "x" }, { "Desk" }, 1 },
+		{ "names that start after a gap (no [1])", { [2] = "Laptop", [3] = "Desk" }, { "Laptop", "Desk" }, 1 },
+		{ "names stored under keys out of order", { [10] = "c", [2] = "b", [1] = "a" }, { "a", "b", "c" }, 1 },
+		{ "a plain list", { "Desk", "Laptop", "Gaming PC" }, { "Desk", "Laptop", "Gaming PC" }, 0 },
+		{ "duplicates", { "Desk", "Desk", "Laptop" }, { "Desk", "Desk", "Laptop" }, 0 },
+		{ "duplicates after a gap", { [1] = "Desk", [4] = "Desk" }, { "Desk", "Desk" }, 1 },
+		{ "a value that is not a name (a number)", { "Desk", 5, "Laptop" }, { "Desk", "Laptop" }, 1 },
+		{ "bad values (a table, empty, 40 characters, false) and a string key", { "Desk", { tier = 2 }, "", string.rep("x", 40), false, "Laptop", future = "k" }, { "Desk", "Laptop" }, 5 },
+		{ "an empty table", {}, {}, 0 },
+	}
+	for _, case in ipairs(CASES) do
+		local label, input, want, warnings = case[1], case[2], case[3], case[4]
+		local st, owned, nWarned, out = ownedWith(input)
+		check("card.owned " .. label .. ": not locked, a plain list with the right names in key order", st.locked == false and sameList(owned, want))
+		check("card.owned " .. label .. ": " .. warnings .. " warning(s)", nWarned == warnings, nWarned)
+		local okStore, problem = pcall(store.SetAsync, store, "k", out)
+		check("card.owned " .. label .. ": the saved section is accepted by the store", okStore, problem)
 		local second = load(deepCopy(out), 2)
-		return #WARNINGS == 0 and deepEqual(save(second, false), out)
-	end)())
-	local inputTable
-	st, copy, nWarned, inputTable = ownedWith({ "Desk", future = { tier = 2, tags = { "a" } } })
-	check("card.owned: a record of a newer version under a key is kept whole, as a copy, with no warning",
-		nWarned == 0 and deepEqual(save(st, false), copy) and st.section.sectors.Software.card.owned.future ~= inputTable.sectors.Software.card.owned.future)
-	st, copy, nWarned = ownedWith({ future = "x" })
-	check("card.owned: a dictionary with no list at all is kept as it was", nWarned == 0 and deepEqual(save(st, false), copy))
-	st, copy, nWarned = ownedWith({ [2] = "Laptop", [3] = "Desk" })
-	check("card.owned: entries that start after a gap (no [1]) are kept as they were", nWarned == 0 and deepEqual(save(st, false), copy))
-	st, copy, nWarned = ownedWith({ "Desk", "Laptop", [0] = "Zero", [-1] = "Minus", [1.5] = "Half" })
-	check("card.owned: keys 0, -1 and 1.5 are kept as they were", nWarned == 0 and deepEqual(save(st, false), copy))
-	st, copy, nWarned = ownedWith({ "Desk", 5, "Laptop" })
-	owned = st.section.sectors.Software.card.owned
-	check("card.owned: a value inside the list that is not a name is skipped, with a warning", #owned == 2 and owned[1] == "Desk" and owned[2] == "Laptop" and nWarned == 1, nWarned)
-	st, copy, nWarned = ownedWith({ "Desk", { tier = 2 }, "", string.rep("x", 40), false, "Laptop", future = "k" })
-	owned = st.section.sectors.Software.card.owned
-	check("card.owned: a table, an empty or too long name and a false in the list are each skipped with a warning, the extra key stays",
-		#owned == 2 and owned.future == "k" and nWarned == 4, nWarned)
+		check("card.owned " .. label .. ": loading what was saved changes nothing and warns about nothing", #WARNINGS == 0 and deepEqual(save(second, false), out))
+	end
+	local st, owned, nWarned = ownedWith({ future = "x" })
+	check("card.owned: a table with only string keys (no names) is kept as it is, with no warning", nWarned == 0 and deepEqual(owned, { future = "x" }))
+	local record = { tier = 2, tags = { "a" } }
+	st, owned, nWarned = ownedWith({ future = record })
+	check("card.owned: a map of a newer version's records is kept whole, as a copy, with no warning",
+		nWarned == 0 and deepEqual(owned, { future = { tier = 2, tags = { "a" } } }) and st.section.sectors.Software.card.owned.future ~= record)
+	st, owned, nWarned = ownedWith({ [1] = 5, future = "x" })
+	check("card.owned: when no list entry is a name the string keys stay (a map), with one warning for the bad value", deepEqual(owned, { future = "x" }) and nWarned == 1, nWarned)
+	st, owned, nWarned = ownedWith({ [0] = "Zero", future = "x" })
+	check("card.owned: a key 0 next to string keys (no names) is dropped, the map stays", deepEqual(owned, { future = "x" }) and nWarned == 1, nWarned)
+	st, owned, nWarned = ownedWith({ [0] = "Zero" })
+	check("card.owned: a lone key 0 is dropped, with a warning", next(owned) == nil and nWarned == 1, nWarned)
 	local many = {}
 	for i = 1, 205 do many[i] = "Name" .. i end
-	st, copy, nWarned = ownedWith(many)
-	check("card.owned: names past 200 are skipped, with a warning for each", #st.section.sectors.Software.card.owned == 200 and nWarned == 5, nWarned)
-	st, copy, nWarned = ownedWith("Desk")
+	st, owned, nWarned = ownedWith(many)
+	check("card.owned: names past 200 are skipped, with a warning for each", plainList(owned, 200) and nWarned == 5, nWarned)
+	many = {}
+	for i = 1, 100 do many[i] = "Name" .. i end
+	for i = 102, 206 do many[i] = "Name" .. i end
+	st, owned, nWarned = ownedWith(many)
+	check("card.owned: names after a gap count toward the 200 too (the first 200 in key order stay), with the gap and each skipped name warned about",
+		plainList(owned, 200) and owned[100] == "Name100" and owned[101] == "Name102" and owned[200] == "Name201" and nWarned == 6, nWarned)
+	st, owned, nWarned = ownedWith("Desk")
 	check("card.owned: a value that isn't a table is skipped, with a warning", next(st.section.sectors.Software.card.owned) == nil and nWarned == 1, nWarned)
 	-- a number above 3 and the other scalar values of a sector entry and its card: changed or skipped only with a warning
 	for _, case in ipairs({ { 7, 3 }, { 3.5, 3 }, { 2.5, 2 }, { -2, 1 }, { 9e9, 3 } }) do
@@ -4915,8 +5146,10 @@ end
 check("fuzz: " .. ran .. " bad values (every field x " .. #WEIRD .. " kinds) never throw", bad == 0 and ran > 500, ran)
 check("fuzz: loading what was saved again never changes it", unstable == 0)
 -- Never silent: an unknown key added to any table of the section (and to the section itself) is written back unchanged, or a warning says
--- why not. A string key is kept everywhere; a number key is kept in a list (card.owned) and in the maps it is skipped with a warning.
+-- why not. A string key is kept in every map; in a list (card.owned, objects) it is dropped with a warning; a number key next to named fields is dropped
+-- with a warning. These inputs can't come out of a store (they are mixed tables), so the screen for storable results is off here.
 do
+	STORE_SCREEN.on = false
 	local tablePaths = { {} }
 	for _, path in ipairs(paths(FULL, {}, {})) do
 		local node = FULL
@@ -4945,8 +5178,8 @@ do
 			end
 		end
 	end
-	check("never silent: an unknown key added to any table is written back unchanged or warned about (" .. tried .. " tried)", #silent == 0 and tried > 100 and kept > warnedOnly, silent[1])
-	check("never silent: a string key is written back unchanged everywhere, with no warning (a list of placed items locks the section instead, with one)", (function()
+	check("never silent: an unknown key added to any table is written back unchanged or warned about (" .. tried .. " tried)", #silent == 0 and tried > 100 and kept > 0 and warnedOnly > 0, silent[1])
+	check("never silent: a string key is written back unchanged in every map, with no warning (in the two lists, card.owned and objects, it is dropped with one)", (function()
 		for _, path in ipairs(tablePaths) do
 			local data = deepCopy(FULL)
 			local node = data
@@ -4955,13 +5188,17 @@ do
 			local expected = deepCopy(data)
 			WARNINGS = {}
 			local ok, result = pcall(CC.load, data, ctx(2))
-			if not (ok and deepEqual(CC.toSave(result, false), expected) and (#WARNINGS == 0 or (result.locked and #WARNINGS == 1))) then
-				print_real("a string key under ." .. table.concat(path, ".") .. " is not kept")
+			local last = path[#path]
+			local isTidiedList = last == "owned" or last == "objects"
+			local good = ok and (isTidiedList and #WARNINGS == 1 or (deepEqual(CC.toSave(result, false), expected) and #WARNINGS == 0))
+			if not good then
+				print_real("a string key under ." .. table.concat(path, ".") .. " is not handled")
 				return false
 			end
 		end
 		return true
 	end)())
+	STORE_SCREEN.on = true
 end
 
 -- 8. Placement ------------------------------------------------------------------------------------
@@ -5230,6 +5467,7 @@ check("... or Enabled is", CC.isPlacementActive() == false)
 CC.Placement.Enabled, CC.Placement.StudioOnly = true, true
 IS_STUDIO = true
 
+check("every section toSave handed out in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 100, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -5242,13 +5480,19 @@ def company_source(mutation=None):
             return f.read()
 
     parts = {name: read(name + ".lua") for name in ("SectorConfig", "IpoConfig", "CompanyConfig", "PlotVisuals", "PlotArt")}
-    if mutation:
-        old, new = mutation
-        hits = [name for name in ("CompanyConfig", "SectorConfig") if old in parts[name]]
-        if len(hits) != 1 or parts[hits[0]].count(old) != 1:
-            raise SystemExit("mutation target not found exactly once: " + old)
-        parts[hits[0]] = parts[hits[0]].replace(old, new, 1)
-    return (COMPANY_TESTS.replace("__UPGRADES__", upgrades_lua_names())
+    storable = STORABLE_LUA
+    if mutation and mutation[0] == "@fake":
+        if storable.count(mutation[1]) != 1:
+            raise SystemExit("mutation target not found exactly once in the faithful store: " + mutation[1])
+        storable = storable.replace(mutation[1], mutation[2], 1)
+    elif mutation:
+        for i in range(0, len(mutation), 2):  # one or more (old, new) pairs
+            old, new = mutation[i], mutation[i + 1]
+            hits = [name for name in ("CompanyConfig", "SectorConfig") if old in parts[name]]
+            if len(hits) != 1 or parts[hits[0]].count(old) != 1:
+                raise SystemExit("mutation target not found exactly once: " + old)
+            parts[hits[0]] = parts[hits[0]].replace(old, new, 1)
+    return (COMPANY_TESTS.replace("__STORABLE__", storable).replace("__UPGRADES__", upgrades_lua_names())
             .replace("__SECTORCONFIG__", parts["SectorConfig"]).replace("__IPOCONFIG__", parts["IpoConfig"])
             .replace("__COMPANYCONFIG__", parts["CompanyConfig"]).replace("__PLOTVISUALS__", parts["PlotVisuals"])
             .replace("__PLOTART__", parts["PlotArt"]))
@@ -5309,21 +5553,21 @@ COMPANY_MUTATIONS = [
     ("the new company's picked flag (always unpicked)", ("local picked = SectorConfig.PickerEnabled ~= true", "local picked = false"),
      "missing section: v 1, run = the IPO count, Software, building 1, picked (the picker is off)"),
     # Unknown fields kept at every level
-    ("keeping unknown fields (the section)", ("copyUnknown(saved, TOP_KNOWN, section)", ""),
+    ("keeping unknown fields (the section)", ("copyUnknown(ctx, \"pokedex\", saved, TOP_KNOWN, section)", ""),
      "unknown data is kept: top-level unknown field"),
-    ("keeping unknown fields (active)", ("copyUnknown(value, ACTIVE_KNOWN, active)", ""),
+    ("keeping unknown fields (active)", ("copyUnknown(ctx, where, value, ACTIVE_KNOWN, active)", ""),
      "unknown data is kept: active unknown field"),
-    ("keeping unknown fields (objects[i])", ("copyUnknown(entry, OBJECT_KNOWN, object)", ""),
+    ("keeping unknown fields (objects[i])", ("copyUnknown(ctx, where .. \".\" .. key .. \"[\" .. index .. \"]\", entry, OBJECT_KNOWN, object)", ""),
      "unknown data is kept: active.objects[i] unknown field"),
-    ("keeping unknown fields (rounds[k])", ("\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n\tcopyUnknown(value, ROUND_KNOWN, round)\n", "\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n"),
+    ("keeping unknown fields (rounds[k])", ("\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n\tcopyUnknown(ctx, where, value, ROUND_KNOWN, round)\n", "\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n"),
      "unknown data is kept: active.rounds[k] unknown field"),
     ("keeping unknown fields (unknown stage keys in rounds)", ("out[name] = deepCopy(inner) -- a stage this version doesn't know: kept whole, its bp still counts", ""),
      "unknown data is kept: active.rounds unknown stage"),
-    ("keeping unknown fields (sectors[k])", ("copyUnknown(value, SECTOR_KNOWN, entry)", ""),
+    ("keeping unknown fields (sectors[k])", ("copyUnknown(ctx, where, value, SECTOR_KNOWN, entry)", ""),
      "unknown data is kept: sectors[k] unknown field"),
     ("keeping unknown fields (unknown sector keys)", ("out[key] = deepCopy(inner) -- a sector this version doesn't know: kept whole", ""),
      "unknown data is kept: sectors unknown key kept whole"),
-    ("keeping unknown fields (card)", ("copyUnknown(value, CARD_KNOWN, card)", ""),
+    ("keeping unknown fields (card)", ("copyUnknown(ctx, here, value, CARD_KNOWN, card)", ""),
      "unknown data is kept: card unknown field"),
     ("keeping unknown fields (unknown keys in a map)", ("\t\telse\n\t\t\tout[name] = deepCopy(inner)\n\t\tend\n\tend\n\treturn out\nend\n\nlocal function validCopies", "\t\tend\n\tend\n\treturn out\nend\n\nlocal function validCopies"),
      "unknown data is kept: active.decor unknown key"),
@@ -5352,7 +5596,7 @@ COMPANY_MUTATIONS = [
      "objects: a bad x, r, id, grid step, missing field, junk, a repeated id or a far x is skipped, the one good item stays"),
     ("a malformed round counts as nothing (dropped dilution)", ("local settled = { s = \"skipped\", c = 0, cash = 0, bp = 0, at = 0, studio = false }", "local settled = { s = \"skipped\", c = 0, cash = 0, bp = 100, at = 0, studio = false }"),
      "rounds: a record of a known stage that isn't a table counts as settled (skipped, no dilution)"),
-    ("a malformed round keeps its claimed bp", ("\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tcopyUnknown(value, ROUND_KNOWN, settled)\n\t\treturn settled\n", "\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tsettled.bp = isWhole(value.bp, 0, TOTAL_BP) and value.bp or 0\n\t\treturn settled\n"),
+    ("a malformed round keeps its claimed bp", ("\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tcopyUnknown(ctx, where, value, ROUND_KNOWN, settled)\n\t\treturn settled\n", "\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tsettled.bp = isWhole(value.bp, 0, TOTAL_BP) and value.bp or 0\n\t\treturn settled\n"),
      "rounds: a malformed record counts as settled with bp 0, its unknown fields stay"),
     ("the dilution cap", ("return math.min(CompanyConfig.Funding.DilutionCap, total)", "return total"),
      "dilution is capped (4,000 bp), the stake never falls under 6,000"),
@@ -5419,14 +5663,14 @@ COMPANY_MUTATIONS = [
      "place: a kept record on the id survives a Place (only a true leaves the inventory)"),
     ("Place deletes a kept record (a new item)", ("table.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] == true then", "table.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] ~= nil then"),
      "place: a kept record on the id survives a Place (only a true leaves the inventory)"),
-    ("the list-shape check on placed items", ("if not (isWhole(index, 1) and index <= #value) then", "if false then"),
-     "objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
-    ("the list-shape check (a card's objects are not looked at)", ("if not (isWhole(index, 1) and index <= #value) then", "if not (isWhole(index, 1) and index <= #value) and where ~= \"sectors.Software.card\" then"),
-     "a card's objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
+    ("the map-shape check on placed items (a map of items is read as an empty list)", ("if #indexes == 0 and #others > 0 then", "if false then"),
+     "objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
+    ("the map-shape check (a card's objects are not looked at)", ("if #indexes == 0 and #others > 0 then", "if #indexes == 0 and #others > 0 and where ~= \"sectors.Software.card\" then"),
+     "a card's objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
     ("the lock on a shape this version doesn't know", ("if ctx.foreign then\n\t\t-- A shape", "if false then\n\t\t-- A shape"),
      "objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
     ("the lock on a foreign shape (written back as a copy)", ("ctx.warn(\"Keeping \" .. ctx.who .. \"'s pokedex as it is: its \" .. ctx.foreign .. \" (a shape this version doesn't know)\")\n\t\tstate.locked, state.raw = true, saved", "ctx.warn(\"Keeping \" .. ctx.who .. \"'s pokedex as it is: its \" .. ctx.foreign .. \" (a shape this version doesn't know)\")\n\t\tstate.locked, state.raw = true, deepCopy(saved)"),
-     "objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
+     "objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
     ("the storage limit", ("if count >= CompanyConfig.MaxStored then", "if false then"),
      "store: a full storage (40) refuses another"),
     ("placing doesn't take the item out of storage", ("\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] == true then active.stored[id] = nil end\n", "\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n"),
@@ -5459,15 +5703,64 @@ COMPANY_MUTATIONS = [
      "round trip: v = 1 is written"),
     ("the Desk footprint too small for its prop", ("[\"Desk\"] = { w = 8.4, d = 7.6 },", "[\"Desk\"] = { w = 6, d = 4 },"),
      "every upgrade's footprint holds every part of its PlotArt prop (turned by its own yaw)"),
-    # card.owned keeps what it can't read as names, and nothing is dropped without a warning (review fix)
-    ("card.owned drops the keys outside its list", ("\t\t\tout[index] = deepCopy(inner) -- never collides with the list: the key after `listed` is empty, and `out` has at most `listed` names\n", ""),
-     "card.owned: keys outside the list (a name under a key, an entry after a gap) are kept and written back unchanged"),
-    ("card.owned keeps its extra keys as the same table (not a copy)", ("out[index] = deepCopy(inner)", "out[index] = inner"),
-     "card.owned: a record of a newer version under a key is kept whole, as a copy, with no warning"),
+    # card.owned and the other lists are tidied on load (review fix C): the store refuses mixed tables and holes
+    ("card.owned goes back to the old KEEP rule (list up to its first gap, every other key copied next to it)",
+     ("\tlocal indexes, others = splitKeys(value)\n\tnoteGap(ctx, where .. \".\" .. key, indexes)\n\tfor _, index in ipairs(indexes) do\n\t\tlocal name = value[index]\n\t\tif typeof(name) == \"string\" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then",
+      "\tlocal indexes, others = {}, {}\n\tlocal listed = 0\n\twhile value[listed + 1] ~= nil do\n\t\tlisted += 1\n\t\ttable.insert(indexes, listed)\n\tend\n\tfor other in pairs(value) do\n\t\tif not (isWhole(other, 1) and other <= listed) then\n\t\t\ttable.insert(others, other)\n\t\tend\n\tend\n\tfor _, index in ipairs(indexes) do\n\t\tlocal name = value[index]\n\t\tif typeof(name) == \"string\" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then",
+      "\t\tif #out == 0 and typeof(other) == \"string\" then\n\t\t\tout[other] = deepCopy(value[other]) -- no names at all",
+      "\t\tif true then\n\t\t\tout[other] = deepCopy(value[other]) -- no names at all"),
+     "card.owned the review's mixed case {Desk, Laptop, future, [5]}: the saved section is accepted by the store"),
+    ("card.owned keeps the hole (the names after it stay under their own keys)", ("\t\t\ttable.insert(out, name)\n\t\telse\n\t\t\tnote(ctx, \"a bad name in \"", "\t\t\tout[index] = name\n\t\telse\n\t\t\tnote(ctx, \"a bad name in \""),
+     "card.owned a hole {Desk, nil, Laptop}: the saved section is accepted by the store"),
+    ("card.owned keeps a string key next to the names", ("\t\tif #out == 0 and typeof(other) == \"string\" then\n\t\t\tout[other]", "\t\tif typeof(other) == \"string\" then\n\t\t\tout[other]"),
+     "card.owned a string key {Desk, Laptop, future}: the saved section is accepted by the store"),
+    ("card.owned keeps keys 0, negative and fractional next to the names", ("\t\tif #out == 0 and typeof(other) == \"string\" then\n\t\t\tout[other]", "\t\tif #out == 0 and typeof(other) == \"string\" or typeof(other) == \"number\" then\n\t\t\tout[other]"),
+     "card.owned keys 0 and -3 next to a name: the saved section is accepted by the store"),
+    ("card.owned loses the names after a gap", ("\tfor _, index in ipairs(indexes) do\n\t\tlocal name = value[index]\n\t\tif typeof(name) == \"string\" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then", "\tfor position, index in ipairs(indexes) do\n\t\tif index ~= position then break end\n\t\tlocal name = value[index]\n\t\tif typeof(name) == \"string\" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then"),
+     "card.owned an entry after a gap {Desk, Laptop, [5]}: not locked, a plain list with the right names in key order"),
+    ("card.owned reads the names in the wrong order of keys", ("\ttable.sort(indexes)\n\treturn indexes, others", "\ttable.sort(indexes, function(a, b) return a > b end)\n\treturn indexes, others"),
+     "card.owned names stored under keys out of order: not locked, a plain list with the right names in key order"),
+    ("card.owned drops a repeated name", ("\t\t\ttable.insert(out, name)\n\t\telse\n\t\t\tnote(ctx, \"a bad name in \"", "\t\t\tif not table.find(out, name) then table.insert(out, name) end\n\t\telse\n\t\t\tnote(ctx, \"a bad name in \""),
+     "card.owned duplicates: not locked, a plain list with the right names in key order"),
+    ("card.owned has no limit of 200", ("#name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then\n\t\t\ttable.insert(out, name)", "#name <= CompanyConfig.MaxIdLength then\n\t\t\ttable.insert(out, name)"),
+     "card.owned: names past 200 are skipped, with a warning for each"),
+    ("card.owned closes a gap without a warning", ("\t\t\tnote(ctx, where .. \" had a gap in its list: what comes after it moved up\")\n", ""),
+     "card.owned a hole {Desk, nil, Laptop}: 1 warning(s)"),
+    ("card.owned drops a key without a warning", ("\t\t\tnote(ctx, \"a key in \" .. where .. \".\" .. key .. \" that can't sit next to a list, dropped (\" .. tostring(other) .. \")\")\n\t\tend\n\tend\n\treturn out\nend\n\n-- The card", "\t\tend\n\tend\n\treturn out\nend\n\n-- The card"),
+     "card.owned a string key {Desk, Laptop, future}: 1 warning(s)"),
+    ("card.owned keeps a map of records as the same table (not a copy)", ("out[other] = deepCopy(value[other])", "out[other] = value[other]"),
+     "card.owned: a map of a newer version's records is kept whole, as a copy, with no warning"),
+    ("card.owned drops the string keys of a map with no names", ("\t\tif #out == 0 and typeof(other) == \"string\" then\n\t\t\tout[other]", "\t\tif false then\n\t\t\tout[other]"),
+     "card.owned: a table with only string keys (no names) is kept as it is, with no warning"),
     ("card.owned skips a bad name without a warning", ("\t\t\tnote(ctx, \"a bad name in \" .. where .. \".\" .. key)\n", ""),
-     "card.owned: a value inside the list that is not a name is skipped, with a warning"),
+     "card.owned a value that is not a name (a number): 1 warning(s)"),
     ("card.owned keeps 400 names (the limit is 200)", ("local MAX_OWNED_NAMES = 200", "local MAX_OWNED_NAMES = 400"),
      "card.owned: names past 200 are skipped, with a warning for each"),
+    # the placed items
+    ("objects keep the hole (an entry after a gap stays under its own key)", ("\t\t\ttable.insert(out, object)\n", "\t\t\tout[index] = object\n"),
+     "objects with a gap in its indexes: not locked, a plain list of the right entries in key order"),
+    ("objects with a string key lock the section again", ("\tnoteGap(ctx, where .. \".\" .. key, indexes)\n\tlocal seen = {}\n", "\tif #others > 0 then ctx.foreign = ctx.foreign or (where .. \".\" .. key .. \" is not a plain list\") end\n\tnoteGap(ctx, where .. \".\" .. key, indexes)\n\tlocal seen = {}\n"),
+     "objects with a string key next to the list: not locked, a plain list of the right entries in key order"),
+    ("objects drop a key without a warning", ("\t\tnote(ctx, \"a key in \" .. where .. \".\" .. key .. \" that can't sit next to a list, dropped (\" .. tostring(other) .. \")\")\n\tend\n\treturn out\nend\n\n-- The inventory", "\tend\n\treturn out\nend\n\n-- The inventory"),
+     "objects with a string key next to the list: 1 warning(s)"),
+    ("objects that is a map no longer keeps the section as it was", ("\t\tif onlyStrings then\n\t\t\tctx.foreign = ctx.foreign or (where .. \".\" .. key .. \" is not a plain list\")\n\t\t\treturn out\n\t\tend", "\t\tif onlyStrings then\n\t\t\treturn out\n\t\tend"),
+     "objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
+    ("objects close a gap without a warning", ("\t\t\tnote(ctx, where .. \" had a gap in its list: what comes after it moved up\")\n", ""),
+     "objects with a gap in its indexes: 1 warning(s)"),
+    # a key that isn't a string next to named fields
+    ("a number key next to named fields is kept (written back mixed)", ("\t\tif typeof(key) ~= \"string\" then\n\t\t\tnote(ctx, \"a key in \" .. where .. \" that isn't a name, dropped (\" .. tostring(key) .. \")\")\n\t\telseif not known[key] then", "\t\tif false then\n\t\t\tnote(ctx, \"a key in \" .. where .. \" that isn't a name, dropped (\" .. tostring(key) .. \")\")\n\t\telseif not known[key] then"),
+     "a number key (99, 0, -3, 1.5) next to the named fields of active is dropped, with one warning each"),
+    ("a number key next to named fields is dropped without a warning", ("\t\t\tnote(ctx, \"a key in \" .. where .. \" that isn't a name, dropped (\" .. tostring(key) .. \")\")\n\t\telseif not known[key] then", "\t\telseif not known[key] then"),
+     "a number key (99, 0, -3, 1.5) next to the named fields of a card is dropped, with one warning each"),
+    # the faithful store itself: a fake that accepts what the real one refuses would hide every bug above
+    ("the faithful store accepts a list plus a string key", ("@fake", "\t\tif strings > 0 and numbers > 0 then\n", "\t\tif false then\n"),
+     "the faithful store refuses a list plus a string key"),
+    ("the faithful store accepts a list with a hole", ("@fake", "\t\t\t\tif value[i] == nil then\n", "\t\t\t\tif false then\n"),
+     "the faithful store refuses a list with a hole"),
+    ("the faithful store only looks at the top table (not recursively)", ("@fake", "\t\t\tstorableProblems(inner, path .. \"[\" .. tostring(key) .. \"]\", problems, open)\n", "\t\t\tlocal _ = nil\n"),
+     "the faithful store refuses a mixed table three levels down"),
+    ("the faithful store accepts a function", ("@fake", "\telseif kind ~= \"string\" and kind ~= \"number\" and kind ~= \"boolean\" then\n", "\telseif false then\n"),
+     "the faithful store refuses a function value"),
     ("a stamp above 3 is clamped without a warning", ("\t\t\tnote(ctx, \"a \" .. where .. \".stamp out of range (\" .. tostring(stamp) .. \")\")\n", ""),
      "sectors: a stamp of 7 is clamped to 3 with a warning"),
     ("a number key in a map is skipped without a warning", ("\t\tif typeof(name) ~= \"string\" then\n\t\t\tnote(ctx, \"a bad key in \" .. where .. \".\" .. key)\n\t\telseif isKnown(name) then", "\t\tif typeof(name) ~= \"string\" then\n\t\telseif isKnown(name) then"),
@@ -5524,6 +5817,12 @@ MODULES.CompanyServer = buildCompanyServer()
 local UPGRADES = __UPGRADES__
 local CC = MODULES.CompanyConfig
 local CompanyServer = MODULES.CompanyServer
+__STORABLE__
+-- Every section CompanyConfig.toSave hands out (through CompanyServer.serialize and the IPO's payload step) is screened: it must be storable
+do
+	local realToSave = CC.toSave
+	CC.toSave = function(state, studio) return screenStorable(realToSave(state, studio)) end
+end
 
 local function deepEqual(a, b)
 	if typeof(a) ~= typeof(b) then return false end
@@ -5888,6 +6187,7 @@ end
 
 check("no request ever threw (a handler that throws is a bug, not a refusal)", #THROWS == 0, THROWS[1])
 
+check("every section the server saved in these tests is storable (" .. STORE_SCREEN.seen .. " screened)", STORE_SCREEN.bad == 0 and STORE_SCREEN.seen > 20, STORE_SCREEN.first)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -5994,7 +6294,7 @@ FAT_POKEDEX_LUA = r"""{
 			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
 			card = {
 				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
-				owned = { "Desk", "Laptop", "Gaming PC", future = "GamingRig", [5] = "Neon Logo" },
+				owned = { "Desk", "Laptop", "Gaming PC" },
 				decor = { Chair = 1, Future = 3 },
 				objects = { { id = "Desk", x = -23, z = -40, r = 0, futureObj = "card object" }, { id = "Laptop", x = -25.5, z = -30, r = 3 } },
 				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
@@ -6018,6 +6318,7 @@ COMMITIPO_TESTS = r"""-- Tests for TycoonCore.commitIpo and save(): the code bet
 -- CompanyConfig, SectorConfig and IpoConfig, fake modules for the rest and a fake DataStore (customize PR 1 review fix).
 -- An IPO is refused while the pokedex is locked and nothing changes; an IPO by this version saves run = the new count.
 local print_real = print
+__STORABLE__
 local passed, failed = 0, 0
 local function check(name, cond, extra)
 	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
@@ -6094,10 +6395,18 @@ local DailyServer = { serialize = function() return { streak = 4 } end }
 local TaskServer = { serialize = function() return nil end }
 __KNOWNSECTIONS__
 local playerData = {}
-local STORE = { calls = 0, last = nil, fail = false }
+local STORE = { calls = 0, last = nil, fail = false, refused = 0, problem = nil, sent = 0 }
+-- The faithful DataStore: like the real SetAsync it throws on a payload that mixes list and string keys or has holes, anywhere in it
 local fakeStore = { SetAsync = function(_, key, payload)
 	STORE.calls += 1
 	if STORE.fail then error("DataStore is down") end
+	local problems = storableProblems(payload)
+	if #problems > 0 then
+		STORE.refused += 1
+		STORE.problem = STORE.problem or problems[1]
+		error("105: Cannot store " .. problems[1] .. " in DataStore")
+	end
+	STORE.sent += 1
 	STORE.key, STORE.last = key, deepCopy(payload)
 end }
 local function getStore() return fakeStore end
@@ -6143,7 +6452,7 @@ end
 -- 1. An IPO is refused while the pokedex is locked --------------------------------------------------
 local V2 = { v = 2, run = 0, active = { sector = "Software", future = { 1, 2 } }, other = { a = 1 } }
 local UNKNOWN_SECTOR = { v = 1, run = 0, active = { sector = "Energy" } }
-local NOT_A_LIST = { v = 1, run = 0, active = { sector = "Software", objects = { { id = "Desk", x = -23, z = -40, r = 0 }, extra = 5 } } }
+local NOT_A_LIST = { v = 1, run = 0, active = { sector = "Software", objects = { first = { id = "Desk", x = -23, z = -40, r = 0 } } } } -- a map: a shape this version doesn't know, and one the store can hold
 local BROKEN = { v = 1, run = 0, active = "whatever", precious = { x = 1 } }
 local LOCKED = {
 	{ "a newer version's section", function() return newPlayer(deepCopy(V2)) end, V2 },
@@ -6229,6 +6538,26 @@ do
 	check("an IPO with unknown fields in the pokedex: and its unknown fields are unchanged in memory", deepEqual(CompanyServer.serialize(data), expected))
 end
 
+-- 4. A card.owned the store would refuse (the review's case): tidied on load, so the save works ----------------------------------
+do
+	local FAT = __FATPOKEDEX__
+	local mixed = deepCopy(FAT)
+	mixed.sectors.Software.card.owned = { "Desk", "Laptop", future = "GamingRig", [5] = "Neon Logo" }
+	local player, data = newPlayer(mixed, FAT.run)
+	check("a mixed card.owned: the join warns about it and does not lock the section", not CompanyServer.isLocked(data) and anyWarning("card.owned"))
+	resetFakes()
+	local ok = save(player)
+	check("a mixed card.owned: save() succeeds against the faithful store (nothing refused)", ok == true and STORE.calls == 1 and STORE.refused == 0, STORE.problem)
+	local owned = (STORE.last or { pokedex = { sectors = { Software = { card = { owned = {} } } } } }).pokedex.sectors.Software.card.owned
+	check("a mixed card.owned: what is written is the plain list Desk, Laptop, Neon Logo", #owned == 3 and owned[1] == "Desk" and owned[2] == "Laptop" and owned[3] == "Neon Logo" and next(owned, 3) == nil)
+	local holey = deepCopy(FAT)
+	holey.sectors.Software.card.owned = { "Desk", nil, "Laptop" }
+	holey.active.objects[4] = { id = "Whiteboard", x = 1, z = 1, r = 0 }
+	player, data = newPlayer(holey, FAT.run)
+	resetFakes()
+	check("a holey card.owned and a holey objects list: save() succeeds against the faithful store", save(player) == true and STORE.refused == 0, STORE.problem)
+end
+check("every payload save() sent to the faithful store was accepted (" .. STORE.sent .. " sent, " .. STORE.refused .. " refused)", STORE.refused == 0 and STORE.sent > 0, STORE.problem)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -6278,6 +6607,10 @@ COMMITIPO_MUTATIONS = [
      "an IPO with an unlocked pokedex: the saved payload carries run = the new count"),
     ("commitIpo moves the run in memory even when the save failed", ("TycoonCore.lua", "\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo", "\tCompanyServer.onIpo(data, newIpo.count)\n\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo"),
      "an IPO whose save failed: Cash, upgrades, ipo.count and the section in memory (run 1) are unchanged"),
+    ("card.owned keeps a string key next to its names (the old KEEP rule): save() is refused by the faithful store", ("CompanyConfig.lua", "\t\tif #out == 0 and typeof(other) == \"string\" then\n\t\t\tout[other]", "\t\tif typeof(other) == \"string\" then\n\t\t\tout[other]"),
+     "a mixed card.owned: save() succeeds against the faithful store (nothing refused)"),
+    ("placed items keep a hole (an entry after a gap stays under its own key): save() is refused by the faithful store", ("CompanyConfig.lua", "\t\t\ttable.insert(out, object)\n", "\t\t\tout[index] = object\n"),
+     "a holey card.owned and a holey objects list: save() succeeds against the faithful store"),
     ("commitIpo no longer resets the Cash in the live game", ("TycoonCore.lua", "\tif resets.Cash then\n\t\tdata.cash.Value = IpoConfig.StartingCash\n\tend\n", ""),
      "an IPO with an unlocked pokedex: the live game followed (Cash, upgrades, items, eggs, income)"),
 ]
@@ -6916,6 +7249,7 @@ def sim_perk_costs_lua():
 
 
 def run_luau(luau, source):
+    source = source.replace("__STORABLE__", STORABLE_LUA)
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
         path = f.name
