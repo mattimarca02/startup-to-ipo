@@ -760,7 +760,7 @@ function WorldVisuals.zones(art, site)
 	add("lounge door", "VipDoor", { lg.x - lg.door / 2, lg.x + lg.door / 2, 0, lg.top, lg.front, lg.front + L.doorClear }, true)
 	local d = L.dropClear
 	add("drop spot", "VipDrop", { lg.drop.x - d, lg.drop.x + d, 0, 8, lg.drop.z - d, lg.drop.z + d }, true)
-	local sp, sm = site.spawn, L.spawnMargin
+	local sp, sm = site.spawn, math.max(L.spawnMargin, 0) -- never smaller than the pad itself
 	add("spawn pad", "SpawnLocation", { sp.x - sp.halfX - sm, sp.x + sp.halfX + sm, 0, sp.top + 12, sp.z - sp.halfZ - sm, sp.z + sp.halfZ + sm }, false)
 	if site.preview then
 		add("preview rooms", "PREVIEW_STAGES", site.preview, false)

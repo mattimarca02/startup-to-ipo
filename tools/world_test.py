@@ -1030,7 +1030,37 @@ MUTANTS_A = [
     ("a sunk ball measured as a whole sphere", V, "local a = cy >= 0 and r or math.sqrt(math.max(r * r - cy * cy, 0))", "local a = r", "aboveGround: a sunk ball"),
     ("two paths join without touching", V, "return ox >= need and oz >= need", "return true", "negative connected"),
 ]
-MUTANTS_B = []
+# Group B: WorldArt.lua. The data breaks a rule, or a copied number or a Studio fact stops matching the real thing.
+MUTANTS_B = [
+    ("a palette color removed", A, "\tKerb = { 246, 246, 240 },\n", "", "default site: check palette"),
+    ("a part names a color the palette lacks", A, 'upright("LampPole", 7, 0.5, 0, 0.6, 0, "LampPost", "Metal"),',
+     'upright("LampPole", 7, 0.5, 0, 0.6, 0, "LampPoles", "Metal"),', "default site: check palette"),
+    ("the arch says something else", A, 'value = "BUILD YOUR STARTUP", font', 'value = "FREE CASH", font', "default site: check data"),
+    ("a bench seat in Neon", A, '{ 0, 1.15, 0 }, "Bench", "WoodPlanks"),', '{ 0, 1.15, 0 }, "Bench", "Neon"),', "default site: check flags"),
+    ("a Wedge for a bush", A, 'P("BushBig", "Ball",', 'P("BushBig", "Wedge",', "default site: check flags"),
+    ("a squashed bush ball", A, 'P("BushBig", "Ball", { 3, 3, 3 }', 'P("BushBig", "Ball", { 3, 2, 3 }', "default site: check data"),
+    ("every upright cylinder tilted 10 degrees", A, "color, material, { rot = { 0, 0, 90 } })", "color, material, { rot = { 0, 0, 80 } })",
+     "default site: check flags"),
+    ("a parts budget too small for the world", A, "Budget = { parts = 600, lights = 8 }", "Budget = { parts = 200, lights = 8 }", "default site: check budget"),
+    ("a lights budget too small for the world", A, "Budget = { parts = 600, lights = 8 }", "Budget = { parts = 600, lights = 5 }", "default site: check budget"),
+    ("the plaza reaching over the spawn pad", A, "spawnMargin = 1,", "spawnMargin = -1,", "default site: check keepouts"),
+    ("paths on the lawn layer", A, "pathTop = 0.16,", "pathTop = 0.04,", "default site: check data"),
+    ("lawns on the Baseplate's top plane", A, "groundTop = 0.04,", "groundTop = 0.001,", "default site: check zfighting"),
+    ("the front street into the rooms' yard", A, "frontGap = 1,", "frontGap = -2,", "default site: check keepouts"),
+    ("the lounge loop hugging the lounge (the hedge in its walls)", A, "armGap = 4.5,", "armGap = 1,", "default site: check keepouts"),
+    ("a hill next to the plots", A, "x = 180, z = 600, height = 20, radius = 120", "x = 180, z = 250, height = 20, radius = 120", "default site: check keepouts"),
+    ("the measured SpawnLocation written down wrong", A, "spawn = { position = { -1, 0.5, -1 }", "spawn = { position = { -1, 0.5, 30 }",
+     "Studio facts: they match the SpawnLocation"),
+    ("plotZ copied wrong from TycoonCore", A, "plotZ = 150,", "plotZ = 160,", "copied: plotY and plotZ"),
+    ("the lounge copied wrong from ShopServer", A, "center = { 0, 0.5, 70 }", "center = { 0, 0.5, 64 }", "copied: lounge center"),
+    ("the plots' reach smaller than the rooms", A, "plotReach = { side = 36,", "plotReach = { side = 30,", "rooms: every room fits"),
+    ("a text on a face that doesn't exist", A, 'color = "SignText", faces = { "Front", "Back" } } }),', 'color = "SignText", faces = { "Inside" } } }),',
+     "default site: check data"),
+    ("the arch's beam lifted off its posts", A, '{ 0, 9.9, 0 }, "ArchBeam"', '{ 0, 12, 0 }, "ArchBeam"', "default site: check floating"),
+    ("the drop spot copied wrong from ShopServer", A, "dropOut = 6 }", "dropOut = 3 }", "copied: lounge sign height and the drop spot"),
+    ("walks too narrow to walk through", A, "walkWidth = 6,", "walkWidth = 3,", "default site: check connected"),
+    ("the garage sign board copied wrong", A, "signBoard = { 8, 2.6, 0.3 },", "signBoard = { 6, 2.6, 0.3 },", "copied: the signs' board and post"),
+]
 
 
 def run_mutants(luau, mutants, group):
