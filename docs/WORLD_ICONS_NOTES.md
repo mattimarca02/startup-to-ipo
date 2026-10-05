@@ -27,7 +27,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 3.1 `IconArt.lua` (pure data, style sheet): 38 recipes (6 Office props copied from PlotArt, 3 eggs, 12 creatures, 12 shop items, 5 HUD buttons)
 - [x] 3.2 `IconVisuals.lua` (builders, pure size, framing and lazy-creation functions, the cache with the cap of 8, taps, named checks)
 - [x] 3.3 `tools/icon_test.py`: 154 checks (97 in Luau, 57 source checks)
-- [ ] 3.4 Icon mutants, group A
+- [x] 3.4 Icon mutants, group A: 17 runs on `IconVisuals.lua` (style, light, framing, the cap plan, reuse, plates, taps, weakened checks), 17 caught by their named checks
 - [ ] 3.5 Icon mutants, group B (20 or more in all)
 - [ ] 3.6 Icon preview block (`StarterGui.PREVIEW_ICONS`) in `docs/STUDIO_SYNC_WORLD.md`, run in the fake by the test
 

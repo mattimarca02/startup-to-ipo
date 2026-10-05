@@ -483,6 +483,8 @@ section("icons", function()
 		end
 		return true
 	end)())
+	check("icons: a diamond is a square turned 45 degrees (the crown's points)", BYID["Shop/VIP"]:FindFirstChild("PointLeft", true).Rotation == 45
+		and BYID["Shop/VIP"]:FindFirstChild("OutlinePointLeft", true).Rotation == 45)
 	check("icons: outline widths are 2 px at 56 and 3 px at 72", IconVisuals.outlinePx(IconArt, 56) == 2 and IconVisuals.outlinePx(IconArt, 72) == 3)
 	local ring = coin:FindFirstChild("CoinRim", true):FindFirstChild("Line")
 	check("icons: a ring's line scales with the icon (4 grid units = 2.24 px at 56)", math.abs(ring.Thickness - 2.24) < 1e-9, ring.Thickness)
@@ -570,8 +572,12 @@ section("lazy", function()
 	check("lazy: every card on screen shows its icon (or its plate while it waits)", missing == nil, missing)
 	check("lazy: scrolling starts no animation", SPAWNS == 0)
 	local built = cache.built
+	IconVisuals.show(cache, window(#slots - 3, 4))
+	check("lazy: showing the same cards again builds nothing", cache.built == built, cache.built - built)
+	IconVisuals.show(cache, window(22, 4)) -- four shop cards (drawn icons) seen long ago
+	check("lazy: drawn icons that left the screen are reused when they come back (not built again)", cache.built == built, cache.built - built)
 	IconVisuals.show(cache, window(1, 4))
-	check("lazy: back at the top, the drawn icons are reused, not built again", cache.built - built <= 4)
+	check("lazy: back at the top, only the 3D icons dropped for room are built again (4 here)", cache.built - built == 4, cache.built - built)
 	-- Ten 3D cards on screen at once (more than the cap): 8 get their model, 2 wait with their plate
 	local big = {}
 	for i, key in ipairs(EXPECT.Creatures) do
@@ -825,7 +831,42 @@ def apply_mutation(text, old, new, what):
     return text.replace(old, new, 1)
 
 
-MUTANTS_A = []
+V = "IconVisuals.lua"
+A = "IconArt.lua"
+# Group A: IconVisuals.lua. The builder breaks the style sheet or a rule (the icons' named check must fail), or a check
+# or a pure function is weakened (the test that proves it must fail).
+MUTANTS_A = [
+    ("outlines drawn in each shape's own color", V, 'local color = outlineCopy and colorOf(art, "outline") or colorOf(art, shape.color)',
+     "local color = colorOf(art, shape.color)", "icons at 56 px: check style"),
+    ("gradients lit from the bottom-right", V, 'Name = "Shade", Rotation = art.Style.lightRotation,', 'Name = "Shade", Rotation = art.Style.lightRotation + 180,',
+     "icons at 56 px: check style"),
+    ("the 3D light fixed in the world instead of the picture", V, "view.LightDirection = camera.CFrame:VectorToWorldSpace(Vector3.new(d[1], d[2], d[3]).Unit)",
+     "view.LightDirection = Vector3.new(d[1], d[2], d[3]).Unit", "icons at 56 px: check style"),
+    ("the framing forgets the padding and the lens (models stick out)", V, "local t = math.tan(math.rad(fov) / 2) * (1 - padding)",
+     "local t = math.tan(math.rad(fov) / 2) * 1.6", "icons at 56 px: check framing"),
+    ("the camera at half the distance it needs", V, "need = math.max(need, nearest + 0.1)", "need = math.max(need, nearest + 0.1) * 0.5",
+     "icons at 56 px: check framing"),
+    ("the plan ignores the cap", V, "if count < cap then", "if true then", "lazy: scrolling the whole list, never more than 8"),
+    ("the plan drops icons still on screen", V, "if not wantedSet[key] then\n\t\t\ttable.insert(spare", "if true then\n\t\t\ttable.insert(spare",
+     "plan: when every live icon is on screen, the new one waits"),
+    ("drawn icons rebuilt every time they are shown", V, "if not entry then\n\t\t\t\tentry = { what = what, icon",
+     "if true then\n\t\t\t\tentry = { what = what, icon", "lazy: drawn icons that left the screen are reused"),
+    ("card icons built without their plate", V, "\tif recipe.plate then\n\t\tdrawPlate(root, art, recipe.plate, size)\n\tend\n", "",
+     "icons at 56 px: check style"),
+    ("the spin ends a little turned", V, "\t\t\tmodel:PivotTo(start)\n", "\t\t\tmodel:PivotTo(start * CFrame.Angles(0, 1, 0))\n",
+     "tap: after the spin the model is back exactly where it was"),
+    ("every icon starts moving when it is built", V, "\troot.Parent = parent\n\treturn root\nend", "\ttask.spawn(function() end)\n\troot.Parent = parent\n\treturn root\nend",
+     "icons: building all 76 made no animation start"),
+    ("the assets check lets images through", V, "\tImageLabel = true, ImageButton = true,", "\tImageLabel = false, ImageButton = true,",
+     "negative assets: an image in an icon is caught"),
+    ("the texts check lets any word through", V, "elseif not allowed[d.Text] then", "elseif false then", "negative texts: a word"),
+    ("the grid box forgets the outline", V, "\tif shape.outline then\n\t\tgrow = art.Style.outline\n\tend\n", "", "shapeBox: an outlined rect"),
+    ("diamonds left square", V, 'Rotation = (shape.kind == "diamond" and 45 or 0) + (shape.rotation or 0),', "Rotation = shape.rotation or 0,",
+     "icons: a diamond is a square turned 45 degrees"),
+    ("the budget check never counts parts", V, "if parts > style.maxParts then", "if false then", "negative budget: 37 parts"),
+    ("the coverage check never misses an icon", V, 'problem(group .. " " .. tostring(key) .. " has no icon")', "",
+     "negative coverage: a shop item without a recipe"),
+]
 MUTANTS_B = []
 
 
