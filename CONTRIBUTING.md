@@ -110,7 +110,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
-| tools/economy_sim.py | (repo only) | free | | |
+| tools/economy_sim.py | (repo only) | @mattimarca02 (Claude Code) | sims-two-sectors-clean | 2026-10-05 |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
@@ -128,4 +128,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
-| docs/SIMS_RESULTS.md | (repo only) | free | | |
+| docs/SIMS_RESULTS.md | (repo only) | @mattimarca02 (Claude Code) | sims-two-sectors-clean | 2026-10-05 |
