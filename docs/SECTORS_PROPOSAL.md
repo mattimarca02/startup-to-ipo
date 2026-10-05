@@ -8,7 +8,7 @@ Design only (2026-10-05, branch `design-customize`). No script, config or test c
 
 The engine and the package are CUST section 2's split (the engine never names a sector; a test fails on a sector key in engine code): `Sector<Name>` (data and hooks) and `SectorArt<Name>` (art in PlotArt's `P(...)` format, PlotArt.lua:9-23). Sectors add to the engine: task rows with a `sector` field (`TaskConfig.Rows`; the task engine, budget, flags and engaged clock stay shared), display names and jobs for creatures and eggs (keys unchanged), and `CompanyAction("Sector", verb, token, choice)`, routed to the active sector's `verbs`.
 
-**Hooks** (new; Software implements none and gets the defaults): `extra(data, seconds)` (income on the income loop's one `addEarnings` call, TycoonCore.lua:866; 0 for Software; CUST 2), `onTask(data, rowKey, grade)` (a graded task's project effect), `action` (a sector verb), `load`/`serialize` (the sector's own state `pokedex.active.sx`, kept whole by the engine, CUST 1.2), `card(sx)` (a summary on the Pokedex card).
+**Hooks** (new; Software implements none and gets the defaults): `extra(data, seconds)` (income on the income loop's one `addEarnings` call, TycoonCore.lua:866; 0 for Software; CUST 2), `onTask(data, rowKey, grade)` (a graded task's project effect), `action` (a sector verb), `awayBase(data)` (the away bank's base, 2.4; default base Income), `load`/`serialize` (the sector's own state `pokedex.active.sx`, kept whole by the engine, CUST 1.2), `card(sx)` (a summary on the Pokedex card).
 
 **Upgrades are safe across versions.** `owned` keeps any string name, known or not (TycoonCore.lua:316-322, 770-772, written back at 417-419), and `totalIncome` only counts names in `UPGRADES` (:137-145). So a rollback to Software-only code keeps a Gaming company's upgrades (they earn nothing there until forward again). Upgrade keys are unique across sectors and never reused (CLAUDE.md "Config-driven items").
 
@@ -16,19 +16,19 @@ The engine and the package are CUST section 2's split (the engine never names a 
 
 **1.1 Fantasy.** A software company that sells a product businesses pay for every month. Customers call, ask for features and report bugs; you keep them happy and the subscriptions keep coming. It is today's game.
 
-**1.2 Core loop, minute to minute.** *Reactive and steady.* Work comes to you: a call rings every 20-40 s and must be answered within 8 s (TaskConfig.lua:49-58), a chain raises the reward, a missed call breaks it. Between calls the player buys the next upgrade in SHOP > Office, hatches eggs and arranges the office. From Seed on, more task kinds wake up (BIBLE:285-296): Bug Storm (tap the bugs), Ship a Feature (press in the green zone), Interview (pick 1 of 3); later support tickets, demos, Board requests (Series C+D) and the Roadshow (Pre-IPO).
+**1.2 Core loop, minute to minute.** *Reactive and steady.* Work comes to you: a call rings every 20-40 s and must be answered within 8 s (TaskConfig.lua:49-58), a chain raises the reward, a missed call breaks it. Between calls: buy the next upgrade, hatch eggs, arrange the office. From Seed on, more task kinds wake up (BIBLE:285-296): Bug Storm (tap the bugs), Ship a Feature (press in the green zone), Interview (pick 1 of 3); later support tickets, demos, Board requests (Series C+D) and the Roadshow (Pre-IPO).
 
-**1.3 Income model.** Steady Income: upgrades plus employees (TycoonCore.lua:137-152), paid every second by the income loop (:865-866). `extra` = 0. Every number is LONG_GAME's (LG section 3). Software is the **reference**: the other sector is fitted to it (S3).
+**1.3 Income model.** Steady Income: upgrades plus employees (TycoonCore.lua:137-152), paid every second by the income loop (:865-866). `extra` = 0. Every number is LONG_GAME's (LG section 3). Software is the **reference** (S3).
 
 **1.4 Tasks and the engaged rule.** The task engine as built (TaskServer, PR 1, Studio only until LONG_GAME PR 2: TaskConfig.lua:24-30). Engaged = a graded answer in the last 180 s (TaskConfig.lua:84-88; TaskServer.lua:147-148). Engaged seconds per day are counted on the daily calendar's day (08:00 UTC, `DailyConfig.dayNumber`, DailyConfig.lua:76-78; TaskServer.lua:152-156, 238). LONG_GAME PR 2 makes valuation count 100% for the first 3 engaged hours per day and 5% after (LG:23), inside `IpoServer.addEarnings(kind)`, for every sector alike.
 
 **1.5 Buildings and objects.** BIBLE sections 1-6 are Software's package: The Garage, Co-working Loft, Downtown Floor, Campus Wing, Tech Campus (Glass Tower and Global HQ become shell upgrades of building 5, CUST 7); today's six upgrades (TycoonCore.lua:65-72) keep their keys; 36 new upgrades, 18 desks, 22 decor (BIBLE:304-361).
 
-**1.6 Employees.** Today's names and jobs (CreatureConfig.lua:53-104): Coffee Capybara (Intern), Coding Cat (Junior Engineer), Pixel Pigeon (Junior Designer), Hustle Hamster (Sales Rep), Bug Beetle (QA Tester), Memo Mole (Office Manager), Sales Shark (Sales Lead), Pitch Parrot (Marketing Lead), Server Sloth (Senior Engineer), Ledger Llama (CFO), Unicorn CEO (CEO), Venture Dragon (Lead Investor); plus LONG_GAME's six (LG:60). Task roles from `TaskConfig.CreatureRoles` (TaskConfig.lua:114-120).
+**1.6 Employees.** Today's names and jobs (CreatureConfig.lua:53-104, Coffee Capybara the Intern to Venture Dragon the Lead Investor), plus LONG_GAME's six (LG:60); task roles from `TaskConfig.CreatureRoles` (TaskConfig.lua:114-120).
 
-**1.7 Shop.** Shared: the six passes and the products (ShopConfig.lua:35-155). Software's own: BIBLE's five decor bundles (Loft, Downtown, Campus, Tower, Golden Bell), fixed contents, `id = 0`. Night Guard is shared (an engine item, LG:95).
+**1.7 Shop.** Shared: passes and products (ShopConfig.lua:35-155). Software's own: BIBLE's five decor bundles (Loft, Downtown, Campus, Tower, Golden Bell), fixed contents, `id = 0`. Night Guard is shared (an engine item, LG:95).
 
-**1.8 Anti-exploit.** Today's engine rules, unchanged: the reward budget (TaskConfig.lua:78-83), minimum reaction and flags (:88, 97), rate limits (:100), engaged only from graded answers (no movement, no client report). Software adds no new rule.
+**1.8 Anti-exploit.** Today's engine rules, unchanged: reward budget (TaskConfig.lua:78-83), minimum reaction and flags (:88, 97), rate limits (:100), engaged only from graded answers.
 
 ## 2. Gaming studio
 
@@ -36,12 +36,12 @@ The engine and the package are CUST section 2's split (the engine never names a 
 
 **2.2 Core loop: the title cycle.** *Proactive and planned.* One title is **in development** and at most one is **live** at a time (the next one is built while the last one earns).
 1. **Pitch** (a sector verb): pick a **genre** and a **scope**; the server offers 3 names from a fixed list (no free text). Today's **trending genre** comes from a published schedule (section 2.3) and is locked into the title at Pitch.
-2. **Build:** a progress bar fills with **work** from the founder and the team while engaged. Two quality meters fill too: **Fun** (Art Sprint tasks, art and marketing roles) and **Polish** (Bug Squash tasks, engineers).
+2. **Build:** a progress bar fills with **work** from the founder and the team while engaged. Two quality meters fill too: **Fun** (Art Sprint tasks, art and marketing roles) and **Polish** (Bug Squash tasks, engineers). **Sprint Review** (a sector verb) every **12 engaged minutes (G1)** of build: pick the next sprint's focus (Fun, Polish or Speed; each card shows its exact split, same total). Ignored, the last focus stays. Target: no wait over 15 minutes in Series C+D and Pre-IPO, where a Flagship build runs 90 minutes (S10).
 3. **Playtest** (once per title, at 50% work): three feedback cards worked out from the meters ("Too short", "Too buggy", "Not fun yet"); the player picks one fix, whose exact effect is shown on the card.
 4. **Content complete** (100% work): **Launch** unlocks. Every extra engaged minute now adds Polish, with diminishing returns. The **Launch Forecast** shows the exact score and tier at all times.
 5. **Trailer** (once, optional, before Launch): a 3-beat timing task; each good beat adds wishlists.
 6. **Launch:** the tier (section 2.3) sets the live game's revenue peak. **Review** messages start arriving.
-7. **Live:** revenue falls as players move on (a half-life in engaged minutes). A **Live Update** (Content Patch, Seasonal Event or Balance Patch) lifts it back; each later update lifts less. When the next title launches, the old one joins the **back catalog** (a small, capped, permanent share). A Hit adds **fans** to its genre: the next title in that genre (a sequel) starts with more wishlists.
+7. **Live:** revenue falls as players move on (a half-life in engaged minutes). A **Live Update** (Content Patch, Seasonal Event or Balance Patch) lifts it back; each later update lifts less. When the next title launches, the old one joins the **back catalog** (a small, capped, permanent share). A Hit adds **fans** to its genre: a sequel starts with more wishlists.
 
 **2.3 The launch outcome: deterministic (D9).** Nothing in a launch is random, and nothing about it is sold for Robux.
 - **Quality** Q (0-100) = 50 x min(1, Fun / FunTarget) + 50 x min(1, Polish / PolishTarget), plus the Playtest fix. Targets come from the scope (data).
@@ -54,7 +54,8 @@ The engine and the package are CUST section 2's split (the engine never names a 
 **2.4 Income model.** Two parts, one `addEarnings` call.
 - **Base Income** from upgrades and employees, as in Software, through `totalIncome` (TycoonCore.lua:137-145). Gaming's **upgrade Incomes are lower** (fitted by S3; hires keep CreatureConfig's Income).
 - **Live revenue:** `SectorGaming.extra(data, 1)` = base Income (TycoonCore.lua:677-680: no passes, with the IPO multiplier) x `peak[tier] x scope x decay(t)` plus the back catalog, **capped at 0.8 x base Income (placeholder)**. `t` = engaged seconds since launch.
-- **Where it is paid:** the income loop (TycoonCore.lua:865-866) adds the extra (times the Cash pass multiplier, `ShopServer.getCashMultiplier`, :151) to the Cash it already adds and to the argument of the **same** `addEarnings` call. **No new call site:** the TycoonCore count in daily_test.py:4537 stays 3. Never in offline pay (:819-827), the away bank (LG:24), `baseIncome`, or the Income stat (task rewards are seconds of `data.income.Value`, TaskServer.lua:253-254, so the extra never inflates them); the HUD shows it on its own ("Live game +$X/s").
+- **Where it is paid:** the income loop (TycoonCore.lua:865-866) adds the extra (times the Cash pass multiplier, `ShopServer.getCashMultiplier`, :151) to the Cash it already adds and to the argument of the **same** `addEarnings` call. **No new call site:** the TycoonCore count in daily_test.py:4537 stays 3. Never in offline pay (:819-827), the away bank (LG:24), `baseIncome`, or the Income stat (task rewards are seconds of `data.income.Value`, TaskServer.lua:253-254, so the extra never inflates them); the HUD shows it apart ("Live game +$X/s").
+- **Away bank on the Software-equivalent base.** The bank pays 10% of base Income (LG:24); Gaming's base is lower, so check-in players were 24-32% off parity (S3, robust). It reads `awayBase(data)`: base Income with each owned Gaming upgrade counted at the Income of the Software upgrade in the same rung and slot (data, `awayIncome`, G1), hires as they are. Computed where LONG_GAME PR 2 pays the bank (LG:94, entry 2): no new call site.
 - **Engaged only:** the extra is 0 unless `TaskServer.isEngaged(player)` (TaskServer.lua:674); `t` and the decay advance only then. An away player loses no revenue and gains none: the live game waits.
 - **Anti-spam bound:** a title's total live revenue is capped at `k x` its build's engaged seconds x base Income (data), so many tiny launches never beat one finished game.
 
@@ -80,34 +81,20 @@ All **placeholders** (S3, S9). Updates restore the curve to 70 / 60 / 50% of the
 | PublisherRequest | choose | Series C+D, every 45 min | never | fixed 60 s of Income (like the Board request, LG:79) |
 | Expo | choose / timing / targets | Pre-IPO, once per run | never | like the Roadshow (BIBLE:296) |
 
-- **Engaged** comes only from graded answers (TaskConfig.lua:84-88). **Pitch, Launch and Live Update are sector verbs, not tasks: they never make a player engaged** (a macro spamming them gets nothing).
+- **Engaged** comes only from graded answers (TaskConfig.lua:84-88). **Pitch, Sprint Review, Launch and Live Update are sector verbs, not tasks: they never make a player engaged** (a macro spamming them gets nothing).
 - **Team work:** routine rows can be taken by the team (`auto`, `AutoCap` 0.75, TaskConfig.lua:63-65); team-taken rows give points at the `teamPays` share, and only while the player is engaged.
 - **3 h/day:** Cash and project points are paid in full all day, as in Software; only the valuation is weighted (LG:23, inside `addEarnings(kind)`), so both sectors lose the same after 3 h. The live curve, the build and the engaged counter (`tasks.engagedDay`/`engagedSeconds`, TaskServer.lua:152-156) do not reset at 08:00 UTC; only the trending genre changes there.
 
 **2.6 Buildings and objects** (example names; the full list is a Gaming content bible, section 5).
 - **Buildings (5, CUST defaults):** Bedroom Studio (Garage), Indie Loft (Seed), Studio Floor (Series A), Game Campus (Series B), Mega Studio (Series C+D to IPO-ready), with Motion-Capture Stage and Global Publishing HQ as shell upgrades (the 7 LONG_GAME offices on 5 footprints, CUST 7).
-- **Upgrades, Garage:** Gaming PC (free, first), Drawing Tablet, Headset Mic, Dev Kit, Test Couch, Pixel Sign. Later examples: Dual Monitors, Sound Booth, Build Server (Seed); Mo-cap Suit, Render Farm, QA Lab (A); Esports Stage, Localization Desk (B); Motion-Capture Hall, Global Servers (C+D, levels I and II); Expo Booth, Golden Joystick Award (Pre-IPO).
+- **Upgrades, Garage:** Gaming PC (free, first), Drawing Tablet, Headset Mic, Dev Kit, Test Couch, Pixel Sign. Later: Sound Booth (Seed), Render Farm (A), Esports Stage (B), Global Servers (C+D, levels I and II), Golden Joystick Award (Pre-IPO).
 - **Desks:** Folding-Table Desk, Gamer-Chair Desk, Crunch Pod, Dev-Kit Bench. **Decor:** Retro Console Shelf, Mascot Cutout, Cartridge Wall, Arcade Cabinet, Pixel Plant.
 - **Genres (6):** Puzzle and Platformer (Garage), Racing (Seed), Sports (Series A), Adventure (Series B), Online World (Series C+D). **Game names:** a fixed list per genre ("Block Drop Deluxe", "Jumpy Jelly", "Turbo Turtle Rally", "Goal Goats", "Dungeon Dumplings", "Sky Island Online").
 - **Events (fixed outcome, like BIBLE:8):** Build Won't Compile (✔ Read the error), Launch-Day Queue (✔ Add servers), Save-File Bug (✔ Roll back the patch).
 
 **2.7 Employees: same bodies, new names and jobs.** Keys, rarities, Income and looks are CreatureConfig's (CreatureConfig.lua:53-104); only the display name and job come from `SectorGaming`, so an employee that follows the player shows the active company's name. Task roles stay `TaskConfig.CreatureRoles` (TaskConfig.lua:114-120).
 
-| Key | Gaming name | Job |
-|---|---|---|
-| CoffeeCapybara | Crunch Capybara | Studio Intern (snacks for the team) |
-| CodingCat | Gameplay Cat | Gameplay Programmer |
-| PixelPigeon | Pixel Pigeon | Pixel Artist |
-| HustleHamster | Hype Hamster | Community Manager |
-| BugBeetle | Bug Beetle | QA Tester |
-| MemoMole | Map Mole | Level Designer |
-| SalesShark | Streamer Shark | Partnerships Lead |
-| PitchParrot | Trailer Parrot | Trailer Director |
-| ServerSloth | Server Sloth | Online Engineer |
-| LedgerLlama | Producer Llama | Producer |
-| UnicornCEO | Unicorn Director | Studio Director |
-| VentureDragon | Publisher Dragon | Publisher |
-| LONG_GAME's six (LG:60) | Live-Ops Gecko, Ratings Cobra, Engine Panda, Console Condor, Franchise Badger, Board Bison | Live Ops, Age Ratings, Engine, Platform Deals, Franchise, Board |
+CoffeeCapybara: Crunch Capybara, Studio Intern (snacks for the team); CodingCat: Gameplay Cat, Gameplay Programmer; PixelPigeon: Pixel Pigeon, Pixel Artist; HustleHamster: Hype Hamster, Community Manager; BugBeetle: Bug Beetle, QA Tester; MemoMole: Map Mole, Level Designer; SalesShark: Streamer Shark, Partnerships Lead; PitchParrot: Trailer Parrot, Trailer Director; ServerSloth: Server Sloth, Online Engineer; LedgerLlama: Producer Llama, Producer; UnicornCEO: Unicorn Director, Studio Director; VentureDragon: Publisher Dragon, Publisher; LONG_GAME's six (LG:60): Live-Ops Gecko, Ratings Cobra, Engine Panda, Console Condor, Franchise Badger, Board Bison (Live Ops, Age Ratings, Engine, Platform Deals, Franchise, Board).
 
 **Eggs** keep their keys and odds; Gaming display names: Jam, Indie, Studio, Franchise, AAA and Legend Egg.
 
@@ -120,7 +107,7 @@ All **placeholders** (S3, S9). Updates restore the curve to 70 / 60 / 50% of the
 **2.9 Anti-exploit** (server checks; each a test).
 - **Requests:** `CompanyAction("Sector", verb, token, choice)`: `verb` from the sector's list, `token` = the title number (stale = refused, like `ipoNumber`, IpoServer.lua:179), `choice` a whole number in range; `data.ready`; 2 verbs per second; no yield between check and write. No time, score or amount is ever read.
 - **Launch-spam:** the per-title revenue cap (2.4) and minimum work per scope. *Test:* ten Jam launches pay no more than one finished Jam of the same build time.
-- **Update-spam:** one per 10 engaged minutes, each lifts less; *test:* the 4th update in a row lifts less than the 3rd.
+- **Update-spam:** one per 10 engaged minutes, each lifts less; *test:* the 4th update in a row lifts less than the 3rd. **Sprint Review:** one per 12 engaged minutes, token = title and sprint number; *test:* a stale one is refused, every focus pays the same total.
 - **Idle and macros:** extra, decay and build need engaged; verbs never set engaged. *Test:* 1 h of verbs with no graded task: extra 0, work 0.
 - **Task-bots:** the reward budget (TaskConfig.lua:78-83) also caps project points per engaged minute; flagged answers (:97) give no points.
 - **Trend fishing:** nothing to fish: the schedule is public and locked at Pitch; cancelling a title loses its work.
@@ -165,19 +152,19 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 
 **`design-tutorial`, docs/TUTORIAL_PROPOSAL.md** (`TUT:` = its line):
 - **Section 2, steps 1 and 4 (TUT:25, 28):** "own your sector's first upgrade" (Software Desk, Gaming Gaming PC) and "own 2 of this company's upgrades" (CUST 7).
-- **Step 5 (TUT:29):** "one task graded by `TaskServer`", any row of the active sector; the card text comes from the sector (Software: a call; Gaming: Bug Squash or Art Sprint, since Reviews arrive only while a title is live). Still skipped while tasks are off (TUT:43).
-- **New Gaming-only steps after step 5:** "Pitch your first game" (done when `sx.n` ≥ 1) and "Launch it" (done when a title is shipped), server-graded, no reward (a launch pays). `TutorialConfig` steps gain a `sector` field (none = every sector).
+- **Step 5 (TUT:29):** "one task graded by `TaskServer`", any row of the active sector; the card text comes from the sector (Software: a call; Gaming: Bug Squash or Art Sprint, as Reviews need a live title). Still skipped while tasks are off (TUT:43).
+- **New Gaming-only steps after step 5:** "Pitch your first game" (done when `sx.n` ≥ 1) and "Launch it" (done when a title is shipped), server-graded, no reward. `TutorialConfig` steps gain a `sector` field (none = every sector).
 - **Step 8 (TUT:32):** no sector change (FUND 8). **Step 9 (TUT:33, notes :37-42):** resets add Gaming's title in development and live title.
 - **Section 6 (TUT:106):** module order unchanged by sectors.
 
 **`content-bible`, docs/CONTENT_BIBLE.md** (`BIBLE:`):
 - **Sections 1-6 (BIBLE:12-241)** are Software's package; the industry skins (:247) go (CUST 7).
-- **"The first 5 hours" (:253-283), "What each rung adds" (:285-296), "Approve or rename" (:298-361)** are Software's. Gaming needs all three in a new section 7 (or its own file): **about 214 names (estimate)**: 7 offices, 42 upgrades, 18 desks, 18 creature names and jobs, 6 egg names, 22 decor, 5 bundles, 9 titles, 12 events, 8 publisher requests, 6 groups of 8 review lines, 6 genres, 36 game names, 7 task names, 12 company names; game names checked against real games.
+- **"The first 5 hours" (:253-283), "What each rung adds" (:285-296), "Approve or rename" (:298-361)** are Software's. Gaming needs all three (a section 7 or its own file): **about 214 names (estimate)**: 7 offices, 42 upgrades, 18 desks, 18 creature names and jobs, 6 egg names, 22 decor, 5 bundles, 9 titles, 12 events, 8 publisher requests, 6 groups of 8 review lines, 6 genres, 36 game names, 7 task names, 12 company names; game names checked against real games.
 - **Choice 1 (:365):** creature keys stay locked; Gaming names are display strings, not a save migration. **Choice 9 (:373)** is replaced by sectors.
 
 **docs/LONG_GAME_PROPOSAL.md** (`LG:`):
 - **Section 1, pacing (LG:6-18):** the hours are Software's fit; Gaming's typical policy must match within ±5%, the others spread 54-74 h at IPO 1 (2.10, estimates).
-- **Section 2, clock (LG:20-34):** unchanged; Gaming's extra is engaged only and outside the away bank (LG:24).
+- **Section 2, clock (LG:20-34):** Gaming's extra is engaged only and outside the away bank (LG:24); the bank reads `awayBase` (2.4).
 - **Section 3, ladder (LG:36-60):** one ladder for both; Gaming has its own item names and lower upgrade Incomes (S3); the hire list is shared.
 - **Section 4, content (LG:62-82):** the moments table per sector (S10); "an industry skin per IPO" (LG:82) becomes the sector picker.
 - **Section 5, Shares (LG:84-88):** Shares per IPO are sector-neutral. Stamps with two sectors: 6 grades (Bronze, Gold, Platinum each), Collection at most 6,000 + IPO count, bonus at most +5% (CUST 5.2); T (CUST 1.5) is the same 57 / 51.5 / 52 h while parity holds.
