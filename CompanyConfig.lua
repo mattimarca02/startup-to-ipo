@@ -317,8 +317,11 @@ function CompanyConfig.checkStore(env, active, id)
 	elseif not (env.decor and (env.decor[key] or 0) >= copy) then
 		return false, "You don't own " .. id
 	end
-	if active.stored[id] then
+	local held = active.stored[id]
+	if held == true then
 		return false, id .. " is already in storage"
+	elseif held ~= nil and held ~= false then
+		return false, "You can't store that yet" -- a record of a newer version sits there: never overwritten
 	end
 	local count = 0
 	for _ in pairs(active.stored) do
@@ -335,12 +338,12 @@ function CompanyConfig.applyPlace(active, id, x, z, r)
 	for _, object in ipairs(active.objects) do
 		if object.id == id then
 			object.x, object.z, object.r = x, z, r
-			active.stored[id] = nil
+			if active.stored[id] == true then active.stored[id] = nil end
 			return
 		end
 	end
 	table.insert(active.objects, { id = id, x = x, z = z, r = r })
-	active.stored[id] = nil
+	if active.stored[id] == true then active.stored[id] = nil end
 end
 
 -- The state change of an allowed Store: the item leaves the office and goes to the inventory
@@ -362,14 +365,16 @@ function CompanyConfig.inventory(active, decor)
 		placed[object.id] = true
 	end
 	local list = {}
-	for id in pairs(active.stored) do
-		table.insert(list, id)
+	for id, held in pairs(active.stored) do
+		if held == true then
+			table.insert(list, id)
+		end
 	end
 	for key, copies in pairs(decor or {}) do
 		if CompanyConfig.Furniture[key] and isWhole(copies, 1, CompanyConfig.MaxCopies) then
 			for n = 1, copies do
 				local id = key .. "#" .. n
-				if not placed[id] and not active.stored[id] then
+				if not placed[id] and active.stored[id] ~= true then
 					table.insert(list, id)
 				end
 			end
@@ -553,7 +558,9 @@ end
 
 -- The placed items: { id, x, z, r } with unknown fields kept. An entry that isn't well formed, repeats an id
 -- or is over the limit is skipped. An id this version has no item for is KEPT (a newer version's item): it just
--- has no footprint here.
+-- has no footprint here. A table that is not a plain list (a key that isn't 1, 2, 3 ... in a row) is a shape this
+-- version doesn't know: it sets ctx.foreign and CompanyConfig.load keeps the whole section as it was (locked), because
+-- a list can't carry such keys back to the save.
 local function readObjects(ctx, where, raw, key)
 	local value = raw[key]
 	local out = {}
@@ -586,10 +593,18 @@ local function readObjects(ctx, where, raw, key)
 			table.insert(out, object)
 		end
 	end
+	for index in pairs(value) do
+		if not (isWhole(index, 1) and index <= #value) then
+			ctx.foreign = ctx.foreign or (where .. "." .. key .. " is not a plain list")
+			break
+		end
+	end
 	return out
 end
 
--- The inventory: { [id] = true }. Ids are kept even when this version has no item for them.
+-- The inventory: { [id] = true }. Ids are kept even when this version has no item for them, and so is a value other
+-- than true (a newer version's record for that id, or false): only `== true` means "in storage" here, and the other
+-- values are written back as they were. They count toward the limit like any other entry.
 local function readStored(ctx, where, raw, key)
 	local value = raw[key]
 	local out = {}
@@ -602,7 +617,7 @@ local function readStored(ctx, where, raw, key)
 	end
 	local ids = {}
 	for id, flag in pairs(value) do
-		if typeof(id) == "string" and #id >= 1 and #id <= CompanyConfig.MaxIdLength and flag == true then
+		if typeof(id) == "string" and #id >= 1 and #id <= CompanyConfig.MaxIdLength then
 			table.insert(ids, id)
 		else
 			note(ctx, "a bad entry in " .. where .. "." .. key .. " (" .. tostring(id) .. ")")
@@ -611,7 +626,7 @@ local function readStored(ctx, where, raw, key)
 	table.sort(ids) -- if there are too many, the same ones are kept every time
 	for i, id in ipairs(ids) do
 		if i <= CompanyConfig.MaxStored then
-			out[id] = true
+			out[id] = deepCopy(value[id])
 		else
 			note(ctx, "too many items in " .. where .. "." .. key .. ": " .. id)
 		end
@@ -925,6 +940,7 @@ function CompanyConfig.load(saved, ctx)
 		note(ctx, "a bad v (" .. tostring(version) .. ")")
 	end
 
+	ctx.foreign = nil
 	local section = { v = CompanyConfig.Version }
 	section.run = readNumber(ctx, "pokedex", saved, "run", count, 0, nil, true)
 	local active, unknownSector = readActive(ctx, saved)
@@ -950,6 +966,12 @@ function CompanyConfig.load(saved, ctx)
 	if unknownSector then
 		-- A sector from a newer version: the company is kept as it is and nothing may change it
 		ctx.warn("Keeping " .. ctx.who .. "'s pokedex as it is: its sector " .. tostring(active.sector) .. " isn't known to this version")
+		state.locked, state.raw = true, saved
+		return state
+	end
+	if ctx.foreign then
+		-- A shape this version can't carry back (for example a list of placed items with other keys): kept as it is
+		ctx.warn("Keeping " .. ctx.who .. "'s pokedex as it is: its " .. ctx.foreign .. " (a shape this version doesn't know)")
 		state.locked, state.raw = true, saved
 		return state
 	end

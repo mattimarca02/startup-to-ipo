@@ -4711,12 +4711,36 @@ check("objects: at most 40 are kept (ids this version has no item for are kept t
 sec, warned = loaded(function(d)
 	d.active.stored = { Desk = true, Laptop = false, [1] = true, [string.rep("a", 40)] = true, Server = "yes" }
 end)
-check("stored: only string ids of 1 to 39 characters with the value true stay", count(sec.active.stored) == 1 and sec.active.stored.Desk == true and warned == 4, warned)
+check("stored: only string ids of 1 to 39 characters stay, and a value other than true is kept as it was",
+	count(sec.active.stored) == 3 and sec.active.stored.Desk == true and sec.active.stored.Laptop == false and sec.active.stored.Server == "yes" and warned == 2, warned)
+do
+	local record = { tier = 2, tags = { "a", "b" } }
+	sec, warned = loaded(function(d) d.active.stored = { Desk = true, Rack = record } end)
+	check("stored: a record of a newer version (a table) is kept whole, as a copy, with no warning",
+		deepEqual(sec.active.stored.Rack, { tier = 2, tags = { "a", "b" } }) and sec.active.stored.Rack ~= record and sec.active.stored.Desk == true and warned == 0, warned)
+	check("stored: ... and it is written back as it was", deepEqual(save({ section = sec, locked = false }, false).active.stored, { Desk = true, Rack = { tier = 2, tags = { "a", "b" } } }))
+end
 sec, warned = loaded(function(d)
 	d.active.stored = {}
 	for i = 1, 45 do d.active.stored["Item" .. string.format("%02d", i)] = true end
 end)
 check("stored: at most 40 are kept, always the same ones", count(sec.active.stored) == 40 and sec.active.stored.Item40 == true and sec.active.stored.Item41 == nil and warned == 5, warned)
+-- A list of placed items with keys that aren't 1, 2, 3 ... can't be carried back in a list: the whole section is kept as it was
+do
+	local function keptAsItWas(name, change)
+		local saved = good()
+		change(saved)
+		local copy = deepCopy(saved)
+		local st = load(saved, 2)
+		check(name .. ": the section is kept as it was (locked, written back unchanged)", st.locked == true and deepEqual(CC.toSave(st, true), copy) and CC.toSave(st, true) == saved and anyWarning("not a plain list"))
+	end
+	keptAsItWas("objects with a key that isn't a list index", function(d) d.active.objects.future = { id = "Gaming PC", x = 0, z = 0, r = 0 } end)
+	keptAsItWas("objects that is a dictionary", function(d) d.active.objects = { first = { id = "Desk", x = 0, z = 0, r = 0 } } end)
+	keptAsItWas("objects with a gap in its indexes", function(d) d.active.objects[5] = { id = "Desk", x = 1, z = 1, r = 0 } end)
+	keptAsItWas("a card's objects with a key that isn't a list index", function(d) d.sectors.Software.card.objects.future = 1 end)
+	local clean = load(good(), 2)
+	check("objects: a plain list (even with bad entries) does not lock the section", clean.locked == false and #clean.section.active.objects == 2)
+end
 sec, warned = loaded(function(d) d.active.told = { Seed = false, SeriesA = true } end)
 check("told: a known stage that isn't true is skipped", sec.active.told.Seed == nil and sec.active.told.SeriesA == true and warned == 1)
 sec, warned = loaded(function(d) d.active.sx = 5 end)
@@ -5010,7 +5034,8 @@ check("store: an upgrade you own can be stored", CC.checkStore(env(), active, "L
 check("store: one you don't own can't", CC.checkStore(none, active, "Laptop") == false)
 check("store: an unknown id, a bad id and a bad type can't", CC.checkStore(env(), active, "Gaming PC") == false and CC.checkStore(env(), active, 5) == false and CC.checkStore(env(), active, string.rep("a", 40)) == false and CC.checkStore(env(), active, nil) == false)
 active.stored.Laptop = true
-check("store: one already in storage can't be stored again", CC.checkStore(env(), active, "Laptop") == false)
+local alreadyOk, alreadyWhy = CC.checkStore(env(), active, "Laptop")
+check("store: one already in storage can't be stored again", alreadyOk == false and string.find(tostring(alreadyWhy), "already in storage", 1, true) ~= nil, alreadyWhy)
 active.stored = {}
 for i = 1, 40 do active.stored["Crate#" .. i] = true end
 check("store: a full storage (40) refuses another", CC.checkStore(owns, active, "Chair#1") == false)
@@ -5024,6 +5049,22 @@ check("applyStore: the item leaves the office and goes to storage", #active.obje
 CC.applyStore(active, "Whiteboard")
 check("applyStore: an upgrade that stood at its default slot goes to storage too", active.stored.Whiteboard == true and #active.objects == 1)
 check("inventory: the stored ids, sorted", deepEqual(CC.inventory(active, {}), { "Desk", "Whiteboard" }))
+check("inventory: only ids stored as true are listed (a false or a newer version's record is not)",
+	deepEqual(CC.inventory({ objects = {}, stored = { Desk = true, Laptop = false, Rack = { tier = 2 }, Whiteboard = "yes" } }, {}), { "Desk" }))
+do
+	local held = { objects = {}, stored = { Desk = { tier = 2 }, Laptop = false } }
+	local ok1 = CC.checkStore(env(), held, "Desk")
+	local ok2 = CC.checkStore(env(), held, "Laptop")
+	check("store: a record of a newer version on that id is never overwritten, a stored false is", ok1 == false and ok2 == true)
+	CC.applyStore(held, "Laptop")
+	check("store: ... and storing over a false makes it true", held.stored.Laptop == true and deepEqual(held.stored.Desk, { tier = 2 }))
+	local placing = { objects = { { id = "Desk", x = -23, z = -40, r = 0 } }, stored = { Desk = { tier = 2 }, Laptop = { tier = 3 }, Whiteboard = true } }
+	CC.applyPlace(placing, "Desk", -22, -40, 0)
+	CC.applyPlace(placing, "Laptop", -25, -30, 0)
+	CC.applyPlace(placing, "Whiteboard", -25, -20, 0)
+	check("place: a kept record on the id survives a Place (only a true leaves the inventory)",
+		deepEqual(placing.stored.Desk, { tier = 2 }) and deepEqual(placing.stored.Laptop, { tier = 3 }) and placing.stored.Whiteboard == nil)
+end
 check("inventory: owned furniture with no entry joins it (placed ones don't)", (function()
 	local list = CC.inventory({ objects = { { id = "Chair#1", x = 0, z = 0, r = 0 } }, stored = { Desk = true } }, { Chair = 2 })
 	return deepEqual(list, { "Chair#2", "Desk" })
@@ -5253,11 +5294,35 @@ COMPANY_MUTATIONS = [
      "limit: a 41st item is refused"),
     ("the rotation (turns ignored)", ("local angle = math.rad(45 * r)", "local angle = math.rad(0 * r)"),
      "placement: turned 90 degrees, the sides swap"),
-    ("the storage check (already stored)", ("if active.stored[id] then\n\t\treturn false, id .. \" is already in storage\"", "if false then\n\t\treturn false, id .. \" is already in storage\""),
+    ("the storage check (already stored)", ("if held == true then\n\t\treturn false, id .. \" is already in storage\"", "if false then\n\t\treturn false, id .. \" is already in storage\""),
      "store: one already in storage can't be stored again"),
+    ("a stored value other than true is dropped on load", ("if typeof(id) == \"string\" and #id >= 1 and #id <= CompanyConfig.MaxIdLength then\n\t\t\ttable.insert(ids, id)", "if typeof(id) == \"string\" and #id >= 1 and #id <= CompanyConfig.MaxIdLength and flag == true then\n\t\t\ttable.insert(ids, id)"),
+     "stored: only string ids of 1 to 39 characters stay, and a value other than true is kept as it was"),
+    ("a kept stored value is rewritten as true", ("out[id] = deepCopy(value[id])", "out[id] = true"),
+     "stored: only string ids of 1 to 39 characters stay, and a value other than true is kept as it was"),
+    ("a kept stored record is shared with the save (not copied)", ("out[id] = deepCopy(value[id])", "out[id] = value[id]"),
+     "stored: a record of a newer version (a table) is kept whole, as a copy, with no warning"),
+    ("a record of a newer version can be overwritten by Store", ("elseif held ~= nil and held ~= false then", "elseif false then"),
+     "store: a record of a newer version on that id is never overwritten, a stored false is"),
+    ("a stored false blocks Store", ("if held == true then\n\t\treturn false, id .. \" is already in storage\"", "if held ~= nil then\n\t\treturn false, id .. \" is already in storage\""),
+     "store: a record of a newer version on that id is never overwritten, a stored false is"),
+    ("the inventory lists every stored entry", ("if held == true then\n\t\t\ttable.insert(list, id)", "if true then\n\t\t\ttable.insert(list, id)"),
+     "inventory: only ids stored as true are listed (a false or a newer version's record is not)"),
+    ("Place deletes a kept record (moving an item)", ("object.x, object.z, object.r = x, z, r\n\t\t\tif active.stored[id] == true then", "object.x, object.z, object.r = x, z, r\n\t\t\tif active.stored[id] ~= nil then"),
+     "place: a kept record on the id survives a Place (only a true leaves the inventory)"),
+    ("Place deletes a kept record (a new item)", ("table.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] == true then", "table.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] ~= nil then"),
+     "place: a kept record on the id survives a Place (only a true leaves the inventory)"),
+    ("the list-shape check on placed items", ("if not (isWhole(index, 1) and index <= #value) then", "if false then"),
+     "objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
+    ("the list-shape check (a card's objects are not looked at)", ("if not (isWhole(index, 1) and index <= #value) then", "if not (isWhole(index, 1) and index <= #value) and where ~= \"sectors.Software.card\" then"),
+     "a card's objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
+    ("the lock on a shape this version doesn't know", ("if ctx.foreign then\n\t\t-- A shape", "if false then\n\t\t-- A shape"),
+     "objects that is a dictionary: the section is kept as it was (locked, written back unchanged)"),
+    ("the lock on a foreign shape (written back as a copy)", ("ctx.warn(\"Keeping \" .. ctx.who .. \"'s pokedex as it is: its \" .. ctx.foreign .. \" (a shape this version doesn't know)\")\n\t\tstate.locked, state.raw = true, saved", "ctx.warn(\"Keeping \" .. ctx.who .. \"'s pokedex as it is: its \" .. ctx.foreign .. \" (a shape this version doesn't know)\")\n\t\tstate.locked, state.raw = true, deepCopy(saved)"),
+     "objects with a key that isn't a list index: the section is kept as it was (locked, written back unchanged)"),
     ("the storage limit", ("if count >= CompanyConfig.MaxStored then", "if false then"),
      "store: a full storage (40) refuses another"),
-    ("placing doesn't take the item out of storage", ("\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tactive.stored[id] = nil\n", "\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n"),
+    ("placing doesn't take the item out of storage", ("\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tif active.stored[id] == true then active.stored[id] = nil end\n", "\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n"),
      "applyPlace: a stored item leaves the storage and stands in the office"),
     ("placing twice makes two entries", ("\t\tif object.id == id then\n\t\t\tobject.x, object.z, object.r = x, z, r", "\t\tif false then\n\t\t\tobject.x, object.z, object.r = x, z, r"),
      "applyPlace: placing again moves it (never two entries)"),
@@ -5569,6 +5634,14 @@ check("sync: shows what was placed and stored", #info.objects == 2 and #info.sto
 tap(p, "Store", "Laptop")
 ok, msg, info = tap(p, "Sync")
 check("sync: lists the inventory sorted", #info.stored == 1 and info.stored[1] == "Laptop" and #info.objects == 1)
+do
+	local sp, sd = newPlayer({ v = 1, run = 0, active = { sector = "Software", stored = { Laptop = true, Desk = { tier = 2 }, Whiteboard = false } } }, { count = 0 })
+	local _, _, sinfo = tap(sp, "Sync")
+	check("sync: only what is stored as true is listed (a newer version's record and a false are kept, not shown)", sinfo ~= nil and #sinfo.stored == 1 and sinfo.stored[1] == "Laptop"
+		and deepEqual(CompanyServer.serialize(sd).active.stored.Desk, { tier = 2 }) and CompanyServer.serialize(sd).active.stored.Whiteboard == false)
+	local sok = tap(sp, "Store", "Desk")
+	check("store: over a record of a newer version is refused and the record stays", sok == false and deepEqual(CompanyServer.serialize(sd).active.stored.Desk, { tier = 2 }))
+end
 check("place, store and sync never saved by themselves (autosave does it)", SAVES == 0)
 local objectsCopy = info.objects
 local changedAnswer = pcall(function() objectsCopy[1].x = 99 end)
@@ -5724,6 +5797,8 @@ SERVER_MUTATIONS = [
      "v 2: locked"),
     ("the sync answer (live tables)", ("table.insert(list, { id = object.id, x = object.x, z = object.z, r = object.r })", "list = objects"),
      "sync: the answer is a copy (changing it never changes the company)"),
+    ("the sync answer lists every stored entry", ("if held == true then\n\t\t\ttable.insert(stored, id)", "if true then\n\t\t\ttable.insert(stored, id)"),
+     "sync: only what is stored as true is listed (a newer version's record and a false are kept, not shown)"),
     ("the zones (never measured from the anchor)", ("zonesCache = CompanyConfig.anchorZones(raw, floorDepth)", "zonesCache = raw"),
      "sync: the reserved zones come with it (so the client can preview)"),
     ("the run in the IPO's save (never written)", ("\tpayload.pokedex.run = count\n", "\tpayload.pokedex.run = payload.pokedex.run\n"),

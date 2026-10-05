@@ -50,8 +50,10 @@ local function snapshot(state)
 	local active = state.section.active
 	local size = CompanyConfig.Buildings.Sizes[active.building]
 	local stored = {}
-	for id in pairs(active.stored) do
-		table.insert(stored, id)
+	for id, held in pairs(active.stored) do
+		if held == true then
+			table.insert(stored, id)
+		end
 	end
 	table.sort(stored)
 	return {
