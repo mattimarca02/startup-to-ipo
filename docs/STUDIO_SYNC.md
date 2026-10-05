@@ -152,14 +152,14 @@ end
 
 ## (d) Addendum: customize PR 1 (branch `customize-pr1`, the `pokedex` save section)
 
-Nothing here touches Roblox: it is the list of what the Mac has to do. **Three new scripts and one changed one.** Every other script is identical to `main`. The `TycoonCore` row here **replaces** the `TycoonCore` row in (a) (that one is the visuals-garage version, already on `main`). Last code commit: see `git log` of `customize-pr1`; only docs changed after the scripts below.
+Nothing here touches Roblox: it is the list of what the Mac has to do. **Three new scripts and one changed one.** Every other script is identical to `main`. The `TycoonCore` row here **replaces** the `TycoonCore` row in (a) (that one is the visuals-garage version, already on `main`). The hashes below are of the scripts after the review fix (branch `customize-pr1-fix`, pushed to `customize-pr1`): `CompanyConfig`, `CompanyServer` and `TycoonCore` changed since the first version of this addendum, `SectorConfig` did not. The steps are the same (same scripts, same order, nothing new to create); only docs and tests changed after the scripts below.
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
 | `SectorConfig` | ModuleScript, **ReplicatedStorage** | **new** | `60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b` | 3194 |
-| `CompanyConfig` | ModuleScript, **ReplicatedStorage** | **new** | `d778c46a1a6ae523ec676e8b87a3fc65ec396c6d52149567b69a6957966b05f4` | 36346 |
-| `CompanyServer` | ModuleScript, **ServerScriptService** | **new** | `ff69bab5a2a6899cd08ad265bf6ef37cbac42f8e4ed5760df634be2e85825325` | 6990 |
-| `TycoonCore` | Script, ServerScriptService | changed | `c40fe0fe81df122856a48d57d3485344130392f7beecc8f4d4b88543366c56dc` | 35827 |
+| `CompanyConfig` | ModuleScript, **ReplicatedStorage** | **new** | `4023ed1f84b70b944f4cbcf7a876a6091b670ee4960a266cd90992972822060e` | 37642 |
+| `CompanyServer` | ModuleScript, **ServerScriptService** | **new** | `826dfba8fac00bee190fd62265024be1c1e4c43d41f4c84d5cf462e20a500a10` | 8268 |
+| `TycoonCore` | Script, ServerScriptService | changed | `df8ba5b9ae489417b7f3d17aa48b6f411353453178cf78e09bce51c19054c7f1` | 36069 |
 
 The Studio MCP cannot create scripts inside services, so the three new ones are made **by hand** (names are exact, capital letters included).
 
@@ -178,9 +178,9 @@ local SSS = game:GetService("ServerScriptService")
 local RS = game:GetService("ReplicatedStorage")
 local WANT = {
 	SectorConfig = { RS, "60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b", 3194 },
-	CompanyConfig = { RS, "d778c46a1a6ae523ec676e8b87a3fc65ec396c6d52149567b69a6957966b05f4", 36346 },
-	CompanyServer = { SSS, "ff69bab5a2a6899cd08ad265bf6ef37cbac42f8e4ed5760df634be2e85825325", 6990 },
-	TycoonCore = { SSS, "c40fe0fe81df122856a48d57d3485344130392f7beecc8f4d4b88543366c56dc", 35827 },
+	CompanyConfig = { RS, "4023ed1f84b70b944f4cbcf7a876a6091b670ee4960a266cd90992972822060e", 37642 },
+	CompanyServer = { SSS, "826dfba8fac00bee190fd62265024be1c1e4c43d41f4c84d5cf462e20a500a10", 8268 },
+	TycoonCore = { SSS, "df8ba5b9ae489417b7f3d17aa48b6f411353453178cf78e09bce51c19054c7f1", 36069 },
 }
 for name, want in pairs(WANT) do
 	local script = want[1]:FindFirstChild(name)
