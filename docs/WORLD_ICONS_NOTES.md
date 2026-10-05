@@ -38,7 +38,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 
 **Phase 4: Studio sync and wrap-up**
 - [x] 4.1 `docs/STUDIO_SYNC_WORLD.md` complete (files, SHA-256 and sizes, steps, hash block, previews, delete list, what to look at); `tools/world_test.py` runs its hash block on the real files
-- [ ] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks)
+- [x] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks, what was not tested, results)
 - [ ] 4.3 Release every claim in `CONTRIBUTING.md`
 
 ## Studio facts (measured by the owner, not in the repo)
@@ -68,16 +68,72 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 - **Icons: eggs are drawn shapes, not 3D.** A Ball part is always round, so a 3D egg would need a SpecialMesh; an outlined, shaded oval reads as an egg at 56 px and costs no ViewportFrame.
 - **Icons: the clover recipe's key.** Icons are looked up by the ShopConfig key, so the clover's recipe sits under that product's key, written as a Lua field name (never a quoted string); the recipe is named `Clover`, which is what an instance or a preview caption shows. No quoted string in the four new Lua files contains the words random, chance, odds or luck (`tools/world_test.py` and `tools/icon_test.py` check every string literal).
 - **Icons: the HUD magnet is white.** The first render of the icon sheet showed the red magnet almost vanishing on the red-orange POACH button (232, 72, 62 on 225, 95, 60). It is now white with soft gray tips, like the other HUD icons; the preview block and the sheet show every HUD icon on its real button color so this can be judged.
-- **Icons: the cap is 8 live ViewportFrames.** The shop shows at most 3 to 4 cards at once on a phone (242 px of page in landscape, 350 in portrait, section 3.10 of the shop proposal), plus one 72 px hero icon and the details sheet: 6 at most on screen. 8 leaves room to scroll back and forth without rebuilding, and a ViewportFrame off screen is kept out of the game tree (it draws nothing). Past the cap a card shows its plate until a model can be dropped (least recently seen first). Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default).
+- **Icons: the cap is 8 live ViewportFrames.** The shop shows at most 3 to 4 cards at once on a phone (242 px of page in landscape, 350 in portrait, section 3.10 of the shop proposal), plus one 72 px hero icon and the details sheet: 6 at most on screen. 8 leaves room to scroll back and forth without rebuilding, and a ViewportFrame off screen is kept out of the game tree (it draws nothing). Past the cap a card shows its plate until a model can be dropped (least recently seen first).
+- **World: decor streaming.** Each decor item is its own Model with `ModelStreamingMode = Atomic`, set inside `pcall` (if a Roblox version refuses it from a script, the item keeps the default). The two streets are cut into one piece per plot block, so the piece under a player is never centered far away.
+- **World: the real objects in the tests.** `tools/world_test.py` doesn't trust copies for the plots and the lounge: it runs `plotCenter` and `makePart` cut from `TycoonCore.lua` and `buildVipLounge` cut from `ShopServer.lua` in its fake, builds the world next to them, and checks that none of them moved and that no world part goes into them. The copied numbers in `WorldArt.Site` are also compared one by one with the scripts.
+- **World: "never solid beyond the Baseplate"** is read as: no world part is solid at all (CanCollide, CanTouch, CanQuery off), and every footprint stays inside the Baseplate's 2048 x 2048. The far hills are big spheres sunk into the ground (their caps are 18 to 26 studs high); the hidden part goes far below the Baseplate, which is harmless because nothing is solid and nobody sees under the ground.
+- **World: lights.** Six PointLights (the plaza's four lamps and the forecourt's two), whatever the plot count; every other lamp only has a glowing Neon lantern. Budget 8.
+- **World and icons: only plain Parts.** A WedgePart, MeshPart or Union fails the checks (a Wedge's slope can't be checked without Studio, and reading `Shape` on a MeshPart errors in Roblox).
+- **Tests: the odds words.** The four words appear in the test files only as test inputs (the checks that forbid them, and the mutants that must be caught). The rule is applied to every quoted string of the four new Lua files, to every text the world or an icon shows, and to the recipe names and captions.
 
 ## OWNER CHOICE
 
-(Defaults picked where the owner's taste decides; each one is implemented and can be changed in one place.)
+Defaults picked where the owner's taste decides. Each is implemented; the place to change it is given.
+
+**World** (`WorldArt.lua` unless said otherwise)
+1. **The welcome arch** over the avenue, BUILD YOUR STARTUP in gold on navy, both faces (`Pieces.Arch`; the item `WelcomeArch` in `WorldVisuals.layout` places it).
+2. **Street signs show the plot number only** (1 to 6), no street name, across the street facing the plot (`Pieces.Sign`; `Layout.signDX`, `signDZ`).
+3. **Six far hills** as a horizon (`Hills`; empty the list for none).
+4. **Lit lamps only at the plaza and the forecourt** (six PointLights); the street lamps only glow (`LampLight`, and `lit = true` in `WorldVisuals.layout`).
+5. **The palette**: warm stone plaza, sand paths, blue-gray streets, white kerbs, two lawn greens next to the Baseplate's (108, 172, 82), three tree greens (`Palette`; a sector can pass its own palette to `build`).
+6. **A 1 stud ring of bare grass** around the spawn pad, inside the plaza (`Layout.spawnMargin`): it also protects the pad if the measured position is a little off.
+7. **SmoothPlastic paths and Concrete kerbs** (in `WorldVisuals.build`): no texture seams where path pieces meet.
+8. **Widths:** paths and streets 8, plot walks 6 (`Layout.pathWidth`, `walkWidth`); the front street 1 stud past what the plots reach (`frontGap`).
+9. **Trees:** three sizes and greens in turn, 2 per plot across the street, a row behind the back street, 4 round the plaza, 2 by the cross walk (`Pieces.TreeA` to `TreeC`, `Layout.treeDX` and friends).
+
+**Icons** (`IconArt.lua`)
+10. **A four-leaf clover for the Luck Boost product** (the same idea as the old emoji, with no text at all). Alternative: an egg with a small sparkle.
+11. **The only icon texts are 2x, +3 and $** (`Texts`): the 2x Cash coin, the Extra Slots badge, the Cash bill and bag.
+12. **HUD drawings:** an egg (EGGS), a shopping bag (SHOP), two people (TEAM), a magnet (POACH: it pulls employees over), a rising bar chart with an arrow (IPO); light figures on the colored buttons (`Hud`).
+13. **Plates:** cream under shop, egg and Office icons; creatures on a plate tinted by their rarity (`RarityPlates`).
+14. **3D views:** the Office props from the front-left and a little above (`PROP_VIEW`, yaw -28, pitch 22); creatures from the front, a little to one side (`CREATURE_VIEW`).
+15. **The cap of 8 live ViewportFrames** (`Style.viewportCap`), and the outline 4 grid units wide (`Style.outline`: 2 px at 56, 3 px at 72).
+
+**Shop** (`docs/SHOP_UX_PROPOSAL.md`, section 7): six open questions, most important first: the landscape tab rail, confirming Cash buys, showing the locked rungs, badges, 3D or drawn icons on phones, the details sheet.
 
 ## Blocked
 
-(Nothing blocked so far.)
+Nothing was blocked. No file this job needed was claimed by someone else (the Ownership table and every remote branch were checked on 2026-10-06), and every phase was finished.
 
 ## Risks
 
-(Filled in as the work goes.)
+1. **Nothing is wired in yet.** The world needs the TycoonCore edit (`docs/world_pass_integration.patch`, owner's approval); the icons need the shop pull requests (`docs/SHOP_UX_PROPOSAL.md` section 5). Until then the four modules do nothing in the game.
+2. **StreamingEnabled (unverified):** on a low-memory phone, parts beyond the minimum radius (64 studs by default) may stream out: the far hills and the plaza will often be missing there, and how Roblox streams very long parts is not documented here (the streets are cut per plot block for that reason). Related, and not this pass's change: `teleportToPlot` moves the character without `RequestStreamAroundAsync`.
+3. **Copied numbers can drift.** `WorldArt.Site` copies numbers from TycoonCore, IpoServer and ShopServer, and `IconArt.Models` copies PlotArt's six props. The tests fail when a copy differs, so whoever changes those scripts must update the copies in the same pull request.
+4. **Bigger buildings later.** The building pass (branch `building-pass`) lays its doorstep path under the plot walks (no flicker: different heights). CUSTOMIZE's 78 x 82 buildings would reach x ±41.3 and back to z 94: at spacing 90 the connectors between plots would drop out by the layout's own rule (the two end ones stay, so every plot is still reached), and the back street (z 87-95) would have to move toward the lounge. Raising `Site.plotReach` makes the tests say exactly that.
+5. **The Studio preview rooms** (`PREVIEW_STAGES`) only fit spacing 90: at 112 plot 1 would stand on them, so their snippet must move before a spacing change.
+6. **Phones and ViewportFrames:** the cap of 8 is a reasoned guess, not a measurement. ViewportFrames cost the most on low-end phones; lower `Style.viewportCap` if a phone test says so (the cache keeps working: more cards show their plate while they wait).
+7. **The fake is not Roblox.** Materials, Neon and Bloom, the haze, SurfaceGui text size, UICorner on turned frames, UIStroke and UIGradient looks, and the ViewportFrame's ambient light are only approximated or not modelled at all. The two SVG previews are approximations too.
+8. **Command-bar `require` of a clone.** The preview blocks require `module:Clone()` so a freshly pasted module is used. This is a common Studio habit but was not run in Studio here; if it ever fails, require the module itself and reopen the place after each paste.
+
+## What was not tested (no Studio, no device)
+
+- Nothing ran in Roblox Studio, in a live server or on a phone; the Studio MCP was not used.
+- How anything looks: colors next to the real Baseplate under the place's Lighting, materials, Neon glow, the hills in the haze, text sizes, the icons at 56 px on a real screen, contrast on the HUD buttons.
+- StreamingEnabled behavior, frame rate and memory on phones, and the cost of the SurfaceGuis (14 in the world).
+- `ModelStreamingMode = Atomic` set from a server script (inside `pcall`), and requiring a cloned ModuleScript from the command bar.
+- The integration patch in a running game: only in the fake (both modules, one missing, broken data) and with `tools/daily_test.py` and `tools/world_test.py` on a patched copy.
+- The shop redesign: a proposal only, no code; its phone numbers come from the code, its text widths are estimates.
+- Tap animations in a real frame loop (the fake runs them step by step).
+
+## Results (final)
+
+| Suite | Checks | Mutation runs |
+|---|---|---|
+| `tools/daily_test.py` (other branches own it; unchanged) | 1,772 pass (1,740 before, plus 32 per-file scans of the four new files), 0 failed | 20 of 20 (its own) |
+| `tools/world_test.py` | 275 pass, 0 failed (155 world program, 59 source, 23 world preview, 6 hash block, 9 sync table, 7 integration blocks, 16 patch source) | 53 of 53, each caught by its named check (29 builder and checks, 24 data) |
+| `tools/icon_test.py` | 174 pass, 0 failed (101 icon program, 16 icon preview, 57 source) | 34 of 34, each caught by its named check (17 builder and checks, 17 data) |
+
+- **World:** 268 parts and 6 lights at the default site (budgets 600 and 8); the sweep (spacing 90 and 112, 1 to 6 plots) gives 151 to 268 parts and always 6 lights, every named check passing.
+- **Icons:** 38 recipes; 18 3D icons of 9 parts (Pixel Pigeon) to 24 (Desk, Server Rack); 20 drawn icons of 3 shapes (HUD bag) to 10 (crown); at most 8 ViewportFrames alive while a list scrolls (measured: the peak is exactly 8).
+- **Files:** `WorldArt.lua` 13,042 bytes, `WorldVisuals.lua` 48,782, `IconArt.lua` 30,143, `IconVisuals.lua` 37,198 (SHA-256 in docs/STUDIO_SYNC_WORLD.md, checked by `tools/world_test.py`).
