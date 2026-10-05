@@ -141,10 +141,10 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 
 ## 4. What the sims must measure (tools/economy_sim.py, `--pokedex` and new `--gaming`; marks are placeholders)
 
-- **S3 parity:** Software and Gaming (typical policy) within ±5% per engaged hour, at every rung and every `LONG_PLAYERS` profile; fits Gaming's upgrade Incomes.
+- **S3 parity:** Software and Gaming (typical policy) within ±5% per engaged hour, at every rung and every `LONG_PLAYERS` profile (check-in with 2.4's bank); fits Gaming's upgrade Incomes.
 - **S4 bots, S5 hopping** (CUST 5.5) with two sectors: no sector faster for a task-bot; alternating Software and Gaming for 10 IPOs within 3% of staying in one.
 - **S9 launch policy (new):** the five policies above per profile: Smash ≤ 5% faster than Software; Solid ≤ 12% slower; Flop ≤ 25% slower (a flop never ruins a run); launch-spam gains ≤ 1%; update timing best-versus-worst ≤ 5%.
-- **S10 cadence (new):** moments per hour per rung for both sectors (LG section 4's table): no gap over 45 engaged minutes; Gaming's longest wait between decisions under 15 minutes.
+- **S10 cadence (new):** moments per hour per rung for both sectors (LG section 4's table): no gap over 45 engaged minutes; Gaming's longest wait between decisions under 15 minutes (with Sprint Reviews).
 - **S8** with both sectors (FUND 6).
 - *Can:* `--long` (`long_run`, economy_sim.py:1213) runs Software's ladder. *Needs:* a Gaming income path (base, curve, cap, catalog), titles and policies, the trend schedule, the task points.
 
@@ -167,7 +167,7 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 - **Section 2, clock (LG:20-34):** Gaming's extra is engaged only and outside the away bank (LG:24); the bank reads `awayBase` (2.4).
 - **Section 3, ladder (LG:36-60):** one ladder for both; Gaming has its own item names and lower upgrade Incomes (S3); the hire list is shared.
 - **Section 4, content (LG:62-82):** the moments table per sector (S10); "an industry skin per IPO" (LG:82) becomes the sector picker.
-- **Section 5, Shares (LG:84-88):** Shares per IPO are sector-neutral. Stamps with two sectors: 6 grades (Bronze, Gold, Platinum each), Collection at most 6,000 + IPO count, bonus at most +5% (CUST 5.2); T (CUST 1.5) is the same 57 / 51.5 / 52 h while parity holds.
+- **Section 5, Shares (LG:84-88):** Shares per IPO are sector-neutral. Stamps with two sectors: 6 grades (Bronze, Gold, Platinum each), Collection at most 6,000 + IPO count, bonus at most +5% (CUST 5.2); T (CUST 1.5, G1) is shared while parity holds.
 - **Section 6, money (LG:90-95):** entry (1) of the `addEarnings` list (LG:94) carries Gaming's extra (no new entry); Gaming bundles join LG:95's product list.
 - **Section 8, PR plan (LG:110-122):** its PR 7 = PR 8-11 in CUST 6; Gaming needs its PR 2 (`kind`, engaged weights).
 

@@ -95,7 +95,7 @@ All 4^5 = 1,024 sequences enumerated (whole bp): **4 lose Platinum**, all Large 
 
 ## 4. Exploits (server check; test)
 
-- **Always raise the maximum:** a design risk. The stage-scaled convex curve (section 3) and the cap: a raise that takes the total past 4,000 bp is refused; S8.
+- **Always raise the maximum:** a design risk, priced by the convex table and the 87.5% stake line (section 3); the cap refuses a total past 4,000 bp; S8.
 - **Raise, then reset.** (a) *The IPO:* round Cash spent on what an IPO keeps (employees, HR level, IpoConfig.lua:51-57): fixed amounts, dilution paid at that IPO (the record stays in `active` until the transform), desk caps (R1, LG:108). Test: the transform pays `dilutedShares(sharesFor(...), D, dust)`; S8's "converter" (round Cash on eggs and HR first) gains < 3% in loop 2. (b) *Debug IpoReset* (IpoServer.lua:423-433, Studio only) sets `count = 0` and leaves `pokedex` alone; the run check's `run > count` case (CUST 1.2) re-bases `run` and keeps `active`, so no free stamp or card. Test: IpoReset, rejoin: a settled round stays settled and cannot be raised again. (c) *A rollback* to pre-funding code pays undiluted Shares there: owner-only, inside the floor; PUBLISH_RULES "2d".
 - **Raise on a throwaway, then IPO:** Cash never moves between accounts; hires do (poaching), and rounds make an alt's hires cheaper (LONG_GAME section 7). R2 (3 poach-ins per run) and R3 go live first. Test: an alt that raised the maximum feeds 4 hires, the 4th is refused; S8's alt-fed profile.
 - **Amount from the client:** only `round` and `choice` are read. Test (mutation): an extra amount is ignored; NaN, 0, 1.5, "1", 4 and a stale `round` are refused; a double tap grants once.
