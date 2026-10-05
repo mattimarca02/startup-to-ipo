@@ -4330,6 +4330,941 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+COMPANY_TESTS = r"""-- Tests for the Pokedex rules: the real CompanyConfig and SectorConfig (customize PR 1) -------------------
+-- Pure code: no Roblox state. The saved section, its loader (bad values, unknown fields, version, run check) and the
+-- placement function run exactly as the server runs them. PlotVisuals.zones and PlotArt give the real reserved zones.
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local IS_STUDIO = true
+local MODULES = {}
+local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local SERVICES = {
+	ReplicatedStorage = token("ReplicatedStorage"),
+	RunService = { IsStudio = function() return IS_STUDIO end },
+}
+local game = { GetService = function(_, n) return SERVICES[n] end }
+local script = { Parent = token("ReplicatedStorage") }
+
+MODULES.SectorConfig = (function()
+__SECTORCONFIG__
+end)()
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.CompanyConfig = (function()
+__COMPANYCONFIG__
+end)()
+local PlotVisuals = (function()
+__PLOTVISUALS__
+end)()
+local PlotArt = (function()
+__PLOTART__
+end)()
+local UPGRADES = __UPGRADES__
+local SectorConfig = MODULES.SectorConfig
+local CC = MODULES.CompanyConfig
+
+local NOW = 1760000000
+local function ctx(count)
+	return { warn = warn, who = "P", ipoCount = count or 0, now = NOW }
+end
+local function load(saved, count)
+	WARNINGS = {}
+	return CC.load(saved, ctx(count))
+end
+local function save(state, studio)
+	return CC.toSave(state, studio == true)
+end
+
+local function deepEqual(a, b)
+	if typeof(a) ~= typeof(b) then return false end
+	if typeof(a) == "number" and a ~= a and b ~= b then return true end -- NaN is NaN
+	if typeof(a) ~= "table" then return a == b end
+	for k, v in pairs(a) do
+		if not deepEqual(v, b[k]) then return false end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then return false end
+	end
+	return true
+end
+local function deepCopy(v)
+	if typeof(v) ~= "table" then return v end
+	local c = {}
+	for k, inner in pairs(v) do c[k] = deepCopy(inner) end
+	return c
+end
+local function count(t)
+	local n = 0
+	for _ in pairs(t) do n += 1 end
+	return n
+end
+local function anyWarning(text)
+	for _, w in ipairs(WARNINGS) do
+		if string.find(w, text, 1, true) then return true end
+	end
+	return false
+end
+
+-- 1. SectorConfig --------------------------------------------------------------------------
+check("four sector keys from day one, in order", deepEqual(SectorConfig.Order, { "Software", "Gaming", "Fintech", "Biotech" }))
+check("every key has an entry", (function()
+	for _, key in ipairs(SectorConfig.Order) do
+		if not SectorConfig.isKnown(key) then return false end
+	end
+	return count(SectorConfig.Sectors) == 4
+end)())
+check("only Software can be picked", SectorConfig.isEnabled("Software") and not SectorConfig.isEnabled("Gaming")
+	and not SectorConfig.isEnabled("Fintech") and not SectorConfig.isEnabled("Biotech"))
+check("the picker is off", SectorConfig.PickerEnabled == false)
+check("an unknown or bad key is not a sector", not SectorConfig.isKnown("Energy") and not SectorConfig.isKnown(nil) and not SectorConfig.isKnown(5) and SectorConfig.get({}) == nil)
+check("Software has 12 or more company names and the default is the first", #SectorConfig.Sectors.Software.names >= 12 and SectorConfig.defaultName("Software") == SectorConfig.Sectors.Software.names[1])
+check("the default sector is Software", SectorConfig.Default == "Software")
+check("the Launch goal is Software and Gaming", deepEqual(SectorConfig.Goals.Launch.sectors, { "Software", "Gaming" }))
+check("no sector text claims odds or chance (D9)", (function()
+	for _, sector in pairs(SectorConfig.Sectors) do
+		local texts = { sector.name, sector.summary }
+		for _, name in ipairs(sector.names) do table.insert(texts, name) end
+		for _, text in ipairs(texts) do
+			local lower = string.lower(text)
+			for _, word in ipairs({ "odds", "chance", "luck", "random", "probab", "%" }) do
+				if string.find(lower, word, 1, true) then return false end
+			end
+		end
+	end
+	return true
+end)())
+
+-- 2. A missing section is a new founding ----------------------------------------------------
+local state = load(nil, 0)
+check("missing section: not locked, no event, no warning", state.locked == false and state.event == nil and #WARNINGS == 0)
+local s = state.section
+check("missing section: v 1, run = the IPO count, Software, building 1, picked (the picker is off)",
+	s.v == 1 and s.run == 0 and s.active.sector == "Software" and s.active.building == 1 and s.active.picked == true)
+check("missing section: the first name from the sector's list, founded now", s.active.name == SectorConfig.defaultName("Software") and s.active.foundedAt == NOW)
+check("missing section: nothing placed, stored, told or raised", next(s.active.objects) == nil and next(s.active.stored) == nil and next(s.active.told) == nil
+	and next(s.active.rounds) == nil and next(s.active.decor) == nil and next(s.active.sx) == nil and s.active.engaged == 0)
+check("missing section: no sector started, nothing kept, no Hall of Fame entry, no dust", next(s.sectors) == nil and next(s.kept) == nil and next(s.hall) == nil and s.dust == 0)
+check("missing section: run follows a save that has IPOs", load(nil, 4).section.run == 4)
+check("missing section: no board mark in a normal server", save(state, false).studio == nil)
+check("a Studio server marks the section for good", save(state, true).studio == true)
+SectorConfig.PickerEnabled = true
+check("with the picker on, a new company starts unpicked (the picker opens)", load(nil, 0).section.active.picked == false)
+SectorConfig.PickerEnabled = false
+state = load("hello", 2)
+check("a section that isn't a table is a new founding with a warning", state.section.run == 2 and state.section.active.sector == "Software" and anyWarning("isn't a table"))
+
+-- 3. Round trip: every field, unknown fields at every level -----------------------------------
+local function objectsList(extra)
+	return { { id = "Desk", x = -23, z = -40, r = 0, futureObj = extra }, { id = "Laptop", x = -25.5, z = -30, r = 3 } }
+end
+local FULL = {
+	v = 1, run = 2,
+	active = {
+		sector = "Software", picked = true, name = "Pixel Pioneers", foundedAt = 1700000000, engaged = 1234.5,
+		passSeconds = { DoubleCash = 100.5, VIP = 20, FuturePass = { a = 1 } },
+		building = 3,
+		decor = { Chair = 2, Future = "x" },
+		objects = objectsList("keep me"),
+		stored = { Whiteboard = true, ["Gaming PC"] = true },
+		told = { Seed = true, SeriesA = true, FutureStage = 7 },
+		rounds = {
+			Seed = { s = "raised", c = 2, cash = 360, bp = 122, at = 1700000100, studio = false, extra = { deep = true } },
+			SeriesA = { s = "skipped", c = 0, cash = 0, bp = 0, at = 1700000200, studio = true },
+			FutureStage = { anything = "goes", bp = 50 },
+		},
+		sx = { n = 3, deep = { a = { b = 1 } } },
+		futureActive = { x = 1 },
+	},
+	sectors = {
+		Software = {
+			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
+			card = {
+				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
+				owned = { "Desk", "Laptop", "Gaming PC" },
+				decor = { Chair = 1, Future = 3 },
+				objects = objectsList("card object"),
+				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
+				stake = 9951, shares = 14, sx = { score = 5 },
+				futureCard = "keep",
+			},
+			futureSector = { y = 2 },
+		},
+		Gaming = { state = "progress", stamp = 0, replays = 0, firstAt = 0, bestEngaged = 0 },
+		Energy = { whatever = { 1, 2, 3 } },
+	},
+	kept = { Chair = 1, Plant = 2 },
+	hall = { Launch = 1700000300, Four = 1700000400 },
+	dust = -1234,
+	studio = false,
+	futureTop = { z = { 1, 2, 3 } },
+}
+state = load(deepCopy(FULL), 2)
+check("round trip: nothing is warned about in a complete good section", #WARNINGS == 0, WARNINGS[1])
+check("round trip: not locked, no run check event", state.locked == false and state.event == nil)
+local out = save(state, false)
+check("round trip: the saved section equals the loaded one, deep", deepEqual(out, FULL))
+check("round trip: v = 1 is written", out.v == 1)
+check("round trip: saving twice gives the same section", deepEqual(save(state, false), out))
+local again = load(deepCopy(out), 2)
+check("round trip: load(save(load(x))) is stable", deepEqual(save(again, false), out) and #WARNINGS == 0)
+local keptAt = {
+	["top-level unknown field"] = function() return out.futureTop and out.futureTop.z[3] == 3 end,
+	["active unknown field"] = function() return out.active.futureActive.x == 1 end,
+	["active.objects[i] unknown field"] = function() return out.active.objects[1].futureObj == "keep me" end,
+	["active.passSeconds unknown key"] = function() return out.active.passSeconds.FuturePass.a == 1 end,
+	["active.decor unknown key"] = function() return out.active.decor.Future == "x" end,
+	["active.stored unknown id"] = function() return out.active.stored["Gaming PC"] == true end,
+	["active.told unknown key"] = function() return out.active.told.FutureStage == 7 end,
+	["active.rounds[k] unknown field"] = function() return out.active.rounds.Seed.extra.deep == true end,
+	["active.rounds unknown stage"] = function() return out.active.rounds.FutureStage.anything == "goes" and out.active.rounds.FutureStage.bp == 50 end,
+	["active.sx whole"] = function() return out.active.sx.deep.a.b == 1 end,
+	["sectors unknown key kept whole"] = function() return out.sectors.Energy.whatever[3] == 3 end,
+	["sectors[k] unknown field"] = function() return out.sectors.Software.futureSector.y == 2 end,
+	["card unknown field"] = function() return out.sectors.Software.card.futureCard == "keep" end,
+	["card.owned unknown upgrade name"] = function() return out.sectors.Software.card.owned[3] == "Gaming PC" end,
+	["card.decor unknown key"] = function() return out.sectors.Software.card.decor.Future == 3 end,
+	["card.objects[i] unknown field"] = function() return out.sectors.Software.card.objects[1].futureObj == "card object" end,
+	["card.rounds[k] unknown field"] = function() return out.sectors.Software.card.rounds.Seed.extra == 1 end,
+	["card.rounds unknown stage"] = function() return out.sectors.Software.card.rounds.FutureStage.bp == 9 end,
+	["card.sx whole"] = function() return out.sectors.Software.card.sx.score == 5 end,
+	["kept unknown key"] = function() return out.kept.Plant == 2 end,
+	["hall unknown goal"] = function() return out.hall.Four == 1700000400 end,
+}
+for name, probe in pairs(keptAt) do
+	local ok, result = pcall(probe)
+	check("unknown data is kept: " .. name, ok and result == true)
+end
+out.active.objects[1].x = 99
+check("the saved section is a copy: changing it never changes the live state", state.section.active.objects[1].x == -23)
+
+-- 4. The version rule ----------------------------------------------------------------------
+local V2 = { v = 2, run = 0, active = { sector = "Software", name = "From the future", newShape = { 1, 2 } }, extra = { a = { b = 1 } }, sectors = { Software = "other shape" } }
+state = load(deepCopy(V2), 5)
+check("v = 2: kept opaque (locked), no run check, no event", state.locked == true and state.event == nil and state.section == nil)
+check("v = 2: a warning says why", anyWarning("version 2"))
+out = save(state, true)
+check("v = 2: deep-equal after a save, even from a Studio server (nothing added)", deepEqual(out, V2) and out.studio == nil)
+check("v = 2: the very table that loaded is written back", out == state.raw)
+check("v = 99 is kept the same way", load({ v = 99, x = 1 }, 0).locked == true)
+for _, bad in ipairs({ 0, -1, 1.5, "1", "2", true, {}, 0 / 0, math.huge }) do
+	local st = load({ v = bad, run = 0 }, 0)
+	check("a bad v (" .. tostring(bad) .. ") is skipped with a warning and the section is read as version 1", st.locked == false and anyWarning("bad v") and save(st, false).v == 1)
+end
+check("a section with no v is read as version 1 without a warning", #(function() load({ run = 0 }, 0) return WARNINGS end)() == 0)
+
+-- 5. The run check ----------------------------------------------------------------------------
+local function savedCompany(run, extra)
+	local active = {
+		sector = "Software", picked = true, name = "Pixel Pioneers", foundedAt = 1700000000, engaged = 100.5,
+		passSeconds = {}, building = 3, decor = { Chair = 1 }, objects = { { id = "Desk", x = -23, z = -40, r = 0 } },
+		stored = { Laptop = true }, told = { Seed = true },
+		rounds = { Seed = { s = "raised", c = 2, cash = 360, bp = 300, at = 1700000100, studio = false } },
+		sx = { n = 1 },
+	}
+	for k, v in pairs(extra or {}) do active[k] = v end
+	return { v = 1, run = run, active = active, sectors = {}, kept = {}, hall = {}, dust = 0 }
+end
+-- (1) run < count: an older version ran an IPO
+state = load(savedCompany(0), 1)
+s = state.section
+check("run < count: the event is 'complete', with a warning", state.event == "complete" and anyWarning("older version ran an IPO"))
+check("run < count: Software is done with Bronze, first done now", s.sectors.Software.state == "done" and s.sectors.Software.stamp == 1 and s.sectors.Software.firstAt == NOW and s.sectors.Software.replays == 0)
+check("run < count: the best engaged time is the company's", s.sectors.Software.bestEngaged == 100.5)
+local card = s.sectors.Software.card
+check("run < count: the card names the company, the IPO number and the date", card.name == "Pixel Pioneers" and card.ipoNumber == 1 and card.at == NOW)
+check("run < count: the card keeps the building, decor, items, rounds and sx as they were",
+	card.building == 3 and card.decor.Chair == 1 and card.objects[1].id == "Desk" and card.rounds.Seed.bp == 300 and card.sx.n == 1 and card.engaged == 100.5)
+check("run < count: the stake is 10,000 minus the dilution, what is unknown is 0", card.stake == 9700 and card.ratio == 0 and card.shares == 0 and #card.owned == 0)
+do
+	local live = CC.load(deepCopy(savedCompany(2)), ctx(2)).section
+	CC.completeCompany(live, 3, NOW)
+	live.active.objects[1].x = 99
+	live.active.rounds.Seed.bp = 1
+	live.active.decor.Chair = 9
+	local made = live.sectors.Software.card
+	check("completeCompany: the card is a copy (changing the live company never changes it)", made.objects[1].x == -23 and made.rounds.Seed.bp == 300 and made.decor.Chair == 1)
+end
+check("run < count: a new company starts (same sector, building 1, nothing placed, no rounds, picked while the picker is off)",
+	s.active.sector == "Software" and s.active.building == 1 and next(s.active.objects) == nil and next(s.active.rounds) == nil
+	and next(s.active.stored) == nil and next(s.active.told) == nil and s.active.picked == true and s.active.foundedAt == NOW and s.active.engaged == 0)
+check("run < count: run = the IPO count", s.run == 1)
+check("run < count: one launch sector done is not the Launch goal", s.hall.Launch == nil)
+local saved = save(state, false)
+local second = load(deepCopy(saved), 1)
+check("run < count: the next join does nothing more (Bronze once, one card)", second.event == nil and #WARNINGS == 0 and deepEqual(save(second, false), saved))
+-- run 2 with count 3: Bronze and a card once
+state = load(savedCompany(2), 3)
+check("run 2, count 3: Bronze and a card, the card says IPO 3", state.event == "complete" and state.section.sectors.Software.stamp == 1 and state.section.sectors.Software.card.ipoNumber == 3 and state.section.run == 3)
+check("run 2, count 3: joining again changes nothing", load(deepCopy(save(state, false)), 3).event == nil)
+-- several IPOs missed: still one company, one card
+state = load(savedCompany(0), 4)
+check("run 0, count 4: one completion (the one company the section knows), run = 4", state.event == "complete" and state.section.run == 4 and state.section.sectors.Software.replays == 0)
+-- a sector done before: replays count, the stamp never goes down, firstAt stays
+local done = savedCompany(1)
+done.sectors = { Software = { state = "done", stamp = 3, replays = 2, firstAt = 1650000000, bestEngaged = 500, card = { name = "Old", ipoNumber = 1, at = 1650000000, engaged = 500 } } }
+state = load(done, 2)
+s = state.section.sectors.Software
+check("a replay: Platinum stays Platinum, replays + 1, firstAt kept, best engaged is the larger", s.stamp == 3 and s.replays == 3 and s.firstAt == 1650000000 and s.bestEngaged == 500 and s.card.ipoNumber == 2)
+done.sectors.Software.stamp = 0
+done.sectors.Software.state = "done"
+check("a finished sector saved with stamp 0 counts as Bronze", load(done, 1).section.sectors.Software.stamp == 1)
+-- a Studio test entry under Gaming: kept, never picked, counts for no goal
+local both = savedCompany(0)
+both.sectors = { Gaming = { state = "done", stamp = 3, replays = 0, firstAt = 5, bestEngaged = 1 } }
+state = load(both, 1)
+check("Gaming 'done' in a save (a Studio test) is kept but Launch is not reached while Gaming can't be picked", state.section.sectors.Gaming.stamp == 3 and state.section.sectors.Software.state == "done" and state.section.hall.Launch == nil)
+SectorConfig.Sectors.Gaming.enabled = true
+check("... with Gaming enabled, both done is the Launch goal", load(deepCopy(both), 1).section.hall.Launch == NOW)
+SectorConfig.Sectors.Gaming.enabled = false
+-- (2) run > count: never an IPO
+local reset = savedCompany(3)
+reset.active.rounds.Seed.bp = 300
+state = load(reset, 0)
+check("run > count: the event is 'rebase', with a warning", state.event == "rebase" and anyWarning("IPO reset in Studio"))
+check("run > count: run = the count, the company stays as it was (settled rounds stay settled)", state.section.run == 0 and state.section.active.building == 3
+	and state.section.active.rounds.Seed.bp == 300 and state.section.active.objects[1].id == "Desk" and state.section.active.name == "Pixel Pioneers")
+check("run > count: no stamp, no card, no Hall of Fame entry", next(state.section.sectors) == nil and next(state.section.hall) == nil)
+check("run > count: the section is marked as saved by Studio", state.section.studio == true and save(state, false).studio == true)
+check("run > count: joining again does nothing more", load(deepCopy(save(state, false)), 0).event == nil)
+check("a damaged ipo (count 0) with run 3 lands in the same case", load(savedCompany(3), 0).event == "rebase")
+check("run = count does nothing", load(savedCompany(2), 2).event == nil and #WARNINGS == 0)
+
+-- 6. Bad values are skipped with a warning, never an error ---------------------------------------
+local function good()
+	return deepCopy(FULL)
+end
+local function loadsWith(change, count)
+	local data = good()
+	change(data)
+	local ok, result = pcall(CC.load, data, ctx(count or 2))
+	check("a bad value never throws", ok, result)
+	WARNINGS = {}
+	return ok and result or nil
+end
+local function loaded(change, count)
+	local data = good()
+	change(data)
+	WARNINGS = {}
+	local ok, result = pcall(CC.load, data, ctx(count or 2))
+	check("a bad value never throws", ok, result)
+	return ok and result.section or nil, #WARNINGS
+end
+local sec, warned
+sec, warned = loaded(function(d) d.active.engaged = -5 end)
+check("engaged -5 is skipped (0) with a warning", sec.active.engaged == 0 and warned == 1)
+sec, warned = loaded(function(d) d.active.engaged = 0 / 0 end)
+check("engaged NaN is skipped", sec.active.engaged == 0 and warned == 1)
+sec, warned = loaded(function(d) d.active.engaged = math.huge end)
+check("engaged infinity is skipped", sec.active.engaged == 0 and warned == 1)
+sec, warned = loaded(function(d) d.active.foundedAt = 1.5 end)
+check("a fractional foundedAt is skipped", sec.active.foundedAt == NOW and warned == 1)
+sec, warned = loaded(function(d) d.active.building = 0 end)
+check("building 0 is skipped (1)", sec.active.building == 1 and warned == 1)
+sec, warned = loaded(function(d) d.active.building = 2.5 end)
+check("building 2.5 is skipped (1)", sec.active.building == 1 and warned == 1)
+sec, warned = loaded(function(d) d.active.building = 7 end)
+check("a building number above the five known is kept (a newer version), it just can't be used", sec.active.building == 7 and warned == 0)
+sec, warned = loaded(function(d) d.active.picked = "yes" end)
+check("picked 'yes' is skipped (the default)", sec.active.picked == true and warned == 1)
+sec, warned = loaded(function(d) d.active.name = 5 end)
+check("a name that isn't a string is skipped (the sector's first name)", sec.active.name == SectorConfig.defaultName("Software") and warned == 1)
+sec, warned = loaded(function(d) d.active.name = string.rep("x", 61) end)
+check("a name over 60 characters is skipped", sec.active.name == SectorConfig.defaultName("Software") and warned == 1)
+sec, warned = loaded(function(d) d.active.passSeconds.DoubleCash = -1; d.active.passSeconds.VIP = "x" end)
+check("passSeconds: a bad value of a known pass is skipped, the others stay", sec.active.passSeconds.DoubleCash == nil and sec.active.passSeconds.VIP == nil and sec.active.passSeconds.FuturePass.a == 1 and warned == 2)
+sec, warned = loaded(function(d) d.active.passSeconds = 5 end)
+check("passSeconds that isn't a table is skipped", next(sec.active.passSeconds) == nil and warned == 1)
+sec, warned = loaded(function(d)
+	d.active.objects = {
+		{ id = "Desk", x = 0 / 0, z = 0, r = 0 }, { id = "Laptop", x = 1, z = 1, r = 8 }, { id = "Laptop", x = 1, z = 1, r = 1.5 },
+		{ id = string.rep("a", 40), x = 1, z = 1, r = 0 }, { id = 5, x = 1, z = 1, r = 0 }, { id = "Server Rack", x = 0.3, z = 1, r = 0 },
+		{ id = "Whiteboard", x = 1, z = 1 }, "junk", { id = "Neon Logo", x = 2, z = 3, r = 7 }, { id = "Neon Logo", x = 4, z = 4, r = 0 },
+		{ id = "Desk", x = math.huge, z = 0, r = 0 }, { id = "Coffee Machine", x = 1e9, z = 0, r = 0 },
+	}
+end)
+check("objects: a bad x, r, id, grid step, missing field, junk, a repeated id or a far x is skipped, the one good item stays",
+	#sec.active.objects == 1 and sec.active.objects[1].id == "Neon Logo" and sec.active.objects[1].x == 2 and warned == 11, warned)
+sec, warned = loaded(function(d)
+	d.active.objects = {}
+	for i = 1, 50 do table.insert(d.active.objects, { id = "Item" .. i, x = i, z = 0, r = 0 }) end
+end)
+check("objects: at most 40 are kept (ids this version has no item for are kept too)", #sec.active.objects == 40 and sec.active.objects[40].id == "Item40" and warned == 10, warned)
+sec, warned = loaded(function(d)
+	d.active.stored = { Desk = true, Laptop = false, [1] = true, [string.rep("a", 40)] = true, Server = "yes" }
+end)
+check("stored: only string ids of 1 to 39 characters with the value true stay", count(sec.active.stored) == 1 and sec.active.stored.Desk == true and warned == 4, warned)
+sec, warned = loaded(function(d)
+	d.active.stored = {}
+	for i = 1, 45 do d.active.stored["Item" .. string.format("%02d", i)] = true end
+end)
+check("stored: at most 40 are kept, always the same ones", count(sec.active.stored) == 40 and sec.active.stored.Item40 == true and sec.active.stored.Item41 == nil and warned == 5, warned)
+sec, warned = loaded(function(d) d.active.told = { Seed = false, SeriesA = true } end)
+check("told: a known stage that isn't true is skipped", sec.active.told.Seed == nil and sec.active.told.SeriesA == true and warned == 1)
+sec, warned = loaded(function(d) d.active.sx = 5 end)
+check("sx that isn't a table starts again as {} with a warning", next(sec.active.sx) == nil and warned == 1)
+sec, warned = loaded(function(d) d.active.decor = "x" end)
+check("decor that isn't a table is skipped", next(sec.active.decor) == nil and warned == 1)
+-- rounds: never dropped
+sec, warned = loaded(function(d)
+	d.active.rounds = { Seed = "x", SeriesA = { s = "maybe", bp = 300, extra = 1 }, SeriesB = { s = "raised", bp = 12.5 }, Future = { bp = 500 } }
+end)
+check("rounds: a record of a known stage that isn't a table counts as settled (skipped, no dilution)", sec.active.rounds.Seed.s == "skipped" and sec.active.rounds.Seed.bp == 0)
+check("rounds: a malformed record counts as settled with bp 0, its unknown fields stay", sec.active.rounds.SeriesA.s == "skipped" and sec.active.rounds.SeriesA.bp == 0 and sec.active.rounds.SeriesA.extra == 1)
+check("rounds: a fractional bp is malformed too", sec.active.rounds.SeriesB.bp == 0 and sec.active.rounds.SeriesB.s == "skipped")
+check("rounds: an unknown stage is kept whole", sec.active.rounds.Future.bp == 500 and warned == 3, warned)
+check("dilution: an unknown stage's valid bp counts, a malformed one counts 0", CC.dilution(sec.active.rounds) == 500 and CC.stakeOf(sec.active.rounds) == 9500)
+check("dilution is capped (4,000 bp), the stake never falls under 6,000", CC.dilution({ A = { bp = 3000 }, B = { bp = 3000 } }) == 4000 and CC.stakeOf({ A = { bp = 9000 } }) == 6000)
+check("dilution ignores bad bp (negative, fractional, huge, NaN, a string)", CC.dilution({ A = { bp = -5 }, B = { bp = 1.5 }, C = { bp = 20000 }, D = { bp = 0 / 0 }, E = { bp = "9" }, F = "x", G = { bp = 7 } }) == 7)
+check("no rounds: the founder keeps 10,000", CC.stakeOf({}) == 10000 and CC.stakeOf(nil) == 10000)
+-- sectors
+sec, warned = loaded(function(d)
+	d.sectors = {
+		Software = { state = "done", stamp = 0 }, Gaming = { state = "weird", stamp = 9, replays = -1 },
+		Fintech = { state = "done", stamp = -2, firstAt = "x", bestEngaged = -3 }, Biotech = "text", Energy = 5,
+	}
+end)
+check("sectors: done with stamp 0 becomes Bronze", sec.sectors.Software.stamp == 1 and sec.sectors.Software.state == "done")
+check("sectors: a bad state is 'progress', a stamp over 3 is clamped to 3 and a bad replays is 0", sec.sectors.Gaming.state == "progress" and sec.sectors.Gaming.stamp == 3 and sec.sectors.Gaming.replays == 0)
+check("sectors: a negative stamp is clamped to 0 (then Bronze, the sector is done), bad numbers are 0", sec.sectors.Fintech.stamp == 1 and sec.sectors.Fintech.firstAt == 0 and sec.sectors.Fintech.bestEngaged == 0)
+check("sectors: an entry that isn't a table is skipped (not started)", sec.sectors.Biotech == nil)
+check("sectors: an unknown key is kept whole, whatever it is", sec.sectors.Energy == 5)
+sec, warned = loaded(function(d) d.sectors.Software.stamp = "gold" end)
+check("sectors: a stamp that isn't a number is 0 (then Bronze, the sector is done)", sec.sectors.Software.stamp == 1 and warned == 1)
+sec, warned = loaded(function(d) d.sectors.Software.card = "text" end)
+check("sectors: a card that isn't a table is skipped", sec.sectors.Software.card == nil and warned == 1)
+sec, warned = loaded(function(d) d.sectors.Software.card.stake = 20000; d.sectors.Software.card.ipoNumber = -1; d.sectors.Software.card.owned = { "Desk", 5 } end)
+check("card: a bad stake, ipoNumber and owned name are skipped", sec.sectors.Software.card.stake == 10000 and sec.sectors.Software.card.ipoNumber == 0 and #sec.sectors.Software.card.owned == 1 and warned == 3, warned)
+sec, warned = loaded(function(d) d.sectors = "x" end)
+check("sectors that isn't a table is skipped", next(sec.sectors) == nil and warned == 1)
+sec, warned = loaded(function(d) d.dust = 6000 end)
+check("dust over 4,999 is skipped (0)", sec.dust == 0 and warned == 1)
+sec, warned = loaded(function(d) d.dust = 0.5 end)
+check("a fractional dust is skipped (0)", sec.dust == 0 and warned == 1)
+sec, warned = loaded(function(d) d.dust = -5000 end)
+check("dust -5000 and 4999 are the edges and stay", sec.dust == -5000 and warned == 0)
+sec, warned = loaded(function(d) d.hall.Launch = "now"; d.hall.Four = "later" end)
+check("hall: a known goal with a bad time is skipped, an unknown goal keeps its value", sec.hall.Launch == nil and sec.hall.Four == "later" and warned == 1)
+sec, warned = loaded(function(d) d.kept.Chair = "x" end)
+check("kept: an unknown key keeps its value as it is", sec.kept.Chair == "x" and warned == 0)
+sec, warned = loaded(function(d) d.run = "x" end, 4)
+check("run that isn't a number is skipped: it follows the IPO count, so no stamp", sec.run == 4 and warned == 1)
+check("... and no card was made for it", sec.sectors.Software.card.name == "Old Co")
+sec, warned = loaded(function(d) d.run = -1 end, 0)
+check("a negative run is skipped too", sec.run == 0 and warned == 1)
+sec, warned = loaded(function(d) d.studio = "yes" end)
+check("studio that isn't a boolean is skipped", sec.studio == false and warned == 1)
+sec, warned = loaded(function(d) d.active = 7 end)
+check("active that isn't a table starts a new company", sec.active.building == 1 and sec.active.sector == "Software" and warned == 1)
+sec, warned = loaded(function(d) d.active.sector = 5 end)
+check("active.sector that isn't a string starts a new company", sec.active.building == 1 and warned == 1)
+-- an unknown sector in the active company: kept opaque
+local unknownSector = good()
+unknownSector.active.sector = "Energy"
+state = load(unknownSector, 2)
+check("an active company in a sector this version doesn't know is kept opaque (locked), unchanged", state.locked == true and deepEqual(save(state, true), good() and unknownSector) and anyWarning("isn't known"))
+
+-- 7. Fuzz: every field replaced by every kind of bad value, the loader never throws ---------------------
+local WEIRD = { 0 / 0, math.huge, -math.huge, -1, 0, 1.5, 2 ^ 53, "", "x", true, false, {}, { 1, 2 }, { a = { b = 1 } }, 1e308 }
+local function paths(value, prefix, list)
+	if typeof(value) == "table" then
+		for k, v in pairs(value) do
+			local p = table.clone(prefix)
+			table.insert(p, k)
+			table.insert(list, p)
+			paths(v, p, list)
+		end
+	end
+	return list
+end
+local function setAt(root, path, value)
+	local node = root
+	for i = 1, #path - 1 do node = node[path[i]] end
+	node[path[#path]] = value
+end
+local function noBadNumbers(value)
+	if typeof(value) == "number" then return value == value and value ~= math.huge and value ~= -math.huge end
+	if typeof(value) == "table" then
+		for _, v in pairs(value) do
+			if not noBadNumbers(v) then return false end
+		end
+	end
+	return true
+end
+local allPaths = paths(FULL, {}, {})
+local ran, bad, unstable = 0, 0, 0
+for _, path in ipairs(allPaths) do
+	for _, weird in ipairs(WEIRD) do
+		local data = deepCopy(FULL)
+		setAt(data, path, deepCopy(weird))
+		local ok, result = pcall(CC.load, data, ctx(2))
+		ran += 1
+		if not ok then
+			bad += 1
+			print_real("FAIL fuzz: " .. table.concat(path, ".") .. " = " .. tostring(weird) .. " -- " .. tostring(result))
+		elseif not result.locked then
+			local first = CC.toSave(result, false)
+			local second = CC.toSave(CC.load(deepCopy(first), ctx(2)), false)
+			if not deepEqual(first, second) then
+				unstable += 1
+				print_real("FAIL fuzz (a second load changes it): " .. table.concat(path, ".") .. " = " .. tostring(weird))
+			end
+		end
+	end
+end
+check("fuzz: " .. ran .. " bad values (every field x " .. #WEIRD .. " kinds) never throw", bad == 0 and ran > 500, ran)
+check("fuzz: loading what was saved again never changes it", unstable == 0)
+
+-- 8. Placement ------------------------------------------------------------------------------------
+local zones = CC.anchorZones(PlotVisuals.zones(PlotArt.Layout), PlotArt.Layout.floorSize[3])
+local ALL = {}
+for _, upgrade in ipairs(UPGRADES) do ALL[upgrade] = true end
+local function env(change)
+	local e = { building = 1, zones = zones, owned = deepCopy(ALL), decor = {}, objects = {} }
+	if change then change(e) end
+	return e
+end
+local function placed(e, id, x, z, r)
+	local ok, why = CC.checkPlacement(e, id, x, z, r)
+	return ok, why
+end
+check("the anchor: the plot's Floor is 60 deep and the plot center is 30 behind its front", CC.FloorDepth == PlotArt.Layout.floorSize[3] and CC.Buildings.Sizes[1].w == PlotArt.Layout.floorSize[1] and CC.Buildings.Sizes[1].d == PlotArt.Layout.floorSize[3])
+check("five nested buildings, each at least as big as the one before", #CC.Buildings.Sizes == 5 and (function()
+	for i = 2, 5 do
+		if CC.Buildings.Sizes[i].w < CC.Buildings.Sizes[i - 1].w or CC.Buildings.Sizes[i].d < CC.Buildings.Sizes[i - 1].d then return false end
+	end
+	return CC.Buildings.Sizes[5].w == 78 and CC.Buildings.Sizes[5].d == 82
+end)())
+check("an upgrade has a footprint for every UPGRADES name, and no footprint for anything else", (function()
+	for _, upgrade in ipairs(UPGRADES) do
+		if not CC.footprintOf(upgrade) then return false end
+	end
+	return count(CC.Footprints) == #UPGRADES and CC.footprintOf("Gaming PC") == nil
+end)())
+check("every upgrade's footprint holds every part of its PlotArt prop (turned by its own yaw)", (function()
+	for _, upgrade in ipairs(UPGRADES) do
+		local w, d = CC.footprintOf(upgrade)
+		local hx, hz = 0, 0
+		for _, part in ipairs(PlotArt.Props[upgrade]) do
+			local yaw = part.rot and part.rot[2] or 0
+			local c, s = math.abs(math.cos(math.rad(yaw))), math.abs(math.sin(math.rad(yaw)))
+			local px, pz = part.size[1], part.size[3]
+			if part.shape == "Cylinder" and part.rot and part.rot[3] == 90 then px, pz = part.size[2], part.size[3] end
+			hx = math.max(hx, math.abs(part.offset[1]) + (px * c + pz * s) / 2)
+			hz = math.max(hz, math.abs(part.offset[3]) + (px * s + pz * c) / 2)
+		end
+		if w / 2 < hx - 1e-6 or d / 2 < hz - 1e-6 then
+			print_real("footprint of " .. upgrade .. " is " .. w .. " x " .. d .. ", the prop needs " .. 2 * hx .. " x " .. 2 * hz)
+			return false
+		end
+	end
+	return true
+end)())
+
+-- every upgrade fits at its default slot (the anchor is 30 studs in front of the plot center)
+for _, slot in ipairs(PlotArt.Layout.itemSlots) do
+	local ok, why = placed(env(), slot.name, slot.x, slot.z - 30, 0)
+	check("placement: " .. slot.name .. " is allowed at its default slot (x " .. slot.x .. ", z " .. slot.z - 30 .. ")", ok, why)
+end
+local e = env()
+-- the free band in front of the hire desks (z -10 to -2 from the anchor, x -27 to -5 and 5 to 28) is where tests place things
+check("placement: a free spot in front of the hire desks is allowed", placed(e, "Coffee Machine", -20, -6, 0) == true)
+check("placement: ... for any turn from 0 to 7", (function()
+	for r = 0, 7 do
+		if not placed(e, "Coffee Machine", -20, -6, r) then return false end
+	end
+	return true
+end)())
+-- ids
+for _, id in ipairs({ "", string.rep("a", 40), 5, true, false, {}, "Desk#1", "Unknown", "Gaming PC", "Desk ", "desk" }) do
+	check("placement: the id " .. tostring(id) .. " is refused", placed(e, id, -20, -6, 0) == false)
+end
+check("placement: a 39-character unknown id is still refused (it is not an item)", placed(e, string.rep("a", 39), -20, -6, 0) == false)
+check("placement: nil id", placed(e, nil, -20, -6, 0) == false)
+-- numbers
+for _, bad in ipairs({ 0 / 0, math.huge, -math.huge, "1", true, 1e9, -1e9, 1001 }) do
+	check("placement: x = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", bad, -6, 0) == false)
+	check("placement: z = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", -20, bad, 0) == false)
+end
+check("placement: a spot off the 0.5 grid is refused (the same spot on the grid is allowed)", placed(e, "Coffee Machine", -20.3, -6, 0) == false and placed(e, "Coffee Machine", -20, -6.25, 0) == false
+	and placed(e, "Coffee Machine", -20.25, -6, 0) == false and placed(e, "Coffee Machine", -20.5, -6, 0) == true and placed(e, "Coffee Machine", -20, -6.5, 0) == true)
+check("placement: a missing x or z is refused", placed(e, "Coffee Machine", nil, -6, 0) == false and placed(e, "Coffee Machine", -20, nil, 0) == false)
+for _, bad in ipairs({ -1, 8, 1.5, "1", true, 0 / 0, math.huge, 100 }) do
+	check("placement: r = " .. tostring(bad) .. " is refused", placed(e, "Coffee Machine", -20, -6, bad) == false)
+end
+check("placement: a missing r is refused", placed(e, "Coffee Machine", -20, -6, nil) == false)
+-- ownership
+local none = env(function(x) x.owned = {} end)
+check("placement: an upgrade you don't own is refused", placed(none, "Coffee Machine", -20, -6, 0) == false)
+local why
+_, why = placed(none, "Coffee Machine", -20, -6, 0)
+check("placement: ... and says so", string.find(tostring(why), "own", 1, true) ~= nil, why)
+check("placement: owning another upgrade doesn't help", placed(env(function(x) x.owned = { Desk = true } end), "Coffee Machine", -20, -6, 0) == false)
+check("placement: no owned table at all is refused", placed(env(function(x) x.owned = nil end), "Desk", -23, -40, 0) == false)
+-- inside the building
+check("placement: against the left wall is allowed (the footprint touches x -30)", placed(e, "Coffee Machine", -27.5, -6, 0) == true)
+check("placement: through the left wall is refused", placed(e, "Coffee Machine", -28, -6, 0) == false)
+check("placement: through the right wall is refused", placed(e, "Coffee Machine", 28, -6, 0) == false)
+check("placement: in front of the front edge is refused (z 0 is the front)", placed(e, "Coffee Machine", -20, 0.5, 0) == false)
+check("placement: behind the back wall is refused (between two incubators, so only the wall says no)", placed(e, "Coffee Machine", -18, -59.5, 0) == false and placed(e, "Coffee Machine", -18, -58.5, 0) == true)
+check("placement: turned 90 degrees, the sides swap", placed(e, "Coffee Machine", -28.5, -6, 2) == true and placed(e, "Coffee Machine", -28.5, -6, 0) == false)
+check("placement: turned 45 degrees takes more room (the corners)", placed(e, "Coffee Machine", -28.5, -6, 1) == false)
+local big = env(function(x) x.building = 5 end)
+check("placement: building 5 (78 x 82) is bigger: x -36.5 fits there and not in building 1", placed(big, "Coffee Machine", -36.5, -6, 0) == true and placed(e, "Coffee Machine", -36.5, -6, 0) == false)
+check("placement: a building number with no size is refused", placed(env(function(x) x.building = 6 end), "Desk", -23, -40, 0) == false and placed(env(function(x) x.building = 0 end), "Desk", -23, -40, 0) == false)
+-- zones
+check("placement: the walking lane down the middle is reserved", placed(e, "Coffee Machine", 0, -35, 0) == false)
+check("placement: the spawn is reserved", placed(e, "Coffee Machine", 0, -18, 0) == false)
+check("placement: where a hire stands is reserved", placed(e, "Coffee Machine", -4.5, -28, 0) == false)
+check("placement: the incubators are reserved", placed(e, "Coffee Machine", -12, -55, 0) == false)
+check("placement: the signs' space is reserved", placed(e, "Coffee Machine", 21, -6, 0) == false)
+check("placement: another upgrade's slot is reserved", placed(e, "Desk", -23, -28, 0) == false)
+_, why = placed(e, "Desk", -23, -28, 0)
+check("placement: ... and says so", string.find(tostring(why), "reserved", 1, true) ~= nil, why)
+check("placement: your own slot is yours (the Laptop in the Desk's slot is not)", placed(e, "Desk", -23, -40, 0) == true and placed(e, "Laptop", -23, -40, 0) == false)
+check("placement: a slot's owner can move around inside it", placed(e, "Desk", -22, -41, 0) == true)
+check("placement: without the plot's zones the server refuses (it can't know what is reserved)", placed(env(function(x) x.zones = nil end), "Coffee Machine", -20, -6, 0) == false)
+check("placement: an empty zone list is not 'unknown': nothing is reserved", placed(env(function(x) x.zones = {} end), "Coffee Machine", 0, -35, 0) == true)
+-- overlap, with the 0.1 stud tolerance
+local with = env(function(x) x.objects = { { id = "Coffee Machine", x = -20, z = -6, r = 0 } } end)
+-- Coffee Machine is 2.9 deep (-7.45 to -4.55) and the Laptop 3.3 deep, so a Laptop 3.1 away just touches
+check("overlap: clear of another item is allowed", placed(with, "Laptop", -20, -2.5, 0) == true)
+check("overlap: 0.1 stud into another item is allowed", placed(with, "Laptop", -20, -3, 0) == true)
+check("overlap: 0.6 stud into another item is refused", placed(with, "Laptop", -20, -3.5, 0) == false)
+check("overlap: 0.4 stud into another item (side by side) is refused", placed(with, "Laptop", -15, -6, 0) == false and placed(with, "Laptop", -14.5, -6, 0) == true)
+_, why = placed(with, "Laptop", -20, -6, 0)
+check("overlap: right on top is refused and says 'taken'", string.find(tostring(why), "taken", 1, true) ~= nil, why)
+check("overlap: a turned footprint is measured turned (a Whiteboard turned 90 degrees reaches 4.85 each way)",
+	placed(env(function(x) x.objects = { { id = "Whiteboard", x = -12, z = -8, r = 0 } } end), "Laptop", -12, -4, 0) == true
+	and placed(env(function(x) x.objects = { { id = "Whiteboard", x = -12, z = -8, r = 2 } } end), "Laptop", -12, -4, 0) == false)
+check("overlap: moving an item doesn't make it collide with its own old place", placed(with, "Coffee Machine", -20, -6.5, 0) == true)
+check("overlap: an item this version has no footprint for blocks nothing (it is kept, not measured)", placed(env(function(x) x.objects = { { id = "Gaming PC", x = -20, z = -6, r = 0 } } end), "Coffee Machine", -20, -6, 0) == true)
+check("overlap depth: two 4 x 4 squares 3 apart overlap by 1", math.abs(CC.overlapDepth({ { 0, 0 }, { 4, 0 }, { 4, 4 }, { 0, 4 } }, { { 3, 0 }, { 7, 0 }, { 7, 4 }, { 3, 4 } }) - 1) < 1e-9)
+check("overlap depth: apart is 0, touching is 0", CC.overlapDepth({ { 0, 0 }, { 4, 0 }, { 4, 4 }, { 0, 4 } }, { { 5, 0 }, { 9, 0 }, { 9, 4 }, { 5, 4 } }) == 0
+	and CC.overlapDepth({ { 0, 0 }, { 4, 0 }, { 4, 4 }, { 0, 4 } }, { { 4, 0 }, { 8, 0 }, { 8, 4 }, { 4, 4 } }) == 0)
+-- furniture ids (none ship yet: a test key is added and removed)
+CC.Furniture.Crate = { name = "Crate", w = 0.5, d = 0.5 }
+CC.Furniture.Chair = { name = "Chair", w = 2, d = 2 }
+local owns = env(function(x) x.decor = { Chair = 2, Crate = 99 } end)
+check("furniture: Chair#1 and Chair#2 are yours, Chair#3 is not", placed(owns, "Chair#1", -20, -6, 0) == true and placed(owns, "Chair#2", -14, -6, 0) == true and placed(owns, "Chair#3", -20, -6, 0) == false)
+check("furniture: the number must be 1 to 99 and plain", placed(owns, "Chair#0", -20, -6, 0) == false and placed(owns, "Chair#100", -20, -6, 0) == false and placed(owns, "Chair#01x", -20, -6, 0) == false and placed(owns, "Chair#", -20, -6, 0) == false and placed(owns, "#1", -20, -6, 0) == false)
+check("furniture: a key with no entry is refused", placed(owns, "Sofa#1", -20, -6, 0) == false)
+check("furniture: it may not stand in an upgrade's slot", placed(owns, "Chair#1", -23, -40, 0) == false)
+check("parseId: upgrade, furniture and nothing", (function()
+	local k1, key1 = CC.parseId("Desk")
+	local k2, key2, n2 = CC.parseId("Chair#2")
+	return k1 == "upgrade" and key1 == "Desk" and k2 == "furniture" and key2 == "Chair" and n2 == 2 and CC.parseId("Chair#2#3") == nil and CC.parseId(7) == nil
+end)())
+-- the item limit
+local crowd = env(function(x)
+	x.decor = { Crate = 99 }
+	x.objects = {}
+	for i = 1, 40 do
+		table.insert(x.objects, { id = "Crate#" .. i, x = -27 + (i - 1) * 0.5, z = -3, r = 0 }) -- anywhere: placed items are not measured again
+	end
+end)
+check("limit: the office holds 40 items", #crowd.objects == 40 and CC.MaxObjects == 40)
+check("limit: a 41st item is refused", placed(crowd, "Crate#41", -20, -9, 0) == false)
+_, why = placed(crowd, "Crate#41", -20, -9, 0)
+check("limit: ... and says the office is full", string.find(tostring(why), "more items", 1, true) ~= nil, why)
+check("limit: moving an item that is already placed still works at the limit", placed(crowd, "Crate#1", -20, -9, 0) == true)
+local unknowns = env(function(x)
+	x.objects = {}
+	for i = 1, 40 do table.insert(x.objects, { id = "Future" .. i, x = i, z = -30, r = 0 }) end
+end)
+check("limit: items kept from a newer version count toward it", placed(unknowns, "Coffee Machine", -20, -6, 0) == false)
+
+-- store, apply, inventory
+local active = { objects = {}, stored = {} }
+check("store: an upgrade you own can be stored", CC.checkStore(env(), active, "Laptop") == true)
+check("store: one you don't own can't", CC.checkStore(none, active, "Laptop") == false)
+check("store: an unknown id, a bad id and a bad type can't", CC.checkStore(env(), active, "Gaming PC") == false and CC.checkStore(env(), active, 5) == false and CC.checkStore(env(), active, string.rep("a", 40)) == false and CC.checkStore(env(), active, nil) == false)
+active.stored.Laptop = true
+check("store: one already in storage can't be stored again", CC.checkStore(env(), active, "Laptop") == false)
+active.stored = {}
+for i = 1, 40 do active.stored["Crate#" .. i] = true end
+check("store: a full storage (40) refuses another", CC.checkStore(owns, active, "Chair#1") == false)
+active = { objects = { { id = "Desk", x = -23, z = -40, r = 0 } }, stored = { Laptop = true } }
+CC.applyPlace(active, "Laptop", -25, -30, 0)
+check("applyPlace: a stored item leaves the storage and stands in the office", active.stored.Laptop == nil and #active.objects == 2 and active.objects[2].id == "Laptop" and active.objects[2].x == -25)
+CC.applyPlace(active, "Laptop", -22, -30, 3)
+check("applyPlace: placing again moves it (never two entries)", #active.objects == 2 and active.objects[2].x == -22 and active.objects[2].r == 3)
+CC.applyStore(active, "Desk")
+check("applyStore: the item leaves the office and goes to storage", #active.objects == 1 and active.objects[1].id == "Laptop" and active.stored.Desk == true)
+CC.applyStore(active, "Whiteboard")
+check("applyStore: an upgrade that stood at its default slot goes to storage too", active.stored.Whiteboard == true and #active.objects == 1)
+check("inventory: the stored ids, sorted", deepEqual(CC.inventory(active, {}), { "Desk", "Whiteboard" }))
+check("inventory: owned furniture with no entry joins it (placed ones don't)", (function()
+	local list = CC.inventory({ objects = { { id = "Chair#1", x = 0, z = 0, r = 0 } }, stored = { Desk = true } }, { Chair = 2 })
+	return deepEqual(list, { "Chair#2", "Desk" })
+end)())
+CC.Furniture.Crate, CC.Furniture.Chair = nil, nil
+check("the test furniture is gone again (the real config has none yet)", next(CC.Furniture) == nil)
+
+-- the request limit
+local bucket = CC.newBucket(100)
+local allowed = 0
+for _ = 1, 10 do
+	if CC.takeToken(bucket, 100) then allowed += 1 end
+end
+check("rate: 4 requests at once, the 5th is refused", allowed == 4)
+check("rate: after a quarter second one more is allowed (4 a second)", CC.takeToken(bucket, 100.25) == true and CC.takeToken(bucket, 100.25) == false)
+check("rate: 4 a second keeps going", (function()
+	local b = CC.newBucket(0)
+	local ok = 0
+	for i = 1, 40 do
+		if CC.takeToken(b, i * 0.25) then ok += 1 end
+	end
+	return ok == 40
+end)())
+check("rate: faster than 4 a second is refused (10 a second gets about 4 a second)", (function()
+	local b = CC.newBucket(0)
+	local ok = 0
+	for i = 1, 100 do
+		if CC.takeToken(b, i * 0.1) then ok += 1 end
+	end
+	return ok >= 40 and ok <= 47
+end)())
+check("rate: a long quiet time refills no more than 4", (function()
+	local b = CC.newBucket(0)
+	local ok = 0
+	for _ = 1, 10 do
+		if CC.takeToken(b, 1000) then ok += 1 end
+	end
+	return ok == 4
+end)())
+check("rate: a clock that goes back adds nothing", (function()
+	local b = CC.newBucket(50)
+	for _ = 1, 4 do CC.takeToken(b, 50) end
+	return CC.takeToken(b, 40) == false
+end)())
+
+-- placement is only for Studio until the office screen exists
+check("Placement is on in Studio only (StudioOnly)", CC.Placement.Enabled == true and CC.Placement.StudioOnly == true and CC.isPlacementActive() == true)
+IS_STUDIO = false
+check("... and off on a live server", CC.isPlacementActive() == false)
+IS_STUDIO = true
+CC.Placement.StudioOnly = false
+IS_STUDIO = false
+check("... until StudioOnly is turned off", CC.isPlacementActive() == true)
+CC.Placement.Enabled = false
+check("... or Enabled is", CC.isPlacementActive() == false)
+CC.Placement.Enabled, CC.Placement.StudioOnly = true, true
+IS_STUDIO = true
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def company_source(mutation=None):
+    """The COMPANY_TESTS program with the real SectorConfig, IpoConfig, CompanyConfig, PlotVisuals and PlotArt.
+    mutation = (old, new) breaks one rule of CompanyConfig (or SectorConfig): `old` must be in exactly one of them once."""
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    parts = {name: read(name + ".lua") for name in ("SectorConfig", "IpoConfig", "CompanyConfig", "PlotVisuals", "PlotArt")}
+    if mutation:
+        old, new = mutation
+        hits = [name for name in ("CompanyConfig", "SectorConfig") if old in parts[name]]
+        if len(hits) != 1 or parts[hits[0]].count(old) != 1:
+            raise SystemExit("mutation target not found exactly once: " + old)
+        parts[hits[0]] = parts[hits[0]].replace(old, new, 1)
+    return (COMPANY_TESTS.replace("__UPGRADES__", upgrades_lua_names())
+            .replace("__SECTORCONFIG__", parts["SectorConfig"]).replace("__IPOCONFIG__", parts["IpoConfig"])
+            .replace("__COMPANYCONFIG__", parts["CompanyConfig"]).replace("__PLOTVISUALS__", parts["PlotVisuals"])
+            .replace("__PLOTART__", parts["PlotArt"]))
+
+
+def upgrades_lua_names():
+    """The six UPGRADES names from TycoonCore.lua, as a Luau list."""
+    import re
+    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
+        text = f.read()
+    block = text[text.index("local UPGRADES = {"):]
+    block = block[:block.index("\n}")]
+    names = re.findall(r'name = "([^"]+)"', block)
+    if len(names) != 6:
+        raise SystemExit("TycoonCore UPGRADES changed: update the Pokedex placement tests (expected 6 upgrades, found %d)" % len(names))
+    return "{ " + ", ".join('"%s"' % n for n in names) + " }"
+
+
+COMPANY_MUTATIONS = [
+    # The version rule
+    ("the version rule (a higher v is read and rewritten)", ("if isWhole(version, 1) and version > CompanyConfig.Version then", "if false then"),
+     "v = 2: kept opaque (locked), no run check, no event"),
+    ("the version rule (written back as a copy, not as it was loaded)", ("\t\treturn state.raw\n", "\t\treturn deepCopy(state.raw)\n"),
+     "v = 2: the very table that loaded is written back"),
+    ("the version rule (a Studio server adds its mark to an opaque section)", ("\tif state.locked then\n\t\treturn state.raw\n\tend\n", "\tif state.locked then\n\t\tstate.raw.studio = studio or nil\n\t\treturn state.raw\n\tend\n"),
+     "v = 2: deep-equal after a save, even from a Studio server (nothing added)"),
+    ("the unknown sector rule", ("if unknownSector then", "if false then"),
+     "an active company in a sector this version doesn't know is kept opaque (locked), unchanged"),
+    # The run check
+    ("the run check (run < count)", ("if section.run < count then", "if false then"),
+     "run < count: the event is 'complete', with a warning"),
+    ("the run check (run = count also completes)", ("if section.run < count then", "if section.run <= count then"),
+     "run = count does nothing"),
+    ("the run check (run > count)", ("elseif section.run > count then", "elseif false then"),
+     "run > count: the event is 'rebase', with a warning"),
+    ("the run check (run = count also rebases)", ("elseif section.run > count then", "elseif section.run >= count then"),
+     "run = count does nothing"),
+    ("the run check (a rebase stamps the sector)", ("\t\tsection.run = count\n\t\tsection.studio = true\n", "\t\tcompleteCompany(section, count, ctx.now)\n\t\tsection.run = count\n\t\tsection.studio = true\n"),
+     "run > count: no stamp, no card, no Hall of Fame entry"),
+    ("the run check (a rebase doesn't mark the section as saved by Studio)", ("\t\tsection.run = count\n\t\tsection.studio = true\n", "\t\tsection.run = count\n"),
+     "run > count: the section is marked as saved by Studio"),
+    ("the run check (the new company keeps the old rounds)", ("section.active = CompanyConfig.newActive(active.sector, ctx.now, ctx)", "section.active = active"),
+     "run < count: a new company starts (same sector, building 1, nothing placed, no rounds, picked while the picker is off)"),
+    ("the run check (run is not moved to the count)", ("\t\tsection.run = count\n\t\tstate.event = \"complete\"", "\t\tstate.event = \"complete\""),
+     "run < count: run = the IPO count"),
+    ("Bronze (a completion sets the stamp to 1, so a Platinum falls)", ("entry.stamp = math.max(entry.stamp, 1) -- Bronze if there was no stamp yet", "entry.stamp = 1"),
+     "a replay: Platinum stays Platinum, replays + 1, firstAt kept, best engaged is the larger"),
+    ("Bronze (no stamp at all)", ("entry.stamp = math.max(entry.stamp, 1) -- Bronze if there was no stamp yet", "entry.stamp = entry.stamp"),
+     "run < count: Software is done with Bronze, first done now"),
+    ("replays (a second completion isn't counted)", ("\t\tentry.replays += 1\n", "\t\tentry.replays += 0\n"),
+     "a replay: Platinum stays Platinum, replays + 1, firstAt kept, best engaged is the larger"),
+    ("the card (it doesn't keep the rounds)", ("rounds = deepCopy(active.rounds),\n\t\tstake", "rounds = {},\n\t\tstake"),
+     "run < count: the card keeps the building, decor, items, rounds and sx as they were"),
+    ("the card (the stake ignores the dilution)", ("stake = CompanyConfig.stakeOf(active.rounds),", "stake = TOTAL_BP,"),
+     "run < count: the stake is 10,000 minus the dilution, what is unknown is 0"),
+    ("the Launch goal (a sector that can't be picked counts)", ("if not (SectorConfig.isEnabled(key) and typeof(other) == \"table\" and other.state == \"done\") then", "if not (typeof(other) == \"table\" and other.state == \"done\") then"),
+     "Gaming 'done' in a save (a Studio test) is kept but Launch is not reached while Gaming can't be picked"),
+    ("the new company's picked flag (always unpicked)", ("local picked = SectorConfig.PickerEnabled ~= true", "local picked = false"),
+     "missing section: v 1, run = the IPO count, Software, building 1, picked (the picker is off)"),
+    # Unknown fields kept at every level
+    ("keeping unknown fields (the section)", ("copyUnknown(saved, TOP_KNOWN, section)", ""),
+     "unknown data is kept: top-level unknown field"),
+    ("keeping unknown fields (active)", ("copyUnknown(value, ACTIVE_KNOWN, active)", ""),
+     "unknown data is kept: active unknown field"),
+    ("keeping unknown fields (objects[i])", ("copyUnknown(entry, OBJECT_KNOWN, object)", ""),
+     "unknown data is kept: active.objects[i] unknown field"),
+    ("keeping unknown fields (rounds[k])", ("\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n\tcopyUnknown(value, ROUND_KNOWN, round)\n", "\tlocal round = { s = value.s, c = value.c or 0, cash = value.cash or 0, bp = value.bp or 0, at = value.at or 0, studio = value.studio or false }\n"),
+     "unknown data is kept: active.rounds[k] unknown field"),
+    ("keeping unknown fields (unknown stage keys in rounds)", ("out[name] = deepCopy(inner) -- a stage this version doesn't know: kept whole, its bp still counts", ""),
+     "unknown data is kept: active.rounds unknown stage"),
+    ("keeping unknown fields (sectors[k])", ("copyUnknown(value, SECTOR_KNOWN, entry)", ""),
+     "unknown data is kept: sectors[k] unknown field"),
+    ("keeping unknown fields (unknown sector keys)", ("out[key] = deepCopy(inner) -- a sector this version doesn't know: kept whole", ""),
+     "unknown data is kept: sectors unknown key kept whole"),
+    ("keeping unknown fields (card)", ("copyUnknown(value, CARD_KNOWN, card)", ""),
+     "unknown data is kept: card unknown field"),
+    ("keeping unknown fields (unknown keys in a map)", ("\t\telse\n\t\t\tout[name] = deepCopy(inner)\n\t\tend\n\tend\n\treturn out\nend\n\nlocal function validCopies", "\t\tend\n\tend\n\treturn out\nend\n\nlocal function validCopies"),
+     "unknown data is kept: active.decor unknown key"),
+    ("keeping unknown fields (unknown upgrade names on a card)", ("if typeof(name) == \"string\" and #name >= 1 and #name <= CompanyConfig.MaxIdLength and #out < MAX_OWNED_NAMES then", "if typeof(name) == \"string\" and CompanyConfig.Footprints[name] then"),
+     "unknown data is kept: card.owned unknown upgrade name"),
+    ("keeping the sx table whole", ("return deepCopy(value)\n\tend\n\tnote(ctx, \"a bad \" .. where .. \".\" .. key .. \", it starts again empty\")", "return {}\n\tend\n\tnote(ctx, \"a bad \" .. where .. \".\" .. key .. \", it starts again empty\")"),
+     "unknown data is kept: active.sx whole"),
+    ("saving a copy (the live state is handed out)", ("local section = deepCopy(state.section)\n", "local section = state.section\n"),
+     "the saved section is a copy: changing it never changes the live state"),
+    # Bad values
+    ("the bad value check on numbers (a negative number passes)", ("if isNumber(value) and value >= minimum and (maximum == nil or value <= maximum) and (not whole or value % 1 == 0) then", "if isNumber(value) then"),
+     "engaged -5 is skipped (0) with a warning"),
+    ("the bad value check (NaN passes)", ("return typeof(value) == \"number\" and value == value and value ~= math.huge and value ~= -math.huge\n", "return typeof(value) == \"number\"\n"),
+     "engaged infinity is skipped"),
+    ("a finished sector with stamp 0", ("if entry.state == \"done\" and entry.stamp == 0 then", "if false then"),
+     "sectors: done with stamp 0 becomes Bronze"),
+    ("the stamp clamp", ("entry.stamp = math.clamp(math.floor(stamp), 0, 3)", "entry.stamp = math.floor(stamp)"),
+     "sectors: a bad state is 'progress', a stamp over 3 is clamped to 3 and a bad replays is 0"),
+    ("the dust range", ("elseif isWhole(dust, -5000, 4999) then", "elseif isWhole(dust, -5000, 9999) then"),
+     "dust over 4,999 is skipped (0)"),
+    ("the objects limit (40)", ("elseif #out >= CompanyConfig.MaxObjects then", "elseif false then"),
+     "objects: at most 40 are kept (ids this version has no item for are kept too)"),
+    ("the object grid check on load", ("and isNumber(entry.x) and math.abs(entry.x) <= limit and (entry.x / CompanyConfig.Grid) % 1 == 0", "and isNumber(entry.x) and math.abs(entry.x) <= limit"),
+     "objects: a bad x, r, id, grid step, missing field, junk, a repeated id or a far x is skipped, the one good item stays"),
+    ("repeated object ids on load", ("elseif seen[entry.id] then", "elseif false then"),
+     "objects: a bad x, r, id, grid step, missing field, junk, a repeated id or a far x is skipped, the one good item stays"),
+    ("a malformed round counts as nothing (dropped dilution)", ("local settled = { s = \"skipped\", c = 0, cash = 0, bp = 0, at = 0, studio = false }", "local settled = { s = \"skipped\", c = 0, cash = 0, bp = 100, at = 0, studio = false }"),
+     "rounds: a record of a known stage that isn't a table counts as settled (skipped, no dilution)"),
+    ("a malformed round keeps its claimed bp", ("\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tcopyUnknown(value, ROUND_KNOWN, settled)\n\t\treturn settled\n", "\t\tnote(ctx, \"a bad \" .. where .. \", counted as settled with no dilution\")\n\t\tsettled.bp = isWhole(value.bp, 0, TOTAL_BP) and value.bp or 0\n\t\treturn settled\n"),
+     "rounds: a malformed record counts as settled with bp 0, its unknown fields stay"),
+    ("the dilution cap", ("return math.min(CompanyConfig.Funding.DilutionCap, total)", "return total"),
+     "dilution is capped (4,000 bp), the stake never falls under 6,000"),
+    ("the dilution sum (unknown stages ignored)", ("if typeof(round) == \"table\" and isWhole(round.bp, 0, TOTAL_BP) then", "if typeof(round) == \"table\" and STAGE_KEYS[_] and isWhole(round.bp, 0, TOTAL_BP) then"),
+     "dilution: an unknown stage's valid bp counts, a malformed one counts 0"),
+    # Placement
+    ("the coordinate check", ("if not isNumber(x) or not isNumber(z) or math.abs(x) > limit or math.abs(z) > limit then", "if false then")),
+    ("the grid check on placement", ("if (x / CompanyConfig.Grid) % 1 ~= 0 or (z / CompanyConfig.Grid) % 1 ~= 0 then", "if false then")),
+    ("the rotation check", ("if not isWhole(r, 0, CompanyConfig.MaxRotation) then", "if false then")),
+    ("the rotation range (0 to 8)", ("if not isWhole(r, 0, CompanyConfig.MaxRotation) then", "if not isWhole(r, 0, CompanyConfig.MaxRotation + 1) then"),
+     "placement: r = 8 is refused"),
+    ("the ownership check (upgrades)", ("\t\tif not (env.owned and env.owned[key]) then\n\t\t\treturn false, \"You don't own \" .. id\n\t\tend\n\telseif not (env.decor and (env.decor[key] or 0) >= copy) then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building", "\t\tif false then\n\t\t\treturn false, \"You don't own \" .. id\n\t\tend\n\telseif not (env.decor and (env.decor[key] or 0) >= copy) then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building"),
+     "placement: an upgrade you don't own is refused"),
+    ("the ownership check (furniture)", ("elseif not (env.decor and (env.decor[key] or 0) >= copy) then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building", "elseif false then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building"),
+     "furniture: Chair#1 and Chair#2 are yours, Chair#3 is not"),
+    ("the building check (a size that doesn't exist)", ("if not building then\n\t\treturn false, \"Your office isn't ready for that yet\"", "if false then\n\t\treturn false, \"Your office isn't ready for that yet\""),
+     "placement: a building number with no size is refused"),
+    ("the zones check (missing zones accepted)", ("if typeof(env.zones) ~= \"table\" then", "if false then"),
+     "placement: without the plot's zones the server refuses (it can't know what is reserved)"),
+    ("the inside-the-building check (the back wall)", ("or corner[2] < -building.d - EPSILON or corner[2] > EPSILON then", "or corner[2] > EPSILON then"),
+     "placement: behind the back wall is refused"),
+    ("the inside-the-building check (the front)", ("or corner[2] < -building.d - EPSILON or corner[2] > EPSILON then", "or corner[2] < -building.d - EPSILON then"),
+     "placement: in front of the front edge is refused (z 0 is the front)"),
+    ("the inside-the-building check (the sides)", ("if corner[1] < -building.w / 2 - EPSILON or corner[1] > building.w / 2 + EPSILON\n\t\t\tor corner[2]", "if corner[1] < -building.w / 2 - EPSILON\n\t\t\tor corner[2]"),
+     "placement: through the right wall is refused"),
+    ("the zones (nothing is reserved)", ("if zone.owner ~= id and overlapDepth(shape, axisRect(zone.x0, zone.x1, zone.z0, zone.z1)) > tolerance then", "if false then"),
+     "placement: the walking lane down the middle is reserved"),
+    ("the zones (an upgrade may use every slot)", ("if zone.owner ~= id and overlapDepth(", "if zone.owner == nil and overlapDepth("),
+     "placement: another upgrade's slot is reserved"),
+    ("the zones (the owner is not exempt in its own slot)", ("if zone.owner ~= id and overlapDepth(", "if overlapDepth("),
+     "placement: your own slot is yours (the Laptop in the Desk's slot is not)"),
+    ("the zones (shifted by the wrong sign)", ("z0 = box[5] - shift, z1 = box[6] - shift", "z0 = box[5] + shift, z1 = box[6] + shift"),
+     "placement: the walking lane down the middle is reserved"),
+    ("the overlap tolerance (none)", ("local tolerance = CompanyConfig.OverlapTolerance + EPSILON", "local tolerance = EPSILON"),
+     "overlap: 0.1 stud into another item is allowed"),
+    ("the overlap tolerance (half a stud)", ("local tolerance = CompanyConfig.OverlapTolerance + EPSILON", "local tolerance = 0.5 + EPSILON"),
+     "overlap: 0.4 stud into another item (side by side) is refused"),
+    ("the overlap check between items", ("if ow and overlapDepth(shape, corners(ow, od, other.x, other.z, other.r)) > tolerance then", "if false then"),
+     "overlap: right on top is refused and says 'taken'"),
+    ("the overlap check (turned items measured unturned)", ("overlapDepth(shape, corners(ow, od, other.x, other.z, other.r))", "overlapDepth(shape, corners(ow, od, other.x, other.z, 0))"),
+     "overlap: a turned footprint is measured turned (a Whiteboard turned 90 degrees reaches 4.85 each way)"),
+    ("the overlap check (a moved item blocks itself)", ("\t\tif other.id ~= id then\n\t\t\tothers += 1", "\t\tif true then\n\t\t\tothers += 1"),
+     "overlap: moving an item doesn't make it collide with its own old place"),
+    ("the item limit", ("if others >= CompanyConfig.MaxObjects then", "if false then"),
+     "limit: a 41st item is refused"),
+    ("the rotation (turns ignored)", ("local angle = math.rad(45 * r)", "local angle = math.rad(0 * r)"),
+     "placement: turned 90 degrees, the sides swap"),
+    ("the storage check (already stored)", ("if active.stored[id] then\n\t\treturn false, id .. \" is already in storage\"", "if false then\n\t\treturn false, id .. \" is already in storage\""),
+     "store: one already in storage can't be stored again"),
+    ("the storage limit", ("if count >= CompanyConfig.MaxStored then", "if false then"),
+     "store: a full storage (40) refuses another"),
+    ("placing doesn't take the item out of storage", ("\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n\tactive.stored[id] = nil\n", "\ttable.insert(active.objects, { id = id, x = x, z = z, r = r })\n"),
+     "applyPlace: a stored item leaves the storage and stands in the office"),
+    ("placing twice makes two entries", ("\t\tif object.id == id then\n\t\t\tobject.x, object.z, object.r = x, z, r", "\t\tif false then\n\t\t\tobject.x, object.z, object.r = x, z, r"),
+     "applyPlace: placing again moves it (never two entries)"),
+    ("storing leaves the item placed", ("\t\t\ttable.remove(active.objects, i)\n\t\t\tbreak\n", "\t\t\tbreak\n"),
+     "applyStore: the item leaves the office and goes to storage"),
+    # The request limit
+    ("the request limit (no refill cap)", ("bucket.tokens = math.min(limit.burst, bucket.tokens + math.max(0, now - bucket.at) * limit.perSecond)", "bucket.tokens = bucket.tokens + math.max(0, now - bucket.at) * limit.perSecond"),
+     "rate: a long quiet time refills no more than 4"),
+    ("the request limit (no limit)", ("if bucket.tokens < 1 then", "if false then"),
+     "rate: 4 requests at once, the 5th is refused"),
+    ("the request limit (8 a second)", ("CompanyConfig.RateLimit = { perSecond = 4, burst = 4 }", "CompanyConfig.RateLimit = { perSecond = 8, burst = 4 }"),
+     "rate: faster than 4 a second is refused (10 a second gets about 4 a second)"),
+    ("the request limit (a clock going back adds)", ("math.max(0, now - bucket.at)", "math.abs(now - bucket.at)"),
+     "rate: a clock that goes back adds nothing"),
+    # Switches and config
+    ("the placement switch (live servers allowed)", ("return placement.Enabled == true and (placement.StudioOnly ~= true or RunService:IsStudio())", "return placement.Enabled == true"),
+     "... and off on a live server"),
+    ("the placement default (not Studio only)", ("\tStudioOnly = true,\n}\n\nfunction CompanyConfig.isPlacementActive", "\tStudioOnly = false,\n}\n\nfunction CompanyConfig.isPlacementActive"),
+     "Placement is on in Studio only (StudioOnly)"),
+    ("the picker (on)", ("SectorConfig.PickerEnabled = false", "SectorConfig.PickerEnabled = true"),
+     "the picker is off"),
+    ("a sector enabled (Gaming)", ("Gaming = { name = \"Gaming\", icon = \"🎮\", enabled = false,", "Gaming = { name = \"Gaming\", icon = \"🎮\", enabled = true,"),
+     "only Software can be picked"),
+    ("a sector key renamed", ("SectorConfig.Order = { \"Software\", \"Gaming\", \"Fintech\", \"Biotech\" }", "SectorConfig.Order = { \"Software\", \"Gaming\", \"Finance\", \"Biotech\" }"),
+     "four sector keys from day one, in order"),
+    ("the format version (2)", ("CompanyConfig.Version = 1", "CompanyConfig.Version = 2"),
+     "round trip: v = 1 is written"),
+    ("the Desk footprint too small for its prop", ("[\"Desk\"] = { w = 8.4, d = 7.6 },", "[\"Desk\"] = { w = 6, d = 4 },"),
+     "every upgrade's footprint holds every part of its PlotArt prop (turned by its own yaw)"),
+]
+
+
 def code_only(text):
     """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
     lines = []
@@ -4858,6 +5793,26 @@ def main():
         else:
             caught += 1
     print("Office upgrade mutations: %d of %d broken rules caught" % (caught, len(BUY_MUTATIONS)))
+    result20 = run_luau(luau, company_source())
+    print("Pokedex rules check (CompanyConfig + SectorConfig): " + (result20.stdout.strip() or result20.stderr.strip()))
+    if result20.returncode != 0 or " 0 failed" not in result20.stdout:
+        code = 1
+    company_caught = 0
+    for label, mutation, *expected in COMPANY_MUTATIONS:
+        mutant = run_luau(luau, company_source(mutation))
+        failures = [line for line in mutant.stdout.split("\n") if line.startswith("FAIL: ")]
+        # A broken rule is caught by a failed check. A run that crashes after the first failed checks counts too (the
+        # real run fails as well), but a program that doesn't even compile proves nothing.
+        crashed = "passed," not in mutant.stdout
+        if "SyntaxError" in mutant.stderr or (not failures and (not crashed or " 0 failed" in mutant.stdout)):
+            print("FAIL: mutation not caught: the Pokedex tests do not notice a broken " + label)
+            code = 1
+        elif expected and not crashed and not any(line.startswith("FAIL: " + expected[0]) for line in failures):
+            print("FAIL: mutation of %s is caught, but not by the test \"%s\"" % (label, expected[0]))
+            code = 1
+        else:
+            company_caught += 1
+    print("Pokedex rule mutations: %d of %d broken rules caught" % (company_caught, len(COMPANY_MUTATIONS)))
     pads_passed, pads_failed = pads_gone_checks()
     print("Pads gone and Office wiring check: %d passed, %d failed" % (pads_passed, pads_failed))
     if pads_failed:
