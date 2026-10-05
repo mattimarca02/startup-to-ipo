@@ -128,3 +128,16 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
+| WorldArt (new) | ServerScriptService | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| WorldVisuals (new) | ServerScriptService | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| IconArt (new) | ReplicatedStorage | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| IconVisuals (new) | ReplicatedStorage | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| tools/world_test.py (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| tools/icon_test.py (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| tools/render_previews.py (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/previews/*.svg (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/SHOP_UX_PROPOSAL.md (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/WORLD_PASS_PROPOSAL.md (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/STUDIO_SYNC_WORLD.md (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/world_pass_integration.patch (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
+| docs/WORLD_ICONS_NOTES.md (new) | (repo only) | @mattimarca02 (Claude Code) | world-icons-pass | 2026-10-06 |
