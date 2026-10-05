@@ -476,6 +476,8 @@ local function noteSaveResult(player, data, ok)
 end
 -- SAVENOTE-END
 
+-- SAVEFN-START
+-- (tools/daily_test.py runs save() with a fake DataStore, with the COMMITIPO code below: keep it free of Roblox calls except warn, task.wait and getStore.)
 -- Returns true if the save worked (the shop needs to know before confirming a purchase).
 -- transform (IPO only) changes the payload before it's written: see commitIpo.
 local function save(player, transform)
@@ -515,6 +517,7 @@ local function save(player, transform)
 	noteSaveResult(player, data, ok)
 	return ok
 end
+-- SAVEFN-END
 
 -- LEAVESAVE-START
 -- (tools/daily_test.py runs the code between the LEAVESAVE markers, with a fake save.)
@@ -544,6 +547,8 @@ end
 -- turns on, and IpoServer's new "ipo" section). Only if that worked does the game change to
 -- match. If it failed, nothing changed. Nothing here waits after the save, so a save that is
 -- waiting behind this one (autosave, leaving) always sees the result.
+-- COMMITIPO-START
+-- (tools/daily_test.py runs commitIpo with the real save(), a fake DataStore and the real CompanyServer.)
 local function commitIpo(player, newIpo)
 	local data = playerData[player]
 	if not data then return false end
@@ -596,6 +601,7 @@ local function commitIpo(player, newIpo)
 	refreshSign(player)
 	return true
 end
+-- COMMITIPO-END
 
 -- Cash the startup earned (not refunds or gifts): raises the valuation
 local function addEarnings(player, amount)

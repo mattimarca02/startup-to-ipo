@@ -5816,6 +5816,320 @@ SERVER_MUTATIONS = [
 ]
 
 
+# A pokedex section with fields this version doesn't know at every level the plan lists (docs/CUSTOMIZE_PROPOSAL.md, "KEEP unknown fields"):
+# shared by the CompanyServer tests and the commitIpo tests. run = 2: join it with an IPO count of 2 and nothing happens.
+FAT_POKEDEX_LUA = r"""{
+	v = 1, run = 2,
+	active = {
+		sector = "Software", picked = true, name = "Pixel Pioneers", foundedAt = 1700000000, engaged = 1234.5,
+		passSeconds = { DoubleCash = 100.5, VIP = 20, FuturePass = { a = 1 } },
+		building = 3,
+		decor = { Chair = 2, Future = "x" },
+		objects = { { id = "Desk", x = -23, z = -40, r = 0, futureObj = "keep me" }, { id = "Laptop", x = -25.5, z = -30, r = 3 } },
+		stored = { Whiteboard = true, ["Gaming PC"] = true, ["Future Rack"] = { size = 3 } },
+		told = { Seed = true, SeriesA = true, FutureStage = 7 },
+		rounds = {
+			Seed = { s = "raised", c = 2, cash = 360, bp = 122, at = 1700000100, studio = false, extra = { deep = true } },
+			SeriesA = { s = "skipped", c = 0, cash = 0, bp = 0, at = 1700000200, studio = true },
+			FutureStage = { anything = "goes", bp = 50 },
+		},
+		sx = { n = 3, deep = { a = { b = 1 } } },
+		futureActive = { x = 1 },
+	},
+	sectors = {
+		Software = {
+			state = "done", stamp = 2, replays = 1, firstAt = 1690000000, bestEngaged = 9999.25,
+			card = {
+				name = "Old Co", ipoNumber = 1, at = 1690000001, engaged = 8888.5, ratio = 1.25, building = 5,
+				owned = { "Desk", "Laptop", "Gaming PC" },
+				decor = { Chair = 1, Future = 3 },
+				objects = { { id = "Desk", x = -23, z = -40, r = 0, futureObj = "card object" }, { id = "Laptop", x = -25.5, z = -30, r = 3 } },
+				rounds = { Seed = { s = "raised", c = 1, cash = 100, bp = 40, at = 5, studio = false, extra = 1 }, FutureStage = { bp = 9 } },
+				stake = 9951, shares = 14, sx = { score = 5 },
+				futureCard = "keep",
+			},
+			futureSector = { y = 2 },
+		},
+		Gaming = { state = "progress", stamp = 0, replays = 0, firstAt = 0, bestEngaged = 0 },
+		Energy = { whatever = { 1, 2, 3 } },
+	},
+	kept = { Chair = 1, Plant = 2 },
+	hall = { Launch = 1700000300, Four = 1700000400 },
+	dust = -1234,
+	studio = false,
+	futureTop = { z = { 1, 2, 3 } },
+}"""
+
+
+COMMITIPO_TESTS = r"""-- Tests for TycoonCore.commitIpo and save(): the code between the COMMITIPO and SAVEFN markers, with the real CompanyServer,
+-- CompanyConfig, SectorConfig and IpoConfig, fake modules for the rest and a fake DataStore (customize PR 1 review fix).
+-- An IPO is refused while the pokedex is locked and nothing changes; an IPO by this version saves run = the new count.
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local WARNINGS = {}
+local function warn(...) table.insert(WARNINGS, table.concat({...}, " ")) end
+local function anyWarning(text)
+	for _, w in ipairs(WARNINGS) do
+		if string.find(w, text, 1, true) then return true end
+	end
+	return false
+end
+local NOW = 1760000000
+local os = { time = function() return NOW end, clock = function() return 100 end }
+local IS_STUDIO = true
+local MODULES = {}
+local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local SERVICES = {
+	ReplicatedStorage = token("ReplicatedStorage"),
+	RunService = { IsStudio = function() return IS_STUDIO end },
+}
+local game = { GetService = function(_, n) return SERVICES[n] end }
+local script = { Parent = token("ReplicatedStorage") }
+local task = { wait = function() error("save() waited: a lock was left on") end }
+
+MODULES.SectorConfig = (function()
+__SECTORCONFIG__
+end)()
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.CompanyConfig = (function()
+__COMPANYCONFIG__
+end)()
+local function buildCompanyServer()
+__COMPANYSERVER__
+end
+local CompanyServer = buildCompanyServer()
+local CC = MODULES.CompanyConfig
+local IpoConfig = MODULES.IpoConfig
+
+local function deepEqual(a, b)
+	if typeof(a) ~= typeof(b) then return false end
+	if typeof(a) == "number" and a ~= a and b ~= b then return true end
+	if typeof(a) ~= "table" then return a == b end
+	for k, v in pairs(a) do
+		if not deepEqual(v, b[k]) then return false end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then return false end
+	end
+	return true
+end
+local function deepCopy(v)
+	if typeof(v) ~= "table" then return v end
+	local c = {}
+	for k, inner in pairs(v) do c[k] = deepCopy(inner) end
+	return c
+end
+
+-- The other modules: they only have to serialize (fresh tables, like the real ones) and count what commitIpo asks of them
+local COUNT = { destroyed = 0, cleared = 0, hrReset = 0, income = 0, sign = 0 }
+local ShopServer = { serialize = function(data) return { luckLeft = 0 } end, notify = function() end }
+local EmployeeServer = {
+	serialize = function(data) return deepCopy(data.team) end,
+	serializeFixedHires = function() return nil end,
+	clearIncubators = function() COUNT.cleared += 1 end,
+}
+local PoachServer = { serialize = function(data) return { hrLevel = data.poachLevel } end, resetHrDepartment = function() COUNT.hrReset += 1 end }
+local IpoServer = { serialize = function(data) return deepCopy(data.ipo) end }
+local OnboardingServer = { serialize = function() return { seenIntro = true } end }
+local DailyServer = { serialize = function() return { streak = 4 } end }
+local TaskServer = { serialize = function() return nil end }
+__KNOWNSECTIONS__
+local playerData = {}
+local STORE = { calls = 0, last = nil, fail = false }
+local fakeStore = { SetAsync = function(_, key, payload)
+	STORE.calls += 1
+	if STORE.fail then error("DataStore is down") end
+	STORE.key, STORE.last = key, deepCopy(payload)
+end }
+local function getStore() return fakeStore end
+local function updateIncome() COUNT.income += 1 end
+local function refreshSign() COUNT.sign += 1 end
+__BUILDSAVE__
+__SAVENOTE__
+__SAVEFN__
+__COMMITIPO__
+
+local function newPlayer(savedPokedex, count)
+	local player = { Name = "P", UserId = 7 }
+	local data = {
+		loaded = true, ready = true, saving = false,
+		owned = { Desk = true, Laptop = true }, cash = { Value = 250 },
+		items = { Desk = { Destroy = function() COUNT.destroyed += 1 end }, Laptop = { Destroy = function() COUNT.destroyed += 1 end } },
+		unknownSections = { future = { x = 1 } },
+		shop = {}, onboarding = {}, daily = {}, tasks = {}, poachLevel = 2, poach = {},
+		team = { employees = {}, incubators = { { egg = "Garage" }, false, false } },
+		ipo = { count = count or 1, shares = 5, valuation = 900, lifetime = 900, best = 900 },
+	}
+	player.data = data
+	playerData[player] = data
+	WARNINGS = {}
+	CompanyServer.setupPlayer(player, data, savedPokedex)
+	return player, data
+end
+local function resetFakes()
+	STORE.calls, STORE.last, STORE.fail = 0, nil, false
+	for key in pairs(COUNT) do COUNT[key] = 0 end
+end
+local function ipoAfter(data) -- the IPO section IpoServer hands over: the same one with the next count
+	local after = deepCopy(data.ipo)
+	after.count += 1
+	after.shares += 3
+	after.valuation = 0
+	return after
+end
+local function live(data) -- everything an IPO may change in the running game
+	return deepCopy({ cash = data.cash.Value, owned = data.owned, ipo = data.ipo, team = data.team, section = CompanyServer.serialize(data) })
+end
+
+-- 1. An IPO is refused while the pokedex is locked --------------------------------------------------
+local V2 = { v = 2, run = 0, active = { sector = "Software", future = { 1, 2 } }, other = { a = 1 } }
+local UNKNOWN_SECTOR = { v = 1, run = 0, active = { sector = "Energy" } }
+local NOT_A_LIST = { v = 1, run = 0, active = { sector = "Software", objects = { { id = "Desk", x = -23, z = -40, r = 0 }, extra = 5 } } }
+local BROKEN = { v = 1, run = 0, active = "whatever", precious = { x = 1 } }
+local LOCKED = {
+	{ "a newer version's section", function() return newPlayer(deepCopy(V2)) end, V2 },
+	{ "a sector this version doesn't know", function() return newPlayer(deepCopy(UNKNOWN_SECTOR)) end, UNKNOWN_SECTOR },
+	{ "placed items that are not a plain list", function() return newPlayer(deepCopy(NOT_A_LIST)) end, NOT_A_LIST },
+	{ "a section that failed to load", function()
+		local realLoad = CC.load
+		CC.load = function(saved, ctx) if saved ~= nil then error("boom") end return realLoad(saved, ctx) end
+		local made, player, data = pcall(newPlayer, deepCopy(BROKEN))
+		CC.load = realLoad
+		assert(made, player)
+		return player, data
+	end, BROKEN },
+}
+for _, kind in ipairs(LOCKED) do
+	local label, make, section = kind[1], kind[2], kind[3]
+	local player, data = make()
+	resetFakes()
+	check("locked (" .. label .. "): the player is locked", CompanyServer.isLocked(data) == true)
+	local before = live(data)
+	WARNINGS = {}
+	local called, result = pcall(commitIpo, player, ipoAfter(data))
+	check("an IPO while the pokedex is locked: the call returns false (" .. label .. ")", called and result == false, called and tostring(result) or result)
+	check("an IPO while the pokedex is locked: Cash, upgrades, eggs, ipo.count and the company are unchanged (" .. label .. ")",
+		deepEqual(live(data), before) and data.cash.Value == 250 and data.ipo.count == 1 and next(data.owned) ~= nil and COUNT.destroyed == 0 and COUNT.cleared == 0 and COUNT.hrReset == 0 and COUNT.income == 0)
+	check("an IPO while the pokedex is locked: nothing was saved (" .. label .. ")", STORE.calls == 0 and STORE.last == nil, STORE.calls)
+	check("an IPO while the pokedex is locked: the refusal is logged with the player and the reason (" .. label .. ")",
+		#WARNINGS == 1 and string.find(WARNINGS[1], "Not going public for P: their pokedex is kept as it is (a newer version's, or unreadable)", 1, true) ~= nil, WARNINGS[1])
+	check("an IPO while the pokedex is locked: the lock is released (" .. label .. ")", data.saving == false)
+	local saved = save(player)
+	check("an IPO while the pokedex is locked: the next save writes the section back as it was, with the old Cash and ipo (" .. label .. ")",
+		saved == true and STORE.last ~= nil and deepEqual(STORE.last.pokedex, section) and STORE.last.cash == 250 and STORE.last.ipo.count == 1 and #STORE.last.owned == 2)
+end
+check("an IPO for a player who is gone: false", commitIpo({ Name = "Gone" }, { count = 2 }) == false)
+
+-- 2. An IPO with a readable pokedex goes through, with run = the new count in the same save ------------------------------
+do
+	local player, data = newPlayer(nil, 1) -- a new founding, run = 1
+	resetFakes()
+	local company = deepCopy(CompanyServer.serialize(data).active)
+	local after = ipoAfter(data)
+	local result = commitIpo(player, after)
+	check("an IPO with an unlocked pokedex: the call returns true and saves once", result == true and STORE.calls == 1 and STORE.key == "player_7", result)
+	local payload = STORE.last or { owned = {}, ipo = {}, pokedex = {} }
+	check("an IPO with an unlocked pokedex: the saved payload has Cash reset, upgrades cleared and the new IPO section",
+		payload.cash == IpoConfig.StartingCash and #payload.owned == 0 and payload.ipo.count == 2 and payload.ipo.shares == 8)
+	check("an IPO with an unlocked pokedex: the saved payload carries run = the new count (same company, no stamp, no card)",
+		payload.pokedex.run == 2 and deepEqual(payload.pokedex.active, company) and next(payload.pokedex.sectors) == nil, payload.pokedex.run)
+	check("an IPO with an unlocked pokedex: the live game followed (Cash, upgrades, items, eggs, income)",
+		data.cash.Value == IpoConfig.StartingCash and next(data.owned) == nil and next(data.items) == nil and COUNT.destroyed == 2 and COUNT.cleared == 1 and COUNT.hrReset == (IpoConfig.Resets.HRDepartment and 1 or 0) and COUNT.income == 1 and COUNT.sign == 1)
+	check("an IPO with an unlocked pokedex: the section in memory follows (run 2)", CompanyServer.serialize(data).run == 2)
+	data.ipo = after -- IpoServer replaces its own section after a good commit
+	resetFakes()
+	check("an IPO with an unlocked pokedex: an autosave right after keeps run = 2", save(player) == true and STORE.last.pokedex.run == 2)
+end
+do
+	local player, data = newPlayer(nil, 1)
+	resetFakes()
+	STORE.fail = true
+	WARNINGS = {}
+	local result = commitIpo(player, ipoAfter(data))
+	check("an IPO whose save failed: the call returns false", result == false, result)
+	check("an IPO whose save failed: Cash, upgrades, ipo.count and the section in memory (run 1) are unchanged",
+		data.cash.Value == 250 and next(data.owned) ~= nil and data.ipo.count == 1 and CompanyServer.serialize(data).run == 1 and COUNT.destroyed == 0 and COUNT.cleared == 0)
+	check("an IPO whose save failed: the lock is released and the failure is logged", data.saving == false and anyWarning("Save failed for P"))
+end
+
+-- 3. A section with fields this version doesn't know: an IPO still writes run and keeps every unknown field -----------------
+do
+	local FAT = __FATPOKEDEX__
+	local player, data = newPlayer(deepCopy(FAT), FAT.run)
+	resetFakes()
+	check("unknown fields: the join is clean (no warning, no run check, not locked)", #WARNINGS == 0 and data.pokedex.event == nil and not CompanyServer.isLocked(data), WARNINGS[1])
+	local expected = deepCopy(FAT)
+	expected.run = FAT.run + 1
+	expected.studio = true -- a Studio server marks every save
+	local result = commitIpo(player, ipoAfter(data))
+	check("an IPO with unknown fields in the pokedex: the call returns true and saves once", result == true and STORE.calls == 1, result)
+	local payload = STORE.last or { pokedex = {} }
+	check("an IPO with unknown fields in the pokedex: the saved payload carries run = the new count", payload.pokedex.run == FAT.run + 1, payload.pokedex.run)
+	check("an IPO with unknown fields in the pokedex: every unknown field is written back unchanged, at every level", deepEqual(payload.pokedex, expected))
+	check("an IPO with unknown fields in the pokedex: the section in memory follows (run = the new count)", CompanyServer.serialize(data).run == FAT.run + 1)
+	check("an IPO with unknown fields in the pokedex: and its unknown fields are unchanged in memory", deepEqual(CompanyServer.serialize(data), expected))
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def commit_ipo_source(mutation=None):
+    """The COMMITIPO_TESTS program with the real save() and commitIpo() (the TycoonCore code between the SAVEFN and COMMITIPO markers),
+    the real CompanyServer, CompanyConfig, SectorConfig and IpoConfig, and fake everything else. mutation = (file, old, new) breaks one
+    rule in TycoonCore.lua or CompanyServer.lua (`old` must be in it exactly once)."""
+    def read(name):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            return f.read()
+
+    texts = {name: read(name + ".lua") for name in ("SectorConfig", "IpoConfig", "CompanyConfig", "CompanyServer", "TycoonCore")}
+    if mutation:
+        name, old, new = mutation
+        name = name[:-4] if name.endswith(".lua") else name
+        if texts[name].count(old) != 1:
+            raise SystemExit("mutation target not found exactly once in %s: %s" % (name, old))
+        texts[name] = texts[name].replace(old, new, 1)
+
+    def slice_of(marker):
+        text = texts["TycoonCore"]
+        return text[text.index("-- %s-START" % marker) + len("-- %s-START" % marker):text.index("-- %s-END" % marker)]
+
+    return (COMMITIPO_TESTS.replace("__SECTORCONFIG__", texts["SectorConfig"]).replace("__IPOCONFIG__", texts["IpoConfig"])
+            .replace("__COMPANYCONFIG__", texts["CompanyConfig"]).replace("__COMPANYSERVER__", texts["CompanyServer"])
+            .replace("__KNOWNSECTIONS__", known_sections_line()).replace("__BUILDSAVE__", slice_of("BUILDSAVE"))
+            .replace("__SAVENOTE__", slice_of("SAVENOTE")).replace("__SAVEFN__", slice_of("SAVEFN"))
+            .replace("__COMMITIPO__", slice_of("COMMITIPO")).replace("__FATPOKEDEX__", FAT_POKEDEX_LUA))
+
+
+_GUARD_WARN = "warn(\"Not going public for \" .. player.Name .. \": their pokedex is kept as it is (a newer version's, or unreadable)\")\n"
+COMMITIPO_MUTATIONS = [
+    ("the lock guard of commitIpo returns true", ("TycoonCore.lua", "unreadable)\")\n\t\treturn false\n", "unreadable)\")\n\t\treturn true\n"),
+     "an IPO while the pokedex is locked: the call returns false"),
+    ("the lock guard of commitIpo returns nothing", ("TycoonCore.lua", "unreadable)\")\n\t\treturn false\n", "unreadable)\")\n\t\treturn\n"),
+     "an IPO while the pokedex is locked: the call returns false"),
+    ("the lock guard of commitIpo falls through", ("TycoonCore.lua", "unreadable)\")\n\t\treturn false\n", "unreadable)\")\n"),
+     "an IPO while the pokedex is locked: the call returns false"),
+    ("the lock guard of commitIpo is off", ("TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n", "\tif false then\n"),
+     "an IPO while the pokedex is locked: the call returns false"),
+    ("the refusal of a locked IPO is not logged", ("TycoonCore.lua", "\t\t" + _GUARD_WARN, ""),
+     "an IPO while the pokedex is locked: the refusal is logged with the player and the reason"),
+    ("the refusal of a locked IPO logs another reason", ("TycoonCore.lua", "Not going public for \" .. player.Name .. \": their pokedex", "Not going public for \" .. player.Name .. \": their cash"),
+     "an IPO while the pokedex is locked: the refusal is logged with the player and the reason"),
+    ("commitIpo no longer writes run in the IPO's save", ("TycoonCore.lua", "\t\tCompanyServer.writeIpoRun(data, payload, newIpo.count) -- the pokedex's run follows the new count in this very save\n", ""),
+     "an IPO with an unlocked pokedex: the saved payload carries run = the new count"),
+    ("commitIpo moves the run in memory even when the save failed", ("TycoonCore.lua", "\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo", "\tCompanyServer.onIpo(data, newIpo.count)\n\tif not ok or playerData[player] ~= data then\n\t\treturn ok\n\tend\n\tCompanyServer.onIpo"),
+     "an IPO whose save failed: Cash, upgrades, ipo.count and the section in memory (run 1) are unchanged"),
+    ("commitIpo no longer resets the Cash in the live game", ("TycoonCore.lua", "\tif resets.Cash then\n\t\tdata.cash.Value = IpoConfig.StartingCash\n\tend\n", ""),
+     "an IPO with an unlocked pokedex: the live game followed (Cash, upgrades, items, eggs, income)"),
+]
+
+
 def code_only(text):
     """The Lua text without comments (a line's `--` tail is cut, so words in comments never count)."""
     lines = []
@@ -6247,7 +6561,15 @@ def pokedex_wiring_checks():
     check("TycoonCore: CompanyServer.init gets only getData, save and plotZones", re.findall(r"^\t(\w+) = ", init_block, re.M) == ["getData", "save", "plotZones"], re.findall(r"^\t(\w+) = ", init_block, re.M))
     commit = code[code.index("local function commitIpo("):]
     commit = commit[:commit.index("local resets")]
-    check("TycoonCore: an IPO is refused first of all while the pokedex is locked (a newer version's, or unreadable)", "CompanyServer.isLocked(data)" in commit and "return false" in commit)
+    # (the runtime test "an IPO while the pokedex is locked" is the real proof; this is the second layer. The guard is read as its own
+    # block: `if not data then return false end` above it must not count as the refusal)
+    start = commit.find("if CompanyServer.isLocked(data) then")
+    guard = commit[start:commit.find("\n\tend\n", start)] if start >= 0 else ""
+    check("TycoonCore: an IPO is refused first of all while the pokedex is locked (a newer version's, or unreadable)",
+          guard != "" and re.search(r"\breturn false\s*$", guard) is not None and "return true" not in guard, guard)
+    ipo_code = code_only(read("IpoServer.lua"))
+    check("IpoServer: a refused commit (the lock) shows \"The IPO couldn't be saved. Nothing changed: try again in a moment.\"",
+          "core.commitIpo(player, toSave(after))" in ipo_code and "return false, \"The IPO couldn't be saved. Nothing changed: try again in a moment.\"" in ipo_code)
     commit_all = code[code.index("local function commitIpo("):]
     commit_all = commit_all[:commit_all.index("\nend\n")]
     save_guard = commit_all.find("if not ok or playerData[player] ~= data then")
@@ -6623,6 +6945,20 @@ def main():
         else:
             server_caught += 1
     print("CompanyServer mutations: %d of %d broken rules caught" % (server_caught, len(SERVER_MUTATIONS)))
+    result22 = run_luau(luau, commit_ipo_source())
+    print("TycoonCore IPO check (commitIpo with the real save, a fake DataStore and the real CompanyServer): " + (result22.stdout.strip() or result22.stderr.strip()))
+    if result22.returncode != 0 or " 0 failed" not in result22.stdout:
+        code = 1
+    commit_caught = 0
+    for label, mutation, *expected in COMMITIPO_MUTATIONS:
+        mutant = run_luau(luau, commit_ipo_source(mutation))
+        problem = mutant_verdict(mutant, expected, "commitIpo", label)
+        if problem:
+            print(problem)
+            code = 1
+        else:
+            commit_caught += 1
+    print("commitIpo mutations: %d of %d broken rules caught" % (commit_caught, len(COMMITIPO_MUTATIONS)))
     pokedex_passed, pokedex_failed = pokedex_wiring_checks()
     print("Pokedex wiring check: %d passed, %d failed" % (pokedex_passed, pokedex_failed))
     if pokedex_failed:
