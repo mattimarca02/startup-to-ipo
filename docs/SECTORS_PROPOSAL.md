@@ -1,6 +1,6 @@
 # Sectors at launch: Software and Gaming (proposal, design only)
 
-Design only (2026-10-05, branch `design-customize`). No script, config or test changed. Line numbers are for this branch (`main` `9798388` merged), checked 2026-10-05. **(unverified)** = not checked in code; **(estimate)** = not measured; **(placeholder)** = sized by the sims. `CUST` = docs/CUSTOMIZE_PROPOSAL.md, `FUND` = docs/FUNDING_ROUNDS_PROPOSAL.md, `LG` = docs/LONG_GAME_PROPOSAL.md, `BIBLE` = docs/CONTENT_BIBLE.md (branch `content-bible`).
+Design only (2026-10-05; revised for the S1-S10 sim findings). No script, config or test changed. Line numbers: `main` `9798388`, checked 2026-10-05. **(unverified)** = not checked in code; **(estimate)** = not measured; **(placeholder)** = sized by the sims; **G1** = needs Studio first (CUST 5.6). `CUST` = docs/CUSTOMIZE_PROPOSAL.md, `FUND` = docs/FUNDING_ROUNDS_PROPOSAL.md, `LG` = docs/LONG_GAME_PROPOSAL.md, `BIBLE` = docs/CONTENT_BIBLE.md (branch `content-bible`).
 
 **Decided by the owner (D-G, 2026-10-05):** the game launches with **two sectors, Software/SaaS and Gaming**, each with truly different gameplay. **Fintech and Biotech are post-launch updates.** The main goal at launch is completing both launch sectors (Hall of Fame); the game goes on with higher stamps and the leaderboard. Everything in a sector relates to the real-life field.
 
@@ -52,12 +52,12 @@ The engine and the package are CUST section 2's split (the engine never names a 
 - **No word of chance:** texts say "Score", "Forecast", "tier", never odds, chance, luck or "%" (the D9 word check, daily_test.py:4553-4560, extends to the sector modules, CUST 6).
 
 **2.4 Income model.** Two parts, one `addEarnings` call.
-- **Base Income** from upgrades and employees, as in Software, through `totalIncome` (TycoonCore.lua:137-145). Gaming's **upgrade Incomes are lower** (fitted by S3; hires keep CreatureConfig's Income).
+- **Base Income** from upgrades and employees, as in Software, through `totalIncome` (TycoonCore.lua:137-145). Gaming's **upgrade Incomes are lower** (fitted by S3, G1; hires keep CreatureConfig's Income).
 - **Live revenue:** `SectorGaming.extra(data, 1)` = base Income (TycoonCore.lua:677-680: no passes, with the IPO multiplier) x `peak[tier] x scope x decay(t)` plus the back catalog, **capped at 0.8 x base Income (placeholder)**. `t` = engaged seconds since launch.
 - **Where it is paid:** the income loop (TycoonCore.lua:865-866) adds the extra (times the Cash pass multiplier, `ShopServer.getCashMultiplier`, :151) to the Cash it already adds and to the argument of the **same** `addEarnings` call. **No new call site:** the TycoonCore count in daily_test.py:4537 stays 3. Never in offline pay (:819-827), the away bank (LG:24), `baseIncome`, or the Income stat (task rewards are seconds of `data.income.Value`, TaskServer.lua:253-254, so the extra never inflates them); the HUD shows it apart ("Live game +$X/s").
 - **Away bank on the Software-equivalent base.** The bank pays 10% of base Income (LG:24); Gaming's base is lower, so check-in players were 24-32% off parity (S3, robust). It reads `awayBase(data)`: base Income with each owned Gaming upgrade counted at the Income of the Software upgrade in the same rung and slot (data, `awayIncome`, G1), hires as they are. Computed where LONG_GAME PR 2 pays the bank (LG:94, entry 2): no new call site.
 - **Engaged only:** the extra is 0 unless `TaskServer.isEngaged(player)` (TaskServer.lua:674); `t` and the decay advance only then. An away player loses no revenue and gains none: the live game waits.
-- **Anti-spam bound:** a title's total live revenue is capped at `k x` its build's engaged seconds x base Income (data), so many tiny launches never beat one finished game.
+- **Anti-spam bound:** a title's total live revenue is capped at `k` (G1) x its build's engaged seconds x base Income, so many tiny launches never beat one finished game.
 
 | Scope (unlock) | Typical work, engaged min | Half-life, engaged min | Peak x base: Flop / Solid / Hit / Smash |
 |---|---|---|---|
@@ -67,7 +67,7 @@ The engine and the package are CUST section 2's split (the engine never names a 
 | Big (Series B) | 60 | 50 | same x scope |
 | Flagship (Series C+D, Pre-IPO) | 90 | 60 | same x scope |
 
-All **placeholders** (S3, S9). Updates restore the curve to 70 / 60 / 50% of the peak, one per 10 engaged minutes; the back catalog adds 3% of a sunset title's peak, total at most 10% of base Income.
+All **G1** (S3, S9). Updates restore the curve to 70 / 60 / 50% of the peak, one per 10 engaged minutes; the back catalog adds 3% of a sunset title's peak, total at most 10% of base Income.
 
 **2.5 Tasks and active play.** Gaming rows in `TaskConfig.Rows` (TaskConfig.lua:49) with `sector = "Gaming"`, using the engine's four actions (`click`, `choose`, `timing`, `targets`, TaskConfig.lua:35) and its budget, flags and quiet mode unchanged. A row's Cash still pays through TaskServer's one call (TaskServer.lua:257); its project effect goes through `onTask` (points, never Cash).
 
@@ -115,9 +115,9 @@ CoffeeCapybara: Crunch Capybara, Studio Intern (snacks for the team); CodingCat:
 - **Studio:** Debug rows "Gaming: finish build", "Gaming: set day" only through `ShopServer.addDebugAction` inside `RunService:IsStudio()`, and they set `pokedex.studio`.
 - **Rollback:** older code keeps `pokedex` whole (CUST 1.2) and Gaming upgrades in `owned` (section 0); it pays no extra.
 
-**2.10 Garage to IPO, and how long.** The valuation ladder, thresholds, rounds and IPO are the shared engine's (IpoConfig.lua:17-23; LONG_GAME's 7 stages). Valuation rises from base Income plus live revenue, so it climbs in waves after each launch. Titles per rung at the typical cycle (work plus half as much polish, overlapping the last title's live phase) **(estimate)**: Garage 4, Seed 5, Series A 6, Series B 6, Series C+D 14, Pre-IPO 7: **about 40 titles to IPO 1.** At the IPO the title in development and the live title end (no refund), `sx` starts empty, and the card keeps titles shipped, Hits and the best tier.
+**2.10 Garage to IPO, and how long.** The valuation ladder, thresholds, rounds and IPO are the shared engine's (IpoConfig.lua:17-23; LONG_GAME's 7 stages). Valuation rises from base Income plus live revenue, so it climbs in waves after each launch. Titles per rung at the typical cycle **(estimate)**: Garage 4, Seed 5, Series A 6, Series B 6, Series C+D 14, Pre-IPO 7; the sims count **about 49 titles to IPO 1** (G1). At the IPO the title in development and the live title end (no refund), `sx` starts empty, and the card keeps titles shipped, Hits and the best tier.
 
-**Length versus Software** (regular player, IPO 1; Software 57 h, LG:7). Fit target: the "Hit" policy equals Software ±5% (S3); the others follow by division from rates relative to Software (fitted base 0.77, extra 0.08-0.36), **not simulated**:
+**Length versus Software** (regular player, IPO 1; Software 57 h, LG:7). Fit target: the "Hit" policy equals Software ±5% (S3); the others follow by division from rates relative to Software (fitted base 0.77, extra 0.08-0.36); hours **G1**:
 
 | Gaming policy | Average extra (x base) | Rate vs Software | IPO 1 hours (estimate) |
 |---|---|---|---|
@@ -163,7 +163,7 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 - **Choice 1 (:365):** creature keys stay locked; Gaming names are display strings, not a save migration. **Choice 9 (:373)** is replaced by sectors.
 
 **docs/LONG_GAME_PROPOSAL.md** (`LG:`):
-- **Section 1, pacing (LG:6-18):** the hours are Software's fit; Gaming's typical policy must match within ±5%, the others spread 54-74 h at IPO 1 (2.10, estimates).
+- **Section 1, pacing (LG:6-18):** the hours are Software's fit; Gaming's typical policy must match within ±5%, the others spread 54-74 h at IPO 1 (2.10, G1).
 - **Section 2, clock (LG:20-34):** Gaming's extra is engaged only and outside the away bank (LG:24); the bank reads `awayBase` (2.4).
 - **Section 3, ladder (LG:36-60):** one ladder for both; Gaming has its own item names and lower upgrade Incomes (S3); the hire list is shared.
 - **Section 4, content (LG:62-82):** the moments table per sector (S10); "an industry skin per IPO" (LG:82) becomes the sector picker.
@@ -182,6 +182,6 @@ Loops 2 and 3 follow LONG_GAME's growth (51.5 / 52 h for Software, LG:18) with t
 
 ## What I did not verify
 
-- No sim was run: every Gaming number, the hours table and the titles count are placeholders or estimates by division. The fitted base (0.77) is an assumption.
+- The sims were not re-run here; their findings were taken as given. Every Gaming number is a placeholder; G1 ones need Studio first (CUST 5.6).
 - Fun, the phone layout of a Project window and where it opens from were not tested; no Studio or MCP was used.
 - BIBLE and LONG_GAME's item list were read, not rebuilt; Gaming names are examples, not checked against real brands beyond the author's reading.
