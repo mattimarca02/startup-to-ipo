@@ -22,7 +22,7 @@ ASSUMPTIONS (estimates, not measured; every number printed is an estimate or a p
     pay = 7 s of Income x min(2, 1 + 0.1 x the chain before this answer). Team auto-answers (20% per sales hire)
     and the difficulty speed-up (1 in the Garage before any IPO) are left out.
  8. A Garage Egg hire pays the Garage Egg's average Income with today's odds (70/25/5): $4.97/s; the free egg too.
-    The launch Garage Egg's odds are not designed yet.
+    Owner default (2026-10-06): the launch Garage Egg keeps a 5% Rare; its other odds are not designed yet.
  9. One hire per desk (LONG PR 3); the free hire takes Desk 1, so Desk 2 and Desk 3 each carry one bought egg.
 10. The Day 1 gift (5 min of Income, at least $300) is claimed 10 s after the third hire (tutorial step 6 at the
     first pause after minute 10). Cash only, never valuation (DailyServer).
@@ -47,7 +47,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC = ROOT / "docs" / "GAMEPLAY_FIRST_HOUR_PROPOSAL.md"
-BEGIN, END = "<!-- first-hour-model:begin -->", "<!-- first-hour-model:end -->"
+BEGIN, END = "<!--first-hour-model:begin-->", "<!--first-hour-model:end-->"   # one word each for wc -w
 
 # ---------------------------------------------------------------------------------------------------------------
 # Constants copied from the code (main e3c9e67) and the proposals. (checked) = --check re-reads the source.
@@ -491,13 +491,13 @@ def table_script(s):
     rows.append((run["calls"][2][0], "third call answered"))
     rows.append((run["calls"][9][0], "10th call answered"))
     rows.sort()
-    out = ["| Time | Event (D1, E1 run) | Tutorial, goal, reward | Cash / Income |", "|---|---|---|---|"]
+    out = ["Time, event (D1, E1 run); tutorial, goal or reward (Cash, Income):"]
     for t, name in rows:
         cash, inc, *_ = at(run, t)
         beat = next((b for key, b in BEATS if key in name), "")
-        out.append(f"| {clock(t)} | {name} | {beat} | {money(cash)} / ${inc:.0f} |")
+        out.append(f"- **{clock(t)}** {name}" + (f"; {beat}" if beat else "") + f" ({money(cash)}, ${inc:.0f}/s)")
     cash, inc, val, hires, bought, ms, answered = at(run, 600)
-    out.append(f"| 10:00 | {answered} calls, {hires} hires, {bought} of {len(run['rows'])} items | next: Server Rack | {money(cash)} / ${inc:.0f} |")
+    out.append(f"- **10:00** {answered} calls, {hires} hires, {bought} of {len(run['rows'])} items; next: Server Rack ({money(cash)}, ${inc:.0f}/s)")
     return out
 
 
@@ -516,8 +516,7 @@ def table_hour(s):
              ("Reach milestone 4", find(lambda k, n: n == "milestone 4")),
              ("Reach Seed", find(lambda k, n: k == "stage")),
              ("(not a goal) TUT 6: " + next(n for t, k, n in ev if k == "gift"), find(lambda k, n: k == "gift"))]
-    out = ["| Goal (D1, E1 run) | Done at |", "|---|---|"]
-    out += [f"| {g} | {clock(t) if t is not None else 'not in 4 h'} |" for g, t in goals]
+    out = ["Goals done (D1, E1 run): " + "; ".join(f"{g}: {clock(t) if t is not None else 'not in 4 h'}" for g, t in goals) + "."]
     out += ["", "| At (D1, E1 run) | Items bought | Hires | Calls answered | Milestones | Cash / Income | Seed bar |", "|---|---|---|---|---|---|---|"]
     for m in (5, 20, 60):
         cash, inc, val, hires, bought, ms, answered = at(run, m * 60)
@@ -537,7 +536,7 @@ def table_garage(s):
             continue                                  # the two Garage Eggs share one row
         seen.add(name)
         times = [t for t, k, n in run["ev"] if k == "buy" and n == f"{name} {money(price)}"]
-        cost = money(plan[name]) + (" (one level)" if name.endswith(" I") else "") if name in plan else "in level I" if name.endswith(" II") else "none"
+        cost = money(plan[name]) + (" (I+II)" if name.endswith(" I") else "") if name in plan else "(in I)" if name.endswith(" II") else "none"
         gain = {"up": f"+${inc}/s", "desk": "a desk", "egg": "a hire"}[kind]
         out.append(f"| {name} | {cost} | {money(price)} | {gain} | {', '.join(clock(t) for t in times)} |")
     seed_t = next(t for t, k, n in run["ev"] if k == "stage")
@@ -548,11 +547,11 @@ def table_garage(s):
 def table_milestones(s):
     run = s["d1"]
     th = thresholds(sum(r[1] for r in run["rows"]))
-    out = ["| Rung (LONG, D1 Garage) | Enters at | Milestones 1-4 (valuation) | Titles 1-4 | Next rung at |", "|---|---|---|---|---|"]
+    out = ["Rung (LONG, D1 and E1 Garage) from its entry: milestones 1-4 (valuation); titles 1-4; the next rung:"]
     for r, name in enumerate(LONG_RUNGS):
         entry = 0 if r == 0 else th[r - 1]
         ms = milestones_for(r, entry, th[r])
-        out.append(f"| {name} | {money(entry)} | {', '.join(money(m) for m in ms)} | {', '.join(MILESTONE_TITLES[name])} | {money(th[r])} |")
+        out.append(f"- **{name}** from {money(entry)}: {', '.join(money(m) for m in ms)}; {', '.join(MILESTONE_TITLES[name])}; next {money(th[r])}")
     stages = [("Garage", 0)] + TODAY_STAGES
     today = [f"{stages[i][0]} {', '.join(money(m) for m in milestones_for(i, stages[i][1], stages[i + 1][1]))}"
              for i in range(len(stages) - 1)]
@@ -567,8 +566,7 @@ def poach_price(creature):
 
 
 def table_poach():
-    out = ["| Home egg tier (egg at launch) | Seconds of Income | Reference and priciest hire: today → launch | Cash per success at base chance |",
-           "|---|---|---|---|"]
+    out = ["Home egg tier (egg at launch), seconds of Income: reference and priciest hire, today → launch; Cash per success at base chance:"]
     for tier, egg, ref, ref_inc in LONG_EGG_TIERS:
         group = [h for h in HIRES if h[3] == tier]
         ends = [next((h for h in group if h[0] == ref), group[0]), group[-1]]   # the hire the egg is priced at, the priciest
@@ -576,7 +574,7 @@ def table_poach():
         per = [f"{money(poach_price(c) / BASE_CHANCE[c[2]])}" if c[2] in BASE_CHANCE else
                "never (Legendary)" if c[2] == "Legendary" else "rarity not set" for c in ends]
         per = per[0] if per[0] == per[1] else f"{per[0]}; {per[1]}"
-        out.append(f"| {tier} ({money(egg)}) | {egg / ref_inc:,.0f} | {'; '.join(cells)} | {per} |")
+        out.append(f"- **{tier}** ({money(egg)}), {egg / ref_inc:,.0f} s: {'; '.join(cells)}; per success {per}")
     return out
 
 
