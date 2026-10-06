@@ -18,8 +18,8 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 8: Sectors
 - [x] Section 9: Measurement
 - [x] Section 10: What to build, in order
-- [ ] Section 11: Open questions
-- [ ] Word count at most 5,500 (`wc -w`)
+- [x] Section 11: Open questions
+- [x] Word count at most 5,500 (`wc -w`): 5,445 after section 11
 - [ ] Release both claims in `CONTRIBUTING.md`
 
 ## Sources

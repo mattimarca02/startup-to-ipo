@@ -278,3 +278,14 @@ Ranked by impact on the first hour. Each PR claims its files first. `*` = every 
 | 16 | Headhunter review, poach price by egg tier (ShopConfig, CreatureConfig) | S, CONFIG-ONLY | S4, S8 | new |
 | 17 | Pokedex, buildings, placement, picker, rounds | L each, CODE | 7 | CUST PR 1-4b, FUND |
 | 18 | Gaming: its content bible, then the package | DESIGN-ONLY, then L CODE + ART | G-S, G-G | SECT 5, CUST PR 8-11 |
+
+## 11. Open questions (most important first)
+
+1. **Garage pacing:** cheaper first items and a Desk 3 (3.3), with the Garage kept at about 1.5 h? Recommend yes; the sims re-fit it.
+2. **Garage milestones** in every rung, never Cash? Recommend yes.
+3. **The first picker:** Software preselected, two cards only? Recommend yes.
+4. **Headhunter:** keep "+10% success chance" for Robux, or a fixed effect such as cheaper poaches? Recommend the fixed effect.
+5. **Launch poach prices** from the egg tier (A13)? Recommend yes, sized by S4 and S8.
+6. **Cash on screen:** the bar's top line (the stage moves down) or a separate pill? Recommend the bar.
+7. **M6b's "2x offline" product:** drop it, since it sells at the welcome-back moment? Recommend dropping it.
+8. **Sound:** silent at launch with a Roblox-library pass later, or commissioned sounds? Recommend silent first.
