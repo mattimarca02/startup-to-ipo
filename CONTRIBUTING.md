@@ -94,14 +94,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
+| ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -122,7 +122,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -141,7 +141,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
-| ShopLayout | ReplicatedStorage | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
-| tools/shop_ux_test.py | (repo only) | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
-| docs/STUDIO_SYNC_SHOP.md | (repo only) | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
-| docs/SHOP_BUILD_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | shop-build | 2026-10-06 |
+| ShopLayout | ReplicatedStorage | free | | |
+| tools/shop_ux_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
+| docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
