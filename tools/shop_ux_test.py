@@ -2548,6 +2548,100 @@ def run_mutants(luau):
     return len(MUTANTS) - len(problems), problems
 
 
+HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_SHOP.md, run as it is, on the real files in a tiny fake place ----------
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local PRINTED = {}
+local function print(...)
+	local parts = {}
+	for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+	table.insert(PRINTED, table.concat(parts, " "))
+end
+local SOURCES = __SOURCES__
+local function folder(children)
+	return { FindFirstChild = function(_, name) return children[name] end }
+end
+local scripts = { ShopLayout = { Source = SOURCES.ShopLayout }, ShopClient = { Source = SOURCES.ShopClient } }
+local services = {
+	ReplicatedStorage = folder({ ShopLayout = scripts.ShopLayout }),
+	StarterPlayer = folder({ StarterPlayerScripts = folder({ ShopClient = scripts.ShopClient }) }),
+}
+local game = { GetService = function(_, name) return services[name] end }
+local function runBlock()
+	table.clear(PRINTED)
+	local ok, err = pcall(function()
+__HASHBLOCK__
+	end)
+	local said = {}
+	for _, line in ipairs(PRINTED) do
+		local name, verdict = string.match(line, "^(%w+) (%u+)")
+		if name then said[name] = verdict end
+	end
+	return ok, err, said
+end
+local ok, err, said = runBlock()
+check("hash block: it runs without an error", ok, err)
+check("hash block: ShopLayout prints OK (Luau's SHA-256 of the real file is the one in the table)", said.ShopLayout == "OK", said.ShopLayout)
+check("hash block: ShopClient prints OK (Luau's SHA-256 of the real file is the one in the table)", said.ShopClient == "OK", said.ShopClient)
+local function runWith(change)
+	for name, s in pairs(scripts) do s.Source = change(SOURCES[name]) end
+	local _, _, verdicts = runBlock()
+	for name, s in pairs(scripts) do s.Source = SOURCES[name] end
+	return verdicts
+end
+local v = runWith(function(source) return string.sub(source, 1, -2) end)
+check("hash block: a script whose last newline Studio dropped prints OK (both)", v.ShopLayout == "OK" and v.ShopClient == "OK")
+v = runWith(function(source) return source .. "\n" end)
+check("hash block: one newline added at the end prints OK (both)", v.ShopLayout == "OK" and v.ShopClient == "OK")
+v = runWith(function(source) return source .. "\n\n" end)
+check("hash block: two newlines added is DIFFERENT (both)", v.ShopLayout == "DIFFERENT" and v.ShopClient == "DIFFERENT")
+v = runWith(function(source) return "x" .. string.sub(source, 2) end)
+check("hash block: one character changed (same size) prints DIFFERENT (both)", v.ShopLayout == "DIFFERENT" and v.ShopClient == "DIFFERENT")
+services.ReplicatedStorage = folder({})
+local _, _, missing = runBlock()
+check("hash block: a ShopLayout not created yet prints MISSING", missing.ShopLayout == "MISSING")
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def hash_source():
+    doc = read("docs/STUDIO_SYNC_SHOP.md")
+    start = doc.index("```lua\n", doc.index("## (d) Hash check (command bar)")) + len("```lua\n")
+    block = doc[start:doc.index("```", start)]
+    sources = "{ ShopLayout = %s, ShopClient = %s }" % (long_string(read(LAYOUT)), long_string(read(CLIENT)))
+    return HASH_TESTS.replace("__SOURCES__", sources).replace("__HASHBLOCK__", block)
+
+
+def sync_table_checks():
+    """docs/STUDIO_SYNC_SHOP.md's table and hash block give each file's real SHA-256 and size (Python's hashlib)."""
+    import hashlib
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    doc = read("docs/STUDIO_SYNC_SHOP.md")
+    for name, kind, place, state, where in (("ShopLayout", "ModuleScript", "ReplicatedStorage", "new", "ReplicatedStorage"),
+                                            ("ShopClient", "LocalScript", "StarterPlayer > StarterPlayerScripts", "changed", "StarterPlayerScripts")):
+        raw = open(os.path.join(ROOT, name + ".lua"), "rb").read()
+        h = hashlib.sha256(raw).hexdigest()
+        row = "| `%s` | %s, %s | %s | `%s` | %d |" % (name, kind, place, state, h, len(raw))
+        check("STUDIO_SYNC_SHOP.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
+        check("STUDIO_SYNC_SHOP.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), where)) in doc)
+        check("%s.lua uses \\n line endings and ends with one newline" % name, b"\r" not in raw and raw.endswith(b"\n") and not raw.endswith(b"\n\n"))
+    check("STUDIO_SYNC_SHOP.md: ShopLayout is created before ShopClient is pasted",
+          doc.index("**Create `ShopLayout`:**") < doc.index("**Paste `ShopClient`:**"))
+    return passed, failed
+
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -2566,6 +2660,17 @@ def main():
     print("Shop source checks: %d passed, %d failed" % (static_passed, static_failed))
     total += static_passed
     if static_failed:
+        code = 1
+    result = run_luau(luau, hash_source())
+    print("Hash block (docs/STUDIO_SYNC_SHOP.md) on the real files: " + (result.stdout.strip() or result.stderr.strip()))
+    m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+    if not m or m.group(2) != "0":
+        code = 1
+    total += int(m.group(1)) if m else 0
+    sync_passed, sync_failed = sync_table_checks()
+    print("Studio sync table (docs/STUDIO_SYNC_SHOP.md): %d passed, %d failed" % (sync_passed, sync_failed))
+    total += sync_passed
+    if sync_failed:
         code = 1
     caught, problems = run_mutants(luau)
     for line in problems:

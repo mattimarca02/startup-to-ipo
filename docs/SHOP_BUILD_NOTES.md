@@ -26,7 +26,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 
 **Phase 3: Studio sync and wrap-up**
 - [x] 3.1 README rows for `ShopLayout.lua` and `tools/shop_ux_test.py`, and the ShopClient row (moved here from phase 1: written once, for S1 and S2)
-- [ ] 3.2 `docs/STUDIO_SYNC_SHOP.md` (paste order, SHA-256 and sizes, playtest checklist)
+- [x] 3.2 `docs/STUDIO_SYNC_SHOP.md` (paste order, SHA-256 and sizes, the hash block, the playtest checklist, what to look at); `tools/shop_ux_test.py` runs its hash block on the real files and compares its table with `hashlib`
 - [ ] 3.3 These notes complete (deviations, questions, what was not tested, results)
 - [ ] 3.4 Release the claims (rows kept, set to free)
 
