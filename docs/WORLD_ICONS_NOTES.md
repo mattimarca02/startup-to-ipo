@@ -146,15 +146,28 @@ Nothing was blocked. No file this job needed was claimed by someone else (the Ow
 - The integration patch in a running game: only in the fake (both modules, one missing, broken data) and with `tools/daily_test.py` and `tools/world_test.py` on a patched copy.
 - The shop redesign: a proposal only, no code; its phone numbers come from the code, its text widths are estimates.
 - Tap animations in a real frame loop (the fake runs them step by step).
+- Review fixes, not tested outside the fake: Roblox firing `Destroying` for the descendants of a destroyed card (the fake does; the caches also check their own slots, and a direct icon inside a destroyed card at worst keeps counting until another icon needs its room); the drawn fallback's look; the cleanup, check and light test blocks and the hash block's newline cases in real Studio; `--regen-patch` on the real future `main` (tested on `e3c9e67`, a `customize-pr1` copy and synthetic moves); the SVG layout check uses estimated text widths.
 
-## Results (final)
+## Results (final, after the review fixes)
 
 | Suite | Checks | Mutation runs |
 |---|---|---|
-| `tools/daily_test.py` (other branches own it; unchanged) | 1,772 pass (1,740 before, plus 32 per-file scans of the four new files), 0 failed | 20 of 20 (its own) |
-| `tools/world_test.py` | 275 pass, 0 failed (155 world program, 59 source, 23 world preview, 6 hash block, 9 sync table, 7 integration blocks, 16 patch source) | 53 of 53, each caught by its named check (29 builder and checks, 24 data) |
-| `tools/icon_test.py` | 174 pass, 0 failed (101 icon program, 16 icon preview, 57 source) | 34 of 34, each caught by its named check (17 builder and checks, 17 data) |
+| `tools/daily_test.py` (other branches own it; unchanged) | 1,772 pass, 0 failed (as before) | 20 of 20 (its own) |
+| `tools/world_test.py` | 298 pass, 0 failed (155 world program, 56 source, 31 world preview with the cleanup, check and Terrain cases, 10 hash block, 9 sync table, 7 integration blocks, 18 patch source, 12 regeneration); 301 with `--review` | 65 of 65, each caught by its named check (29 builder and checks, 24 data, 6 doc blocks, 6 regeneration) |
+| `tools/icon_test.py` | 199 pass, 0 failed (121 icon program, 20 icon preview with the light test, 58 source); 201 with `--review` | 51 of 51, each caught by its named check (33 builder, cap and checks, 18 data) |
+
+Before the review fixes (777f843): 1,772 / 20, 275 / 53 and 174 / 34.
+
+**The same suites on scratch copies** (the branch's files added; `--integration` for world_test):
+
+| Copy | daily_test | world_test | icon_test |
+|---|---|---|---|
+| `origin/main` (`e3c9e67`) | 1,772 pass | 298 pass, 65 of 65 | 199 pass, 51 of 51 |
+| `origin/customize-pr1` (TycoonCore changed) | 2,592 pass | 295 pass, 65 of 65 (patch applied with fuzz; hash and byte-for-byte checks skipped with a note) | 199 pass, 51 of 51 |
+| `origin/main` with the patch applied (merged) | 1,772 pass | 298 pass, 65 of 65 | 199 pass, 51 of 51 |
+| `origin/customize-pr1` with the patch applied | 2,592 pass | 296 pass, 65 of 65 | 199 pass, 51 of 51 |
+| `origin/main` with the patch's context and anchor changed | 1,772 pass | fails as it should: "patch needs regenerating" and two named regeneration FAILs (277 pass, 59 of 59, group D skipped) | 199 pass, 51 of 51 |
 
 - **World:** 268 parts and 6 lights at the default site (budgets 600 and 8); the sweep (spacing 90 and 112, 1 to 6 plots) gives 151 to 268 parts and always 6 lights, every named check passing.
-- **Icons:** 38 recipes; 18 3D icons of 9 parts (Pixel Pigeon) to 24 (Desk, Server Rack); 20 drawn icons of 3 shapes (HUD bag) to 10 (crown); at most 8 ViewportFrames alive while a list scrolls (measured: the peak is exactly 8).
-- **Files:** `WorldArt.lua` 13,042 bytes, `WorldVisuals.lua` 48,782, `IconArt.lua` 30,143, `IconVisuals.lua` 37,198 (SHA-256 in docs/STUDIO_SYNC_WORLD.md, checked by `tools/world_test.py`).
+- **Icons:** 38 recipes; 18 3D icons of 9 parts (Pixel Pigeon) to 24 (Desk, Server Rack); 20 drawn icons of 3 shapes (HUD bag) to 10 (crown); at most 8 ViewportFrames on the whole client, measured in the fake across three windows at once, a hero card with a list, a fast scroll of 38 cards and 20 close-and-reopen rounds (the peak is exactly 8; past it the drawn fallback).
+- **Files:** `WorldArt.lua` 13,042 bytes, `WorldVisuals.lua` 48,782, `IconArt.lua` 30,355, `IconVisuals.lua` 48,178 (SHA-256 in docs/STUDIO_SYNC_WORLD.md, checked by `tools/world_test.py`).
