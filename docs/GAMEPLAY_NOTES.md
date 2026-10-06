@@ -8,8 +8,8 @@ Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gam
 
 - [x] Claim the two docs and the new `docs/SOUND_PLAN.md`, `tools/first_hour_model.py` (99ca4c1)
 - [x] Item 1 (5345cb3): D1-D8 recorded as DECIDED BY THE OWNER, open questions replaced (8 left), build order re-tagged (the bar is 1, `SoundConfig` 5, assets 15); 5,490 words (the numbers come from the item 2 model, committed next)
-- [x] Item 2: `tools/first_hour_model.py` (standard library, deterministic, 0.1 s; `--check` compares the 8 doc blocks and 17 copied constants with their sources; `--previous` prints model G); doc numbers from it
-- [ ] Item 3: `docs/SOUND_PLAN.md` (at most 2,000 words)
+- [x] Item 2 (4416dfb): `tools/first_hour_model.py` (standard library, deterministic, 0.1 s; `--check` compares the 8 doc blocks and 17 copied constants with their sources; `--previous` prints model G); doc numbers from it
+- [x] Item 3: `docs/SOUND_PLAN.md`, 1,994 words: 17 slots (16 effects and optional music; window open and close share a row), `SoundConfig` design, phone, id 0 and failed loads, the owner's shopping list and record template, Creator Hub checks (all unverified), 10 tests; no asset id named
 - [ ] Item 4: 15+ citations checked against `origin/main` (and `origin/task-needs-desk`), word counts
 - [ ] Release the four claims
 
