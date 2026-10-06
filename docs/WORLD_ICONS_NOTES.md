@@ -60,6 +60,21 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 6.5 OWNER CHOICE: the shop's six items marked decided (this commit)
 - [x] 6.6 Release the claims (rows kept, set to free)
 
+**Phase 7: second review fixes** (branch `world-fix2`, from `world-icons-pass` at `6bc827c`, worktree `../world-fix2`, pushed to `world-icons-pass` after every commit; an independent review of `2bcb164`)
+- [x] 7.0 Claim the files touched in `CONTRIBUTING.md`
+- [x] 7.1 Item 1: the patch checks never crash. `block_order` reports a missing landmark line as a problem (it raised `ValueError` when `PlotVisuals, PlotArt = nil, nil` changed, so "patch needs regenerating" never printed and group D never ran); every step of the patch checks runs inside `guarded()`, so any error is the named FAIL "... ran to the end -- patch needs regenerating"; group E: 3 TycoonCore.lua mutants (that line changed, E1's anchor line removed, the PlayerAdded hook moved), each caught by a named check that says "patch needs regenerating"
+- [ ] 7.2 Item 2: `--strict-patch` (offset, fuzz, stale preamble or STUDIO_SYNC row fail; the default run prints a NOTE); group D skipped, saying so, when the patch cannot apply
+- [ ] 7.3 Item 3: the preview cleanup removes exactly three known objects; any other `PREVIEW_` object is only reported
+- [ ] 7.4 Item 4: the icon cache: promotion, hero priority, the fallback recipe cached per key with a rebuild guard, a direct icon re-parented, deferred signals
+- [ ] 7.5 Item 5: `docs/STUDIO_SYNC_WORLD.md` hashes and sizes, the new blocks, `--strict-patch` in the merge-time step
+- [ ] 7.6 Release the claims (rows kept, set to free)
+
+## OWNER DEFAULT (decided by the owner for the second review fixes, 2026-10-06)
+
+1. **A hero card always wins over list icons** for a ViewportFrame.
+2. **The normal test run passes with a NOTE** when the integration patch applies only with fuzz or an offset; the flag `--strict-patch` (used at merge time, together with `--review`) fails then.
+3. **The preview cleanup removes exactly three known objects** (`Workspace.PREVIEW_STAGES`, `Workspace.PREVIEW_WORLD`, `StarterGui.PREVIEW_ICONS`); any other `PREVIEW_` object is only reported.
+
 ## OWNER DEFAULT (decided by the owner for the review fixes)
 
 1. **The ViewportFrame cap is global** across every window and every cache on the client.

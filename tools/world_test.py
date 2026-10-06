@@ -1548,7 +1548,7 @@ def regen_checks():
         cur_patch, cur_patched = regen_patch(base, "test")
     except ValueError as e:
         cur_patch, cur_patched = None, None
-        check("regen: this worktree's TycoonCore.lua can be regenerated", False, e)
+        check("regen: this worktree's TycoonCore.lua can be regenerated -- " + STALE + " by hand (an anchor changed)", False, e)
     if cur_patch is not None:
         check("regen: the regenerated Made for and Result lines are the hashes of this TycoonCore.lua and of it patched",
               patch_made_for(cur_patch)[:2] == sha(base)[:2] and patch_result(cur_patch) == sha(cur_patched)[:2])
@@ -1567,7 +1567,10 @@ def regen_checks():
         check("regen: the regenerated patch applies exactly to this TycoonCore.lua and gives the same file as the committed patch",
               exact and applied == cur_patched and block_order(cur_patched) == [] and (committed is None or committed == cur_patched))
     lines = base.split("\n")
-    pc = next(i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded("))
+    pc = next((i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded(")), None)
+    check("regen: this worktree's TycoonCore.lua has local function onPlayerAdded( -- " + STALE + " by hand", pc is not None)
+    if pc is None:
+        return passed, failed
     moved = "\n".join(["-- added line %d" % k for k in range(5)] + lines[:pc] + ["-- moved %d" % k for k in range(3)] + lines[pc:])
     try:
         new_patch, new_patched = regen_patch(moved, "test")
@@ -1634,13 +1637,22 @@ def integration_source(patched):
     return PRELUDE + text
 
 
+# The lines of TycoonCore.lua the two blocks are placed by (block_order): if one is missing, the patch needs regenerating
+LANDMARKS = ("PlotVisuals, PlotArt = nil, nil", "local UPGRADES = {", "local function plotCenter(", "local function onPlayerAdded(",
+             "Players.PlayerAdded:Connect(onPlayerAdded)", "WorldVisuals.build(")
+
+
 def block_order(text):
-    """Problems with where the two blocks sit in a patched TycoonCore (empty = both in place, in order)."""
+    """Problems with where the two blocks sit in a patched TycoonCore (empty = both in place, in order). Never raises:
+    a missing marker or landmark line is a problem like any other."""
     problems = []
-    try:
-        e1, e2 = text.index(PATCH_MARKERS[0]), text.index(PATCH_MARKERS[1])
-    except ValueError:
-        return ["a marker line is missing: %s" % [m for m in PATCH_MARKERS if m not in text]]
+    missing = [m for m in PATCH_MARKERS if m not in text]
+    if missing:
+        return ["a marker line is missing: %s" % missing]
+    gone = [m for m in LANDMARKS if m not in text]
+    if gone:
+        return ["a line the blocks are placed by is missing from TycoonCore.lua: %s" % gone]
+    e1, e2 = text.index(PATCH_MARKERS[0]), text.index(PATCH_MARKERS[1])
     if not (text.index("PlotVisuals, PlotArt = nil, nil") < e1 < text.index("local UPGRADES = {")):
         problems.append("the require block is not between the plot visuals block and UPGRADES")
     if not (text.index("local function plotCenter(") < text.index("local function onPlayerAdded(") < e2
@@ -1672,7 +1684,7 @@ def patch_checks(how, patched):
         check("integration patch: merged: TycoonCore.lua holds both blocks exactly as the patch adds them -- " + STALE, missing == [], missing)
     if patched is not None:
         order = block_order(patched)
-        check("integration patch: both marker lines are in TycoonCore, once each, in the right places and order", order == [], order[:1])
+        check("integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE, order == [], order[:1])
     patch = read("docs/world_pass_integration.patch")
     files = re.findall(r"^\+\+\+ b/(\S+)", patch, re.M)
     check("integration patch: it changes TycoonCore.lua and nothing else", files == ["TycoonCore.lua"], files)
@@ -1692,6 +1704,55 @@ def patch_checks(how, patched):
         check("integration patch: the patched TycoonCore still builds the world before players are set up",
               patched.index("WorldVisuals.build(") < patched.index("Players.PlayerAdded:Connect(onPlayerAdded)") and patched.index("local function plotCenter(") < patched.index("WorldVisuals.build("))
         check("integration patch: the patched TycoonCore has no Touched handler (tools/daily_test.py's rule)", "Touched" not in patched)
+    return passed, failed
+
+
+def guarded(what, fn, *args):
+    """Runs one step of the patch checks. If it raises (a TycoonCore.lua the step cannot read), the error is the named
+    check "patch needs regenerating", never a crash: returns (0, 1) for (passed, failed) then."""
+    try:
+        return fn(*args)
+    except Exception as e:  # noqa: BLE001 -- every error of a step is reported by name
+        print("FAIL: integration patch: the %s ran to the end -- %s (%s: %s)" % (what, STALE, type(e).__name__, e))
+        return 0, 1
+
+
+def run_blocks(luau, patched):
+    result = run_luau(luau, integration_source(patched))
+    print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
+    m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+    if not m:
+        print("FAIL: integration patch: the blocks in the fake ran to the end -- " + STALE)
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 1)
+
+
+def patch_section(luau):
+    """Everything about the integration patch: how it applies, its two blocks run in the fake, its source checks and
+    the regeneration procedure. Every failure is a named FAIL line; nothing in it can stop the test with an error.
+    Returns (passed, failed)."""
+    passed = failed = 0
+    try:
+        how, patched = integration_state()
+    except Exception as e:  # noqa: BLE001
+        print("FAIL: integration patch: the patch state ran to the end -- %s (%s: %s)" % (STALE, type(e).__name__, e))
+        return 0, 1
+    if how == "nogit":
+        print("note: git is not installed, so the integration patch could not be applied and its blocks are not run")
+    elif patched is None:
+        print("note: the integration patch does not apply to this TycoonCore.lua, so its blocks are not run (" + STALE + ")")
+    else:
+        got = guarded("blocks in the fake", run_blocks, luau, patched)
+        passed, failed = passed + got[0], failed + got[1]
+    got = guarded("patch source checks", patch_checks, how, patched)
+    print("Integration patch source checks: %d passed, %d failed" % got)
+    passed, failed = passed + got[0], failed + got[1]
+    got = guarded("regeneration checks", regen_checks)
+    print("Integration patch regeneration (--regen-patch): %d passed, %d failed" % got)
+    passed, failed = passed + got[0], failed + got[1]
+    if "--integration" in sys.argv and patched is not None:
+        print("Integration: both test suites on a scratch copy with the patch applied:")
+        if not integration_suites(luau):
+            failed += 1
     return passed, failed
 
 
@@ -1920,6 +1981,64 @@ MUTANTS_D = [
 ]
 
 
+# Group E: TycoonCore.lua changes the patch must notice (review 2, item 1). TycoonCore.lua is changed in a scratch
+# copy (with the patch, the doc, this file and the two world modules); patch_section() there must run to the end and
+# fail the named check, which says "patch needs regenerating". Never a crash.
+TC = "TycoonCore.lua"
+HOOK = "Players.PlayerAdded:Connect(onPlayerAdded)\n"
+MUTANTS_E = [
+    ("the plot visuals block's last line changed", TC, "\tPlotVisuals, PlotArt = nil, nil\nend\n", "\tPlotArt, PlotVisuals = nil, nil\nend\n",
+     "integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE),
+    ("E1's anchor line removed", TC, "\tPlotVisuals, PlotArt = nil, nil\nend\n", "end\n",
+     "integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE),
+    ("the PlayerAdded hook moved below the PlayerRemoving handler", TC, HOOK + "-- Players already in the server",
+     "-- Players already in the server", "integration patch: it applies to this worktree's TycoonCore.lua"),
+]
+
+
+def tycoon_mutation(text, old, new):
+    """apply_mutation for group E; the hook mutant also puts the removed hook back further down."""
+    changed = apply_mutation(text, old, new, TC)
+    if old.startswith(HOOK):
+        anchor = "Players.PlayerRemoving:Connect(function(player)"
+        changed = apply_mutation(changed, anchor, HOOK + "\n" + anchor, TC)
+    return changed
+
+
+def scratch_copy(tmp, files):
+    """Copies the files patch_section() reads into tmp; files: { name: text or None (copied as it is) }."""
+    for name in ("TycoonCore.lua", "WorldArt.lua", "WorldVisuals.lua", "docs/world_pass_integration.patch", "docs/STUDIO_SYNC_WORLD.md", T):
+        target = os.path.join(tmp, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if files.get(name) is None:
+            shutil.copy(os.path.join(ROOT, name), target)
+        else:
+            with open(target, "w", encoding="utf-8", newline="\n") as f:
+                f.write(files[name])
+
+
+def run_patch_section(luau, tmp, args=()):
+    """patch_section() of the world_test.py in tmp, in its own process: (finished, its stdout)."""
+    code = "import sys; sys.argv = ['x'] + %r; sys.path.insert(0, 'tools'); import world_test; print(world_test.patch_section(%r))" % (list(args), luau)
+    ran = subprocess.run([sys.executable, "-c", code], cwd=tmp, capture_output=True, text=True)
+    finished = ran.returncode == 0 and re.search(r"^\(\d+, \d+\)$", ran.stdout, re.M) is not None
+    return finished, ran.stdout + ("" if finished else ran.stderr)
+
+
+def run_tycoon_mutants(luau, mutants, group):
+    """Group E: each changed TycoonCore.lua runs patch_section() in a scratch copy; caught only by its named FAIL line."""
+    problems = []
+    for label, _, old, new, expected in mutants:
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch_copy(tmp, {TC: tycoon_mutation(read(TC), old, new)})
+            finished, out = run_patch_section(luau, tmp)
+        named = any(line.startswith("FAIL: " + expected) for line in out.split("\n"))
+        if not (finished and named):
+            why = ("it crashed: " + out.strip().split("\n")[-1]) if not finished else "the check '%s' did not fail" % expected
+            problems.append("FAIL: mutation %s, %s: not caught by its named check (%s)" % (group, label, why))
+    return len(mutants) - len(problems), problems
+
+
 def run_regen_mutants(mutants, group):
     """Group D: each mutant of this file runs regen_checks() in a scratch copy; caught only by its named FAIL line."""
     own = read(T)
@@ -2026,35 +2145,18 @@ def main():
         if review_failed:
             code = 1
     if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
-        how, patched = integration_state()
-        if how == "nogit":
-            print("note: git is not installed, so the integration patch could not be applied and its blocks are not run")
-        elif patched is None:
-            print("note: the integration patch does not apply to this TycoonCore.lua, so its blocks are not run (" + STALE + ")")
-        else:
-            result = run_luau(luau, integration_source(patched))
-            print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
-            m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
-            if not m or m.group(2) != "0":
-                code = 1
-            total += int(m.group(1)) if m else 0
-        patch_passed, patch_failed = patch_checks(how, patched)
-        print("Integration patch source checks: %d passed, %d failed" % (patch_passed, patch_failed))
+        patch_passed, patch_failed = patch_section(luau)
         total += patch_passed
         if patch_failed:
             code = 1
-        regen_passed, regen_failed = regen_checks()
-        print("Integration patch regeneration (--regen-patch): %d passed, %d failed" % (regen_passed, regen_failed))
-        total += regen_passed
-        if regen_failed:
-            code = 1
-        if "--integration" in sys.argv and patched is not None:
-            print("Integration: both test suites on a scratch copy with the patch applied:")
-            if not integration_suites(luau):
-                code = 1
     runs = caught = 0
-    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D)):
-        got, problems = run_regen_mutants(mutants, group) if group == "D" else run_mutants(luau, mutants, group)
+    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D), ("E", MUTANTS_E)):
+        if group == "D":
+            got, problems = run_regen_mutants(mutants, group)
+        elif group == "E":
+            got, problems = run_tycoon_mutants(luau, mutants, group)
+        else:
+            got, problems = run_mutants(luau, mutants, group)
         for line in problems:
             print(line)
         if problems:
