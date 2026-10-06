@@ -28,7 +28,12 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE = "e3c9e67"  # main when world-icons-pass was made: no existing file may differ from it but CONTRIBUTING.md
+BASE = "e3c9e67"  # main when world-icons-pass was made (only a label: the permanent tests never read git history)
+# main's TycoonCore.lua at e3c9e67: the patched SHA-256 in docs/STUDIO_SYNC_WORLD.md is the result for this file only
+BASE_TYCOON = ("77ce9c43dcbd03ae5e03e5e112c99b3763af7b92e6527a367e3eeee112e61aa9", 34330)
+# The first comment line of each block the integration patch adds: if TycoonCore.lua already has them, it is merged
+PATCH_MARKERS = ("-- The world around the plots (the spawn plaza", "-- The world around the plots, built once")
+STALE = "patch needs regenerating"
 NEW_LUA = ("WorldArt.lua", "WorldVisuals.lua")
 
 
@@ -1175,30 +1180,65 @@ def sync_table_checks():
         row = "| `%s` | ModuleScript, %s | new | `%s` | %d |" % (name, place, h, len(raw))
         check("STUDIO_SYNC_WORLD.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
         check("STUDIO_SYNC_WORLD.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), place)) in doc)
-    patched = patched_tycoon()
-    if patched is not None:
+    how, patched = integration_state()
+    current = open(os.path.join(ROOT, "TycoonCore.lua"), "rb").read()
+    if how == "applied" and (hashlib.sha256(current).hexdigest(), len(current)) == BASE_TYCOON:
         h = hashlib.sha256(patched.encode("utf-8")).hexdigest()
         check("STUDIO_SYNC_WORLD.md: the patched TycoonCore's SHA-256 and size are the patch's real result",
               ("`%s` | %d |" % (h, len(patched.encode("utf-8")))) in doc, h)
+    else:
+        print("note: TycoonCore.lua is not main's %s file (or the patch is merged), so the patched TycoonCore hash in "
+              "STUDIO_SYNC_WORLD.md (valid for %s only) is not compared" % (BASE, BASE))
     return passed, failed
 
 
-def patched_tycoon():
-    """main's TycoonCore.lua with docs/world_pass_integration.patch applied in a scratch folder, or None without git."""
-    try:
-        base = subprocess.run(["git", "show", BASE + ":TycoonCore.lua"], cwd=ROOT, capture_output=True)
-    except OSError:
-        return None
-    if base.returncode != 0:
-        return None
+def unpatched_tycoon(text):
+    """TycoonCore.lua without the two blocks the integration patch adds (for a file where the patch is merged)."""
+    for block in patch_hunks():
+        text = text.replace(block + "\n", "", 1)
+    return text
+
+
+def apply_patch(text):
+    """text with docs/world_pass_integration.patch applied in a scratch folder: exactly, or with fuzz (git apply -C1:
+    one line of context must match, like patch's default fuzz of 2 on 3 lines). None if it does not apply or git is
+    missing."""
     with tempfile.TemporaryDirectory() as tmp:
-        with open(os.path.join(tmp, "TycoonCore.lua"), "wb") as f:
-            f.write(base.stdout)
-        applied = subprocess.run(["git", "apply", os.path.join(ROOT, "docs", "world_pass_integration.patch")], cwd=tmp, capture_output=True, text=True)
-        if applied.returncode != 0:
-            raise SystemExit("world_test: docs/world_pass_integration.patch does not apply to TycoonCore.lua at %s: %s" % (BASE, applied.stderr.strip()))
-        with open(os.path.join(tmp, "TycoonCore.lua"), encoding="utf-8") as f:
-            return f.read()
+        target = os.path.join(tmp, "TycoonCore.lua")
+        for extra in ([], ["-C1"]):
+            with open(target, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+            try:
+                applied = subprocess.run(["git", "apply"] + extra + [os.path.join(ROOT, "docs", "world_pass_integration.patch")],
+                                         cwd=tmp, capture_output=True, text=True)
+            except OSError:
+                return None
+            if applied.returncode == 0:
+                with open(target, encoding="utf-8") as f:
+                    return f.read()
+    return None
+
+
+def integration_state():
+    """How the integration patch stands against the TycoonCore.lua of this worktree:
+    ("merged", text)   TycoonCore.lua already holds the patch's marker lines (the patch was applied or merged)
+    ("applied", text)  the patch applies to it (exactly or with fuzz); text = the patched file, in memory only
+    ("stale", None)    it does not apply: the patch needs regenerating
+    ("nogit", None)    git is not installed, so it could not be tried"""
+    current = read("TycoonCore.lua")
+    if any(marker in current for marker in PATCH_MARKERS):
+        return "merged", current
+    if shutil.which("git") is None:
+        return "nogit", None
+    patched = apply_patch(current)
+    if patched is None:
+        return "stale", None
+    return "applied", patched
+
+
+def patched_tycoon():
+    """The patched TycoonCore (merged or applied in memory), or None (stale patch or no git)."""
+    return integration_state()[1]
 
 
 def patch_hunks():
@@ -1231,8 +1271,25 @@ def integration_source(patched):
     return PRELUDE + text
 
 
-def patch_checks(patched):
-    """Source checks on the patch itself and on the patched TycoonCore."""
+def block_order(text):
+    """Problems with where the two blocks sit in a patched TycoonCore (empty = both in place, in order)."""
+    problems = []
+    try:
+        e1, e2 = text.index(PATCH_MARKERS[0]), text.index(PATCH_MARKERS[1])
+    except ValueError:
+        return ["a marker line is missing: %s" % [m for m in PATCH_MARKERS if m not in text]]
+    if not (text.index("PlotVisuals, PlotArt = nil, nil") < e1 < text.index("local UPGRADES = {")):
+        problems.append("the require block is not between the plot visuals block and UPGRADES")
+    if not (text.index("local function plotCenter(") < text.index("local function onPlayerAdded(") < e2
+            < text.index("Players.PlayerAdded:Connect(onPlayerAdded)")):
+        problems.append("the build block is not after onPlayerAdded and before Players.PlayerAdded:Connect")
+    if not (text.index("WorldVisuals.build(") > e2 and text.count(PATCH_MARKERS[0]) == 1 and text.count(PATCH_MARKERS[1]) == 1):
+        problems.append("a block is there twice, or the build call is outside its block")
+    return problems
+
+
+def patch_checks(how, patched):
+    """Source checks on the patch itself and on the patched TycoonCore (applied in memory, or merged)."""
     passed, failed = 0, 0
 
     def check(name, cond, extra=None):
@@ -1243,6 +1300,16 @@ def patch_checks(patched):
             failed += 1
             print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
 
+    if how != "nogit":
+        check("integration patch: it applies to this worktree's TycoonCore.lua (exactly or with fuzz), or is already merged in it -- " + STALE
+              + " (python3 tools/world_test.py --regen-patch)", how in ("applied", "merged"), how)
+    if how == "merged":
+        current = read("TycoonCore.lua")
+        missing = [i + 1 for i, block in enumerate(patch_hunks()) if block not in current]
+        check("integration patch: merged: TycoonCore.lua holds both blocks exactly as the patch adds them -- " + STALE, missing == [], missing)
+    if patched is not None:
+        order = block_order(patched)
+        check("integration patch: both marker lines are in TycoonCore, once each, in the right places and order", order == [], order[:1])
     patch = read("docs/world_pass_integration.patch")
     files = re.findall(r"^\+\+\+ b/(\S+)", patch, re.M)
     check("integration patch: it changes TycoonCore.lua and nothing else", files == ["TycoonCore.lua"], files)
@@ -1277,22 +1344,20 @@ def integration_suites(luau):
             os.makedirs(os.path.dirname(target), exist_ok=True)
             if os.path.exists(os.path.join(ROOT, name)):
                 shutil.copy(os.path.join(ROOT, name), target)
-        with open(os.path.join(tmp, "TycoonCore.lua"), "w", encoding="utf-8") as f:
+        with open(os.path.join(tmp, "TycoonCore.lua"), "w", encoding="utf-8", newline="\n") as f:
             f.write(patched_tycoon())
         env = dict(os.environ, LUAU=luau)
         ok = True
         for script in ("tools/daily_test.py", "tools/world_test.py"):
             result = subprocess.run([sys.executable, os.path.join(tmp, script)], cwd=tmp, capture_output=True, text=True, env=env)
-            bad = [l for l in result.stdout.split("\n") if l.startswith("FAIL") and "no existing file is edited" not in l] if script.endswith("world_test.py") else \
-                [l for l in result.stdout.split("\n") if "FAIL" in l or (" failed" in l and " 0 failed" not in l)]
-            print("  with the patch applied, %s: %s" % (script, "all pass" if not bad and (result.returncode == 0 or script.endswith("world_test.py")) else "FAILS " + "; ".join(bad[:3])))
+            bad = [l for l in result.stdout.split("\n") if "FAIL" in l or (" failed" in l and " 0 failed" not in l)]
+            print("  with the patch applied, %s: %s" % (script, "all pass" if not bad and result.returncode == 0 else "FAILS " + "; ".join(bad[:3])))
             ok = ok and not bad
         return ok
 
 
 def static_checks():
-    """Source checks on the new files: looks only, pure data, no services, no randomness, no assets, no emoji, no odds words,
-    and no existing file edited."""
+    """Source checks on the new files: looks only, pure data, no services, no randomness, no assets, no emoji, no odds words."""
     passed, failed = 0, 0
 
     def check(name, cond, extra=None):
@@ -1324,21 +1389,43 @@ def static_checks():
           vis.count("part.CanCollide = false") == 1 and vis.count("part.CanTouch = false") == 1 and vis.count("part.CanQuery = false") == 1
           and "CanCollide = true" not in vis)
 
-    try:
-        have = subprocess.run(["git", "cat-file", "-e", BASE + "^{commit}"], cwd=ROOT, capture_output=True).returncode == 0
-    except OSError:
-        have = False
-    if not have:
-        print("note: git or the base commit %s is not available here, so the 'no existing file edited' checks are skipped" % BASE)
-    else:
-        changed = subprocess.run(["git", "diff", "--name-only", "--diff-filter=MDRT", BASE, "--"], cwd=ROOT, capture_output=True, text=True).stdout.split()
-        check("no existing file is edited: against %s only CONTRIBUTING.md differs (the integration patch is not applied)" % BASE,
-              [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
-        diff = subprocess.run(["git", "diff", "-U0", BASE, "--", "CONTRIBUTING.md"], cwd=ROOT, capture_output=True, text=True).stdout
-        edits = [l for l in diff.split("\n") if l[:1] in ("+", "-") and not l.startswith(("+++", "---"))]
-        check("CONTRIBUTING.md: only rows of the Ownership table change (the claims)", all(l[1:].startswith("| ") for l in edits), [l for l in edits if not l[1:].startswith("| ")][:2])
-        same = subprocess.run(["git", "diff", "--quiet", BASE, "--", "tools/daily_test.py"], cwd=ROOT).returncode == 0
-        check("tools/daily_test.py (other branches own it) is untouched", same)
+    return passed, failed
+
+
+def review_checks():
+    """Optional (--review), for reviewing this branch before it is merged: against the merge-base with origin/main (or
+    main), only CONTRIBUTING.md's Ownership rows and the branch's own new files changed, and tools/daily_test.py is
+    untouched. Not part of the permanent run: once the branch is merged, the merge-base is main itself."""
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def git(*args):
+        return subprocess.run(["git"] + list(args), cwd=ROOT, capture_output=True, text=True)
+
+    base = None
+    for ref in ("origin/main", "main"):
+        got = git("merge-base", ref, "HEAD")
+        if got.returncode == 0:
+            base = got.stdout.strip()
+            break
+    if base is None:
+        print("note: no merge-base with origin/main or main, so the review checks are skipped")
+        return passed, failed
+    changed = git("diff", "--name-only", "--diff-filter=MDRT", base, "--").stdout.split()
+    check("review: against the merge-base %s, no existing file is edited but CONTRIBUTING.md" % base[:7],
+          [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
+    diff = git("diff", "-U0", base, "--", "CONTRIBUTING.md").stdout
+    edits = [l for l in diff.split("\n") if l[:1] in ("+", "-") and not l.startswith(("+++", "---"))]
+    check("review: CONTRIBUTING.md: only rows of the Ownership table change (the claims)", all(l[1:].startswith("| ") for l in edits),
+          [l for l in edits if not l[1:].startswith("| ")][:2])
+    check("review: tools/daily_test.py (other branches own it) is untouched", git("diff", "--quiet", base, "--", "tools/daily_test.py").returncode == 0)
     return passed, failed
 
 
@@ -1497,10 +1584,18 @@ def main():
         total += table_passed
         if table_failed:
             code = 1
+    if "--review" in sys.argv:
+        review_passed, review_failed = review_checks()
+        print("Review checks (--review, against the merge-base with main): %d passed, %d failed" % (review_passed, review_failed))
+        total += review_passed
+        if review_failed:
+            code = 1
     if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
-        patched = patched_tycoon()
-        if patched is None:
-            print("note: git or the base commit %s is not available here, so the integration blocks are not run" % BASE)
+        how, patched = integration_state()
+        if how == "nogit":
+            print("note: git is not installed, so the integration patch could not be applied and its blocks are not run")
+        elif patched is None:
+            print("note: the integration patch does not apply to this TycoonCore.lua, so its blocks are not run (" + STALE + ")")
         else:
             result = run_luau(luau, integration_source(patched))
             print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
@@ -1508,12 +1603,12 @@ def main():
             if not m or m.group(2) != "0":
                 code = 1
             total += int(m.group(1)) if m else 0
-        patch_passed, patch_failed = patch_checks(patched)
+        patch_passed, patch_failed = patch_checks(how, patched)
         print("Integration patch source checks: %d passed, %d failed" % (patch_passed, patch_failed))
         total += patch_passed
         if patch_failed:
             code = 1
-        if "--integration" in sys.argv:
+        if "--integration" in sys.argv and patched is not None:
             print("Integration: both test suites on a scratch copy with the patch applied:")
             if not integration_suites(luau):
                 code = 1

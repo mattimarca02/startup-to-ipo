@@ -41,6 +41,26 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 4.2 These notes complete (judgment calls, OWNER CHOICE list, blocked items, risks, what was not tested, results)
 - [x] 4.3 Release every claim in `CONTRIBUTING.md` (the 13 rows stay, set to free, like the design branches did)
 
+**Phase 5: review fixes** (branch `world-icons-fix`, from `world-icons-pass` at `777f843`, worktree `../world-fix`, pushed to `world-icons-pass` after every commit)
+- [x] 5.0 Claim the files touched in `CONTRIBUTING.md`
+- [x] 5.1 Item 1: the permanent tests no longer read git history. The "only CONTRIBUTING.md differs" and "daily_test.py untouched" checks moved to `--review` (against the merge-base with `origin/main`); the patch test applies the patch to this worktree's `TycoonCore.lua` (exactly, then with fuzz `git apply -C1`), or, if the two marker lines are already there, checks that both blocks are in it exactly, once each, in the right places and order; a patch that does not apply fails the named check with "patch needs regenerating"
+- [ ] 5.2 Item 2: one icon cap for the whole client
+- [ ] 5.3 Item 3: the Studio previews' cleanup and check blocks
+- [ ] 5.4 Item 4: SHOP_UX_PROPOSAL fixes
+- [ ] 5.5 Item 5: the patch's hash and line numbers are for `e3c9e67` only; the regeneration is scripted and tested
+- [ ] 5.6 Item 6: the top-down preview's labels
+- [ ] 5.7 Item 7: minor notes (drift test, the cap is a guess, the light test)
+- [ ] 5.8 Release the claims
+
+## OWNER DEFAULT (decided by the owner for the review fixes)
+
+1. **The ViewportFrame cap is global** across every window and every cache on the client.
+2. **Direct `build()` calls** (the hero card, the details sheet) go through the same cap.
+3. **"One window open at a time" alone is not enough** to keep the count down: the cap is enforced by the code.
+4. **Shop order:** S1 builds the tutorial's Names and the "?" slot first, the tutorial uses them, and CUSTOMIZE PR 2 and PR 3 come after S1.
+5. **S2 may edit the "Locked" check of `tools/daily_test.py`** in its own pull request, with a claim, and the test updated in the same pull request.
+6. **Studio-only previews get a cleanup block and a check block.**
+
 ## Studio facts (measured by the owner, not in the repo)
 
 These are placed by hand in Studio. They are treated as fixed constants in `WorldArt.Site` (marked "Studio fact") and the tests use them as they are; nothing parses them from a `.lua` file because no script creates these two objects.

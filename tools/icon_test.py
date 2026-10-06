@@ -26,7 +26,6 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE = "e3c9e67"  # main when world-icons-pass was made
 NEW_LUA = ("IconArt.lua", "IconVisuals.lua")
 
 
@@ -935,17 +934,39 @@ def static_checks():
     check("IconArt.lua is pure data: no Instance.new, GetService, require or game", not any(w in art for w in ("Instance.new", "GetService", "require(", "game", "workspace")))
     check("IconVisuals.lua asks for no service and requires nothing (art and creature modules are passed in)", "GetService" not in vis and "require(" not in vis)
     check("IconVisuals.lua starts an animation in one place only (tap)", vis.count("task.spawn(") == 1 and "task.delay" not in vis)
-    try:
-        have = subprocess.run(["git", "cat-file", "-e", BASE + "^{commit}"], cwd=ROOT, capture_output=True).returncode == 0
-    except OSError:
-        have = False
-    if not have:
-        print("note: git or the base commit %s is not available here, so the 'no existing file edited' checks are skipped" % BASE)
-    else:
-        changed = subprocess.run(["git", "diff", "--name-only", "--diff-filter=MDRT", BASE, "--"], cwd=ROOT, capture_output=True, text=True).stdout.split()
-        check("no existing file is edited: against %s only CONTRIBUTING.md differs" % BASE, [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
-        same = subprocess.run(["git", "diff", "--quiet", BASE, "--", "tools/daily_test.py"], cwd=ROOT).returncode == 0
-        check("tools/daily_test.py (other branches own it) is untouched", same)
+    return passed, failed
+
+
+def review_checks():
+    """Optional (--review), for reviewing this branch before it is merged: against the merge-base with origin/main (or
+    main), no existing file is edited but CONTRIBUTING.md, and tools/daily_test.py is untouched. Not part of the
+    permanent run: once the branch is merged, the merge-base is main itself."""
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    def git(*args):
+        return subprocess.run(["git"] + list(args), cwd=ROOT, capture_output=True, text=True)
+
+    base = None
+    for ref in ("origin/main", "main"):
+        got = git("merge-base", ref, "HEAD")
+        if got.returncode == 0:
+            base = got.stdout.strip()
+            break
+    if base is None:
+        print("note: no merge-base with origin/main or main, so the review checks are skipped")
+        return passed, failed
+    changed = git("diff", "--name-only", "--diff-filter=MDRT", base, "--").stdout.split()
+    check("review: against the merge-base %s, no existing file is edited but CONTRIBUTING.md" % base[:7],
+          [n for n in changed if n != "CONTRIBUTING.md"] == [], changed)
+    check("review: tools/daily_test.py (other branches own it) is untouched", git("diff", "--quiet", base, "--", "tools/daily_test.py").returncode == 0)
     return passed, failed
 
 
@@ -1076,6 +1097,12 @@ def main():
     total += static_passed
     if static_failed:
         code = 1
+    if "--review" in sys.argv:
+        review_passed, review_failed = review_checks()
+        print("Review checks (--review, against the merge-base with main): %d passed, %d failed" % (review_passed, review_failed))
+        total += review_passed
+        if review_failed:
+            code = 1
     runs = caught = 0
     for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B)):
         got, problems = run_mutants(luau, mutants, group)
