@@ -132,3 +132,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/GAMEPLAY_NOTES.md | (repo only) | free | | |
 | docs/SOUND_PLAN.md | (repo only) | free | | |
 | tools/first_hour_model.py | (repo only) | free | | |
+| docs/SIMS_RESULTS.md | (repo only) | free | | |
