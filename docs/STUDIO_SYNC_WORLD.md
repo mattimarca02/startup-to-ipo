@@ -14,7 +14,7 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 | `IconVisuals` | ModuleScript, ReplicatedStorage | new | `fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98` | 48178 |
 | `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file with `docs/world_pass_integration.patch` applied | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
 
-The files use `\n` line endings and end with one newline (Studio may add or drop that last newline: the check prints both). Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
+The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
 
 ## (b) Studio-only settings
 
@@ -22,16 +22,25 @@ Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnab
 
 ## (c) Steps on the Mac
 
-1. **Pull.** In the project folder: `git fetch`, then look at the branch `world-icons-pass` (or its pull request). Nothing to merge into Studio yet.
-2. **Create the four ModuleScripts** (right-click the service > Insert Object > ModuleScript, rename it exactly), then open each `.lua` file, select all, copy, and paste over the new script's whole source:
-   - **ServerScriptService:** `WorldArt` (from `WorldArt.lua`), `WorldVisuals` (from `WorldVisuals.lua`).
-   - **ReplicatedStorage:** `IconArt` (from `IconArt.lua`), `IconVisuals` (from `IconVisuals.lua`). They sit next to `CreatureConfig`, `CreatureModels` and `ShopConfig`, which the icons read.
+1. **Put the branch's files in their own folder.** In Terminal, in the project folder (for example `cd ~/Developer/startup-to-ipo-clean`):
+   ```
+   git fetch
+   git worktree add ~/Developer/world-studio origin/world-icons-pass
+   ```
+   This makes a separate folder, `~/Developer/world-studio`, with the branch's files; your own folder and branch are not touched. Open that folder in VS Code (**File > Open Folder...** and pick `world-studio`, or `code ~/Developer/world-studio`) and copy the files from there. When you are done with it, remove it from the project folder: `git worktree remove ~/Developer/world-studio`. (Once the branch is merged, the files are on `main`: pull `main` instead.)
+2. **Create the four ModuleScripts** (right-click the service > Insert Object > ModuleScript, rename it exactly), then open each `.lua` file, select all, copy, and paste over the new script's whole source. Where each one goes:
+   - `ServerScriptService > WorldArt` (ModuleScript, from `WorldArt.lua`)
+   - `ServerScriptService > WorldVisuals` (ModuleScript, from `WorldVisuals.lua`)
+   - `ReplicatedStorage > IconArt` (ModuleScript, from `IconArt.lua`)
+   - `ReplicatedStorage > IconVisuals` (ModuleScript, from `IconVisuals.lua`)
+
+   The icon modules sit next to `CreatureConfig`, `CreatureModels` and `ShopConfig`, which the icons read. No other script changes.
 3. **Check the hashes:** paste block (d) into **View > Command Bar**, press Enter. Every line must say `OK`.
 4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
-5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the checklist in (f).
-6. **Delete the previews** (e) before anything else: before a playtest and always before publishing.
+5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
+6. **Before any playtest:** paste the **cleanup block** (e), press Enter, then the **check block** (e): it must print `OK`.
 7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch, `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
-8. **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
+8. **Before publishing:** paste the check block (e) again: it must print `OK` (if it prints `FAIL`, run the cleanup block). Then **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
 
 ## (d) Hash check (command bar)
 
@@ -91,9 +100,12 @@ for name, want in pairs(WANT) do
 		print(name, "MISSING (create it in " .. want[3] .. ")")
 	else
 		local source = script.Source
-		local same = sha256(source) == want[1] and #source == want[2]
-		local withNewline = sha256(source .. "\n") == want[1] and #source + 1 == want[2]
-		print(name, (same or withNewline) and "OK" or "DIFFERENT", #source, "bytes")
+		local function matches(text)
+			return #text == want[2] and sha256(text) == want[1]
+		end
+		-- the file as it is, or with its last newline dropped by Studio, or with one newline added by Studio
+		local ok = matches(source) or matches(source .. "\n") or (string.sub(source, -2) == "\n\n" and matches(string.sub(source, 1, -2)))
+		print(name, ok and "OK" or "DIFFERENT", #source, "bytes")
 	end
 end
 ```
@@ -102,7 +114,7 @@ end
 
 Only to look at the world in edit mode; it never plays the game. Paste the block into **View > Command Bar** and press Enter. It needs the two ModuleScripts `WorldArt` and `WorldVisuals` in **ServerScriptService** (paste them from the repo first). It builds `Workspace.PREVIEW_WORLD` (the world, plus see-through ghosts where the plots and the VIP Lounge stand once the game runs), then prints one line per check: `OK` or `PROBLEM` and the first problem. It also checks the two Studio facts against the real SpawnLocation and Baseplate (read only), that they were left untouched, and lists any part already in the Workspace that the world would go into (`NOTE`). Running it again replaces the old preview.
 
-**Delete `Workspace.PREVIEW_WORLD` before publishing** (select it in the Explorer, press Delete), and before a playtest of the wired-in world (the two would lie on top of each other).
+**Remove `Workspace.PREVIEW_WORLD` before a playtest and before publishing** with the cleanup block (e) (or select it in the Explorer and press Delete): in a playtest of the wired-in world the two would lie on top of each other.
 
 ```lua
 -- World preview: builds Workspace.PREVIEW_WORLD and prints one line per check. Delete PREVIEW_WORLD before publishing.
@@ -143,7 +155,8 @@ report("studio facts", WorldVisuals.studioFacts(site, spawn, baseplate))
 report("untouched", WorldVisuals.compare(before))
 local others = {}
 for _, d in ipairs(workspace:GetDescendants()) do
-	if d:IsA("BasePart") and d ~= baseplate and not d:IsDescendantOf(folder) then
+	-- Terrain is a BasePart too, but it is not a hand-placed part (its box is the whole map): never a clash
+	if d:IsA("BasePart") and d ~= baseplate and not d:IsA("Terrain") and not d:IsDescendantOf(folder) then
 		table.insert(others, d)
 	end
 end
@@ -164,7 +177,7 @@ print(string.format("PREVIEW_WORLD: %d parts (budget %d), %d lights (budget %d).
 
 Only to look at the icons in Studio; it never plays the game. It needs `IconArt` and `IconVisuals` as ModuleScripts in **ReplicatedStorage** (next to the existing `CreatureConfig`, `CreatureModels` and `ShopConfig`). Paste the block into **View > Command Bar** and press Enter: it builds a ScreenGui **`StarterGui.PREVIEW_ICONS`** with every icon in a grid at card size (56 px), each with a caption (its group and its drawing's name), the HUD icons on their real button colors, and prints one line per check (`OK` or `PROBLEM` and the first problem). It shows all 18 3D icons at once (it builds them with `IconVisuals.buildUncapped`, outside the cap); in the game every icon goes through the cap of 8 ViewportFrames for the whole client, and a card past it shows its drawn fallback. Running it again replaces the old sheet.
 
-**Delete `StarterGui.PREVIEW_ICONS` before publishing**, and before any playtest (everything in StarterGui is copied onto every player's screen).
+**Remove `StarterGui.PREVIEW_ICONS` before any playtest and before publishing** with the cleanup block (e): everything in StarterGui is copied onto every player's screen. To hide it for a moment while you look at the world, untick its `Enabled` (the block sets it on).
 
 ```lua
 -- Icon preview: builds StarterGui.PREVIEW_ICONS with every icon and prints one line per check. Delete it before publishing.
@@ -210,6 +223,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "PREVIEW_ICONS"
 gui.ResetOnSpawn = false
 gui.DisplayOrder = 50
+gui.Enabled = true -- untick Enabled in Properties to hide the sheet without deleting it
 local sheet = Instance.new("ScrollingFrame")
 sheet.Name = "Sheet"
 sheet.Position = UDim2.fromOffset(16, 16)
@@ -278,7 +292,7 @@ print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps a
 	#icons, views, #icons - views, IconArt.Style.viewportCap))
 ```
 
-## (e) Delete before publishing (and before a playtest)
+## (e) Remove the previews before a playtest and before publishing
 
 | Object | Made by | Why it must go |
 |---|---|---|
@@ -286,7 +300,54 @@ print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps a
 | `StarterGui.PREVIEW_ICONS` | the icon preview block | everything in StarterGui is copied onto every player's screen |
 | `Workspace.PREVIEW_STAGES` | the plot visuals' preview (docs/STUDIO_SYNC.md) | still on the ROADMAP's before-publish list (item m), if it is there |
 
-Select each in the Explorer and press Delete. Then check that `Workspace` and `StarterGui` hold nothing named `PREVIEW_...`.
+**Before a playtest:** the cleanup block, then the check block (it must print `OK`).
+**Before publishing:** the check block (it must print `OK`; if it prints `FAIL`, the cleanup block, then the check block again).
+
+No game object is named `PREVIEW_...`: only these Studio previews are.
+
+### The cleanup block (command bar)
+
+It destroys every object whose name starts with `PREVIEW_` in `Workspace` and `StarterGui` (the three above, and any other), then prints what it removed and whether anything is left.
+
+```lua
+-- Cleanup: destroys every PREVIEW_ object in Workspace and StarterGui, then prints what it removed and what is left
+local places = { workspace, game:GetService("StarterGui") }
+local removed, left = {}, {}
+for _, place in ipairs(places) do
+	for _, d in ipairs(place:GetDescendants()) do
+		if string.sub(d.Name, 1, 8) == "PREVIEW_" and d:IsDescendantOf(place) then
+			table.insert(removed, d:GetFullName())
+			d:Destroy()
+		end
+	end
+end
+for _, place in ipairs(places) do
+	for _, d in ipairs(place:GetDescendants()) do
+		if string.sub(d.Name, 1, 8) == "PREVIEW_" then
+			table.insert(left, d:GetFullName())
+		end
+	end
+end
+print("Removed: " .. (#removed > 0 and table.concat(removed, ", ") or "nothing (no preview was there)"))
+print(#left == 0 and "OK no PREVIEW_ object is left in Workspace or StarterGui" or ("FAIL still there: " .. table.concat(left, ", ")))
+```
+
+### The check block (command bar)
+
+It changes nothing: `OK`, or `FAIL` and the name of every `PREVIEW_` object still in `Workspace` or `StarterGui`.
+
+```lua
+-- Check: OK, or FAIL and the name of every PREVIEW_ object still in Workspace or StarterGui. Changes nothing.
+local left = {}
+for _, place in ipairs({ workspace, game:GetService("StarterGui") }) do
+	for _, d in ipairs(place:GetDescendants()) do
+		if string.sub(d.Name, 1, 8) == "PREVIEW_" then
+			table.insert(left, d:GetFullName())
+		end
+	end
+end
+print(#left == 0 and "OK no PREVIEW_ object in Workspace or StarterGui" or ("FAIL " .. #left .. " PREVIEW_ object(s) still there: " .. table.concat(left, ", ")))
+```
 
 ## (f) What to look at in Studio (only your eyes can judge these)
 

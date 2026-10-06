@@ -205,11 +205,12 @@ local IS_A = {
 	Seat = { Part = true, BasePart = true, PVInstance = true }, WedgePart = { BasePart = true, PVInstance = true },
 	PointLight = { Light = true }, SpotLight = { Light = true }, SurfaceLight = { Light = true },
 	Model = { PVInstance = true }, Workspace = { Model = true, PVInstance = true },
+	Terrain = { BasePart = true, PVInstance = true },
 	Script = { BaseScript = true, LuaSourceContainer = true }, LocalScript = { Script = true, BaseScript = true, LuaSourceContainer = true },
 	ModuleScript = { LuaSourceContainer = true }, SurfaceGui = { LayerCollector = true, GuiBase = true },
 	TextLabel = { GuiObject = true, GuiBase2d = true }, Decal = { FaceInstance = true },
 }
-local PART_CLASSES = { Part = true, SpawnLocation = true, Seat = true, WedgePart = true }
+local PART_CLASSES = { Part = true, SpawnLocation = true, Seat = true, WedgePart = true, Terrain = true }
 local Methods = {}
 local Mt = {}
 Mt.__index = function(t, k)
@@ -1038,6 +1039,12 @@ for stage = 1, 5 do
 	floor.Position = vec(-600 + (stage - 1) * 70, 0.5, 150)
 	floor.Parent = stages
 end
+-- Workspace.Terrain: a BasePart whose box is the whole map (Studio always has it)
+local terrain = newInstance("Terrain")
+terrain.Name = "Terrain"
+terrain.Size = vec(2044, 252, 2044)
+terrain.Position = vec(0, 0, 0)
+terrain.Parent = workspace
 local function has(prefix)
 	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #prefix) == prefix then return true end end
 	return false
@@ -1059,6 +1066,8 @@ end
 check("preview: it prints OK for the Studio facts (the SpawnLocation and the Baseplate where the owner measured them)", has("OK studio facts"))
 check("preview: it prints OK for untouched (the SpawnLocation and the Baseplate as they were)", has("OK untouched"))
 check("preview: it prints OK for clashes (the plot visuals' preview rooms are not in the way)", has("OK clashes with parts already in the Workspace"))
+check("preview: Workspace.Terrain is never listed as a clash (its box covers the world, so it would be without the rule)",
+	has("OK clashes with parts already in the Workspace") and #WorldVisualsModule.clashes(folder:FindFirstChild("World"), { terrain }) > 0)
 do
 	local empty = newInstance("Folder")
 	local saved = {}
@@ -1095,20 +1104,77 @@ check("preview: a hand-placed part standing on the front street is listed as a N
 stray.Parent = nil
 runPreview()
 check("preview: with it gone, OK again", has("OK clashes with parts already in the Workspace") and has("OK studio facts"))
+
+-- The cleanup block and the check block of section (e), as written, after the previews
+local function runBlock(block)
+	table.clear(PRINTED)
+	local ok, err = pcall(block)
+	return ok, err, table.concat(PRINTED, "\n")
+end
+local function cleanupBlock()
+__CLEANUP__
+end
+local function checkBlock()
+__CHECK__
+end
+local StarterGui = SERVICES.StarterGui
+local icons = newInstance("Folder")
+icons.Name = "PREVIEW_ICONS"
+icons.Parent = StarterGui
+local shopGui = newInstance("Folder")
+shopGui.Name = "ShopGui"
+shopGui.Parent = StarterGui
+local holder = newInstance("Model")
+holder.Name = "Props"
+holder.Parent = workspace
+local nested = newInstance("Folder")
+nested.Name = "PREVIEW_OLD"
+nested.Parent = holder
+local inner = newInstance("Folder")
+inner.Name = "PREVIEW_INNER"
+inner.Parent = workspace:FindFirstChild("PREVIEW_WORLD")
+local okC, errC, said = runBlock(checkBlock)
+check("check block: with previews there it prints FAIL and every name (PREVIEW_WORLD, PREVIEW_STAGES, PREVIEW_ICONS, a nested one)", okC
+	and string.sub(said, 1, 5) == "FAIL " and string.find(said, "PREVIEW_WORLD", 1, true) and string.find(said, "PREVIEW_STAGES", 1, true)
+	and string.find(said, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(said, "Props.PREVIEW_OLD", 1, true), errC or said)
+check("check block: it changes nothing", workspace:FindFirstChild("PREVIEW_WORLD") ~= nil and StarterGui:FindFirstChild("PREVIEW_ICONS") ~= nil)
+local okR, errR, cleaned = runBlock(cleanupBlock)
+local leftover = {}
+for _, place in ipairs({ workspace, StarterGui }) do
+	for _, d in ipairs(place:GetDescendants()) do if string.sub(d.Name, 1, 8) == "PREVIEW_" then table.insert(leftover, d.Name) end end
+end
+check("cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which", okR and #leftover == 0
+	and string.find(cleaned, "Removed: ", 1, true) and string.find(cleaned, "Workspace.PREVIEW_WORLD", 1, true) and string.find(cleaned, "Workspace.PREVIEW_STAGES", 1, true)
+	and string.find(cleaned, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(cleaned, "Workspace.Props.PREVIEW_OLD", 1, true)
+	and not string.find(cleaned, "PREVIEW_INNER", 1, true), errR or (cleaned .. " | left " .. table.concat(leftover, ",")))
+check("cleanup block: it prints OK once nothing is left", string.find(cleaned, "\nOK no PREVIEW_ object is left in Workspace or StarterGui", 1, true) ~= nil, cleaned)
+check("cleanup block: everything else stays (Baseplate, SpawnLocation, Terrain, StarterGui.ShopGui, Workspace.Props)",
+	baseplate.Parent == workspace and spawnPad.Parent == workspace and terrain.Parent == workspace and shopGui.Parent == StarterGui and holder.Parent == workspace)
+local _, _, after = runBlock(checkBlock)
+check("check block: after the cleanup it prints OK", after == "OK no PREVIEW_ object in Workspace or StarterGui", after)
+local okAgain, _, again = runBlock(cleanupBlock)
+check("cleanup block: run again, it says nothing was there and OK", okAgain and string.find(again, "Removed: nothing (no preview was there)", 1, true) ~= nil
+	and string.find(again, "OK no PREVIEW_ object is left", 1, true) ~= nil, again)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
-def doc_block(heading):
-    """The first ```lua block after a heading of docs/STUDIO_SYNC_WORLD.md."""
-    text = read("docs/STUDIO_SYNC_WORLD.md")
+def doc_block(heading, doc=None):
+    """The first ```lua block after a heading of docs/STUDIO_SYNC_WORLD.md (or of `doc`, a changed copy)."""
+    text = doc if doc is not None else read("docs/STUDIO_SYNC_WORLD.md")
     start = text.index("```lua\n", text.index(heading)) + len("```lua\n")
     return text[start:text.index("```", start)]
 
 
-def preview_source():
-    block = "\n".join("\t\t" + line if line.strip() else line for line in doc_block("## The world preview (command bar)").split("\n"))
-    return PRELUDE + PREVIEW_TESTS.replace("__WORLDART__", read("WorldArt.lua")).replace("__WORLDVISUALS__", read("WorldVisuals.lua")).replace("__PREVIEW__", block)
+def indented(block, tabs):
+    return "\n".join("\t" * tabs + line if line.strip() else line for line in block.split("\n"))
+
+
+def preview_source(doc=None):
+    block = indented(doc_block("## The world preview (command bar)", doc), 2)
+    return PRELUDE + (PREVIEW_TESTS.replace("__WORLDART__", read("WorldArt.lua")).replace("__WORLDVISUALS__", read("WorldVisuals.lua"))
+                      .replace("__CLEANUP__", indented(doc_block("### The cleanup block (command bar)", doc), 1))
+                      .replace("__CHECK__", indented(doc_block("### The check block (command bar)", doc), 1)).replace("__PREVIEW__", block))
 
 
 HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_WORLD.md, run as it is, on the real files in a fake place ----------------
@@ -1128,17 +1194,31 @@ for name in pairs(SOURCES) do
 	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #name + 1) == name .. " " then said = line end end
 	check("hash block: " .. name .. " prints OK (Luau's SHA-256 of the real file is the one in the table)", said ~= nil and string.find(said, " OK ", 1, true) ~= nil, said)
 end
-for name, entry in pairs(SOURCES) do
-	local script = SERVICES[entry.place]:FindFirstChild(name)
-	script.Source = entry.source .. "-- changed\n"
-end
-table.clear(PRINTED)
-pcall(function()
+local function runWith(change)
+	for name, entry in pairs(SOURCES) do
+		SERVICES[entry.place]:FindFirstChild(name).Source = change(entry.source)
+	end
+	table.clear(PRINTED)
+	pcall(function()
 __HASHBLOCK__
-end)
-local different = 0
-for _, line in ipairs(PRINTED) do if string.find(line, " DIFFERENT ", 1, true) then different += 1 end end
+	end)
+	local ok, different = 0, 0
+	for _, line in ipairs(PRINTED) do
+		if string.find(line, " OK ", 1, true) then ok += 1 end
+		if string.find(line, " DIFFERENT ", 1, true) then different += 1 end
+	end
+	return ok, different
+end
+local okDropped = runWith(function(source) return string.sub(source, 1, -2) end)
+check("hash block: a script whose last newline Studio dropped prints OK (four of four)", okDropped == 4, okDropped)
+local okAdded = runWith(function(source) return source .. "\n" end)
+check("hash block: a script with one newline added at the end prints OK (four of four)", okAdded == 4, okAdded)
+local _, twoAdded = runWith(function(source) return source .. "\n\n" end)
+check("hash block: two newlines added is DIFFERENT (four of four)", twoAdded == 4, twoAdded)
+local _, different = runWith(function(source) return source .. "-- changed\n" end)
 check("hash block: a changed script prints DIFFERENT (four of four)", different == 4, different)
+local _, oneChar = runWith(function(source) return "x" .. string.sub(source, 2) end)
+check("hash block: one character changed (same size) prints DIFFERENT (four of four)", oneChar == 4, oneChar)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -1153,8 +1233,8 @@ def lua_long_string(text):
 SYNCED = (("WorldArt", "ServerScriptService"), ("WorldVisuals", "ServerScriptService"), ("IconArt", "ReplicatedStorage"), ("IconVisuals", "ReplicatedStorage"))
 
 
-def hash_source():
-    block = doc_block("## (d) Hash check (command bar)")
+def hash_source(doc=None):
+    block = doc_block("## (d) Hash check (command bar)", doc)
     sources = "{ " + ", ".join('%s = { place = "%s", source = %s }' % (name, place, lua_long_string(read(name + ".lua"))) for name, place in SYNCED) + " }"
     text = HASH_TESTS.replace("__SOURCES__", sources).replace("__HASHBLOCK__", block)
     return PRELUDE + text
@@ -1519,14 +1599,39 @@ MUTANTS_B = [
 ]
 
 
+# Group C: the command-bar blocks of docs/STUDIO_SYNC_WORLD.md (review item 3). The block is broken in a copy of the
+# doc; the program that runs it (the world preview program, or the hash block's) must fail the named check.
+D = "docs/STUDIO_SYNC_WORLD.md"
+MUTANTS_C = [
+    ("the world preview lists Terrain as a clash", D, ' and not d:IsA("Terrain") and not d:IsDescendantOf(folder) then', " and not d:IsDescendantOf(folder) then",
+     "preview: Workspace.Terrain is never listed as a clash"),
+    ("the hash block refuses a newline Studio added", D, ' or (string.sub(source, -2) == "\\n\\n" and matches(string.sub(source, 1, -2)))', "",
+     "hash block: a script with one newline added at the end prints OK"),
+    ("the hash block refuses a newline Studio dropped", D, 'matches(source) or matches(source .. "\\n") or', "matches(source) or",
+     "hash block: a script whose last newline Studio dropped prints OK"),
+    ("the cleanup block only looks at the top level", D, "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
+     "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
+     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
+    ("the cleanup block destroys what is already gone and lists it twice", D, ' and d:IsDescendantOf(place) then', " then",
+     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
+    ("the check block forgets StarterGui", D, 'for _, place in ipairs({ workspace, game:GetService("StarterGui") }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
+     'for _, place in ipairs({ workspace }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
+     "check block: with previews there it prints FAIL and every name"),
+]
+
+
 def run_mutants(luau, mutants, group):
     """Runs every mutant (four at a time). Returns how many were caught and a FAIL line for each one that was not."""
     from concurrent.futures import ThreadPoolExecutor
     art, vis = read("WorldArt.lua"), read("WorldVisuals.lua")
+    doc = read(D) if os.path.exists(os.path.join(ROOT, D)) else ""
 
     def one(mutant):
         label, filename, old, new, expected = mutant
-        if filename == "WorldArt.lua":
+        if filename == D:
+            changed = apply_mutation(doc, old, new, filename)
+            source = hash_source(changed) if expected.startswith("hash block") else preview_source(changed)
+        elif filename == "WorldArt.lua":
             source = world_source(art=apply_mutation(art, old, new, filename))
         else:
             source = world_source(visuals=apply_mutation(vis, old, new, filename))
@@ -1613,7 +1718,7 @@ def main():
             if not integration_suites(luau):
                 code = 1
     runs = caught = 0
-    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B)):
+    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C)):
         got, problems = run_mutants(luau, mutants, group)
         for line in problems:
             print(line)

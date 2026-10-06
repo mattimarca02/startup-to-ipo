@@ -1027,6 +1027,7 @@ for _, cell in ipairs(sheet and sheet:GetChildren() or {}) do
 		if string.find(cell:FindFirstChild("Caption").Text, "MISSING", 1, true) then missing += 1 end
 	end
 end
+check("icon preview: the sheet is a ScreenGui with Enabled on (untick it to hide the sheet without deleting it)", gui ~= nil and gui.ClassName == "ScreenGui" and gui.Enabled == true)
 check("icon preview: StarterGui.PREVIEW_ICONS holds 38 cells, each with its icon and a caption", gui ~= nil and cells == 38 and icons == 38 and missing == 0, cells .. "/" .. icons .. "/" .. missing)
 for _, name in ipairs(loaded.IconVisuals.CHECKS) do
 	check("icon preview: it prints OK for the check " .. name, has("OK " .. name), PRINTED[1])
