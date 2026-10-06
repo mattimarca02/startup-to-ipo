@@ -195,3 +195,16 @@ Every effect is client-only and changes no data (CLAUDE.md, client visuals). "Ph
 **The leaderboard.** Today's board ranks IPO count, then best valuation (IpoClient.lua:754), and Cash packs raise valuation: bought speed. At launch it ranks Collection, stamps plus IPOs (CUST 1.6), and valuation counts base Cash only (LG:93): passes buy a little speed, never a higher ceiling.
 
 **Never sold:** valuation, stage or rung skips, engaged time, stamps, tiers, eggs or creatures, random boxes, Gaming's work, quality or wishlists (SECT 2.8); bundles have fixed contents (LG:95).
+
+## 7. Frustration and safety nets
+
+| Situation | Today | Proposal |
+|---|---|---|
+| Quiet mode | 3 misses or 90 s: "📞 Tap to resume" (TaskConfig.lua:92, 125); a window never counts (TaskServer.lua:232) | the chip says "Calls paused"; employees rest (section 5); no blame |
+| Offline | 50% for 8 h (+2 h per Night Shift level, IpoConfig.lua:94), silent (A12); launch: 10% for 2 h (LG:24) | a welcome-back card with the amount and the cap; no Robux on it (M6b's "2x offline" product, ROADMAP.md:90, would sell at that moment) |
+| Rejoin | the save reloads, eggs kept hatching (EmployeeServer.lua:640), the task budget refills (PUBLISH_RULES.md:59-61) | the tutorial resumes at its step (TUT §4) |
+| Losing an employee | 10 min shield, a 5-min Counter-Offer at 50%, one loss per 10 min, Legendaries safe (CreatureConfig.lua:114-125) | the card adds a free path ("Hatch a new hire") and no Robux (FR-14) |
+| A failed save | 3 load tries, then a kick saying progress is safe (TycoonCore.lua:79-80, 746-751); a message after 2 failed saves (:457-472) | keep; a small cloud icon on the bar while saves fail |
+| Alone in a server | "Nobody else is in this server yet" (PoachClient.lua:506) | everything else works alone; the Poach tab says when poaching opens; no computer rival that gives employees (it would bypass R2, LG:108); Max Players 6 (PUBLISH_RULES.md:5-11) |
+| Low-end phone | rooms up to 260 parts (PLOT_VISUALS.md:34), FR-16, FR-17; the plot streams in after the teleport (WORLD §3) | section 5's budgets, FR-16 and FR-17 fixes, stream the plot in before the teleport (unverified) |
+| A very young player | no text input (FULL_REVIEW.md:517) | words a 10-year-old reads (BIBLE:7), calm texts like DailyConfig's (:53), no timed Robux, no "chance" in new copy (D9) |

@@ -14,7 +14,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 4: The first hour
 - [x] Section 5: Game feel
 - [x] Section 6: Monetization that feels fair
-- [ ] Section 7: Frustration and safety nets
+- [x] Section 7: Frustration and safety nets
 - [ ] Section 8: Sectors
 - [ ] Section 9: Measurement
 - [ ] Section 10: What to build, in order
@@ -44,8 +44,9 @@ Where each input came from (main = `origin/main` at e3c9e67).
 3. **Checked and dropped:** I suspected that keeping a window open for 90 s starts quiet mode the moment it closes. It doesn't: `settle` moves the idle clock while paused (TaskServer.lua:232).
 4. **LG R3** (poaching needs 14+ days of account age and 10 engaged hours, LG:108) is treated as proposed, not decided: LG:128 lists R1 and R2 among the decisions, not R3.
 5. **A third Garage desk.** Model G (cheaper first items only) still left a 10-minute wait from 8:00 to the Server Rack. Adding Desk 3 and a Bug Beetle egg (model G2) brings the longest wait in minutes 0-20 to about 6 minutes, and it also fixes the free-egg conflict (the free hire takes Desk 1 in LONG's list, which assumes the first hire is bought).
-6. **The Day 1 gift goes after minute 10, not at 7:00.** At 7:00 the $4,200 gift would buy Desk 3 and an egg at once and leave an 8-minute wait after it; after the third hire (~12:20) its ~$6,600 shortens the longest wait instead.
-7. **Findings about today that LONG PR 2 fixes** (A4, A5, A20) are kept in the list, marked "(today)" and "planned", so the owner sees what a launch on today's code would feel like.
+6. **No computer rival for solo players.** A Studio dummy exists (PoachServer.lua:776-792), but a live one that can be poached would hand out free employees and bypass LG's R2 (3 poach-ins per run). Solo players get everything else and a clear "when poaching opens" line instead.
+7. **The Day 1 gift goes after minute 10, not at 7:00.** At 7:00 the $4,200 gift would buy Desk 3 and an egg at once and leave an 8-minute wait after it; after the third hire (~12:20) its ~$6,600 shortens the longest wait instead.
+8. **Findings about today that LONG PR 2 fixes** (A4, A5, A20) are kept in the list, marked "(today)" and "planned", so the owner sees what a launch on today's code would feel like.
 
 ## OWNER CHOICE
 
@@ -72,3 +73,4 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 - Everything about real players: the model's delays are guesses until the 5-friend playtest (section 9).
 - Roblox audio: the Creator Store license terms for Roblox-made sounds, the current upload allowance and fees, and which assets the 2022 audio privacy rules let any experience play (section 5).
 - An API that tells a script the player's graphics quality, to drop particles on low settings (section 5).
+- Streaming the plot in before the teleport (WORLD §3 marks it unverified too); how a phone behaves when the plot arrives late (section 7).
