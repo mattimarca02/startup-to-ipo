@@ -128,3 +128,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
+| docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md | (repo only) | @mattimarca02 | gameplay-design | 2026-10-06 |
+| docs/GAMEPLAY_NOTES.md | (repo only) | @mattimarca02 | gameplay-design | 2026-10-06 |
