@@ -103,7 +103,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | free | | |
+| IpoClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | hud-fix (pushed to hud-cash) | 2026-10-06 |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
@@ -128,5 +128,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | free | | |
-| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
+| tools/hud_test.py | (repo only) | @mattimarca02 (Claude Code) | hud-fix (pushed to hud-cash) | 2026-10-06 |
+| docs/STUDIO_SYNC_HUD.md | (repo only) | @mattimarca02 (Claude Code) | hud-fix (pushed to hud-cash) | 2026-10-06 |
