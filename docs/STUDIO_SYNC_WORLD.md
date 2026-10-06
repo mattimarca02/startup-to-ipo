@@ -37,7 +37,7 @@ Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnab
    The icon modules sit next to `CreatureConfig`, `CreatureModels` and `ShopConfig`, which the icons read. No other script changes.
 3. **Check the hashes:** paste block (d) into **View > Command Bar**, press Enter. Every line must say `OK`.
 4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
-5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
+5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the light test block (one lit cube) and the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
 6. **Before any playtest:** paste the **cleanup block** (e), press Enter, then the **check block** (e): it must print `OK`.
 7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch. The patch's hash and line numbers are valid for `main` at `e3c9e67` only (its "Made for:" line). If `main`'s `TycoonCore.lua` changed since, first regenerate them on that branch: `python3 tools/world_test.py --regen-patch` (it rewrites the patch and the TycoonCore row in (a), and prints the new hash), then `python3 tools/world_test.py --integration`. Then `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
 8. **Before publishing:** paste the check block (e) again: it must print `OK` (if it prints `FAIL`, run the cleanup block). Then **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
@@ -292,12 +292,49 @@ print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps a
 	#icons, views, #icons - views, IconArt.Style.viewportCap))
 ```
 
+## The light test (command bar)
+
+Roblox's `ViewportFrame.LightDirection` was not checked in Studio: the icons assume it is the way the light travels (IconArt `Style.lightDirection = { 1, -1, -1 }` in the camera's frame: toward the right, down and away, so lit from the picture's top-left). This block shows one white cube lit exactly the way every 3D icon is, at 240 px, as `StarterGui.PREVIEW_LIGHT` (the cleanup block removes it). It needs `IconArt` and `IconVisuals` in ReplicatedStorage.
+
+```lua
+-- Light test: builds StarterGui.PREVIEW_LIGHT, one white cube lit like every 3D icon. Remove it with the cleanup block.
+local RS = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+local artModule, visualsModule = RS:FindFirstChild("IconArt"), RS:FindFirstChild("IconVisuals")
+assert(artModule and visualsModule, "First create the ModuleScripts IconArt and IconVisuals in ReplicatedStorage")
+local IconArt = require(artModule:Clone())
+local IconVisuals = require(visualsModule:Clone())
+local old = StarterGui:FindFirstChild("PREVIEW_LIGHT")
+if old then
+	old:Destroy()
+end
+local art = table.clone(IconArt)
+art.Models = { LightCube = { { name = "Cube", shape = "Block", size = { 2, 2, 2 }, offset = { 0, 1, 0 }, color = "white", material = "SmoothPlastic" } } }
+local gui = Instance.new("ScreenGui")
+gui.Name = "PREVIEW_LIGHT"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 60
+local slot = Instance.new("Frame")
+slot.Name = "Slot"
+slot.Position = UDim2.fromOffset(24, 24)
+slot.Size = UDim2.fromOffset(240, 240)
+slot.BackgroundColor3 = Color3.fromRGB(28, 30, 38)
+slot.Parent = gui
+local view = IconVisuals.buildModel(slot, art, { kind = "model", model = "LightCube", view = { yaw = -28, pitch = 22 } }, 240)
+gui.Parent = StarterGui
+print(view and "OK light test built" or "PROBLEM light test not built",
+	"PREVIEW_LIGHT: a white cube seen like the Office props. Lit from the top-left: its top face brightest, its right-hand face the darkest.")
+```
+
+**What to look at:** the top face is the brightest and the left-hand face is brighter than the right-hand one. If the right-hand face is the brighter one (lit from the bottom-right), `LightDirection` works the other way: write `lightDirection = { -1, 1, 1 }` in IconArt's `Style`, paste IconArt again and rerun this block and the icon preview (and tell the next Claude session: `tools/icon_test.py` pins the current value).
+
 ## (e) Remove the previews before a playtest and before publishing
 
 | Object | Made by | Why it must go |
 |---|---|---|
 | `Workspace.PREVIEW_WORLD` | the world preview block | it lies where the wired-in world would be built (two copies on top of each other flicker), and it is not part of the game |
 | `StarterGui.PREVIEW_ICONS` | the icon preview block | everything in StarterGui is copied onto every player's screen |
+| `StarterGui.PREVIEW_LIGHT` | the light test block | the same |
 | `Workspace.PREVIEW_STAGES` | the plot visuals' preview (docs/STUDIO_SYNC.md) | still on the ROADMAP's before-publish list (item m), if it is there |
 
 **Before a playtest:** the cleanup block, then the check block (it must print `OK`).
@@ -363,6 +400,7 @@ print(#left == 0 and "OK no PREVIEW_ object in Workspace or StarterGui" or ("FAI
 
 **The icons** (after the icon preview)
 - [ ] Every icon reads at 56 px: zoom the Studio view to 100%, then Test > Device on a small phone.
+- [ ] The light test (its block, above (e)): the white cube is lit from the top-left (top face brightest, right-hand face darkest). This is the only check of `LightDirection`'s meaning; if it is the other way round, see the note under the block.
 - [ ] The 3D icons: nothing cut off, nothing too small, lit from the top-left, not too dark (the ViewportFrame has its own ambient light).
 - [ ] The outline weight and the round plates: chunky cartoon, or too heavy?
 - [ ] The HUD icons on their real button colors: enough contrast (especially the magnet on POACH and the chart on IPO)?

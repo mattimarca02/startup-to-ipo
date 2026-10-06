@@ -465,24 +465,45 @@ section("coverage", function()
 end)
 
 -- 3. The Office icons are PlotArt's own props (copied: PlotArt lives on the server) --------------------------------------
-section("props", function()
-	for _, name in ipairs(UPGRADES) do
-		local mine, theirs = IconArt.Models[IconArt.Office[name].model], PlotArt.Props[name]
-		local same = mine ~= nil and theirs ~= nil and #mine == #theirs
-		local k = same and (theirs[1].size[1] / mine[1].size[1]) or 0
-		if same then
-			for i, p in ipairs(mine) do
-				local q = theirs[i]
-				local c = IconArt.Palette[p.color]
-				if p.name ~= q.name or p.shape ~= q.shape or p.material ~= q.material or c == nil or c[1] ~= q.color[1] or c[2] ~= q.color[2] or c[3] ~= q.color[3] then same = false end
-				for j = 1, 3 do
-					if math.abs(p.size[j] * k - q.size[j]) > 1e-6 or math.abs(p.offset[j] * k - q.offset[j]) > 1e-6 then same = false end
-					if (p.rot and p.rot[j] or 0) ~= (q.rot and q.rot[j] or 0) then same = false end
-				end
+-- The copy is PlotArt's prop at its drawn size: PlotArt.Props[name] = scaled(parts, k) with the k PlotArt.lua declares
+-- (PROP_SCALES, read from its source), so a copy resized as a whole is caught too. Board texts and the coffee steam
+-- are left out on purpose (a ViewportFrame draws neither); transparency must match.
+local PROP_SCALES = __PROPSCALES__
+local function propSame(mine, theirs, declared, palette)
+	local same = mine ~= nil and theirs ~= nil and declared ~= nil and #mine == #theirs
+	local k = same and (theirs[1].size[1] / mine[1].size[1]) or 0
+	if same and math.abs(k - declared) > 1e-6 then same = false end
+	if same then
+		for i, p in ipairs(mine) do
+			local q = theirs[i]
+			local c = palette[p.color]
+			if p.name ~= q.name or p.shape ~= q.shape or p.material ~= q.material or c == nil or c[1] ~= q.color[1] or c[2] ~= q.color[2] or c[3] ~= q.color[3] then same = false end
+			if (p.transparency or 0) ~= (q.transparency or 0) then same = false end
+			for j = 1, 3 do
+				if math.abs(p.size[j] * k - q.size[j]) > 1e-6 or math.abs(p.offset[j] * k - q.offset[j]) > 1e-6 then same = false end
+				if (p.rot and p.rot[j] or 0) ~= (q.rot and q.rot[j] or 0) then same = false end
 			end
 		end
+	end
+	return same, k
+end
+section("props", function()
+	for _, name in ipairs(UPGRADES) do
+		local same, k = propSame(IconArt.Models[IconArt.Office[name].model], PlotArt.Props[name], PROP_SCALES[name], IconArt.Palette)
 		check(string.format("props: the %s icon is PlotArt's %s prop, part for part (scale %.1f)", name, name, k), same)
 	end
+	local laptop = deepCopy(IconArt.Models[IconArt.Office.Laptop.model])
+	for _, part in ipairs(laptop) do
+		for j = 1, 3 do part.size[j] *= 1.1; part.offset[j] *= 1.1 end
+	end
+	check("props: a copy resized as a whole (the Laptop 10% bigger) is caught", not propSame(laptop, PlotArt.Props.Laptop, PROP_SCALES.Laptop, IconArt.Palette))
+	local faded = deepCopy(IconArt.Models[IconArt.Office.Desk.model])
+	faded[1].transparency = 0.5
+	check("props: a copy with another transparency is caught", not propSame(faded, PlotArt.Props.Desk, PROP_SCALES.Desk, IconArt.Palette))
+	check("props: PlotArt.lua declares a scale for each of the six props", (function()
+		for _, name in ipairs(UPGRADES) do if type(PROP_SCALES[name]) ~= "number" then return false end end
+		return true
+	end)())
 end)
 
 -- 4. Every icon, built at card size and at hero size ---------------------------------------------------------------------
@@ -1054,6 +1075,25 @@ runPreview()
 local n = 0
 for _, c in ipairs(StarterGui:GetChildren()) do if c.Name == "PREVIEW_ICONS" then n += 1 end end
 check("icon preview: running it again replaces the old sheet (one PREVIEW_ICONS)", n == 1)
+-- The light test block: one white cube, lit the way every 3D icon is (light toward the picture's right, down and away)
+table.clear(PRINTED)
+local lightOk, lightErr = pcall(function()
+__LIGHTTEST__
+end)
+local lgui = StarterGui:FindFirstChild("PREVIEW_LIGHT")
+local lview = lgui and lgui:FindFirstChild("Slot") and lgui:FindFirstChild("Slot"):FindFirstChild("View")
+local inCamera = lview and lview.CurrentCamera.CFrame:VectorToObjectSpace(lview.LightDirection)
+local s3 = 1 / math.sqrt(3)
+check("light test: the block builds StarterGui.PREVIEW_LIGHT, one cube in a ViewportFrame, and prints OK", lightOk and lview ~= nil and has("OK light test built")
+	and #lview:FindFirstChild("Model"):GetChildren() == 1, lightErr)
+check("light test: the cube is lit like the icons (toward the picture's right, down and away: (1, -1, -1) in the camera's frame)", inCamera ~= nil
+	and math.abs(inCamera.X - s3) < 1e-6 and math.abs(inCamera.Y + s3) < 1e-6 and math.abs(inCamera.Z + s3) < 1e-6, inCamera and (inCamera.X .. " " .. inCamera.Y .. " " .. inCamera.Z))
+pcall(function()
+__LIGHTTEST__
+end)
+local lights = 0
+for _, c in ipairs(StarterGui:GetChildren()) do if c.Name == "PREVIEW_LIGHT" then lights += 1 end end
+check("light test: running it again replaces the old one", lights == 1)
 local saved = {}
 for _, c in ipairs(RS:GetChildren()) do if c.Name == "IconArt" or c.Name == "IconVisuals" then table.insert(saved, c); c.Parent = nil end end
 local missingOk, missingErr = runPreview()
@@ -1086,6 +1126,7 @@ def preview_source():
     text = PREVIEW_TESTS
     for key, value in (("__ICONART__", read("IconArt.lua")), ("__ICONVISUALS__", read("IconVisuals.lua")), ("__CREATURECONFIG__", read("CreatureConfig.lua")),
                        ("__CREATUREMODELS__", read("CreatureModels.lua")), ("__SHOPCONFIG__", read("ShopConfig.lua")), ("__HUDCOLORS__", hud_colors_lua()),
+                       ("__LIGHTTEST__", "\n".join("\t" + line if line.strip() else line for line in doc_block("## The light test (command bar)").split("\n"))),
                        ("__PREVIEW__", block)):
         text = text.replace(key, value)
     return PRELUDE + text
@@ -1117,8 +1158,15 @@ def hud_lua():
     return "{ " + ", ".join('"%s"' % found[i] for i in range(5)) + " }"
 
 
+def prop_scales_lua():
+    """PlotArt.Props' declared scale per prop, from PlotArt.lua's source: ["Laptop"] = scaled(laptop, 1.5)."""
+    found = re.findall(r'^\t\["([^"]+)"\] = scaled\(\w+, ([\d.]+)\),?$', read("PlotArt.lua"), re.M)
+    return "{ " + ", ".join('["%s"] = %s' % (name, k) for name, k in found) + " }"
+
+
 def icon_source(art=None, visuals=None):
     replacements = {
+        "__PROPSCALES__": prop_scales_lua(),
         "__ICONART__": art if art is not None else read("IconArt.lua"),
         "__ICONVISUALS__": visuals if visuals is not None else read("IconVisuals.lua"),
         "__CREATURECONFIG__": read("CreatureConfig.lua"),
@@ -1165,8 +1213,8 @@ def static_checks():
     check("IconVisuals.lua makes a ViewportFrame in one place (buildModel), called only by the registry (setView) and buildUncapped",
           vis.count('"ViewportFrame"') == 1 and vis.count("IconVisuals.buildModel(") - vis.count("function IconVisuals.buildModel(") == 2
           and re.search(r"local function setView\(record, on\)[\s\S]*?IconVisuals\.buildModel\(", vis) is not None)
-    users = [n for n in sorted(os.listdir(ROOT)) if n.endswith(".lua") and n != "IconVisuals.lua" and "buildUncapped" in read(n)]
-    check("no game script calls IconVisuals.buildUncapped (outside the cap: the Studio preview and the tests only)", users == [], users)
+    users = [n for n in sorted(os.listdir(ROOT)) if n.endswith(".lua") and n != "IconVisuals.lua" and ("buildUncapped" in read(n) or "buildModel(" in read(n))]
+    check("no game script calls IconVisuals.buildUncapped or buildModel (outside the cap: Studio's blocks and the tests only)", users == [], users)
     doc = read("docs/STUDIO_SYNC_WORLD.md") if os.path.exists(os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")) else ""
     check("docs/STUDIO_SYNC_WORLD.md: only the icon preview block calls buildUncapped",
           doc.count("buildUncapped(") == doc_block("## The icon preview (command bar)").count("buildUncapped(") == 1 if doc else True)
@@ -1289,6 +1337,8 @@ MUTANTS_B = [
      "icons at 56 px: check texts"),
     ("a target that reaches out of the grid", A, 'S("circle", "RingOuter", 14, 14, 72, 72,', 'S("circle", "RingOuter", 2, 2, 96, 96,', "icons at 56 px: check grid"),
     ("the desk copy drifting from PlotArt", A, 'P("DeskTop", "Block", { 6.2, 0.3, 3 }', 'P("DeskTop", "Block", { 6.4, 0.3, 3 }', "props: the Desk icon is PlotArt's"),
+    ("a laptop leaf made see-through", A, 'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric"),',
+     'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric", { transparency = 0.5 }),', "props: the Laptop icon is PlotArt's"),
     ("a laptop with a part PlotArt doesn't have", A, 'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric"),',
      'P("PlantLeaves", "Ball", { 0.8, 0.8, 0.8 }, { -1.3, 3.5, -0.5 }, "leaf", "Fabric"),\n\t\tP("ExtraLeaf", "Ball", { 0.5, 0.5, 0.5 }, { -1.1, 3.9, -0.5 }, "leaf", "Fabric"),',
      "props: the Laptop icon is PlotArt's"),
