@@ -68,7 +68,7 @@ pokedex = {                  -- CompanyServer.serialize (optional)
 **1.5 Stamps, replays, Hall of Fame.**
 - **Bronze:** first completion, +1.5%; no time, ratio or stake condition. **Gold (decided by the owner, 2026-10-05):** a replay reaching ratio **≥ 1.20** within **1.30 T** engaged hours (G1), **no stake condition**, +0.5%. **Platinum:** ratio ≥ 1.20 within **1.0 T** (G1), stake ≥ **87.5%** (placeholder, FUND 3; the minimum kept, decided by the owner, 2026-10-05), +0.5%. **Stake** = 10,000 bp minus the total dilution at the IPO (FUND 3). **T** = a typical player's loop hours with a typical raise, **55.5 / 50.4 / 51.2 / 51.6 h** for IPO 1-4 (G1; LONG_GAME's 57 / 51.5 / 52 h have no raise), both sectors while parity holds. All **placeholders**.
 - **Why (S6, robust to ±20%):** ratio 1.20 at p10 / p50 / p90: 1.01 / 1.09 / 1.20 T (typical), 0.95 / 1.03 / 1.13 T (fast), 1.38 / 1.46 / 1.54 T (slow). Platinum at 1.0 T: fast 33%, typical and slow 0%, typical pass owners 0-6%; the old 0.8 T / 1.25 gave everyone 0% (it needed 1.4x the typical speed; players span about ±7%). **Gold's 1.30 T** lies between the typical p90 and the slow p10: typical players who play on past IPO-ready reach it, slow ones don't; a hunter missing 1.0 T keeps Gold. A replay under 1.20 earns no new stamp. **Gold's rule is not simulated:** S6 re-runs it.
-- The server's stamp clock is weighted like the valuation (owner default, 1.6; LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2. The tier = the highest whose conditions all hold, graded **once, in the IPO transform** (1.4), from the stake (saved `rounds`' `bp`), T and targets at the IPO; the client sends nothing; never regraded.
+- The server's stamp clock is weighted like the valuation (owner default, 1.6; LONG_GAME_PROPOSAL.md:23): Gold and Platinum wait for LONG_GAME PR 2. The tier = the highest whose conditions all hold, graded **once, in the IPO transform** (1.4), from the stake (saved `rounds`' `bp`), T and targets at the IPO; the client sends nothing; never regraded. Platinum's speed, stake under 87.5% = Gold.
 - **Pass fairness:** 2x Cash shortens a run about **6%** (S6, robust; was 15%): a target shrinks by 6% times the **share of the run's engaged seconds with the pass** (`passSeconds`), never by passes owned at founding (exploitable). The **Shareholder** pass gets the same 6% (an assumption: it only brings speed perks sooner, so perk timing decides, G1). A replay is priced by IPO count only.
 - **Hall of Fame, the launch goal:** Software and Gaming `"done"`: `hall.Launch`, a title, a gold frame, a board entry. From IPO 3 on, every IPO is a replay.
 - **When a sector is added later** (Fintech, Biotech): `SectorConfig.Goals` lists each goal's sectors; a shipped list never changes. `hall.Launch` stays earned; a new goal key (say `Four`) brings its own title and frame; Collection grows by itself.
@@ -142,7 +142,7 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 
 **Test impact** (daily_test.py, `main` `9798388`):
 - **Must hold:** fingerprints (stage 1, props, layout: :3770, 3778, 3790; stations stay the default slots); one `Touched` handler (:4463-4465); new: building i draws exactly `PlotArt.Stages[i]`.
-- **PR 1:** the section list (:4478-4480) gains only `pokedex`; "pokedex is a known section" joins :4531 and :664 / :673 (BUILDSAVE, `known_sections_line`, :4700-4705); :659 gains `payload.pokedex`. **The save gate** (TycoonCore.lua:481) gains `data.pokedex`; :4533 matches `"data.daily and data.tasks)"` exactly, so it is rewritten to check both names.
+- **PR 1:** the section list (:4478-4480) gains only `pokedex`; "pokedex is a known section" joins :4531 and :664 / :673 (BUILDSAVE, `known_sections_line`, :4700-4705); :659 gains `payload.pokedex`. **The save gate** (TycoonCore.lua:481) gains `data.pokedex`; :4533 matches `"data.daily and data.tasks)"` exactly, so it is rewritten for both names.
 - **PR 2:** :4667-4668 (the income loop's `syncRoom`) are rewritten to pin `roomOf(data)` (the fallback may still match: never pass by accident). The Office checks :4487-4488 and :4494-4495 (only `core.buyUpgrade`; only `"Upgrades"`, `"BuyUpgrade"`) gain `"BuyBuilding"`.
 - **PR 3:** :4669 (`spawnItem(data, i, upg, true)`, the pop-in) breaks: purchases go to storage.
 - **PR 4b:** the `addEarnings` checks (:4536-4543) cover every `.lua` file and aliases (FUND 2).
@@ -174,7 +174,7 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 13. `BoardServer` (exception approved, section 7), FR-11; needs S7.
 14. Picker and funding on for live servers; PUBLISH_RULES "2d" (FUND 4's rollback note); publish.
 
-**Post-launch: Fintech and Biotech**, each its own PRs: the same package, **no new save field** (keys from PR 1), `SectorConfig` enables it, a new goal key (1.5), S3-S5 rerun, a content bible, D9 words, `id = 0`. Income sketches (Fintech, Biotech): docs/CUSTOMIZE_PR1_NOTES.md, "Moved text", item 2.
+**Post-launch: Fintech and Biotech**, each its own PRs: the same package, **no new save field** (keys from PR 1), `SectorConfig` enables it, a new goal key (1.5), S3-S5 rerun, a content bible, D9 words, `id = 0`. Income sketches: docs/CUSTOMIZE_PR1_NOTES.md, "Moved text" 2.
 
 ## 7. Impact on other docs and branches
 
@@ -191,7 +191,7 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 - **`building-pass`: park it** (its patch and BuildingClient.lua assume 60 x 60; its roof blocks the edit camera); reuse its shell data and `pcall` plug-in.
 - **`visuals-garage`, PLOT_VISUALS.md (14, 37), CLAUDE.md "Plot visuals" (32):** 60 x 60, the skyline, "six props identical in every room", "the only solid" and "room of `IpoConfig.Stages[i]`" change.
 - **CLAUDE.md, README, ROADMAP, PUBLISH_RULES:** `pokedex`, modules and order, `CompanyRemotes`, "2d".
-- **CLAUDE.md:29 (approved by the owner):** the build PR changes it to the exact text in docs/CUSTOMIZE_PR1_NOTES.md, "Moved text", item 1.
+- **CLAUDE.md:29 (approved by the owner):** the build PR changes it to the exact text in docs/CUSTOMIZE_PR1_NOTES.md, "Moved text" 1.
 
 ## 8. Open questions (unresolved, most important first)
 
@@ -204,5 +204,5 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 ## What I did not verify
 
 - No Studio or MCP was used: section 3's checks, hand-placed parts, "0 visits" and privacy, OrderedDataStore and `UserService` limits, camera scale, frame rates, why `MAX_PARTS` is 260, the top bar height.
-- The sims were not re-run: S1-S10's findings were taken as given; every economy number and content count stays a placeholder or estimate; no tier, stake or Gaming code exists.
+- The sims were not re-run: S1-S10's findings taken as given; every economy number and content count stays a placeholder or estimate; no tier, stake or Gaming code exists.
 - Other branches were read with `git show`; LONG_GAME PR 2 doesn't exist; `daily_test.py` was not run (docs only).
