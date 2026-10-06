@@ -223,3 +223,33 @@ Every effect is client-only and changes no data (CLAUDE.md, client visuals). "Ph
 - kept: employees (renamed, SECT 2.7), perks, HR, kept decor; seed Cash, at most 25% of the first rung (CUST 5.1), skips the Desk-only minutes; kept hires refill desks free (LG:60);
 - harder: task level +1 per IPO (TaskConfig.lua:151-153);
 - new goals: Gold on a replay (CUST 1.5), the Hall of Fame.
+
+## 9. Measurement
+
+**Without code**, Creator Hub's analytics should give retention (day 1, 7, 30), session length, daily players, play-through rate, revenue and payers, and frame rate (unverified: I could not open the dashboard). **With code**, `AnalyticsService` funnel, economy and custom events (method names unverified). No script calls it today (grep); ROADMAP.md:107 and ACTIVE §5 (`task_session`) plan it. Log on the server where each step is decided, once per player, guarded by saved state (`onboarding.goals`, `tasks.done`, `daily`), never from a client.
+
+| Funnel step | Server event | Target (placeholder) |
+|---|---|---|
+| spawn | `data.ready` (TycoonCore.lua:831) | 100% |
+| first_desk | `buyUpgrade` 1 (TycoonCore.lua:272-288) | 95% |
+| first_call | first graded answer (TaskServer.lua:436-457) | 85% |
+| first_hire | first `hatch` (EmployeeServer.lua:285-308) | 85% |
+| goal_3 | `Hire3` done (OnboardingServer.lua:157-158) | 60% |
+| milestone_1 | first Garage milestone | 50% |
+| seed | stage Seed | 25% |
+| day2_return | a join the day after the first | 25% |
+| first_ipo | `goPublic` (IpoServer.lua:177-243) | 3% by day 30 |
+
+Also economy events (Cash in and out, by source) and a `first_hour` event at 60 min (purchases, calls answered and missed, quiet mode).
+
+**Retention.** Day 1: Day 2 and Day 3's egg shown, the away card, a named next target, Seed's round as session 1's cliffhanger. Day 7: the Day 7 reward, Series A's tasks, the weekly event (ROADMAP.md:93-97). Watch day 1 ≥ 25% and day 7 ≥ 8% (placeholders); if day 1 is short, read funnel steps 2-6 first.
+
+**The 5-friend playtest** (20 min each, a phone, a fresh save). The observer says only: "Play as you would at home and think out loud. I can't help." Then silence: never point, never say "shop", "egg", "call" or "tycoon". Note with times: finding SHOP; walking to the sign; the first call; hatching by window or on foot; looking for Cash; the first "what now?" or glance away; taps on non-buttons; reading the goal card; any Robux screen. Ask after, in order:
+1. In one sentence, what is this game about?
+2. What were you trying to do at the end?
+3. The best moment? The most boring one?
+4. When did you not know what to do?
+5. What do the phone calls do?
+6. What would you do next?
+7. Would you play again tomorrow? Why?
+8. Did anything feel unfair or pushy?

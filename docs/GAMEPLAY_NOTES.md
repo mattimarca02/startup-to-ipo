@@ -16,7 +16,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 6: Monetization that feels fair
 - [x] Section 7: Frustration and safety nets
 - [x] Section 8: Sectors
-- [ ] Section 9: Measurement
+- [x] Section 9: Measurement
 - [ ] Section 10: What to build, in order
 - [ ] Section 11: Open questions
 - [ ] Word count at most 5,500 (`wc -w`)
@@ -67,6 +67,7 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 11 | **No starter offer and no unprompted Robux surface:** the first Robux prompt is the player's own tap on a price in SHOP; no badge points at a Robux tab | ShopClient (SHOP_UX S4) | 6 |
 | 12 | At launch the Extra Employee Slots pass means **+3 desks**, capped like every desk (LG:60 estimates up to +15% Income) | LONG PR 3 (desks) | 6 |
 | 13 | A first founding **hides the Fintech and Biotech "Coming soon" cards** (CUST 1.3 shows them greyed); they appear from the second founding. Picker texts: Software "Answer customers, grow steady", Gaming "Make games, launch hits" | the picker (CUST PR 4) | 8 |
+| 14 | Funnel targets (95 / 85 / 85 / 60 / 50 / 25% ..., day 1 ≥ 25%, day 7 ≥ 8%, first IPO 3% by day 30) are placeholders to replace after the first 100 players | the analytics PR | 9 |
 
 ## Not verified
 
@@ -74,4 +75,5 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 - Everything about real players: the model's delays are guesses until the 5-friend playtest (section 9).
 - Roblox audio: the Creator Store license terms for Roblox-made sounds, the current upload allowance and fees, and which assets the 2022 audio privacy rules let any experience play (section 5).
 - An API that tells a script the player's graphics quality, to drop particles on low settings (section 5).
+- Creator Hub's built-in analytics (which charts exist today) and `AnalyticsService` method names: written from memory, no dashboard or docs opened (section 9).
 - Streaming the plot in before the teleport (WORLD §3 marks it unverified too); how a phone behaves when the plot arrives late (section 7).
