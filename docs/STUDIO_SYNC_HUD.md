@@ -1,8 +1,8 @@
 # Studio sync: Cash and Income on the valuation bar (D4)
 
-Branch `hud-cash`. One script changed: **IpoClient**. Nothing else. Written without Studio: nothing here was seen on a screen (see "What only your eyes can judge").
+Branch `hud-cash`. One script changed: **IpoClient**. Nothing else. Written without Studio: nothing here was seen on a screen (see "What only your eyes can judge"). Updated after the independent review of `727c5ef` (the review's blocker, the rounding, the new hash).
 
-What changed: the valuation bar (top left, next to the IPO button) now has three rows. **Top:** your Cash and Income, for example `$4,630 · +$18/s`. **Middle:** the progress bar, exactly as before. **Bottom:** the stage and the valuation, for example `🏚️ Garage → Seed · $0 / $1.8K` (a shorter form when the bar is too narrow, see section (d)). Until now the Cash was only in Roblox's player list, which a new player doesn't see. It is the owner's decision D4 (docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md, sections 0 and 5.1, on the `gameplay-design` branch).
+What changed: the valuation bar (top left, next to the IPO button) now has three rows. **Top:** your Cash and Income, for example `$4,630 · +$18/s`. **Middle:** the progress bar, exactly as before. **Bottom:** the stage and the valuation, for example `🏚️ Garage → Seed · $0 / $1.8K` (a shorter form when the bar is too narrow, see section (d)). While the save loads, the top row stays **empty** (see section (a)), so a returning player never sees `$0 · +$0/s`. Until now the Cash was only in Roblox's player list, which a new player doesn't see. It is the owner's decision D4 (docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md, sections 0 and 5.1, on the `gameplay-design` branch).
 
 ## (a) The script to paste
 
@@ -10,8 +10,9 @@ What changed: the valuation bar (top left, next to the IPO button) now has three
 |---|---|---|---|---|
 | `IpoClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `e7937d8785ee5451154b6b99e2b80c37dff050e5aaf5a64fc5e64e25a1a09511` | 41550 |
 
-Exact Explorer path: **StarterPlayer > StarterPlayerScripts > IpoClient**. Hash and size are of the repo file `IpoClient.lua` at commit `7e63187` (the last commit that touches it; later commits on this branch are only the test and this doc). The hash was computed with the block in section (c) run in Luau on the real file, and it matches `shasum -a 256`. The file uses `\n` line endings and ends with one newline; Studio may drop that last newline, so the block prints both cases as OK.
+Exact Explorer path: **StarterPlayer > StarterPlayerScripts > IpoClient**. Hash and size are of the repo file `IpoClient.lua` at commit `c89e57e` (the last commit that touches it; later commits on this branch are only this doc). The block in section (c) was run in Luau on the real file and says `OK`, and the hash matches `shasum -a 256`. The earlier hash (`15de6cd4...`, 38612 bytes) is the file before the review: if your Studio script says `DIFFERENT`, paste the file again. The file uses `\n` line endings and ends with one newline; Studio may drop that last newline, so the block prints both cases as OK.
 
+- **While the save loads, the top row is empty.** TycoonCore makes `leaderstats` at join with Cash 0 and Income 0, and writes the saved Cash only after the DataStore read (and a 7 s re-read when the save is under 75 s old), the income and the offline earnings after that. Showing the folder as it is would show `$0 · +$0/s` to a returning player. So the bar waits for the player attribute **`Upgrade1`**: TycoonCore sets `Upgrade1` to `Upgrade6` (true or false) for every player in `refreshSign` -> `publishUpgrades`, after the saved Cash, the income and the offline earnings are written and right before `data.ready`, and never before. The row then shows the real values (a brand-new player sees `$0 · +$0/s` at that moment). If the attribute never comes (a failed server script), the row shows the real values 30 s after the leaderstats were found. An IPO that resets Cash to 0 shows `$0` at once. This is client-side only: TycoonCore already sets that attribute on `main` (the shop's Office tab uses it), so **nothing on the server changes**.
 - **TycoonCore: not needed, not touched.** The bar reads the `leaderstats` folder (Cash and Income) that TycoonCore already makes on `main` (TycoonCore.lua, `onPlayerAdded`). It is claimed by nobody on this branch; the `customize-pr1` branch changes it for other reasons, and this change has nothing to do with that. Nothing else needs pasting: no server script, no config, no remote, no save field.
 - **No new Studio objects.** No new remote, no new script.
 - **Publishing:** nothing special for this change (client only, no save change, no new remote). Follow docs/PUBLISH_RULES.md as always (**Shut down all servers**, commit every draft in View > Drafts first).
@@ -90,7 +91,7 @@ end
 
 You need a **new** save for the first two, or use Shop > Debug > **Reset IPO progress** and start a fresh Studio save. Passes don't matter here.
 
-1. **At the start, 0 Cash.** Press F5 and look at the bar. Top row: `$0 · +$0/s`. Middle: the empty progress bar. Bottom: `🏚️ Garage → Seed · $0 / $1.8K`, or a shorter form such as `🏚️ Garage · $0 / $1.8K` or `🏚️ $0 / $1.8K` (see the tables below). Nothing says `nil`, `nan` or a minus sign, and there is no flash of an empty top row longer than a moment.
+1. **At the start, 0 Cash.** Press F5 and look at the bar. Top row: empty for a moment while the save loads, then `$0 · +$0/s`. Middle: the empty progress bar. Bottom: `🏚️ Garage → Seed · $0 / $1.8K`, or a shorter form such as `🏚️ Garage · $0 / $1.8K` or `🏚️ $0 / $1.8K` (see the tables below). Nothing says `nil`, `nan` or a minus sign. (If the top row is still empty after a few seconds, the `Upgrade1` attribute did not arrive: it shows up by itself after 30 s, and tell me.)
 2. **After the Desk.** Shop > **Office** tab > buy the Desk (free). Top row becomes `$0 · +$1/s`, then the Cash counts up: `$1`, `$2`, ... about once a second.
 3. **While income ticks.** Leave it 30 seconds. The top row moves about once a second and the text never shakes or jumps in size. Open the Output window: nothing is printed by the bar.
 4. **Buying something.** Shop > Debug > **Give $10,000**. The top row shows `$10,000 ...` within a quarter of a second. Give $1,000,000 twice: `$1M`, then `$2M` (no `e+`, no stray letters).
@@ -101,7 +102,7 @@ You need a **new** save for the first two, or use Shop > Debug > **Reset IPO pro
    - Also try 568x320 and 844x390 once.
    - Look at the three rows: no row touches another, and the progress bar is where it was.
 7. **Windows.** Open the Shop, the Team and the IPO window and close them. The bar stays on the left and nothing overlaps the buttons. The call tray (calls only ring in Studio) and the gift chip stay clear of the bar.
-8. **Rejoin.** Stop and press F5 again: the top row shows your saved Cash at once, not `$0`.
+8. **Rejoin.** Stop and press F5 again. The top row is **empty for a moment** while the save loads (the bar waits for the server: a moment, and about 7 s more if the save is under 75 s old, because the server reads it again after 7 s; I have not timed it in Studio), then shows your **saved Cash** and the Income. It never shows `$0 · +$0/s` on the way. Look at the top row from the first frame, or record the screen.
 9. **Output window.** At the end there are no red lines and no new warnings from `IpoClient`.
 
 ### What you should see (the text forms)
@@ -115,20 +116,33 @@ The bar shows the fullest text that fits, measured on the real font (so the exac
 | 99,999, 9,999 | `$99,999 · +$9,999/s` | `$100K · +$10K/s` (14 px) |
 | 123,456, 12,345 | `$123.5K · +$12.3K/s` | `$123K +$12K` |
 | 1.5M, 45,000 | `$1.5M · +$45K/s` | the same |
+| 999,999, 99,999 | `$1M · +$100K/s` | the same |
 | over 999 trillion | `$999T · +$999T/s` | the same |
 
-The narrow column is what the tests' (wide) font estimate gives; the real font may show a fuller form. Bottom row, fullest first: stage, next stage, valuation and target, then the multiplier and Shares (only when they are not x1 and 0); when it doesn't fit it drops the multiplier and Shares first, then the next stage's name, then the stage's name, then the icon. The valuation is always kept. With the estimate, `🏚️ Garage · $0 / $1.8K` on the wide bar and `🏚️ $0 / $1.8K` on the narrow one. Text is 16 px where it fits (top row) and 14 px otherwise; never smaller.
+Every form rounds to the nearest (99,999 is `$100K` in all of them, 4,630 is `$4.6K` and, in the shortest form, `$5K`) and moves to the next unit at 999,500 (`$1M`, never `$1000K`: `IpoConfig.formatShort` has that fault, the bar guards it, `IpoConfig` is not changed). The narrow column is what the tests' (wide) font estimate gives; the real font may show a fuller form. Bottom row, fullest first: stage, next stage, valuation and target, then the multiplier and Shares (only when they are not x1 and 0); when it doesn't fit it drops the multiplier and Shares first, then the next stage's name, then the stage's name, then the icon. The valuation is always kept. With the estimate, `🏚️ Garage · $0 / $1.8K` on the wide bar and `🏚️ $0 / $1.8K` on the narrow one. Text is 16 px where it fits (top row) and 14 px otherwise; never smaller.
 
 ## (e) What only your eyes can judge
 
 - **The real font widths.** The tests use an estimate of Gotham Bold (wide on purpose). The game measures the real font (TextService), so it should fit, but only Studio shows it. If the narrow bar often falls back to the short forms (`$123K +$12K`) the estimate was too pessimistic or the bar is too narrow: tell me which numbers you saw.
 - **Whether 16 / 14 px reads well** on a phone, and whether the bar feels crowded with three rows in 64 px.
 - **Colors:** the top row is white, the bottom row is the old gold, the progress bar is as before. Is the white row too loud next to the gold?
-- **The 568x320 phone (held sideways, narrow):** the bar sits under the HUD row there and already touched the call tray, a few pop-up lanes and the thumbstick before this change (the same overlaps tools/daily_test.py lists as accepted). This change does not move or resize the bar, so it did not make that worse, and it did not fix it. If it looks bad in Studio, fixing it means moving the bar or the tray: a separate decision.
-- **The IPO-ready text.** Before: `🔔 IPO-ready! Tap to go public` on the top row, plus the valuation on the bottom row. Now it is one row: the fullest of `🔔 IPO-ready! Tap to go public`, `🔔 IPO-ready! · $81K`, `🔔 IPO-ready!`, `🔔 IPO!`. On a narrow phone you won't see "Tap to go public". Say if you want it back.
-- **The multiplier and Shares.** They used to be on the bar all the time (`x1 · 📜 0`). The doc says to show them only when they are not x1 and 0; I did that. They are always in the IPO window.
+- **The 568x320 phone (held sideways, narrow):** see "Accepted overlaps" in section (f). This change does not move or resize the bar, so it did not make that worse, and it did not fix it.
+- **OWNER DEFAULT: losing "Tap to go public" on narrow phones is fine.** **The IPO-ready text.** Before: `🔔 IPO-ready! Tap to go public` on the top row, plus the valuation on the bottom row. Now it is one row: the fullest of `🔔 IPO-ready! Tap to go public`, `🔔 IPO-ready! · $81K`, `🔔 IPO-ready!`, `🔔 IPO!`. On a narrow phone you won't see "Tap to go public". The owner accepted this as the default.
+- **OWNER DEFAULT: hiding the multiplier and the Shares while they are x1 and 0 is fine.** They used to be on the bar all the time (`x1 · 📜 0`). The doc says to show them only when they are not x1 and 0; I did that. They are always in the IPO window.
+- **OWNER DEFAULT: `$999T` for any amount above 999 trillion is fine.** The bar caps what it shows there (`MONEY_CAP`), so the text stays short.
 - **What is not there:** the doc says Cash "counts up between ticks". That needs a loop or a tween; this change has no loop (your rule), so the number simply changes each time the server sets it (about once a second).
 
-## (f) Not tested
+## (f) Accepted overlaps
 
-I never saw Studio. Tested: the real `IpoClient.lua` runs in a fake Roblox (tools/hud_test.py): the text of the three rows for many Cash and Income values, the rectangles at 5 sizes with 3 top bars each, updates on Changed events and the rate limit, a missing leaderstats at start and a late one, the progress bar, and 45 deliberate breakages, each caught by a named check. Not tested: the real font and its widths, how the text looks, the real layout engine (the fake computes positions from offsets and scales, like Roblox does for these simple frames), `TextService:GetTextSize` on the real emoji, the real leaderstats replication timing, touch input, and any other client script running at the same time.
+On a 568x320 phone held sideways the bar sits under the HUD row, where it was before this work (the bar is not moved or resized: tools/hud_test.py checks its rectangle at five sizes). There it touches things that are **not new**. They are accepted for now; fixing them means moving the bar or the other element, which is a separate decision. `tools/daily_test.py` lists only the call tray; the rest is listed by `tools/hud_test.py` (the `TOUCHES` table) and was on `main` already.
+
+| 568x320 with a top bar of | the bar touches | on `main` already? |
+|---|---|---|
+| 0 | the call tray and its text line, the pop-up lane at -184 | yes |
+| 36 or 58 | the call tray and its text line, the pop-up lanes at -128 and -184, the thumbstick | yes |
+
+The bar touches no HUD button, no daily gift chip and no Goals card at any of the five sizes (that is checked, and a new overlap fails the test).
+
+## (g) Not tested
+
+I never saw Studio. Tested: the real `IpoClient.lua` runs in a fake Roblox (tools/hud_test.py): the text of the three rows for many Cash and Income values, the rectangles at 5 sizes with 3 top bars each, updates on Changed events and the rate limit, a missing leaderstats at start and a late one, the progress bar, and 69 deliberate breakages, each caught by a named check. The review fixes add the loading rule (empty while the save loads, the real values at the server's signal, the 30 s fallback, a rebind restarts it, nothing leaks over 100 rebinds, an IPO reset shows `$0`) and the rounding. Not tested: the real font and its widths, how the text looks, the real layout engine (the fake computes positions from offsets and scales, like Roblox does for these simple frames), `TextService:GetTextSize` on the real emoji, the real order in which Roblox replicates the Cash change and the `Upgrade1` attribute to the client (the server writes Cash and Income well before it sets the attribute, so the bar relies on Roblox delivering them in that order; the 30 s fallback covers a signal that never comes), how long the real load takes in Studio, touch input, and any other client script running at the same time.
