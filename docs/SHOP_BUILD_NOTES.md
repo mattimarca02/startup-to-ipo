@@ -21,7 +21,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 - [x] 2.3 `tools/daily_test.py`: "daily_test: Locked check follows the new ladder" (the one edit there)
 - [x] 2.4 `ShopClient.lua`: the BEST VALUE badge on the Cash pack `ShopLayout.bestValue` picks (added after 2.2: the task asks ShopClient to use it)
 - [x] 2.5 `tools/shop_ux_test.py`: the S2 checks (and ShopLayout.OFFICE_WIDE: the Office keeps its landscape layout down to 360 px, so the hero fits above the strip at 568x320)
-- [ ] 2.6 S2 mutants (at least 40 in all, each caught by a named check)
+- [x] 2.6 S2 mutants: 35 (67 in all with S1's 32), each caught by its named check; every block of checks now runs in a protected section, so a broken ShopLayout is a named FAIL, never a crash
 
 **Phase 3: Studio sync and wrap-up**
 - [ ] 3.1 README rows for `ShopLayout.lua` and `tools/shop_ux_test.py` (moved here from phase 1: written once, for S1 and S2)

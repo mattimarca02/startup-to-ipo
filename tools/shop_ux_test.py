@@ -2,6 +2,7 @@
 """Tests for the shop window (ShopLayout.lua and ShopClient.lua: PR S1 and S2 of docs/SHOP_UX_PROPOSAL.md), outside Studio.
 
 Run:   python3 tools/shop_ux_test.py
+       python3 tools/shop_ux_test.py --list-mutants   (also prints the named check that caught each mutation run)
 
 It needs the free Luau command-line tool (https://github.com/luau-lang/luau/releases, the "luau" file from
 luau-macos.zip, luau-windows.zip or luau-ubuntu.zip). Put it on your PATH, or point to it:
@@ -88,6 +89,12 @@ local function check(name, cond, extra)
 	end
 end
 local LOG = { warned = {}, errors = {} }
+-- A block of checks: an error inside it (a broken ShopLayout, or a test that met something missing) is a named FAIL,
+-- and the next block still runs
+local function section(name, fn)
+	local ok, err = pcall(fn)
+	check("the checks of \"" .. name .. "\" run to their end (no error in ShopLayout or in the test)", ok, err)
+end
 
 -- Types ---------------------------------------------------------------------------------------------------------
 local function typeOf(v)
@@ -1092,8 +1099,14 @@ end
 
 LAYOUT_TESTS = r"""-- Tests: ShopLayout's pure functions (rectangles in GUI pixels) ---------------------------------------------------
 local ShopLayout = (function()
-	local fn = assert(loadstring(MODULE_SOURCES.ShopLayout, "=ShopLayout"))
-	return fn()
+	local fn, err = loadstring(MODULE_SOURCES.ShopLayout, "=ShopLayout")
+	if not fn then
+		check("ShopLayout.lua compiles", false, err)
+		return {}
+	end
+	local ok, module = pcall(fn)
+	check("ShopLayout.lua loads without an error and returns its table", ok and type(module) == "table", module)
+	return ok and type(module) == "table" and module or {}
 end)()
 local SIZES = { { 667, 375 }, { 320, 568 }, { 568, 320 }, { 640, 360 }, { 844, 390 } }
 local BARS = { 0, 36, 58 }
@@ -1102,6 +1115,7 @@ local BARS = { 0, 36, 58 }
 local RAIL_SCROLLS = { ["568x320/58"] = true }
 
 local function headerItems(L) return { title = L.title, help = L.help, close = L.close } end
+-- The window's rectangles at every phone, top bar, tab count and bottom slot -----------------------------------------
 for _, size in ipairs(SIZES) do
 	for _, bar in ipairs(BARS) do
 		local key0 = size[1] .. "x" .. size[2] .. "/" .. bar
@@ -2111,6 +2125,24 @@ do
 	noErrors(label)
 end
 
+-- The last buy: the page was scrolled down to the hero; once all six are bought it goes back to its top ------------
+do
+	local label = "office complete after the last buy"
+	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 5, cash = 6000, income = 63 })
+	tap(kid(officeOf(w), "OfficeSummary"), label .. ": unfold the five owned rungs")
+	local hero = rung(w, 6)
+	scrollTo(hero)
+	local function scrollY() return prop(officeOf(w), "CanvasPosition", v2(0, -1)).Y end
+	check(label .. ": the page is scrolled down to the Neon Logo", scrollY() > 100, scrollY())
+	tap(kid(hero, "BuyButton"), label .. ": Buy $5,000")
+	run(1.2)
+	local banner = kid(officeOf(w), "OfficeComplete")
+	check(label .. ": the Office complete banner shows at the top (the page scrolled back up)",
+		prop(banner, "Visible", false) and visibleRect(banner).h == rectOrEmpty(banner).h and scrollY() == 0, scrollY())
+	screenChecks(w, label)
+	noErrors(label)
+end
+
 -- The free Desk: "Get it free" -------------------------------------------------------------------------------------
 do
 	local label = "office desk"
@@ -2178,7 +2210,7 @@ for _, case in ipairs({ { 30, true }, { 10, false } }) do
 	for _, tw in ipairs(w.tweens) do
 		if tw.inst.Name == "Pulse" and tw.goals.Scale == 1.05 then pulses += 1 end
 	end
-	check(label .. ": a soft pulse every 4 s on an affordable Buy, none on Need more", (pulses >= 1) == case[2], pulses)
+	check(label .. ": a soft pulse every 4 s on an affordable Buy, none on Need more", pulses == (case[2] and 1 or 0), pulses)
 	noErrors(label)
 end
 
@@ -2250,6 +2282,30 @@ def upgrades_lua():
 MODULES = ("ShopConfig", "CreatureConfig", "IpoConfig", "TaskConfig")
 
 
+def sectionize(text):
+    """Wraps every top-level block of checks (a `do` or `for` block at column 0) in section(name, function() ... end),
+    named after the comment line above it. Helpers (local functions and values at column 0) stay outside."""
+    out, name = [], "checks"
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("-- "):
+            name = line[3:].split(" ---")[0].strip().replace("\\", "").replace('"', "'")
+        if line == "do" or line.startswith("for "):
+            j = i + 1
+            while not (lines[j] == "end" or lines[j].startswith("end ")):
+                j += 1
+            out.append('section("%s", function()' % name)
+            out.extend(lines[i:j + 1])
+            out.append("end)")
+            i = j + 1
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 def program(layout=None, client=None):
     """The whole Luau program: the fake, the real modules and the scenarios. layout and client replace the files' text."""
     sources = {name: read(name + ".lua") for name in MODULES}
@@ -2258,7 +2314,8 @@ def program(layout=None, client=None):
     world = (WORLD.replace("__UPGRADES__", upgrades_lua())
              .replace("__CLIENT__", long_string(client if client is not None else read(CLIENT)))
              .replace("__MODULES__", modules))
-    return PRELUDE + world + LAYOUT_TESTS + LADDER_TESTS + CLIENT_TESTS + OFFICE_TESTS + 'print_real(string.format("%d passed, %d failed", passed, failed))\n'
+    tests = "".join(sectionize(block) for block in (LAYOUT_TESTS, LADDER_TESTS, CLIENT_TESTS, OFFICE_TESTS))
+    return PRELUDE + world + tests + 'print_real(string.format("%d passed, %d failed", passed, failed))\n'
 
 
 # String literals of ShopClient.lua (as it was before S1, world-icons-pass 6bc827c) that use one of the four D9 words.
@@ -2336,6 +2393,11 @@ def static_checks(layout=None, client=None):
 
 
 def apply_mutation(text, old, new, what):
+    """One change (old, new), or several at once when old and new are tuples (a rule held in two places)."""
+    if isinstance(old, tuple):
+        for o, n in zip(old, new):
+            text = apply_mutation(text, o, n, what)
+        return text
     if text.count(old) < 1:
         raise SystemExit("mutation target not found in %s: %r" % (what, old))
     return text.replace(old, new, 1)
@@ -2393,6 +2455,61 @@ MUTANTS = [
     ("luckText reworded", C, 'string.format("Odds weight x%s for %s hires."', 'string.format("Weight x%s for %s hires."',
      "ShopClient.lua: luckText is the function it was"),
     ("the strip 20 px tall on a short window", L, "ShopLayout.STRIP_SHORT = 32", "ShopLayout.STRIP_SHORT = 20", "the strip is 32 px on a short window"),
+    # S2: the Office ladder
+    ("a wrong next index (the rung after the first not owned)", L, "\t\t\tS.nextIndex = i\n", "\t\t\tS.nextIndex = i + 1\n",
+     "the next rung is the first not owned"),
+    ("the bar not clamped", L, "return math.clamp(cash / price, 0, 1)", "return cash / price", "barFill stays in 0..1"),
+    ("Buy shown when the Cash is short", L, "\t\telseif cash >= cost then\n", "\t\telseif true then\n",
+     "the hero's button (Get it free, Buy $X, or Need $X more"),
+    ("Need more sends the buy anyway", C, '\tif hero.action == "buy" then\n\t\tbuyOffice(office.actionRemote, i)',
+     '\tif hero.action == "buy" or hero.action == "short" then\n\t\tbuyOffice(office.actionRemote, i)', "Need more sends nothing"),
+    ("the strip over the hero (a hero too tall for the page)", L, "ShopLayout.HERO_WIDE = 132", "ShopLayout.HERO_WIDE = 190",
+     "the hero is fully visible above TutorialStrip"),
+    ("the hero never scrolled into view", C,
+     "\t\tofficePage.CanvasPosition = Vector2.new(0, ShopLayout.revealScroll(office.heroY, office.heroH, pagesHeight, office.total or 0))\n", "",
+     "the hero is fully visible above TutorialStrip"),
+    ("a missing Retry", C, "\tretryButton.Visible = office.failed\n", "\tretryButton.Visible = false\n", "a Retry button (44 px or more)"),
+    ("Retry does nothing", C, "retryButton.Activated:Connect(function()\n\tfetchOffice()\nend)", "retryButton.Activated:Connect(function() end)",
+     "Retry shows the gray rungs again while it asks"),
+    ("only one try before the error", C, "\tfor _ = 1, 5 do\n", "\tfor _ = 1, 1 do\n", "the Office asks 5 times, 2 s apart, before it gives up"),
+    ("no skeleton rungs while loading", C, "\t\trow.Visible = loading\n", "\t\trow.Visible = false\n", "three gray skeleton rungs while Upgrades is asked"),
+    ("the skeleton rungs stay after the list arrives", C, "local loading = office.list == nil and not office.failed", "local loading = not office.failed",
+     "the skeleton rungs go away once the list arrives"),
+    ("minutes shown as seconds", L, "\tif seconds < 120 then\n", "\tif seconds < 1e9 then\n", "timeText: 5,000 s reads about 84 min"),
+    ("the time rounded down", L, "local seconds = math.ceil(need / income)", "local seconds = math.floor(need / income)",
+     "timeText: $25 at $1/s is about 25 s, at $2/s about 13 s"),
+    ("locked rungs name themselves", L, '"Unlocks after " .. tostring(before and before.name or "the one before")', '"Unlocks after " .. tostring(upg.name)',
+     "Unlocks after <the one before>"),
+    ("the summary counts one too many", L, 'S.summary = { title = S.owned .. " of "', 'S.summary = { title = (S.owned + 1) .. " of "',
+     "the summary says k of 6 bought"),
+    ("a locked rung offers a button", C, 'button.Visible = row.state ~= "locked"', "button.Visible = true",
+     "locked rungs are shown, a padlock, Unlocks after <the one before>, no button"),
+    ("owned rungs never fold", C, 'local shown = row.state ~= "owned" or office.unfolded', "local shown = true", "owned rungs fold into the summary row"),
+    ("no Office complete banner", L, "S.complete = S.count > 0 and S.nextIndex == nil", "S.complete = false", "the Office complete banner"),
+    ("the complete banner left scrolled away", C, "\t\t\tofficePage.CanvasPosition = Vector2.new(0, 0)\n", "",
+     "the Office complete banner shows at the top (the page scrolled back up)"),
+    ("a refusal not shown in the card", C, "\t\trungStatus(index, text, COLORS.refusal)\n", "", "the card shows the answer in red"),
+    ("no pop and no float on success", C, "\t\tcelebrate(index)\n", "", "on success the icon pops"),
+    ("the bought rung folds at once (no Bought!)", L, "local mine = owned[i] == true and i ~= bought", "local mine = owned[i] == true",
+     "the card says Bought! a moment"),
+    ("the free Desk says Buy $0", L, '"Get it free", "buy", "buy"', '"Buy $0", "buy", "buy"', "the free Desk says Get it free"),
+    ("Buy offered while the request runs", L, "\t\telseif busy then\n", "\t\telseif false then\n", "while the request runs the hero says ..."),
+    ("no busy state: a second tap sends again", C, ("\tif officeBusy then return end\n", "ShopConfig.formatCash, office.bought, officeBusy)"),
+     ("", "ShopConfig.formatCash, office.bought, false)"), "a second tap while the request runs sends nothing"),
+    ("an Office buy asks for a second tap (a confirmation)", C, "\t\tbuyOffice(office.actionRemote, i)\n", '\t\trungStatus(i, "Tap again to buy", COLORS.gold)\n',
+     "an Office upgrade never asks for a confirmation"),
+    ("the bar's fill never set", C, "parts.fill.Size = UDim2.fromScale(hero.fill, 1)", "parts.fill.Size = UDim2.fromScale(0, 1)", "the bar's fill is the ladder's"),
+    ("no shake on Need more", C, "\t\tshakeBar(office.rungs[i])\n", "", "the bar shakes and the card says"),
+    ("the hint without the time", L, 'H.hint = H.time and (H.time .. " at your Income") or', 'H.hint = H.time and "Not enough Cash" or',
+     "the card says about 5 s at your Income"),
+    ("a pulse on Need more", C, '\tif hero and hero.action == "buy" then\n', "\tif hero then\n", "none on Need more"),
+    ("the pulse every second", C, "if pulseTicks % 4 ~= 0 or", "if pulseTicks % 1 ~= 0 or", "a soft pulse every 4 s"),
+    ("narrow rows too short for two lines", L, "ShopLayout.ROW_NARROW = 72", "ShopLayout.ROW_NARROW = 56", "office rows and the hero: every piece inside"),
+    ("the reveal scrolls past the hero's top", L, "local want = math.min(math.max(0, y + h - view), y)", "local want = math.max(0, y + h - view)",
+     "revealScroll: never past the hero's top"),
+    ("BEST VALUE on a Coming soon item", L, "if minutes > 0 and price > 0 and forSale(product) then", "if minutes > 0 and price > 0 then",
+     "never on a Coming soon item"),
+    ("BEST VALUE on the worst pack", L, "if bestRate == nil or rate > bestRate then", "if bestRate == nil or rate < bestRate then", "BEST VALUE is the Vault"),
 ]
 
 
@@ -2412,8 +2529,10 @@ def run_mutants(luau):
         with contextlib.redirect_stdout(buffer):
             static_checks(layout=changed[LAYOUT], client=changed[CLIENT])
         lines = [line for line in (result.stdout + "\n" + buffer.getvalue()).split("\n") if line.startswith("FAIL: ")]
-        named = any(expected in line for line in lines)
+        named = [line for line in lines if expected in line]
         if finished and named:
+            if "--list-mutants" in sys.argv:
+                print("caught: %s -- by FAIL: %s" % (label, named[0][6:160]))
             return None
         if not finished:
             why = "it crashed: " + (result.stderr.strip().split("\n")[0] if result.stderr.strip() else "no summary")
