@@ -253,3 +253,28 @@ Also economy events (Cash in and out, by source) and a `first_hour` event at 60 
 6. What would you do next?
 7. Would you play again tomorrow? Why?
 8. Did anything feel unfair or pushy?
+
+## 10. What to build, in order
+
+Ranked by impact on the first hour. Each PR claims its files first. `*` = every file of that feature.
+
+| # | Change (files) | Size, tag | Needs | Plan |
+|---|---|---|---|---|
+| 1 | Cash and +$/s on the bar (IpoClient) | S, CODE | | new (A1) |
+| 2 | Tutorial, step 5 on the first ring, step 6 after the third hire (Tutorial*, TycoonCore, ShopClient, OnboardingClient) | L, CODE | 3 | TUT PR A-C; order new |
+| 3 | Calls start with the Desk (Task*) | S, CODE | | built on `task-needs-desk` |
+| 4 | Office ladder, names, 44 px targets (ShopClient) | M+M, CODE | | SHOP_UX S1-S2 |
+| 5 | Feel pack: buy pop, "+$" floats, missed call, stage-up card, 50% flash (Shop, Task, Ipo, EmployeeClient) | M, CODE | | new |
+| 6 | Goal chain, new goal kinds (Onboarding*) | M, CODE + CONFIG | 9 | new |
+| 7 | Economy core: calls live, away bank | XL, CODE | G1 | LG PR 2 |
+| 8 | Garage placeholder prices, Desk 3, free egg in the sim; S10 re-run | S, CONFIG-ONLY | 7 | new |
+| 9 | Garage milestones in every rung (Ipo*) | M, CODE + CONFIG | 7 | extends LG 4(b) |
+| 10 | Welcome-back card (TycoonCore, a client) | S, CODE | | M6b, without its Robux product |
+| 11 | Small fixes: gift at the first pause, no live Shield button, VIP button, calls pause under reveals, toast after ready | S, CODE | 2 | FR-14, M5 F7; rest new |
+| 12 | Icons, Robux cards, storage (ShopClient, IconArt) | M each, CODE + ART | CUST PR 3 | SHOP_UX S3-S6 |
+| 13 | The street and plot numbers (TycoonCore patch) | S, CODE + ART | owner's look in Studio | WORLD integration |
+| 14 | Employee states, FR-16, a silent `SoundConfig` (EmployeeClient) | M, CODE + ART | | FR-16; rest new |
+| 15 | Funnel events (server modules) | S, CODE | 6, 9 | ROADMAP M9; steps new |
+| 16 | Headhunter review, poach price by egg tier (ShopConfig, CreatureConfig) | S, CONFIG-ONLY | S4, S8 | new |
+| 17 | Pokedex, buildings, placement, picker, rounds | L each, CODE | 7 | CUST PR 1-4b, FUND |
+| 18 | Gaming: its content bible, then the package | DESIGN-ONLY, then L CODE + ART | G-S, G-G | SECT 5, CUST PR 8-11 |

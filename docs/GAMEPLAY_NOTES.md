@@ -17,7 +17,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 7: Frustration and safety nets
 - [x] Section 8: Sectors
 - [x] Section 9: Measurement
-- [ ] Section 10: What to build, in order
+- [x] Section 10: What to build, in order
 - [ ] Section 11: Open questions
 - [ ] Word count at most 5,500 (`wc -w`)
 - [ ] Release both claims in `CONTRIBUTING.md`
