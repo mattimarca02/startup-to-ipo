@@ -130,14 +130,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
-| IconArt | ReplicatedStorage | free | | |
-| IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | free | | |
-| tools/icon_test.py | (repo only) | free | | |
-| tools/render_previews.py | (repo only) | free | | |
-| docs/previews/*.svg | (repo only) | free | | |
-| docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
-| docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
-| docs/world_pass_integration.patch | (repo only) | free | | |
-| docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
+| IconArt | ReplicatedStorage | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| IconVisuals | ReplicatedStorage | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| tools/world_test.py | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| tools/icon_test.py | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| tools/render_previews.py | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/previews/*.svg | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/SHOP_UX_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/WORLD_PASS_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/STUDIO_SYNC_WORLD.md | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/world_pass_integration.patch | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
+| docs/WORLD_ICONS_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | world-icons-fix | 2026-10-06 |
