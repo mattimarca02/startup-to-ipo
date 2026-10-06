@@ -125,7 +125,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
-| docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
+| docs/CUSTOMIZE_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | integration-trim | 2026-10-06 |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
 | docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md | (repo only) | free | | |
@@ -136,4 +136,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyServer | ServerScriptService | free | | |
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
-| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
+| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | integration-trim | 2026-10-06 |
