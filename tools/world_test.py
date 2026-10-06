@@ -2,6 +2,10 @@
 """Tests for the world pass (WorldArt.lua and WorldVisuals.lua), outside Studio.
 
 Run:   python3 tools/world_test.py
+       python3 tools/world_test.py --integration   (also both suites on a scratch copy with the patch applied)
+       python3 tools/world_test.py --review        (also the review checks against the merge-base with main)
+       python3 tools/world_test.py --regen-patch [label]   (rewrites docs/world_pass_integration.patch and the
+           TycoonCore row of docs/STUDIO_SYNC_WORLD.md for this worktree's TycoonCore.lua, at merge time)
 
 It needs the free Luau command-line tool (https://github.com/luau-lang/luau/releases, the "luau" file from
 luau-macos.zip, luau-windows.zip or luau-ubuntu.zip). Put it on your PATH, or point to it:
@@ -28,9 +32,6 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE = "e3c9e67"  # main when world-icons-pass was made (only a label: the permanent tests never read git history)
-# main's TycoonCore.lua at e3c9e67: the patched SHA-256 in docs/STUDIO_SYNC_WORLD.md is the result for this file only
-BASE_TYCOON = ("77ce9c43dcbd03ae5e03e5e112c99b3763af7b92e6527a367e3eeee112e61aa9", 34330)
 # The first comment line of each block the integration patch adds: if TycoonCore.lua already has them, it is merged
 PATCH_MARKERS = ("-- The world around the plots (the spawn plaza", "-- The world around the plots, built once")
 STALE = "patch needs regenerating"
@@ -1261,14 +1262,14 @@ def sync_table_checks():
         check("STUDIO_SYNC_WORLD.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
         check("STUDIO_SYNC_WORLD.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), place)) in doc)
     how, patched = integration_state()
-    current = open(os.path.join(ROOT, "TycoonCore.lua"), "rb").read()
-    if how == "applied" and (hashlib.sha256(current).hexdigest(), len(current)) == BASE_TYCOON:
-        h = hashlib.sha256(patched.encode("utf-8")).hexdigest()
+    made = patch_made_for()
+    if how == "applied" and made is not None and sha(read("TycoonCore.lua"))[:2] == made[:2]:
+        h, size = sha(patched)
         check("STUDIO_SYNC_WORLD.md: the patched TycoonCore's SHA-256 and size are the patch's real result",
-              ("`%s` | %d |" % (h, len(patched.encode("utf-8")))) in doc, h)
+              ("`%s` | %d |" % (h, size)) in doc, h)
     else:
-        print("note: TycoonCore.lua is not main's %s file (or the patch is merged), so the patched TycoonCore hash in "
-              "STUDIO_SYNC_WORLD.md (valid for %s only) is not compared" % (BASE, BASE))
+        print("note: TycoonCore.lua is not the file the patch was made for (main at %s) or the patch is merged, so the patched "
+              "TycoonCore hash in STUDIO_SYNC_WORLD.md (valid for that file only) is not compared" % (made[2] if made else "?"))
     return passed, failed
 
 
@@ -1323,14 +1324,248 @@ def patched_tycoon():
 
 def patch_hunks():
     """The lines each hunk of the integration patch adds (without their leading +)."""
+    return patch_hunks_of(read("docs/world_pass_integration.patch"))
+
+
+def patch_hunks_of(text):
     hunks, current = [], None
-    for line in read("docs/world_pass_integration.patch").split("\n"):
+    for line in text.split("\n"):
         if line.startswith("@@"):
             current = []
             hunks.append(current)
         elif current is not None and line.startswith("+") and not line.startswith("+++"):
             current.append(line[1:])
     return ["\n".join(h) for h in hunks]
+
+
+# The integration patch's preamble. Its hashes, line numbers and hunk headers are valid only for the TycoonCore.lua
+# named in "Made for:"; python3 tools/world_test.py --regen-patch rewrites them for the TycoonCore.lua of the worktree.
+PATCH_PREAMBLE = """World pass integration (branch world-icons-pass): NOT APPLIED. It needs the owner's approval.
+
+Made for: TycoonCore.lua sha256 {base_sha}, {base_size} bytes (main at {label}).
+Result:   TycoonCore.lua sha256 {res_sha}, {res_size} bytes.
+Both hashes, the line numbers below and the hunk headers are valid for that TycoonCore.lua only (main at {label}).
+On any other TycoonCore.lua (main moved on), regenerate them at merge time, in the repo folder, on the branch that
+claims TycoonCore:
+  python3 tools/world_test.py --regen-patch
+It rewrites this file and the TycoonCore row of docs/STUDIO_SYNC_WORLD.md (a) for the TycoonCore.lua it finds, and
+prints the new hash. tools/world_test.py tests that procedure and fails ("patch needs regenerating") once the patch
+no longer applies.
+
+What it does: TycoonCore builds the world around the plots once, when the server starts, from WorldArt and
+WorldVisuals. It passes its own PLOT_SPACING, MAX_PLOTS and plotCenter, so the world moves with the plots if
+those ever change. Both modules are required inside pcall with a 5 second wait, the same way as PlotVisuals and
+PlotArt: if either is missing or broken there is one warning and the game runs exactly as today. No save, no
+remote, no player data, no touch handler, nothing runs per player.
+
+The two edits, in TycoonCore.lua at main {label} (TycoonCore is the only file this changes):
+  E1  after line {e1_end} (the end of the "Plot visuals are off" block, lines {e1_start}-{e1_end}): 10 lines that require
+      WorldVisuals and WorldArt inside pcall and warn if they are missing.
+  E2  between line {e2_before} (the end of onPlayerAdded) and line {e2_after} (Players.PlayerAdded:Connect(onPlayerAdded)):
+      12 lines that build the world once inside pcall, from PLOT_SPACING (line {ps}), MAX_PLOTS (line {mp}) and
+      plotCenter (lines {pc0}-{pc1}).
+
+Studio steps by hand, in this order (nothing syncs by itself):
+  1. ServerScriptService: create a ModuleScript named exactly WorldArt and paste WorldArt.lua into it.
+  2. ServerScriptService: create a ModuleScript named exactly WorldVisuals and paste WorldVisuals.lua into it.
+     Do both before pasting TycoonCore (it waits 5 s for each inside pcall, so it never hangs, but without
+     them the world is simply not built).
+  3. Only after approval: apply this patch (git apply docs/world_pass_integration.patch on a branch that claims
+     TycoonCore), then paste the new TycoonCore.lua into the Script TycoonCore (ServerScriptService).
+  4. Remove Workspace.PREVIEW_WORLD if it exists (the cleanup block, docs/STUDIO_SYNC_WORLD.md (e)), then F5.
+  5. View > Drafts: commit every draft. Publish with Shut down all servers, as always.
+
+Checked by tools/world_test.py --integration: the patch applies to the worktree's TycoonCore.lua, the patched file
+passes tools/daily_test.py and tools/world_test.py, and the two inserted blocks build the world in the fake.
+
+"""
+MADE_FOR = re.compile(r"^Made for: TycoonCore\.lua sha256 ([0-9a-f]{64}), (\d+) bytes \(main at (\S+)\)\.$", re.M)
+RESULT = re.compile(r"^Result:   TycoonCore\.lua sha256 ([0-9a-f]{64}), (\d+) bytes\.$", re.M)
+SYNC_ROW = re.compile(r"^\| `TycoonCore` \| Script, ServerScriptService \|.*$", re.M)
+E1_ANCHOR = "\tPlotVisuals, PlotArt = nil, nil\nend\n\n"
+E2_ANCHOR = "\nPlayers.PlayerAdded:Connect(onPlayerAdded)\n"
+
+
+def sha(text):
+    import hashlib
+    raw = text.encode("utf-8")
+    return hashlib.sha256(raw).hexdigest(), len(raw)
+
+
+def patch_made_for(patch=None):
+    """(sha256, bytes, label) of the TycoonCore.lua the patch was made for, from its "Made for:" line, or None."""
+    m = MADE_FOR.search(patch if patch is not None else read("docs/world_pass_integration.patch"))
+    return (m.group(1), int(m.group(2)), m.group(3)) if m else None
+
+
+def patch_result(patch=None):
+    m = RESULT.search(patch if patch is not None else read("docs/world_pass_integration.patch"))
+    return (m.group(1), int(m.group(2))) if m else None
+
+
+def insert_blocks(base, hunks):
+    """base (a TycoonCore.lua without the patch) with the two blocks put at their anchors. Raises ValueError, naming
+    the anchor, if one is missing or there twice (then the blocks must be placed by hand)."""
+    for name, anchor in (("E1 (the end of the plot visuals block)", E1_ANCHOR), ("E2 (Players.PlayerAdded:Connect(onPlayerAdded))", E2_ANCHOR)):
+        if base.count(anchor) != 1:
+            raise ValueError("cannot regenerate the patch: the anchor of %s is found %d times in TycoonCore.lua" % (name, base.count(anchor)))
+    i = base.index(E1_ANCHOR) + len(E1_ANCHOR)
+    text = base[:i] + hunks[0] + "\n" + base[i:]
+    j = text.index(E2_ANCHOR) + 1
+    return text[:j] + hunks[1] + "\n" + text[j:]
+
+
+def line_of(text, start, prefix):
+    """1-based number of the first line at or after line `start` that begins with prefix."""
+    lines = text.split("\n")
+    for n in range(start - 1, len(lines)):
+        if lines[n].startswith(prefix):
+            return n + 1
+    raise ValueError("cannot regenerate the patch: no line starting with %r in TycoonCore.lua" % prefix)
+
+
+def regen_patch(base, label, hunks=None):
+    """The whole integration patch (preamble and hunks) for this TycoonCore.lua, and the patched file."""
+    hunks = hunks if hunks is not None else patch_hunks()
+    patched = insert_blocks(base, hunks)
+    with tempfile.TemporaryDirectory() as tmp:
+        for side, text in (("old", base), ("new", patched)):
+            os.makedirs(os.path.join(tmp, side))
+            with open(os.path.join(tmp, side, "TycoonCore.lua"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+        diff = subprocess.run(["git", "diff", "--no-index", "--no-color", "--no-ext-diff", "-U3", "old/TycoonCore.lua", "new/TycoonCore.lua"],
+                              cwd=tmp, capture_output=True, text=True).stdout
+    body = diff[diff.index("\n@@") + 1:]
+    e1_start = line_of(base, 1, "local visualsOk, PlotVisuals = pcall(require")
+    e1_end = line_of(base, e1_start, "end")
+    e2_after = line_of(base, 1, "Players.PlayerAdded:Connect(onPlayerAdded)")
+    pc0 = line_of(base, 1, "local function plotCenter(")
+    base_sha, base_size = sha(base)
+    res_sha, res_size = sha(patched)
+    preamble = PATCH_PREAMBLE.format(base_sha=base_sha, base_size=base_size, label=label, res_sha=res_sha, res_size=res_size,
+                                     e1_start=e1_start, e1_end=e1_end, e2_before=e2_after - 1, e2_after=e2_after,
+                                     ps=line_of(base, 1, "local PLOT_SPACING = "), mp=line_of(base, 1, "local MAX_PLOTS = "),
+                                     pc0=pc0, pc1=line_of(base, pc0, "end"))
+    return preamble + "--- a/TycoonCore.lua\n+++ b/TycoonCore.lua\n" + body, patched
+
+
+def sync_row(label, res_sha, res_size):
+    return ("| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at %s) with "
+            "`docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `%s` | %d |" % (label, res_sha, res_size))
+
+
+def regen_command():
+    """--regen-patch [label]: rewrites docs/world_pass_integration.patch and the TycoonCore row of
+    docs/STUDIO_SYNC_WORLD.md for this worktree's TycoonCore.lua (with the patch merged, for the file without it)."""
+    current = read("TycoonCore.lua")
+    base = unpatched_tycoon(current) if any(m in current for m in PATCH_MARKERS) else current
+    args = sys.argv[sys.argv.index("--regen-patch") + 1:]
+    label = args[0] if args and not args[0].startswith("-") else None
+    if label is None:
+        got = subprocess.run(["git", "show", "origin/main:TycoonCore.lua"], cwd=ROOT, capture_output=True)
+        same = got.returncode == 0 and got.stdout.decode("utf-8") == base
+        label = subprocess.run(["git", "rev-parse", "--short", "origin/main"], cwd=ROOT, capture_output=True, text=True).stdout.strip() if same else ""
+        label = label or "worktree-" + sha(base)[0][:7]
+    try:
+        patch, patched = regen_patch(base, label)
+    except ValueError as e:
+        print(str(e))
+        return 1
+    with open(os.path.join(ROOT, "docs", "world_pass_integration.patch"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(patch)
+    doc_path = os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")
+    res_sha, res_size = sha(patched)
+    doc = read("docs/STUDIO_SYNC_WORLD.md")
+    with open(doc_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(SYNC_ROW.sub(lambda _: sync_row(label, res_sha, res_size), doc, count=1))
+    print("Regenerated docs/world_pass_integration.patch for TycoonCore.lua %s (%d bytes, main at %s)" % (sha(base)[0], sha(base)[1], label))
+    print("Patched TycoonCore.lua: sha256 %s, %d bytes (written to the TycoonCore row of docs/STUDIO_SYNC_WORLD.md (a))" % (res_sha, res_size))
+    print("Now run python3 tools/world_test.py --integration")
+    return 0
+
+
+def regen_checks():
+    """The regeneration procedure, tested: it reproduces the committed patch from the file it was made for, and on a
+    TycoonCore.lua with lines added it gives a patch that applies exactly, with the line numbers and the hash moved."""
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    patch = read("docs/world_pass_integration.patch")
+    made, result = patch_made_for(patch), patch_result(patch)
+    check("regen: the patch names the TycoonCore.lua it was made for and its result (Made for:, Result:)", made is not None and result is not None)
+    if made is None or result is None or shutil.which("git") is None:
+        return passed, failed
+    doc = read("docs/STUDIO_SYNC_WORLD.md")
+    row = SYNC_ROW.search(doc)
+    check("regen: STUDIO_SYNC_WORLD.md's TycoonCore row has the patch's Result hash and size and its base",
+          row is not None and row.group(0) == sync_row(made[2], result[0], result[1]), row and row.group(0))
+    current = read("TycoonCore.lua")
+    base = unpatched_tycoon(current) if any(m in current for m in PATCH_MARKERS) else current
+    if sha(base)[:2] == made[:2]:
+        again, patched = regen_patch(base, made[2])
+        check("regen: from the TycoonCore.lua it was made for, --regen-patch gives the committed patch byte for byte", again == patch,
+              next((i for i, (a, b) in enumerate(zip(again, patch)) if a != b), "lengths %d %d" % (len(again), len(patch))))
+        check("regen: the Result line is the hash of that file with the patch applied (committed and regenerated)",
+              sha(patched)[:2] == result and patch_result(again) == sha(patched)[:2])
+    else:
+        print("note: TycoonCore.lua is not the file the patch was made for (main at %s), so the byte-for-byte regeneration "
+              "check is skipped (the moved-lines check below still runs)" % made[2])
+    lines = base.split("\n")
+    pc = next(i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded("))
+    moved = "\n".join(["-- added line %d" % k for k in range(5)] + lines[:pc] + ["-- moved %d" % k for k in range(3)] + lines[pc:])
+    try:
+        new_patch, new_patched = regen_patch(moved, "test")
+    except ValueError as e:
+        new_patch, new_patched = None, None
+        check("regen: a TycoonCore.lua with 5 lines added at the top and 3 before onPlayerAdded can be regenerated", False, e)
+    if new_patch is not None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "TycoonCore.lua")
+            with open(target, "w", encoding="utf-8", newline="\n") as f:
+                f.write(moved)
+            with open(os.path.join(tmp, "p.patch"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(new_patch)
+            exact = subprocess.run(["git", "apply", "p.patch"], cwd=tmp, capture_output=True).returncode == 0
+            with open(target, encoding="utf-8") as f:
+                applied = f.read()
+        nm = re.search(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) ", new_patch)
+        om = re.search(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) ", patch)
+        check("regen: with lines added, the new patch applies exactly (no fuzz) and gives the file its Result line names",
+              exact and applied == new_patched and patch_result(new_patch) == sha(applied)[:2] and patch_made_for(new_patch)[:2] == sha(moved)[:2])
+        check("regen: with lines added, E1's line numbers moved by 5 and E2's by 8", nm is not None and om is not None
+              and [int(x) - int(y) for x, y in zip(nm.groups(), om.groups())] == [5, 5, 5, 8, 8], nm and om and (nm.groups(), om.groups()))
+        check("regen: the regenerated hunks add exactly the committed blocks", patch_hunks_of(new_patch) == patch_hunks_of(patch))
+        # The command itself, in a scratch copy holding the moved TycoonCore.lua: it rewrites the patch and only the doc's row
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("tools/world_test.py", "docs/world_pass_integration.patch", "docs/STUDIO_SYNC_WORLD.md"):
+                os.makedirs(os.path.dirname(os.path.join(tmp, name)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, name), os.path.join(tmp, name))
+            with open(os.path.join(tmp, "TycoonCore.lua"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(moved)
+            ran = subprocess.run([sys.executable, os.path.join(tmp, "tools", "world_test.py"), "--regen-patch", "test"], cwd=tmp, capture_output=True, text=True)
+            with open(os.path.join(tmp, "docs", "world_pass_integration.patch"), encoding="utf-8") as f:
+                written = f.read()
+            with open(os.path.join(tmp, "docs", "STUDIO_SYNC_WORLD.md"), encoding="utf-8") as f:
+                doc_after = f.read()
+        want_row = sync_row("test", *sha(new_patched))
+        check("regen: the command (--regen-patch) writes that patch and changes only the TycoonCore row of STUDIO_SYNC_WORLD.md",
+              ran.returncode == 0 and written == new_patch and SYNC_ROW.sub(lambda _: "ROW", doc_after) == SYNC_ROW.sub(lambda _: "ROW", doc)
+              and want_row in doc_after and sha(new_patched)[0] in ran.stdout, ran.stdout.strip()[-200:] or ran.stderr.strip()[-200:])
+    broken = base.replace(E1_ANCHOR, "\tPlotVisuals, PlotArt = nil, nil -- off\nend\n\n", 1)
+    try:
+        regen_patch(broken, "test")
+        refused = None
+    except ValueError as e:
+        refused = str(e)
+    check("regen: without its anchor (the plot visuals block changed) it refuses and names the anchor", refused is not None and "E1" in refused, refused)
+    return passed, failed
 
 
 def patched_blocks(patched):
@@ -1620,6 +1855,45 @@ MUTANTS_C = [
 ]
 
 
+# Group D: the patch regeneration (review item 5). This test file itself is changed in a scratch copy (with the
+# TycoonCore.lua, the patch and the doc); its regen_checks() must fail the named check.
+T = "tools/world_test.py"
+MUTANTS_D = [
+    ("the preamble names E2's line one too far", T, "e2_before=e2_after - 1", "e2_before=e2_after", "regen: from the TycoonCore.lua it was made for"),
+    ("E2 put one character early", T, "    j = text.index(E2_ANCHOR) + 1\n", "    j = text.index(E2_ANCHOR)\n", "regen: from the TycoonCore.lua it was made for"),
+    ("the Result line hashes the unpatched file", T, "    res_sha, res_size = sha(patched)\n    preamble", "    res_sha, res_size = sha(base)\n    preamble",
+     "regen: the Result line is the hash"),
+    ("the command forgets the doc's row", T, "        f.write(SYNC_ROW.sub(lambda _: sync_row(label, res_sha, res_size), doc, count=1))", "        f.write(doc)",
+     "regen: the command (--regen-patch)"),
+    ("plotCenter's end looked up from the top", T, 'pc0=pc0, pc1=line_of(base, pc0, "end"))', 'pc0=pc0, pc1=line_of(base, 1, "end"))',
+     "regen: from the TycoonCore.lua it was made for"),
+    ("a missing anchor is not refused", T, "        if base.count(anchor) != 1:\n            raise ValueError", "        if False:\n            raise ValueError",
+     "regen: without its anchor"),
+]
+
+
+def run_regen_mutants(mutants, group):
+    """Group D: each mutant of this file runs regen_checks() in a scratch copy; caught only by its named FAIL line."""
+    own = read(T)
+    problems = []
+    for label, _, old, new, expected in mutants:
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("TycoonCore.lua", "docs/world_pass_integration.patch", "docs/STUDIO_SYNC_WORLD.md"):
+                os.makedirs(os.path.dirname(os.path.join(tmp, name)) or tmp, exist_ok=True)
+                shutil.copy(os.path.join(ROOT, name), os.path.join(tmp, name))
+            os.makedirs(os.path.join(tmp, "tools"))
+            with open(os.path.join(tmp, T), "w", encoding="utf-8", newline="\n") as f:
+                f.write(apply_mutation(own, old, new, T))
+            ran = subprocess.run([sys.executable, "-c", "import sys; sys.argv = ['x']; sys.path.insert(0, 'tools'); import world_test; print(world_test.regen_checks())"],
+                                 cwd=tmp, capture_output=True, text=True)
+        finished = ran.returncode == 0 and re.search(r"^\(\d+, \d+\)$", ran.stdout, re.M) is not None
+        named = any(line.startswith("FAIL: " + expected) for line in ran.stdout.split("\n"))
+        if not (finished and named):
+            why = ("it crashed: " + (ran.stderr.strip().split("\n")[-1] if ran.stderr.strip() else "no summary")) if not finished else "the check '%s' did not fail" % expected
+            problems.append("FAIL: mutation %s, %s: not caught by its named check (%s)" % (group, label, why))
+    return len(mutants) - len(problems), problems
+
+
 def run_mutants(luau, mutants, group):
     """Runs every mutant (four at a time). Returns how many were caught and a FAIL line for each one that was not."""
     from concurrent.futures import ThreadPoolExecutor
@@ -1653,6 +1927,8 @@ def run_mutants(luau, mutants, group):
 
 
 def main():
+    if "--regen-patch" in sys.argv:
+        return regen_command()
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
         print("Luau not found. Download it from https://github.com/luau-lang/luau/releases and set LUAU=/path/to/luau")
@@ -1713,13 +1989,18 @@ def main():
         total += patch_passed
         if patch_failed:
             code = 1
+        regen_passed, regen_failed = regen_checks()
+        print("Integration patch regeneration (--regen-patch): %d passed, %d failed" % (regen_passed, regen_failed))
+        total += regen_passed
+        if regen_failed:
+            code = 1
         if "--integration" in sys.argv and patched is not None:
             print("Integration: both test suites on a scratch copy with the patch applied:")
             if not integration_suites(luau):
                 code = 1
     runs = caught = 0
-    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C)):
-        got, problems = run_mutants(luau, mutants, group)
+    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D)):
+        got, problems = run_regen_mutants(mutants, group) if group == "D" else run_mutants(luau, mutants, group)
         for line in problems:
             print(line)
         if problems:

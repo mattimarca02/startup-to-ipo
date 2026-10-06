@@ -12,7 +12,7 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 | `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
 | `IconArt` | ModuleScript, ReplicatedStorage | new | `9fa113c553f3e9ea17c857c62aca75be48a86ee833426b1c5a0ca2eddbda099d` | 30355 |
 | `IconVisuals` | ModuleScript, ReplicatedStorage | new | `fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98` | 48178 |
-| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file with `docs/world_pass_integration.patch` applied | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
+| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at e3c9e67) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
 
@@ -39,7 +39,7 @@ Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnab
 4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
 5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
 6. **Before any playtest:** paste the **cleanup block** (e), press Enter, then the **check block** (e): it must print `OK`.
-7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch, `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
+7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch. The patch's hash and line numbers are valid for `main` at `e3c9e67` only (its "Made for:" line). If `main`'s `TycoonCore.lua` changed since, first regenerate them on that branch: `python3 tools/world_test.py --regen-patch` (it rewrites the patch and the TycoonCore row in (a), and prints the new hash), then `python3 tools/world_test.py --integration`. Then `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
 8. **Before publishing:** paste the check block (e) again: it must print `OK` (if it prints `FAIL`, run the cleanup block). Then **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
 
 ## (d) Hash check (command bar)
