@@ -35,6 +35,14 @@ local MONEY_SIZES = { 16, 14 } -- top row (Cash and Income): the biggest size th
 local INFO_SIZE = 14 -- bottom row (stage and valuation)
 local MONEY_INTERVAL = 0.25 -- seconds: the top row redraws at most 4 times a second, however fast the values change
 local MONEY_CAP = 999e12 -- above this the bar shows $999T, so the text stays short
+-- While the server loads a returning player's save, leaderstats already exist with Cash and Income at 0: the saved
+-- Cash, the income and the offline earnings are written only after the DataStore read (and a 7 s re-read of a fresh
+-- save). So the top row stays empty until the server says it has finished. The signal is the Upgrade1 attribute
+-- (TycoonCore refreshSign -> publishUpgrades): it is set for every player (true or false), after the saved Cash, the
+-- income and the offline earnings are written, right before the server's data.ready. It is never set before.
+local LOADED_ATTRIBUTE = "Upgrade1"
+-- If that attribute never comes (the server script failed), the row shows the real values after this many seconds
+local MONEY_WAIT = 30
 
 local COLORS = {
 	panel = Color3.fromRGB(28, 30, 38),
@@ -916,9 +924,16 @@ end
 local moneyLastDraw = -math.huge
 local moneyPending = false
 local moneyConnections = {}
+local moneyShown = false -- false while the save loads: the top row stays empty
+local moneyStats = nil -- the leaderstats folder the loading rule was started for
+local moneyWait = nil -- the pending MONEY_WAIT delay (a task), nil when there is none
 
 local function drawMoney()
 	moneyLastDraw = os.clock()
+	if not moneyShown then
+		hudMoney.Text = "" -- the save is still loading: the top row stays empty
+		return
+	end
 	local cash, income = readMoney()
 	if cash == nil and income == nil then
 		hudMoney.Text = "" -- no leaderstats (yet): the top row stays empty
@@ -944,6 +959,45 @@ local function requestMoney()
 	end
 end
 
+local function cancelMoneyWait()
+	if moneyWait then
+		task.cancel(moneyWait)
+		moneyWait = nil
+	end
+end
+
+-- The row goes from empty to the real values (once per leaderstats), and the pending delay is cancelled
+local function showMoney()
+	cancelMoneyWait()
+	if not moneyShown then
+		moneyShown = true
+		drawMoney()
+	end
+end
+
+-- The loading rule starts again when the bar finds a different leaderstats (late, or a replacement), not on a
+-- Changed event and not when Cash or Income come or go inside the same folder. An IPO resets Cash to 0 after the
+-- row is shown: that shows $0 at once, the rule is not involved.
+local function restartMoneyRule(stats)
+	if stats == moneyStats then
+		return
+	end
+	moneyStats = stats
+	moneyShown = false
+	cancelMoneyWait()
+	if not stats then
+		return
+	end
+	if player:GetAttribute(LOADED_ATTRIBUTE) ~= nil then
+		moneyShown = true -- bindMoney draws it
+	else
+		moneyWait = task.delay(MONEY_WAIT, function()
+			moneyWait = nil
+			showMoney()
+		end)
+	end
+end
+
 -- Listens to leaderstats.Cash and .Income. Called again when leaderstats or one of them comes or goes.
 local function bindMoney()
 	for _, connection in ipairs(moneyConnections) do
@@ -951,6 +1005,7 @@ local function bindMoney()
 	end
 	table.clear(moneyConnections)
 	local stats = player:FindFirstChild("leaderstats")
+	restartMoneyRule(stats)
 	if stats then
 		table.insert(moneyConnections, stats.ChildAdded:Connect(bindMoney))
 		table.insert(moneyConnections, stats.ChildRemoved:Connect(bindMoney))
@@ -1146,6 +1201,11 @@ end)
 
 -- Cash and Income on the bar: listens to leaderstats, no loop
 bindMoney()
+player:GetAttributeChangedSignal(LOADED_ATTRIBUTE):Connect(function()
+	if moneyStats and player:GetAttribute(LOADED_ATTRIBUTE) ~= nil then
+		showMoney()
+	end
+end)
 player.ChildAdded:Connect(function(child)
 	if child.Name == "leaderstats" then
 		bindMoney()

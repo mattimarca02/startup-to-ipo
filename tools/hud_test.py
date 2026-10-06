@@ -189,7 +189,17 @@ local task = {
 	end,
 	delay = function(t, fn)
 		table.insert(W.delays, t)
-		schedule(t, coroutine.create(fn))
+		local co = coroutine.create(fn)
+		schedule(t, co)
+		return co
+	end,
+	cancel = function(co)
+		for i = #W.queue, 1, -1 do
+			if W.queue[i].thread == co then
+				table.remove(W.queue, i)
+				W.cancelled += 1
+			end
+		end
 	end,
 	defer = function(fn) schedule(0, coroutine.create(fn)) end,
 	wait = function(t)
@@ -416,7 +426,7 @@ SCENARIOS = r"""
 -- Worlds --------------------------------------------------------------------------------------------------------
 local function newWorld(opts)
 	opts = opts or {}
-	W = { clock = 5000, seq = 0, queue = {}, waits = {}, delays = {}, errors = {}, warns = {}, invokes = {}, all = {}, services = {},
+	W = { clock = 5000, seq = 0, queue = {}, waits = {}, delays = {}, errors = {}, warns = {}, invokes = {}, all = {}, services = {}, cancelled = 0,
 		screen = Vector2.new(opts.w or 667, opts.h or 339), widthScale = opts.widthScale or 1, measures = 0 }
 	W.run = { Heartbeat = newSignal(), RenderStepped = newSignal(), Stepped = newSignal() }
 	W.playerAdded, W.playerRemoving = newSignal(), newSignal()
@@ -440,6 +450,8 @@ local function newWorld(opts)
 	W.ipoEvent = newInstance("RemoteEvent")
 	W.ipoEvent.Name = "IpoEvent"
 	W.ipoEvent.Parent = remotes
+	-- TycoonCore sets Upgrade1..6 (true or false) when a player's save is loaded; opts.loading = true leaves it unset
+	if not opts.loading then W.player:SetAttribute("Upgrade1", false) end
 	for k, v in pairs(opts.attrs or {}) do W.player:SetAttribute(k, v) end
 	return W
 end
@@ -785,6 +797,203 @@ scenario("idle", function()
 	check("idle: the only loop is the existing 1 s one (about 30 waits, all of 1 s)", ones == #W.waits and #W.waits >= 29 and #W.waits <= 31, #W.waits)
 	check("idle: nothing listens to a frame event", W.run.Heartbeat:Count() == 0 and W.run.RenderStepped:Count() == 0 and W.run.Stepped:Count() == 0)
 	noErrors("idle")
+end)
+
+-- 4b. Loading: the top row stays empty until the server says the save is loaded ---------------------------------------
+-- TycoonCore makes leaderstats at join with Cash 0 and Income 0, writes the saved Cash only after the DataStore read
+-- (and a 7 s re-read of a fresh save), the income and the offline earnings after that, then sets Upgrade1..6 (true or
+-- false), then data.ready. The bar waits for Upgrade1; if it never comes the row shows the real values after 30 s.
+local function pendingLong() -- delays still waiting that are longer than the 1 s tick and the 0.25 s redraw: the loading wait
+	local n = 0
+	for _, item in ipairs(W.queue) do if item.t - W.clock > 10 then n += 1 end end
+	return n
+end
+-- Advances in 0.05 s steps and keeps every text the top row has had
+local function watch(E, seconds)
+	E.seen = E.seen or {}
+	for _ = 1, math.floor(seconds / 0.05 + 0.5) do
+		advance(0.05)
+		E.seen[E.money.Text] = true
+	end
+end
+local function neverMoney(E)
+	for text in pairs(E.seen) do if text ~= "" then return text end end
+	return nil
+end
+local function swapStats(cash, income)
+	local old = W.player:FindFirstChild("leaderstats")
+	old.Parent = nil
+	return makeStats(cash, income, true)
+end
+
+scenario("loading", function()
+	-- a returning player, step by step like the server
+	local E = boot({ loading = true, stats = { 0, 0 } })
+	noErrors("loading")
+	local stats = W.player:FindFirstChild("leaderstats")
+	local cash, income = stats:FindFirstChild("Cash"), stats:FindFirstChild("Income")
+	check("loading: the top row is empty when leaderstats are found (Cash 0, Income 0, the save not loaded)", E.money.Text == "", E.money.Text)
+	check("loading: the other rows are there while the top row is empty", E.info.Text ~= "" and E.fill ~= nil)
+	watch(E, 7) -- the 7 s re-read
+	check("loading: still empty after 7 s with Cash 0 and Income 0", E.money.Text == "", E.money.Text)
+	W.player:SetAttribute("IpoCount", 2) -- IpoServer.publish: set before the income and the offline earnings, not a loaded signal
+	cash.Value = 12345 -- the saved Cash
+	watch(E, 1)
+	check("loading: the first change above 0 (the saved Cash) does not show the row", E.money.Text == "", E.money.Text)
+	income.Value = 18 -- updateIncome
+	watch(E, 0.5)
+	cash.Value += 4000 -- the offline earnings
+	watch(E, 0.5)
+	check("loading: Cash and Income both above 0, the save still not marked loaded: still empty", E.money.Text == "", E.money.Text)
+	W.player:SetAttribute("Upgrade1", false)
+	check("loading: the Upgrade1 attribute shows the real values at once", E.money.Text == "$16,345 · +$18/s", E.money.Text)
+	watch(E, 3)
+	check("loading: a returning player never saw $0 · +$0/s (nor any text before the real one)", neverMoney(E) == "$16,345 · +$18/s" and E.seen["$0 · +$0/s"] == nil, neverMoney(E))
+	check("loading: the wait is cancelled once the row is shown (no delay left)", pendingLong() == 0, pendingLong())
+	cash.Value = 20000
+	advance(0.3)
+	check("loading: after that the row follows Cash", E.money.Text == "$20,000 · +$18/s", E.money.Text)
+	-- an IPO: Cash goes to 0 and the row shows the real $0 at once
+	local w0 = E.money._writes.Text
+	cash.Value = 0
+	advance(0.3)
+	check("loading: an IPO reset (Cash to 0) shows $0 within the redraw interval", E.money.Text == "$0 · +$18/s", E.money.Text)
+	cash.Value, income.Value = 0, 0
+	advance(0.3)
+	check("loading: Cash 0 and Income 0 after the row is shown reads $0 · +$0/s (it does not hide again)", E.money.Text == "$0 · +$0/s", E.money.Text)
+	noErrors("loading, returning player")
+
+	-- a slow load (retries 2 s + 4 s, then the 7 s re-read, then the Roblox checks): still nothing wrong on the bar
+	local S = boot({ loading = true, stats = { 0, 0 } })
+	watch(S, 20)
+	check("loading: after 20 s of loading the row is still empty (not $0 · +$0/s)", S.money.Text == "" and S.seen[""] == true and neverMoney(S) == nil, S.money.Text)
+	watch(S, 9.8)
+	check("loading: after 29.8 s it is still empty", S.money.Text == "")
+	watch(S, 0.4)
+	check("loading: the real values show 30 s after leaderstats were found, if the signal never came", S.money.Text == "$0 · +$0/s", S.money.Text)
+	check("loading: the 30 s wait ended, none is left", pendingLong() == 0, pendingLong())
+	local F = boot({ loading = true, stats = { 500, 4 } })
+	watch(F, 29.9)
+	check("loading: Cash 500 and Income 4 at 29.9 s: still empty (nothing changed, so nothing shows)", F.money.Text == "", F.money.Text)
+	watch(F, 0.2)
+	check("loading: and then the real values after 30 s", F.money.Text == "$500 · +$4/s", F.money.Text)
+
+	-- a brand-new player: $0 · +$0/s is the truth, shown when the server says the save is done
+	local B = boot({ loading = true, stats = { 0, 0 } })
+	watch(B, 2)
+	check("loading: a new player sees nothing while loading", B.money.Text == "")
+	W.player:SetAttribute("Upgrade1", false)
+	check("loading: a new player sees $0 · +$0/s at once when the server is done", B.money.Text == "$0 · +$0/s", B.money.Text)
+	watch(B, 0.1)
+	check("loading: a new player's row was empty until then, then $0 · +$0/s", B.seen[""] == true and neverMoney(B) == "$0 · +$0/s", neverMoney(B))
+
+	-- the signal can be true too (Upgrade1 owned)
+	local T = boot({ loading = true, stats = { 9, 1 } })
+	W.player:SetAttribute("Upgrade1", true)
+	check("loading: Upgrade1 = true is the signal too", T.money.Text == "$9 · +$1/s", T.money.Text)
+
+	-- a change to 0 before the signal does not show the row, and only a signal that is not cleared does
+	local Z = boot({ loading = true, stats = { 50, 2 } })
+	local zc = W.player:FindFirstChild("leaderstats"):FindFirstChild("Cash")
+	zc.Value = 0
+	watch(Z, 1)
+	check("loading: a change to 0 does not show the row early", Z.money.Text == "", Z.money.Text)
+	zc.Value = 70
+	watch(Z, 1)
+	check("loading: a change to 70 does not show it either (only the server's signal does)", Z.money.Text == "", Z.money.Text)
+	W.player:SetAttribute("Upgrade1", false)
+	W.player:SetAttribute("Upgrade1", nil)
+	check("loading: the signal is shown once; a later clear does not hide the row", Z.money.Text == "$70 · +$2/s", Z.money.Text)
+	noErrors("loading, new and odd players")
+
+	-- the wait counts from the leaderstats, and neither a Changed event nor Cash and Income coming into the folder restart it
+	local D = boot({ loading = true })
+	local folder = newInstance("Folder")
+	folder.Name = "leaderstats"
+	folder.Parent = W.player
+	advance(10)
+	local dc, di = newInstance("IntValue"), newInstance("IntValue")
+	dc.Name, di.Name = "Cash", "Income"
+	dc.Parent, di.Parent = folder, folder
+	for second = 11, 25 do
+		dc.Value = second
+		di.Value = second % 3
+		advance(1)
+	end
+	check("loading: Cash and Income added to the folder at 10 s and changed every second: still empty at 25 s", D.money.Text == "", D.money.Text)
+	advance(4.9)
+	check("loading: still empty at 29.9 s", D.money.Text == "")
+	advance(0.2)
+	check("loading: shown at 30 s after the folder (Changed events and new children did not restart the wait)", D.money.Text == "$25 · +$1/s", D.money.Text)
+
+	-- the signal first, the leaderstats later; the leaderstats first, the signal later
+	local L = boot({ loading = true })
+	W.player:SetAttribute("Upgrade1", false)
+	advance(1)
+	check("loading: the signal with no leaderstats shows nothing", L.money.Text == "")
+	makeStats(33, 2, false)
+	advance(0.5)
+	check("loading: leaderstats that come after the signal show at once", L.money.Text == "$33 · +$2/s", L.money.Text)
+	noErrors("loading, order")
+end)
+
+scenario("loading rebind", function()
+	-- a replaced leaderstats starts the rule again
+	local E = boot({ loading = true, stats = { 0, 0 } })
+	watch(E, 1)
+	W.player:SetAttribute("Upgrade1", false)
+	check("loading rebind: shown after the signal", E.money.Text == "$0 · +$0/s", E.money.Text)
+	swapStats(77, 3)
+	advance(0.5)
+	check("loading rebind: a new leaderstats while the server is done (the signal is still set) shows at once", E.money.Text == "$77 · +$3/s", E.money.Text)
+	check("loading rebind: no wait is started when the signal is already there", pendingLong() == 0, pendingLong())
+	W.player:SetAttribute("Upgrade1", nil) -- as if a new load started
+	local _, c2 = swapStats(0, 0)
+	advance(0.5)
+	check("loading rebind: a new leaderstats with the save not loaded hides the row again", E.money.Text == "", E.money.Text)
+	check("loading rebind: the wait is started again (one pending)", pendingLong() == 1, pendingLong())
+	advance(20)
+	swapStats(0, 0)
+	check("loading rebind: a second replacement keeps one pending wait (the old one was cancelled)", pendingLong() == 1, pendingLong())
+	advance(20) -- 40 s since the first, 20 s since the last
+	check("loading rebind: 40 s after the first, 20 s after the last: still empty (the rule restarted)", E.money.Text == "", E.money.Text)
+	advance(10.1)
+	check("loading rebind: 30 s after the last replacement the real values show", E.money.Text == "$0 · +$0/s", E.money.Text)
+	check("loading rebind: and nothing is left waiting", pendingLong() == 0, pendingLong())
+	-- the leaderstats go away: empty, no wait; they come back: the rule starts
+	W.player:SetAttribute("Upgrade1", nil)
+	W.player:FindFirstChild("leaderstats").Parent = nil
+	advance(0.5)
+	check("loading rebind: leaderstats removed: empty and no wait pending", E.money.Text == "" and pendingLong() == 0, pendingLong())
+	local _, c3 = makeStats(8, 1, true)
+	advance(0.5)
+	check("loading rebind: leaderstats back, save not loaded: empty, one wait", E.money.Text == "" and pendingLong() == 1, pendingLong())
+	W.player:SetAttribute("Upgrade1", false)
+	check("loading rebind: the signal shows it and cancels the wait", E.money.Text == "$8 · +$1/s" and pendingLong() == 0, pendingLong())
+	noErrors("loading rebind")
+
+	-- 100 rebinds: nothing piles up
+	local P = boot({ loading = true, stats = { 0, 0 } })
+	local before = #W.queue
+	local attrListeners = W.player:GetAttributeChangedSignal("Upgrade1"):Count()
+	local oldCash
+	for n = 1, 100 do
+		local old = W.player:FindFirstChild("leaderstats")
+		oldCash = old:FindFirstChild("Cash")
+		old.Parent = nil
+		makeStats(n, 1, n % 2 == 0)
+		advance(0.1)
+	end
+	local latest = W.player:FindFirstChild("leaderstats")
+	check("loading rebind: after 100 replacements there is one wait pending, not 100", pendingLong() == 1, pendingLong())
+	check("loading rebind: the queue did not grow (" .. before .. " before, " .. #W.queue .. " after)", #W.queue <= before + 2, #W.queue)
+	check("loading rebind: the signal has still one listener", W.player:GetAttributeChangedSignal("Upgrade1"):Count() == attrListeners, W.player:GetAttributeChangedSignal("Upgrade1"):Count())
+	check("loading rebind: the latest Cash has one listener from the bar (and the confirm screen's)", latest:FindFirstChild("Cash"):_signal("Changed"):Count() <= 2 and latest:FindFirstChild("Income"):_signal("Changed"):Count() == 1, latest:FindFirstChild("Income"):_signal("Changed"):Count())
+	check("loading rebind: the old Cash lost the bar's listener", oldCash:_signal("Changed"):Count() <= 1, oldCash:_signal("Changed"):Count())
+	check("loading rebind: the row is still empty (never revealed by a rebind)", P.money.Text == "", P.money.Text)
+	W.player:SetAttribute("Upgrade1", false)
+	check("loading rebind: then the signal shows the latest values and leaves nothing waiting", P.money.Text == "$100 · +$1/s" and pendingLong() == 0, P.money.Text)
+	noErrors("loading rebind, 100 times")
 end)
 
 -- 5. The progress bar and the bottom row ------------------------------------------------------------------------------
@@ -1180,6 +1389,24 @@ end)''', ''),
     ("odds wording in a bar text", '"🔔 IPO!" }', '"🔔 Lucky IPO!" }'),
     ("a new remote call at start", '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()', '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()\nipoAction:InvokeServer("Cash")'),
     ("the top row has no truncate safety net", 'TextSize = MONEY_SIZES[1],\n\tTextTruncate = Enum.TextTruncate.AtEnd,\n', 'TextSize = MONEY_SIZES[1],\n'),
+    # the loading rule (the top row stays empty until the server says the save is loaded)
+    ("loading: the row is shown as soon as leaderstats are found (no rule)", '\tmoneyStats = stats\n\tmoneyShown = false\n', '\tmoneyStats = stats\n\tmoneyShown = true\n'),
+    ("loading: the first change above 0 shows the row", 'table.insert(moneyConnections, value.Changed:Connect(requestMoney))', 'table.insert(moneyConnections, value.Changed:Connect(function()\n\t\t\t\t\tif value.Value > 0 then\n\t\t\t\t\t\tshowMoney()\n\t\t\t\t\tend\n\t\t\t\t\trequestMoney()\n\t\t\t\tend))'),
+    ("loading: any change (also to 0) shows the row", 'table.insert(moneyConnections, value.Changed:Connect(requestMoney))', 'table.insert(moneyConnections, value.Changed:Connect(function()\n\t\t\t\t\tshowMoney()\n\t\t\t\t\trequestMoney()\n\t\t\t\tend))'),
+    ("loading: the server's signal is not listened to", 'player:GetAttributeChangedSignal(LOADED_ATTRIBUTE):Connect(function()', 'player:GetAttributeChangedSignal("NotTheSignal"):Connect(function()'),
+    ("loading: the signal is IpoCount (set before the income)", 'local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "IpoCount"'),
+    ("loading: no fallback wait (the row never shows if the signal never comes)", 'moneyWait = task.delay(MONEY_WAIT, function()\n\t\t\tmoneyWait = nil\n\t\t\tshowMoney()\n\t\tend)', 'moneyWait = nil'),
+    ("loading: the fallback wait is 10 s", 'local MONEY_WAIT = 30', 'local MONEY_WAIT = 10'),
+    ("loading: the wait is not cancelled when the row is shown", 'local function showMoney()\n\tcancelMoneyWait()\n', 'local function showMoney()\n'),
+    ("loading: the wait is not cancelled when the bar rebinds", 'moneyShown = false\n\tcancelMoneyWait()\n\tif not stats then', 'moneyShown = false\n\tif not stats then'),
+    ("loading: a Changed event starts the wait again", 'table.insert(moneyConnections, value.Changed:Connect(requestMoney))', 'table.insert(moneyConnections, value.Changed:Connect(function()\n\t\t\t\t\tif moneyWait then\n\t\t\t\t\t\tcancelMoneyWait()\n\t\t\t\t\t\tmoneyWait = task.delay(MONEY_WAIT, function()\n\t\t\t\t\t\t\tmoneyWait = nil\n\t\t\t\t\t\t\tshowMoney()\n\t\t\t\t\t\tend)\n\t\t\t\t\tend\n\t\t\t\t\trequestMoney()\n\t\t\t\tend))'),
+    ("loading: Cash or Income coming into the same folder restarts the rule", 'if stats == moneyStats then\n\t\treturn\n\tend\n\tmoneyStats = stats', 'moneyStats = stats'),
+    ("loading: a new leaderstats does not hide the row again", 'moneyStats = stats\n\tmoneyShown = false\n', 'moneyStats = stats\n'),
+    ("loading: a new leaderstats waits even when the server is done", 'if player:GetAttribute(LOADED_ATTRIBUTE) ~= nil then\n\t\tmoneyShown = true -- bindMoney draws it', 'if false then\n\t\tmoneyShown = true -- bindMoney draws it'),
+    ("loading: a Cash of 0 hides the row (an IPO reset and a new player never see $0)", 'if not moneyShown then\n\t\thudMoney.Text = "" -- the save is still loading', 'if not moneyShown or (readMoney()) == 0 then\n\t\thudMoney.Text = "" -- the save is still loading'),
+    ("loading: the row is shown at the signal but not drawn (waits for the next change)", 'if not moneyShown then\n\t\tmoneyShown = true\n\t\tdrawMoney()\n\tend', 'if not moneyShown then\n\t\tmoneyShown = true\n\tend'),
+    ("loading: a signal listener added on every rebind (leak)", 'restartMoneyRule(stats)\n\tif stats then', 'restartMoneyRule(stats)\n\tplayer:GetAttributeChangedSignal(LOADED_ATTRIBUTE):Connect(function() end)\n\tif stats then'),
+    ("loading: a polling loop waits for the signal", 'moneyWait = task.delay(MONEY_WAIT, function()', 'task.spawn(function()\n\t\t\twhile player:GetAttribute(LOADED_ATTRIBUTE) == nil do\n\t\t\t\ttask.wait(0.5)\n\t\t\tend\n\t\t\tshowMoney()\n\t\tend)\n\t\tmoneyWait = task.delay(MONEY_WAIT, function()'),
 ]
 
 
