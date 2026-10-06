@@ -36,6 +36,7 @@ ShopLayout.RAIL_GAP_MIN = 2 -- the rail's tabs move closer together on a low win
 ShopLayout.HELP_RIGHT = 50 -- "?" ends this far from the right edge: left of the X, 6 px apart
 ShopLayout.TITLE_RIGHT = 106 -- the title ends this far from the right edge (X, "?" and two gaps)
 ShopLayout.WIDE_CARD = 420 -- a card at least this wide keeps its text between the icon and the button
+ShopLayout.OFFICE_WIDE = 360 -- an Office row or hero card at least this wide keeps its landscape layout
 ShopLayout.SCROLLBAR_ROOM = 10 -- the pages' right padding, where the scrollbar goes
 ShopLayout.TOAST_MAX_W = 520 -- the pop-up message at the bottom center (only while the shop is closed)
 ShopLayout.BADGE_H = 22 -- a factual badge on a card (BEST VALUE)
@@ -327,7 +328,7 @@ end
 -- info and button (owned and summary only).
 function ShopLayout.officeRow(cardW, kind)
 	cardW = math.max(0, finite(cardW, 0))
-	local narrow = cardW < ShopLayout.WIDE_CARD
+	local narrow = cardW < ShopLayout.OFFICE_WIDE
 	local h = narrow and ShopLayout.ROW_NARROW or ShopLayout.ROW_WIDE
 	local R = { height = h, narrow = narrow }
 	if kind == "banner" then
@@ -362,7 +363,7 @@ end
 -- takes the time's place (statusSharesTime) for its 3 s.
 function ShopLayout.hero(cardW)
 	cardW = math.max(0, finite(cardW, 0))
-	local H = { narrow = cardW < ShopLayout.WIDE_CARD }
+	local H = { narrow = cardW < ShopLayout.OFFICE_WIDE }
 	if H.narrow then
 		local textW = cardW - 96
 		H.height = ShopLayout.HERO_NARROW
