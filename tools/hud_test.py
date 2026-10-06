@@ -25,6 +25,7 @@ test sees depends on the estimate. Studio is the only way to see the real font (
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
 
+import hashlib
 import os
 import re
 import shutil
@@ -1060,6 +1061,18 @@ def static_checks(client_text):
     return out
 
 
+def doc_checks():
+    """The hash and size in docs/STUDIO_SYNC_HUD.md are those of IpoClient.lua (so the doc can't go stale)."""
+    with open(os.path.join(ROOT, CLIENT), "rb") as f:
+        raw = f.read()
+    digest = hashlib.sha256(raw).hexdigest()
+    doc = read("docs/STUDIO_SYNC_HUD.md")
+    return [
+        ("doc: docs/STUDIO_SYNC_HUD.md has the SHA-256 of IpoClient.lua (%s)" % digest[:12], doc.count(digest) >= 2, digest),
+        ("doc: docs/STUDIO_SYNC_HUD.md has the size of IpoClient.lua (%d bytes)" % len(raw), "| %d |" % len(raw) in doc and ", %d }" % len(raw) in doc, len(raw)),
+    ]
+
+
 def build_program(client_text, goal_count, dump=False):
     ipo_config = read("IpoConfig.lua")
     shop_config = read("ShopConfig.lua")
@@ -1181,8 +1194,16 @@ def main():
     for line in out:
         if not line.startswith("FAIL: ") and not re.match(r"^\d+ passed, \d+ failed$", line):
             print(line)
+    for name, ok, extra in doc_checks():
+        if ok:
+            passed += 1
+        else:
+            failed += 1
+            fails.append("FAIL: " + name + " -- " + str(extra))
+            print(fails[-1])
     for line in fails:
-        print(line)
+        if not line.startswith("FAIL: doc:"):
+            print(line)
     if crashed:
         print("CRASH: " + crashed)
     print("HUD bar check: %d passed, %d failed" % (passed, failed))
