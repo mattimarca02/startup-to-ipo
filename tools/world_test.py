@@ -1924,6 +1924,12 @@ def run_regen_mutants(mutants, group):
     """Group D: each mutant of this file runs regen_checks() in a scratch copy; caught only by its named FAIL line."""
     own = read(T)
     problems = []
+    current = read("TycoonCore.lua")
+    try:
+        regen_patch(unpatched_tycoon(current) if any(m in current for m in PATCH_MARKERS) else current, "test")
+    except ValueError:
+        print("note: this TycoonCore.lua cannot be regenerated (an anchor changed: see the regen FAIL above), so group %s is not run" % group)
+        return 0, []
     for label, _, old, new, expected in mutants:
         with tempfile.TemporaryDirectory() as tmp:
             for name in ("TycoonCore.lua", "docs/world_pass_integration.patch", "docs/STUDIO_SYNC_WORLD.md"):
@@ -2053,6 +2059,8 @@ def main():
             print(line)
         if problems:
             code = 1
+        if group == "D" and got == 0 and not problems:
+            continue  # not run (the note says why)
         runs += len(mutants)
         caught += got
         if mutants:
