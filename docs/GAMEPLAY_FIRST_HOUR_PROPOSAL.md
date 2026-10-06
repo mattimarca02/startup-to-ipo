@@ -1,6 +1,6 @@
 # The first hour: gameplay proposal (design only)
 
-Design only (2026-10-06, branch `gameplay-design`, from `main` `e3c9e67`). No script, config or test changed. Line numbers are `main`'s. Other branches' docs: `TUT` docs/TUTORIAL_PROPOSAL.md (`design-tutorial`); `CUST`, `FUND`, `SECT` the customize, funding rounds and sectors proposals (`design-sims-fixes`, newer than `main`); `LG` docs/LONG_GAME_PROPOSAL.md; `BIBLE` docs/CONTENT_BIBLE.md (`content-bible`); `SHOP_UX`, `WORLD` (`world-icons-pass`); `SIMS` docs/SIMS_RESULTS.md (`sims-two-sectors-clean`). **(estimate)** = my model, **(placeholder)** = for the sims to size, **(unverified)** = not checked.
+Design only (2026-10-06, branch `gameplay-design`, from `main` `e3c9e67`). No script, config or test changed. Line numbers are `main`'s. Other branches' docs: `TUT` docs/TUTORIAL_PROPOSAL.md (`design-tutorial`); `CUST`, `FUND`, `SECT` the customize, funding rounds and sectors proposals (`design-sims-fixes`, newer than `main`); `LG`, `ACTIVE` docs/LONG_GAME_PROPOSAL.md and docs/ACTIVE_LOOPS_PROPOSAL.md; `BIBLE` docs/CONTENT_BIBLE.md (`content-bible`); `SHOP_UX`, `WORLD` (`world-icons-pass`); `SIMS` docs/SIMS_RESULTS.md (`sims-two-sectors-clean`). **(estimate)** = my model, **(placeholder)** = for the sims to size, **(unverified)** = not checked.
 
 **Today** = `main`: live servers have no calls (`TaskConfig.StudioOnly`, TaskConfig.lua:25). **Launch** = today plus the decided plans: LONG_GAME PR 2 (first IPO after about 57 engaged hours, LG:7), calls from the Desk on (`task-needs-desk`), the tutorial, sectors and rounds. Numbers: `python tools/economy_sim.py` ("sim §n") and a scratch model with the same config numbers plus human delays (Desk at 0:30, a ready egg noticed in 20 s, 80% of calls answered: estimates).
 
@@ -13,7 +13,7 @@ Design only (2026-10-06, branch `gameplay-design`, from `main` `e3c9e67`). No sc
 - **Arrow:** a beam and a bouncing chevron (OnboardingClient.lua:107-153) toward the sign while the next upgrade is affordable (OnboardingServer.lua:116-119), else the egg.
 - **Free egg:** a Garage Egg, 60 s, in an incubator at the back of the plot (OnboardingConfig.lua:20; CreatureConfig.lua:25-31; EmployeeServer.lua:37-40).
 - **Desk:** SHOP opens on Office (ShopClient.lua:744), "Buy Free" (:554-561), toast "Bought Desk", the prop pops in (TycoonCore.lua:285).
-- **Calls (Studio):** from 20-40 s after the Desk, 8 s to answer, 7 s of Income times a chain up to x2 (TaskConfig.lua:49-58), toast "+$7" (TaskClient.lua:249-260, 408-424).
+- **Calls (Studio only):** with `task-needs-desk`, from 20-40 s after the Desk; 8 s to answer, 7 s of Income times a chain up to x2 (TaskConfig.lua:49-58), toast "+$7" (TaskClient.lua:249-260, 408-424).
 - **Hiring:** "READY!" and a "Hatch" prompt within 12 studs (EmployeeServer.lua:218-236, 531-544) or "Hatch!" in EGGS (EmployeeClient.lua:571-578); a wobble-flash reveal (:866-940).
 - **Goals:** after the first hire, "Hire 3 employees" and "Reach Seed stage", no reward (OnboardingConfig.lua:30-38); the arrow ends at 1 hire and 2 upgrades (:27).
 - **Poaching:** a new save is protected 15 min (CreatureConfig.lua:126) but may poach; alone: "Nobody else is in this server yet" (PoachClient.lua:505-506).
@@ -29,14 +29,14 @@ Design only (2026-10-06, branch `gameplay-design`, from `main` `e3c9e67`). No sc
 | 0:00 | Reads the sign, walks to it | $0 / $0 | same |
 | 0:30 | Finds SHOP, gets the Desk | $0 / $1 | first call 0:53, +$7 |
 | 1:01 | Coffee Machine ($25) | $29 / $1 → $3 | 0:59 |
-| 1:22 | Hatches the free egg, goal card | $8 (egg average $5.0/s, sim §5) | same |
+| 1:22 | Hatches the free egg, goal card | / $8 (egg average $5.0/s, sim §5) | same |
 | 2:00 | Laptop, Server Rack | $398 / $13 | |
 | 2:49 | **Seed**: the room flashes, no message | | 2:30 |
 | 3:03-4:20 | Whiteboard, Neon Logo: garage done | $3,989 / $68 at 4:00 | done 3:48 |
 | 4:25-7:10 | Garage Eggs to the 5-hire cap | $6,997 / $188 at 5:00 | |
 | 7:00-10:00 | Nothing new to buy | $67,672 / $208 at 10:00 | |
 | 10:25 | **IPO-ready** | | 8:40 |
-| 12 / 20 / 35 / 60 min | IPO 1 / 2 / 3 / 5 (sim §6) | | |
+| 12 / 22 / 40 / 71 min | IPO 1 / 2 / 3 / 4 (sim §6, one long session) | | |
 
 The sim has no free egg: Seed at 4 min, IPO-ready at 12 (sim §4).
 
@@ -48,7 +48,7 @@ The sim has no free egg: Seed at 4 min, IPO-ready at 12 (sim §4).
 | A2 | **The first pointer is a sign that does nothing** (OnboardingServer.lua:116-119; CanTouch off, TycoonCore.lua:228-230). Nothing outlines SHOP. | High | Tutorial step 1 outlines SHOP, then Office (TUT §3) |
 | A3 | **Launch Garage waits.** The second upgrade costs $1,100 (economy_sim.py:1068): ~5:00 with the free egg, ~16:00 without, then nothing until Desk 2 at ~13:00 (model). Longest Garage gap 18 min (SIMS S10). | High (launch) | Placeholder prices, section 3 |
 | A4 | **Live: nothing active between purchases.** Calls are Studio only (TaskConfig.lua:25): after ~7 min the player waits. | High (today) | LONG PR 2 (planned) |
-| A5 | **Too much too early.** Seed ~3-4 min, IPO 1 at 12, IPO 3 at 35 (sim §6): three resets in hour one, against 50 hours (LG:3). | High (today) | LONG PR 2 (planned) |
+| A5 | **Too much too early.** Seed ~3-4 min, IPO 1 at 12, IPO 3 at 40 in one long session (sim §6): three resets in hour one, against 50 hours (LG:3). | High (today) | LONG PR 2 (planned) |
 | A6 | **Step 5 clashes with the Desk rule.** Calls ring right after the Desk; the tutorial teaches them after hatching and a second upgrade (TUT:25-29). Early calls expire; 3 misses start quiet mode. | Medium | Step 5 on the first ring |
 | A7 | **Stage-ups have no moment:** a room flash and new bar text (TycoonCore.lua:182-186; IpoClient.lua:826-828); only the IPO gets a banner (:932-939). | Medium | Stage-up card |
 | A8 | **Robux on a countdown during a loss:** "🛡 Shield R$ 49" with a timer bar in the live poach alert (PoachClient.lua:938-959; FR-14). | Medium | Drop it (FR-14's fix) |
@@ -104,43 +104,43 @@ Assumes the launch build plus this doc's proposals: placeholder Garage prices (3
 | 4:51-5:21 | TEAM "1/1 desks" | Desk 2 ($1,000), an egg ($400) | | **TUT 3** rewritten: one hire per desk (LG:60) |
 | 6:41 | Reveal | Second hire | $1,465 / $14 at 7:00 | "Hire 3 employees 2/3" |
 | ~7:00 | 10th call answered | Decor: Beanbag Throne (BIBLE:26, 261) | | |
-| ~8:00 | **Milestone 1** ($5K valuation): the funding sign gets a star, a short fanfare | Desk 3 ($2,500); title "Garage Dreamer" (BIBLE:28) | | "Reach milestone 1" ✓ |
-| 10:00 | Next target "Bug Beetle egg · about 1 min" | Calls; arranges the office (CUST, after PR 3) | $2,130 / $14 | |
+| ~8:00 | **Milestone 1** ($5K valuation): the funding sign gets a star, a short fanfare | Reads the title "Garage Dreamer" (BIBLE:28) | | "Reach milestone 1" ✓ |
+| 10:00 | Next target "Desk 3 · about 30 s" | Calls; arranges the office (CUST, after PR 3) | $4,630 / $14 | |
 
-TUT 6 (the gift) comes at the first pause after minute 10, the third hire (~12:20): Day 1 is 5 min of Income (~$6,600 at $22/s), so it fills the longest wait (12:21 to the Server Rack at 19:04) instead of rushing minutes 2-5 (fixes A9). TUT 7-9 wait for their own triggers (TUT:143-146): poaching when it opens (section 7), funding at the first round (FUND 8), going public near IPO-ready.
+TUT 6 (the gift) comes at the first pause after minute 10, the third hire (~12:15): Day 1 is 5 min of Income (~$6,600 at $22/s), so it fills the longest wait (12:14 to the Server Rack at 19:00) instead of rushing minutes 2-5 (fixes A9). TUT 7-9 wait for their own triggers (TUT:143-146): poaching when it opens (section 7), funding at the first round (FUND 8), going public near IPO-ready.
 
 ### 3.2 Pacing targets
 
-| Moment | Target | Today (model A) | Launch as planned (model D) | With 3.3 (model G2) |
+| Moment | Target | Today (model A) | Launch as planned (model D) | With 3.3 (model G) |
 |---|---|---|---|---|
 | Desk | ≤ 0:30 | 0:30 | 0:30 | 0:30 |
 | First call | ≤ 1:00 | none live | 0:53 | 0:53 |
 | First hire | ≤ 1:30 | 1:22 (sim, no free egg: 5 min) | 1:22 | 1:22 |
 | Second purchase | ≤ 2:00 | 1:01 | **5:01** | 1:43 |
-| Longest wait for a purchase or unlock, 0-20 min | ≤ 6:00 | 3:15 | **8:19** | 6:09 |
+| Longest wait for a purchase or unlock, 0-20 min | ≤ 6:30 | 3:15 | **8:19** | 6:13 |
 | First milestone | ≤ 10:00 | Seed 2:49 (too early) | none before Seed | 8:02 |
-| Third hire | ≤ 15:00 | 5:51 | none in 30 min | 12:21 |
+| Third hire | ≤ 15:00 | 5:51 | none in 30 min | 12:14 |
 | First Seed | inside session 1 | 4 min (sim §4) | ~90 min (LG:42) | re-fit to ~90 min |
 
 ### 3.3 Number changes (placeholders for the sims)
 
-- **Garage prices:** Coffee Machine $1,100 → $150, Laptop $4,200 → $800, the first egg $2,300 → $400, Desk 2 $3,600 → $1,000 (economy_sim.py:1068-1073); add Desk 3 $2,500 and a Bug Beetle egg $3,000. The sims raise the Whiteboard and Neon Logo so the Garage keeps ~1.5 h (LONG_K, LG:38; OWNER CHOICE).
+- **Garage prices:** Coffee Machine $1,100 → $150, Laptop $4,200 → $800, the first egg $2,300 → $400, Desk 2 $3,600 → $1,000 (economy_sim.py:1068-1073); add a Desk 3 at $5,000; the Garage Egg, one price per tier (LG:42), costs $400. The sims raise the Whiteboard and Neon Logo so the Garage keeps ~1.5 h (LONG_K, LG:38; OWNER CHOICE).
 - **The free egg is not in the ladder:** `LONG_ITEMS` buys the first hire (economy_sim.py:1071), but OnboardingConfig.lua:20 gives one; that hire takes Desk 1, so the planned Bug Beetle has no desk in the Garage. Add the free egg and Desk 3 to the sim.
 - **Garage milestones** at $5K, $20K, $60K and $120K valuation (about 8, 18, 30 and 39 min before the re-fit, estimate): LG 4(b)'s milestones in every rung, giving a title, decor, a task preview, decor. Never Cash (LG:5).
 
 ## 4. The first hour (launch, Software)
 
-**Goals, two on the card at a time** (new goal kinds next to `employees` and `stage`, OnboardingServer.lua:136-146; shipped keys `Hire3` and `Seed` kept): 1 "Answer 3 calls" (~2:00), 2 "Own 3 upgrades" (3:34, LG:88), 3 "Hire 3 employees" (12:21), then "Reach milestone 1" (~8:00), "Get a x2 chain" (10 answers in a row, ~20 min), "Buy the Server Rack" (19:04), milestones 2-4 (18:30, 30:09, 39:13), "Reach Seed" (end of session 1). Times: model G2, estimates.
+**Goals, two on the card at a time** (new goal kinds next to `employees` and `stage`, OnboardingServer.lua:136-146; shipped keys `Hire3` and `Seed` kept): 1 "Answer 3 calls" (~2:00), 2 "Own 3 upgrades" (3:34, LG:88), 3 "Hire 3 employees" (12:14), then "Reach milestone 1" (~8:00), "Get a x2 chain" (10 answers in a row, ~20 min), "Buy the Server Rack" (19:00), milestones 2-4 (18:27, 30:05, 39:13), "Reach Seed" (end of session 1). Times: model G, estimates.
 
 **The first IPO tease** (milestone 1, ~8:00): a dot on IPO; the window opens on "The road to the bell": the seven stages, "Seed: your first funding round", two empty Pokedex frames ("Go public to stamp a company", CUST 1.4). No countdown.
 
-**The gift hook** (TUT 6, ~12:20): the calendar shows Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61). Calm text (:53-69).
+**The gift hook** (TUT 6, ~12:15): the calendar shows Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61). Calm text (:53-69).
 
 **Why come back tomorrow:** Day 2-3; the away bank's "saved $X" card (LG:24); a named next target with a time ("Whiteboard · about 12 min"); Seed's round, room and three new tasks shown ahead (BIBLE:271); in Gaming, tomorrow's trending genre (SECT 2.3).
 
 **The first social moment** is visual: poaching is closed (new players are shielded 15 min, CreatureConfig.lua:126; LG R3 proposes 10 engaged hours, LG:108). Neighbors' rooms across the street (WORLD §4), their milestone stars, the in-server board (IpoClient.lua:754). New, optional: a "Cheer" on a neighbor's sign (a clap over their plot, no reward, rate-limited). Planned: the paired demo (ACTIVE §3). The lounge stays paid (ShopConfig.lua:46).
 
-**The first real trade-off** (~11:00): a $3,000 egg (+$5/s on average, sim §5, odds or the next fixed hire shown) or 8 minutes of saving for the Server Rack (+$15/s, certain). Both cards show "pays for itself in about N min". The big one ends session 1: Seed's round, Raise, Later or Skip (FUND 1), never forced.
+**The first real trade-off** (~10:00): Desk 3 and an egg ($5,400 for one more hire, +$5/s on average, sim §5) or saving for the Server Rack ($13,000, +$15/s, certain, and it pays back sooner). Both cards show "pays for itself in about N min". The big one ends session 1: Seed's round, Raise, Later or Skip (FUND 1), never forced.
 
 | Session | Leaves the player with |
 |---|---|
