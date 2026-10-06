@@ -9,8 +9,8 @@ Worktree `../gameplay-fold2` from `origin/gameplay-design` (38a9642), branch `ga
 - [x] Claim the two docs and `tools/first_hour_model.py` (4f0eb93)
 - [x] Item 1 (2b982b5): the model splits the Whiteboard and Neon Logo (E1), `--fit` re-fits the Garage, `--previous` checks models A, B, D, G and session 2's Garage; the doc's 8 blocks re-generated (prose updated in item 2)
 - [x] Item 2 (12f1339): E1, E2 and the defaults recorded (section 0 and every section they touch); milestones, script and tables from the model; build order 1 bar, 2 tutorial order, 3 SHOP_UX S1-S2 (calls with the Desk moved to 4: built on `task-needs-desk`, not merged); 5 open questions (a sixth, the props, added in item 3); 5,423 words (`wc -w`), **not** the 5,200 asked: see judgment call 21
-- [x] Item 3: all 132 explicit `file:line` citation ranges printed from `origin/main` (e3c9e67) and read, plus 18 `LG:` lines, 7 `BIBLE:` lines (`origin/content-bible`), `TUT:25-29` and `:143-146` (`origin/design-tutorial`), and the Desk rule on `origin/task-needs-desk` (TaskConfig.lua:66, TaskServer.lua:11-16, the first call after a normal 20-40 s gap). Five fixed (judgment call 23); open question 6 added (the split levels' props). `--check`: 8 blocks, 0 problems; `--previous` all reproduced; `--fit` matches. `wc -w`: 5,489
-- [ ] Release the three claims
+- [x] Item 3 (1f051f5): all 132 explicit `file:line` citation ranges printed from `origin/main` (e3c9e67) and read, plus 18 `LG:` lines, 7 `BIBLE:` lines (`origin/content-bible`), `TUT:25-29` and `:143-146` (`origin/design-tutorial`), and the Desk rule on `origin/task-needs-desk` (TaskConfig.lua:66, TaskServer.lua:11-16, the first call after a normal 20-40 s gap). Five fixed (judgment call 23); open question 6 added (the split levels' props). `--check`: 8 blocks, 0 problems; `--previous` all reproduced; `--fit` matches. `wc -w`: 5,489
+- [x] Release the three claims (rows kept, set to free)
 
 ## Progress (session 2: owner decisions, 2026-10-06)
 
