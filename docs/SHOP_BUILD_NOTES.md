@@ -12,7 +12,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 
 **Phase 1: S1 (layout, accessibility, the Names, help, strip, status line)**
 - [x] 1.1 `ShopLayout.lua` (new, pure): `layout(guiW, guiH, topBar, ...)` and the card geometry
-- [ ] 1.2 `ShopClient.lua` S1: the layout from ShopLayout (landscape rail, portrait row), 44 px header items and tap targets, 16 px minimum text, the Names, `HelpButton` and its card, `TutorialStrip`, the in-window status line
+- [x] 1.2 `ShopClient.lua` S1: the layout from ShopLayout (landscape rail, portrait row), 44 px header items and tap targets, 16 px minimum text, the Names, `HelpButton` and its card, `TutorialStrip`, the in-window status line
 - [ ] 1.3 `tools/shop_ux_test.py` (new): the fake Roblox and the S1 checks
 - [ ] 1.4 S1 mutants
 - [ ] 1.5 README rows for `ShopLayout.lua` and `tools/shop_ux_test.py`

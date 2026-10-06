@@ -2,14 +2,20 @@
 -- Put this LocalScript in StarterPlayer > StarterPlayerScripts. It builds the screen by itself.
 -- It only opens Roblox's purchase prompts. Everything is granted by ShopServer on the server.
 -- The Office tab buys the garage upgrades: it sends only the upgrade's number, and the server decides.
+-- Every size comes from ShopLayout (a ModuleScript in ReplicatedStorage, pure functions that tools/shop_ux_test.py
+-- checks): the tabs in a rail on the left in landscape and in a row in portrait, 44 px header items and tap
+-- targets, no text under 16 px. The tutorial finds its targets by name under ShopGui.Window: TabOffice ... TabDebug,
+-- OfficePage ... DebugPage, Office1 ... Office6, BuyButton (every card's button), HelpButton and TutorialStrip.
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
+local TextService = game:GetService("TextService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local ShopLayout = require(ReplicatedStorage:WaitForChild("ShopLayout")) -- the window's sizes (pure functions)
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- Luck Boost odds, egg Debug buttons
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the Talent Scouts perk, for Luck Boost's odds
 local remotes = ReplicatedStorage:WaitForChild("ShopRemotes")
@@ -30,13 +36,23 @@ local COLORS = {
 	gold = Color3.fromRGB(255, 200, 60),
 	close = Color3.fromRGB(210, 65, 65),
 	debug = Color3.fromRGB(215, 125, 40),
+	strip = Color3.fromRGB(70, 58, 24), -- the tutorial's line at the window's bottom
+}
+
+local MIN_TEXT = ShopLayout.MIN_TEXT -- 16: nothing a player must read is smaller
+local HELP_LINES = { -- the "How the shop works" card (HelpButton): three lines, no reward
+	"Office: buy the upgrades in order with Cash. Each one adds Cash every second.",
+	"The next upgrade's bar fills with your Cash. More Income fills it faster.",
+	"Passes, Boosts and Cash cost Robux. Roblox asks you to confirm every purchase.",
 }
 
 local pending = {} -- item key -> token while its Roblox purchase prompt is open
 local cards = {} -- refresh functions, one per card
-local cardParts = {} -- the pieces of every card, resized by applyLayout on small screens
+local cardParts = {} -- the pieces of every card, laid out by layoutCard from ShopLayout.card
+local measured = {} -- labels whose height follows their text (16 px, wrapped): label -> { extra, inset } in pixels
 local incomeValue -- leaderstats.Income, used to preview cash pack sizes
 local cashValue -- leaderstats.Cash, to show which upgrade you can afford
+local cardWidth = 0 -- every card's width in pixels (ShopLayout's cardW for this screen)
 
 -- UI helpers ------------------------------------------------------------
 
@@ -55,10 +71,34 @@ local function round(inst, radius)
 	make("UICorner", { CornerRadius = UDim.new(0, radius), Parent = inst })
 end
 
--- Text shrinks to fit small phone screens but never grows past maxSize
+-- Text shrinks to fit small phone screens but never grows past maxSize, and never goes under 16 px
 local function fitText(inst, maxSize)
 	inst.TextScaled = true
-	make("UITextSizeConstraint", { MaxTextSize = maxSize, MinTextSize = 8, Parent = inst })
+	make("UITextSizeConstraint", { MaxTextSize = maxSize, MinTextSize = MIN_TEXT, Parent = inst })
+end
+
+-- Text that stays at 16 px and wraps; its box is made as tall as the text (measured below)
+local function fixedText(inst)
+	inst.TextScaled = false
+	inst.TextSize = MIN_TEXT
+	inst.TextWrapped = true
+end
+
+-- How tall a 16 px text is when it wraps at this width (Roblox's own measure, so every box fits its text)
+local function textHeight(text, font, width)
+	if text == "" or width <= 0 then
+		return 0
+	end
+	local ok, size = pcall(function()
+		return TextService:GetTextSize(text, MIN_TEXT, font, Vector2.new(width, 10000))
+	end)
+	return ok and math.ceil(size.Y) or 2 * MIN_TEXT
+end
+
+-- Puts inst on rectangle r (GUI pixels, from ShopLayout); origin = the rectangle of its parent
+local function place(inst, r, origin)
+	inst.Position = UDim2.fromOffset(r.x - (origin and origin.x or 0), r.y - (origin and origin.y or 0))
+	inst.Size = UDim2.fromOffset(r.w, r.h)
 end
 
 local function setButton(button, text, color, clickable)
@@ -75,6 +115,7 @@ local gui = make("ScreenGui", {
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	Parent = player:WaitForChild("PlayerGui"),
 })
+local playerGui = gui.Parent
 
 -- HUD button: left middle of the screen, big enough for thumbs
 local shopButton = make("TextButton", {
@@ -113,6 +154,7 @@ local function placeHudButton(button, slot)
 end
 placeHudButton(shopButton, 1)
 
+-- The pop-up message at the bottom center, only while the shop is closed (it would cover the window)
 local toast = make("TextLabel", {
 	Name = "Toast",
 	AnchorPoint = Vector2.new(0.5, 1),
@@ -128,29 +170,19 @@ local toast = make("TextLabel", {
 })
 round(toast, 12)
 fitText(toast, 22)
-make("UISizeConstraint", { MaxSize = Vector2.new(520, 48), Parent = toast })
+make("UISizeConstraint", { MaxSize = Vector2.new(ShopLayout.TOAST_MAX_W, 48), Parent = toast })
 
+-- The window: every piece is placed by applyLayout from ShopLayout.layout
 local window = make("Frame", {
 	Name = "Window",
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromScale(0.92, 0.92),
 	BackgroundColor3 = COLORS.panel,
 	Visible = false,
 	Parent = gui,
 })
 round(window, 18)
-make("UISizeConstraint", { MaxSize = Vector2.new(640, 470), Parent = window })
-make("UIPadding", {
-	PaddingTop = UDim.new(0, 10),
-	PaddingBottom = UDim.new(0, 10),
-	PaddingLeft = UDim.new(0, 10),
-	PaddingRight = UDim.new(0, 10),
-	Parent = window,
-})
 
 local title = make("TextLabel", {
-	Size = UDim2.new(1, -56, 0, 40),
+	Name = "Title",
 	BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold,
 	Text = "Startup Shop",
@@ -160,10 +192,20 @@ local title = make("TextLabel", {
 })
 fitText(title, 28)
 
+-- "?": the "How the shop works" card (the tutorial's step list can take its place once it exists)
+local helpButton = make("TextButton", {
+	Name = "HelpButton",
+	BackgroundColor3 = COLORS.tab,
+	Font = Enum.Font.GothamBold,
+	Text = "?",
+	TextColor3 = COLORS.text,
+	Parent = window,
+})
+round(helpButton, 10)
+fitText(helpButton, 24)
+
 local closeButton = make("TextButton", {
-	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.fromScale(1, 0),
-	Size = UDim2.fromOffset(44, 40),
+	Name = "CloseButton",
 	BackgroundColor3 = COLORS.close,
 	Font = Enum.Font.GothamBold,
 	Text = "X",
@@ -173,22 +215,18 @@ local closeButton = make("TextButton", {
 round(closeButton, 10)
 fitText(closeButton, 22)
 
-local tabBar = make("Frame", {
-	Position = UDim2.new(0, 0, 0, 48),
-	Size = UDim2.new(1, 0, 0, 42),
+-- The tabs: a rail in landscape, a row in portrait (it scrolls only on a window too small for them)
+local tabBar = make("ScrollingFrame", {
+	Name = "TabBar",
 	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	CanvasSize = UDim2.new(),
+	ScrollBarThickness = 0,
 	Parent = window,
-})
-make("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Parent = tabBar,
 })
 
 local pages = make("Frame", {
-	Position = UDim2.new(0, 0, 0, 98),
-	Size = UDim2.new(1, 0, 1, -98),
+	Name = "Pages",
 	BackgroundTransparency = 1,
 	Parent = window,
 })
@@ -200,8 +238,8 @@ end
 local tabButtons, tabPages = {}, {}
 for i, name in ipairs(tabNames) do
 	local tabButton = make("TextButton", {
+		Name = "Tab" .. name,
 		LayoutOrder = i,
-		Size = UDim2.new(1 / #tabNames, -6, 1, 0),
 		BackgroundColor3 = COLORS.tab,
 		Font = Enum.Font.GothamBold,
 		Text = name,
@@ -213,6 +251,7 @@ for i, name in ipairs(tabNames) do
 	tabButtons[name] = tabButton
 
 	local page = make("ScrollingFrame", {
+		Name = name .. "Page",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -224,13 +263,95 @@ for i, name in ipairs(tabNames) do
 		Parent = pages,
 	})
 	make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page })
-	make("UIPadding", { PaddingRight = UDim.new(0, 10), Parent = page }) -- room for the scrollbar
+	make("UIPadding", { PaddingRight = UDim.new(0, ShopLayout.SCROLLBAR_ROOM), Parent = page }) -- room for the scrollbar
 	tabPages[name] = page
 end
 
--- One row in the shop: icon, name, description, and a button on the right
-local function makeCard(page, order, icon, name)
+-- The bottom slot: the tutorial's line, or a message while the shop is open. Each takes its height from the pages
+-- (never covers a card). The tutorial's line shows while PlayerGui's "TutorialBanner" attribute holds a text
+-- (TutorialClient writes it); unset, it is hidden and takes no room.
+local tutorialStrip = make("TextLabel", {
+	Name = "TutorialStrip",
+	BackgroundColor3 = COLORS.strip,
+	Font = Enum.Font.GothamBold,
+	Text = "",
+	TextColor3 = COLORS.gold,
+	TextWrapped = true,
+	Visible = false,
+	ZIndex = 3,
+	Parent = window,
+})
+round(tutorialStrip, 10)
+fitText(tutorialStrip, 18)
+
+local statusLine = make("TextLabel", {
+	Name = "StatusLine",
+	BackgroundColor3 = COLORS.card,
+	Font = Enum.Font.GothamBold,
+	Text = "",
+	TextColor3 = COLORS.gold,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Visible = false,
+	ZIndex = 4,
+	Parent = window,
+})
+round(statusLine, 10)
+fixedText(statusLine)
+
+-- The "How the shop works" card: over the pages (never the header or the tabs), one screen, a Back button
+local helpCard = make("ScrollingFrame", {
+	Name = "HelpCard",
+	BackgroundColor3 = COLORS.card,
+	BorderSizePixel = 0,
+	CanvasSize = UDim2.new(),
+	ScrollingDirection = Enum.ScrollingDirection.Y,
+	ScrollBarThickness = 0,
+	Visible = false,
+	ZIndex = 5,
+	Parent = window,
+})
+round(helpCard, 12)
+local helpTitle = make("TextLabel", {
+	Name = "HelpTitle",
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBold,
+	Text = "How the shop works",
+	TextColor3 = COLORS.gold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = helpCard,
+})
+fitText(helpTitle, 22)
+local helpBack = make("TextButton", {
+	Name = "HelpBack",
+	BackgroundColor3 = COLORS.tab,
+	Font = Enum.Font.GothamBold,
+	Text = "Back",
+	TextColor3 = COLORS.text,
+	Parent = helpCard,
+})
+round(helpBack, 10)
+fitText(helpBack, 20)
+local helpLines = {}
+for i, line in ipairs(HELP_LINES) do
+	local label = make("TextLabel", {
+		Name = "HelpLine" .. i,
+		BackgroundTransparency = 1,
+		Font = Enum.Font.Gotham,
+		Text = line,
+		TextColor3 = COLORS.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Parent = helpCard,
+	})
+	fixedText(label)
+	helpLines[i] = label
+end
+
+-- One row in the shop: icon, name, description, and a button on the right (cardName: the card's Name, for the
+-- tutorial; the button is always "BuyButton")
+local function makeCard(page, order, icon, name, cardName)
 	local card = make("Frame", {
+		Name = cardName or "Card",
 		LayoutOrder = order,
 		Size = UDim2.new(1, 0, 0, 84),
 		BackgroundColor3 = COLORS.card,
@@ -239,9 +360,7 @@ local function makeCard(page, order, icon, name)
 	round(card, 12)
 
 	local iconLabel = make("TextLabel", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 8, 0.5, 0),
-		Size = UDim2.fromOffset(52, 52),
+		Name = "Icon",
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
 		Text = icon,
@@ -251,77 +370,157 @@ local function makeCard(page, order, icon, name)
 	fitText(iconLabel, 40)
 
 	local nameLabel = make("TextLabel", {
-		Position = UDim2.new(0, 68, 0, 8),
-		Size = UDim2.new(1, -68 - 136, 0, 24),
+		Name = "ItemName",
 		BackgroundTransparency = 1,
 		Font = Enum.Font.GothamBold,
 		Text = name,
 		TextColor3 = COLORS.text,
+		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = card,
 	})
 	fitText(nameLabel, 20)
 
 	local descLabel = make("TextLabel", {
-		Position = UDim2.new(0, 68, 0, 34),
-		Size = UDim2.new(1, -68 - 136, 0, 44),
+		Name = "Description",
 		BackgroundTransparency = 1,
 		Font = Enum.Font.Gotham,
 		Text = "",
 		TextColor3 = COLORS.subtext,
-		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Parent = card,
 	})
-	fitText(descLabel, 15)
+	fixedText(descLabel)
 
 	local button = make("TextButton", {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -8, 0.5, 0),
-		Size = UDim2.fromOffset(124, 52),
+		Name = "BuyButton",
 		BackgroundColor3 = COLORS.buy,
 		Font = Enum.Font.GothamBold,
 		Text = "",
 		TextColor3 = COLORS.text,
+		TextWrapped = true,
 		Parent = card,
 	})
 	round(button, 10)
 	fitText(button, 20)
 
-	table.insert(cardParts, { card = card, icon = iconLabel, name = nameLabel, desc = descLabel, button = button })
+	table.insert(cardParts, { card = card, icon = iconLabel, name = nameLabel, desc = descLabel, button = button, seen = {} })
 	return descLabel, button
 end
 
--- Phones: a shorter header on short screens, narrower buttons on narrow screens,
--- so descriptions stay readable. Runs again whenever the screen size changes.
+-- A card's pieces for the current width; its texts are measured again only when they (or the width) changed
+local function layoutCard(parts)
+	local seen = parts.seen
+	if seen.name ~= parts.name.Text or seen.desc ~= parts.desc.Text or seen.width ~= cardWidth then
+		local nameW, descW = ShopLayout.cardWidths(cardWidth)
+		seen.name, seen.desc, seen.width = parts.name.Text, parts.desc.Text, cardWidth
+		seen.nameH = textHeight(seen.name, parts.name.Font, nameW)
+		seen.descH = textHeight(seen.desc, parts.desc.Font, descW)
+	end
+	local C = ShopLayout.card(cardWidth, seen.nameH, seen.descH)
+	parts.card.Size = UDim2.new(1, 0, 0, C.height)
+	place(parts.icon, C.icon)
+	place(parts.name, C.name)
+	place(parts.desc, C.desc)
+	place(parts.button, C.button)
+end
+
+-- A label as tall as its 16 px text, at the page's width (the Debug status, the Office error line)
+local function measureLabel(label)
+	local m = measured[label]
+	if m then
+		label.Size = UDim2.new(1, 0, 0, textHeight(label.Text, label.Font, cardWidth - m.inset) + m.extra)
+	end
+end
+
+local function fitLabel(label, extra, inset)
+	fixedText(label)
+	measured[label] = { extra = extra or 0, inset = inset or 0 }
+	measureLabel(label)
+end
+
+-- Behaviour -------------------------------------------------------------
+
+local statusText -- the message in the window's status line now (nil: none)
+local helpOpen = false
+
+-- PlayerGui's "TutorialBanner": a text the tutorial wants shown, or nil
+local function tutorialBanner()
+	local value = playerGui:GetAttribute("TutorialBanner")
+	if typeof(value) == "string" and value ~= "" then
+		return value
+	end
+	return nil
+end
+
+local function guiInset()
+	local ok, topLeft = pcall(function()
+		return GuiService:GetGuiInset()
+	end)
+	return ok and typeof(topLeft) == "Vector2" and topLeft.Y or 0
+end
+
+-- Every size, from ShopLayout. Runs again whenever the screen size, the tutorial's line or a message changes.
 local function applyLayout()
-	local size = window.AbsoluteSize
-	local short = size.Y < 330
-	local narrow = size.X < 480
+	local size = gui.AbsoluteSize
+	local inset = guiInset()
+	local L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0)
+	local banner = tutorialBanner()
+	local bottomH = 0
+	if banner then
+		bottomH = L.stripH
+	end
+	if statusText then
+		bottomH = math.max(bottomH, math.clamp(textHeight(statusText, statusLine.Font, L.pages.w - 16) + 12, L.stripH, 72))
+	end
+	if bottomH > 0 then
+		L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, bottomH)
+	end
 
-	local headerHeight = short and 34 or 40
-	local tabHeight = short and 34 or 42
-	title.Size = UDim2.new(1, -56, 0, headerHeight)
-	closeButton.Size = UDim2.fromOffset(44, headerHeight)
-	tabBar.Position = UDim2.new(0, 0, 0, headerHeight + 6)
-	tabBar.Size = UDim2.new(1, 0, 0, tabHeight)
-	local top = headerHeight + tabHeight + 14
-	pages.Position = UDim2.new(0, 0, 0, top)
-	pages.Size = UDim2.new(1, 0, 1, -top)
+	local frame = L.window
+	place(window, frame)
+	place(title, L.title, frame)
+	place(helpButton, L.help, frame)
+	place(closeButton, L.close, frame)
+	place(tabBar, L.tabBar, frame)
+	tabBar.ScrollingDirection = L.rail and Enum.ScrollingDirection.Y or Enum.ScrollingDirection.X
+	tabBar.CanvasSize = L.rail and UDim2.fromOffset(0, L.tabCanvas) or UDim2.fromOffset(L.tabCanvas, 0)
+	tabBar.ScrollBarThickness = L.tabScrolls and 4 or 0
+	for i, name in ipairs(tabNames) do
+		place(tabButtons[name], L.tabs[i], L.tabBar)
+	end
+	place(pages, L.pages, frame)
 
-	local buttonWidth = narrow and 92 or 124
-	local iconSize = narrow and 36 or 52
-	local textX = iconSize + 14
-	local textWidth = -textX - buttonWidth - 16
+	tutorialStrip.Text = banner or ""
+	tutorialStrip.Visible = banner ~= nil and statusText == nil
+	statusLine.Text = statusText or ""
+	statusLine.Visible = statusText ~= nil
+	if L.bottom then
+		place(tutorialStrip, L.bottom, frame)
+		place(statusLine, L.bottom, frame)
+	end
+
+	place(helpCard, L.helpCard, frame)
+	local heights = {}
+	for i, label in ipairs(helpLines) do
+		heights[i] = textHeight(label.Text, label.Font, ShopLayout.helpTextWidth(L.helpCard.w))
+	end
+	local H = ShopLayout.helpCard(L.helpCard.w, L.helpCard.h, heights)
+	place(helpTitle, H.title)
+	place(helpBack, H.back)
+	for i, label in ipairs(helpLines) do
+		place(label, H.lines[i])
+	end
+	helpCard.CanvasSize = UDim2.fromOffset(0, H.height)
+	helpCard.ScrollBarThickness = H.fits and 0 or 6
+
+	cardWidth = L.cardW
 	for _, parts in ipairs(cardParts) do
-		parts.card.Size = UDim2.new(1, 0, 0, narrow and 96 or 84)
-		parts.icon.Size = UDim2.fromOffset(iconSize, iconSize)
-		parts.name.Position = UDim2.new(0, textX, 0, 8)
-		parts.name.Size = UDim2.new(1, textWidth, 0, 22)
-		parts.desc.Position = UDim2.new(0, textX, 0, 32)
-		parts.desc.Size = UDim2.new(1, textWidth, 1, -38)
-		parts.button.Size = UDim2.fromOffset(buttonWidth, 48)
+		layoutCard(parts)
+	end
+	for label in pairs(measured) do
+		measureLabel(label)
 	end
 end
 
@@ -330,6 +529,9 @@ end
 local function refreshAll()
 	for _, refresh in ipairs(cards) do
 		refresh()
+	end
+	for _, parts in ipairs(cardParts) do
+		layoutCard(parts)
 	end
 end
 
@@ -344,6 +546,30 @@ local function showToast(text)
 			toast.Visible = false
 		end
 	end)
+end
+
+-- The window's own status line (3.5 s, like the toast); it takes its room from the pages while it shows
+local statusToken = 0
+local function showStatus(text)
+	statusToken += 1
+	local myToken = statusToken
+	statusText = text
+	applyLayout()
+	task.delay(3.5, function()
+		if statusToken == myToken then
+			statusText = nil
+			applyLayout()
+		end
+	end)
+end
+
+-- Every message goes here: in the window while the shop is open, the pop-up at the bottom while it is closed
+local function showMessage(text)
+	if window.Visible then
+		showStatus(text)
+	else
+		showToast(text)
+	end
 end
 
 -- Paid random items restricted for this player (the server asks Roblox's PolicyService on join)?
@@ -375,7 +601,7 @@ local function promptPurchase(item, isPass)
 		warn("Purchase prompt failed: " .. tostring(err))
 		pending[item.key] = nil
 		refreshAll()
-		showToast("Couldn't open the purchase. Please try again.")
+		showMessage("Couldn't open the purchase. Please try again.")
 		return
 	end
 
@@ -450,7 +676,7 @@ end
 -- Cards -----------------------------------------------------------------
 
 for i, pass in ipairs(ShopConfig.Passes) do
-	local desc, button = makeCard(tabPages.Passes, i, pass.icon, pass.name)
+	local desc, button = makeCard(tabPages.Passes, i, pass.icon, pass.name, pass.key)
 	desc.Text = pass.description
 	button.Activated:Connect(function()
 		promptPurchase(pass, true)
@@ -471,7 +697,7 @@ end
 for i, product in ipairs(ShopConfig.Products) do
 	local page = tabPages[product.tab]
 	if page then
-		local desc, button = makeCard(page, i, product.icon, product.name)
+		local desc, button = makeCard(page, i, product.icon, product.name, product.key)
 		button.Activated:Connect(function()
 			promptPurchase(product, false)
 		end)
@@ -504,7 +730,7 @@ local function buyOffice(actionRemote, index)
 		return actionRemote:InvokeServer("BuyUpgrade", index)
 	end)
 	officeBusy = false
-	showToast(ok and message or "Couldn't buy that. Please try again.")
+	showMessage(ok and message or "Couldn't buy that. Please try again.")
 	refreshAll()
 end
 
@@ -524,19 +750,19 @@ task.spawn(function()
 		task.wait(2)
 	end
 	if not list then
-		make("TextLabel", {
-			Size = UDim2.new(1, 0, 0, 52),
+		local errorLabel = make("TextLabel", {
+			Name = "OfficeError",
 			BackgroundTransparency = 1,
 			Font = Enum.Font.GothamBold,
 			Text = "The office upgrades aren't available right now.",
 			TextColor3 = COLORS.subtext,
-			TextWrapped = true,
 			Parent = page,
 		})
+		fitLabel(errorLabel, 12)
 		return
 	end
 	for i, upg in ipairs(list) do
-		local desc, button = makeCard(page, i, upg.icon or "🏢", upg.name)
+		local desc, button = makeCard(page, i, upg.icon or "🏢", upg.name, "Office" .. i)
 		button.Activated:Connect(function()
 			buyOffice(actionRemote, i)
 		end)
@@ -576,28 +802,29 @@ end)
 if debugRemote then
 	local page = tabPages.Debug
 	local status = make("TextLabel", {
+		Name = "DebugStatus",
 		LayoutOrder = 0,
-		Size = UDim2.new(1, 0, 0, 52),
 		BackgroundColor3 = COLORS.debug,
 		Font = Enum.Font.GothamBold,
 		Text = "STUDIO ONLY: test without Robux. This tab never exists in live servers.",
 		TextColor3 = COLORS.text,
-		TextWrapped = true,
 		Parent = page,
 	})
 	round(status, 12)
-	fitText(status, 16)
+	fitLabel(status, 16, 16)
 
 	local busy = false
 	local function runDebug(action, key)
 		if busy then return end
 		busy = true
 		status.Text = "Working..."
+		measureLabel(status)
 		local ok, result = pcall(function()
 			return debugRemote:InvokeServer(action, key)
 		end)
 		busy = false
 		status.Text = ok and tostring(result) or ("Debug failed: " .. tostring(result))
+		measureLabel(status)
 	end
 
 	local order = 1
@@ -697,7 +924,16 @@ end
 
 -- Tabs, opening and closing ---------------------------------------------
 
+-- The help card covers the pages while it is open (the pages hide, so it never sits on a Buy button)
+local function setHelp(open)
+	helpOpen = open
+	helpCard.Visible = open
+	pages.Visible = not open
+	helpButton.BackgroundColor3 = open and COLORS.buy or COLORS.tab
+end
+
 local function showTab(name)
+	setHelp(false)
 	for tabName, page in pairs(tabPages) do
 		page.Visible = tabName == name
 		tabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab
@@ -710,11 +946,17 @@ for name, tabButton in pairs(tabButtons) do
 	end)
 end
 
+helpButton.Activated:Connect(function()
+	setHelp(not helpOpen)
+end)
+helpBack.Activated:Connect(function()
+	setHelp(false)
+end)
+
 -- Only one window is open at a time: each window writes its name into PlayerGui's "OpenPanel"
 -- attribute, and closes itself when another one opens
-local playerGui = gui.Parent
-
 local function setOpen(open)
+	setHelp(false) -- the shop opens on its last tab, never on the help card
 	window.Visible = open
 	if open then
 		playerGui:SetAttribute("OpenPanel", "Shop")
@@ -724,6 +966,12 @@ local function setOpen(open)
 	-- Hide the phone joystick and jump button while a window is open, so they don't cover buttons
 	GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
 	if open then
+		if toast.Visible then
+			-- a message that is still up moves into the window (the pop-up would cover it)
+			toastToken += 1
+			toast.Visible = false
+			showStatus(toast.Text)
+		end
 		refreshAll()
 	end
 end
@@ -744,7 +992,8 @@ end)
 showTab("Office")
 refreshAll()
 applyLayout()
-window:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
+playerGui:GetAttributeChangedSignal("TutorialBanner"):Connect(applyLayout)
 
 -- Keeping it up to date -------------------------------------------------
 
@@ -770,7 +1019,7 @@ MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, produc
 	refreshAll()
 end)
 
-notifyEvent.OnClientEvent:Connect(showToast)
+notifyEvent.OnClientEvent:Connect(showMessage)
 
 task.spawn(function()
 	local stats = player:WaitForChild("leaderstats")

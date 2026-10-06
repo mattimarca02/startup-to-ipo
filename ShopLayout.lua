@@ -78,16 +78,20 @@ function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)
 	L.close = rect(right - tap, c.y, tap, header)
 	L.help = rect(right - ShopLayout.HELP_RIGHT - tap, c.y, tap, header)
 
-	-- The bottom slot (TutorialStrip or a status message) takes its height from the tabs and the pages
-	local bottom = c.y + c.h
-	if bottomH > 0 then
-		L.bottom = rect(c.x, c.y + c.h - bottomH, c.w, bottomH)
-		bottom = L.bottom.y - gap
+	-- The bottom slot (TutorialStrip or a status message) sits under the pages, as wide as they are, and takes its
+	-- height from them (never from the rail, so the tabs keep their room)
+	local function slotUnder(left, width)
+		local bottom = c.y + c.h
+		if bottomH > 0 then
+			L.bottom = rect(left, c.y + c.h - bottomH, width, bottomH)
+			bottom = L.bottom.y - gap
+		end
+		return bottom
 	end
 
 	L.tabs = {}
 	if L.rail then
-		L.tabBar = rect(c.x, c.y, ShopLayout.RAIL_W, bottom - c.y)
+		L.tabBar = rect(c.x, c.y, ShopLayout.RAIL_W, c.h)
 		local spare = L.tabBar.h - tabCount * tap
 		local tabGap = tabCount > 1 and math.floor(spare / (tabCount - 1)) or 0
 		L.tabGap = math.clamp(tabGap, ShopLayout.RAIL_GAP_MIN, gap)
@@ -95,10 +99,11 @@ function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)
 			L.tabs[i] = rect(c.x, c.y + (i - 1) * (tap + L.tabGap), ShopLayout.RAIL_W, tap)
 		end
 		L.tabCanvas = tabCount * tap + (tabCount - 1) * L.tabGap
-		L.tabScrolls = L.tabCanvas > L.tabBar.h -- only on very low windows (or with the Studio Debug tab)
+		L.tabScrolls = L.tabCanvas > L.tabBar.h -- only with the Studio Debug tab on the lowest windows
 		local left = c.x + ShopLayout.RAIL_W + 8
 		L.title = rect(left, c.y, right - ShopLayout.TITLE_RIGHT - left, header)
 		local top = c.y + header + gap
+		local bottom = slotUnder(left, right - left)
 		L.pages = rect(left, top, right - left, bottom - top)
 	else
 		local top = c.y + header + gap
@@ -112,6 +117,7 @@ function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)
 		L.tabScrolls = L.tabCanvas > L.tabBar.w -- a phone narrower than any we know
 		L.title = rect(c.x, c.y, c.w - ShopLayout.TITLE_RIGHT, header)
 		local pagesTop = top + tap + gap
+		local bottom = slotUnder(c.x, c.w)
 		L.pages = rect(c.x, pagesTop, c.w, bottom - pagesTop)
 	end
 
