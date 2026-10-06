@@ -28,7 +28,7 @@ OWNER DEFAULT (the owner may veto): the launch Garage Egg keeps a **5% Rare** (e
 - **Screen:** EGGS, SHOP, TEAM, POACH, IPO (left column; a top row under 460 px: ShopClient.lua:99-113), the bar "🏚️ Garage → Seed · $0 / $1.8K" (IpoClient.lua:823-832), the chip "CLAIM" (DailyClient.lua:515-520).
 - **Arrow** (OnboardingClient.lua:107-153) to the sign if the next upgrade is affordable (OnboardingServer.lua:116-119), else the egg. **Free egg:** Garage, 60 s, at the back (OnboardingConfig.lua:20; CreatureConfig.lua:25-31; EmployeeServer.lua:37-40).
 - **Desk:** SHOP opens on Office (ShopClient.lua:744), "Buy Free" (:554-561), the prop pops in (TycoonCore.lua:285).
-- **Calls (Studio only)** with `task-needs-desk`: 20-40 s after the Desk, 8 s to answer, 7 s of Income times a chain up to x2 (TaskConfig.lua:51-58), toast "+$7" (TaskClient.lua:249-260, 408-424).
+- **Calls (Studio only)** with `task-needs-desk` (its TaskConfig.lua:66, TaskServer.lua:11-16): 20-40 s after the Desk, 8 s to answer, 7 s of Income times a chain up to x2 (TaskConfig.lua:51-58), toast "+$7" (TaskClient.lua:249-260, 408-424).
 - **Hiring:** "READY!", a "Hatch" prompt within 12 studs (EmployeeServer.lua:218-236, 531-544) or "Hatch!" in EGGS (EmployeeClient.lua:571-578); a reveal (:866-940).
 - **Goals** after the first hire: "Hire 3 employees", "Reach Seed stage", no reward (OnboardingConfig.lua:30-38); the arrow ends at 1 hire and 2 upgrades (:27).
 - **Poaching:** new saves are protected 15 min (CreatureConfig.lua:126) but may poach; alone: "Nobody else is in this server yet" (PoachClient.lua:505-506).
@@ -69,7 +69,7 @@ The sim (no free egg) has Seed at 4 min (§4) and IPO 1, 2, 3, 4 at 12, 22, 40, 
 - **Every minute:** buy the next upgrade, egg or desk; hatch. Pulled by Cash on the bar (D4) and the Office bar "$1,234 / $1,500 · about 7 s" (SHOP_UX 3.2).
 - **Every 10 min:** a milestone (D2), a goal, a new task kind. **Every session:** a funding stage, its round (Raise, Later, Skip: FUND 1), a new room. **Every day:** the gift, 3 engaged hours at full value (LG:23), a trending genre (Gaming).
 
-*Active* play alone moves the IPO clock (LG:5) and adds about a third to Garage Income (G1 target f 0.32, LG:115). *Passive* Income is every reward's unit: a call pays 7 s of it (TaskServer.lua:254), so each purchase raises each call. *Decisions* turn active Cash into Income.
+*Active* play alone moves the IPO clock (LG:5) and adds about a third to Garage Income (G1 target f 0.32, LG:115). *Passive* Income is every reward's unit: a call pays 7 s of it (TaskServer.lua:253-254), so each purchase raises each call. *Decisions* turn active Cash into Income.
 
 **AFK against active.** Today offline Cash (1.1) is all valuation (TycoonCore.lua:77-78, 825). At launch engaged Cash is valuation for 3 h a day, then 5% (LG:23); idle (quiet mode, 7) and offline share the away bank, 10% of base Income for 2 h, 10% of it valuation (LG:24): an hour away is about 1/130 of an engaged Garage hour toward the IPO (0.1 x 0.1 against 1.32), yet its Cash still buys things. The welcome-back card says "Your startup saved $X while you were away", with no Robux (D7).
 
@@ -135,7 +135,7 @@ E1 meets every target: the longest wait after minute 20 falls from 17:11 (sessio
 | Enter Seed at | $197K | $669K | | 1:31:00 |
 <!--first-hour-model:end-->
 
-The free egg takes Desk 1, so the bought eggs need Desks 2 and 3, one price per egg tier (LG:38); this also fixes LONG's list, which buys the first hire (economy_sim.py:1067-1077). **E1:** each level adds half the old Income, as in Series C+D (LG:76; economy_sim.py:1064); `--fit` spaces them evenly after the Server Rack with Seed at 1:30-1:31, which raises Seed's entry from $492K to $669K and every later one by $177K. Saves list upgrades by name and buying follows the list (TycoonCore.lua:258-262, 316-322, 771), so level I keeps the shipped names; only `Whiteboard II` and `Neon Logo II` are new. The sims own the re-fit (build item 9; a read-only comparison is in docs/GAMEPLAY_NOTES.md).
+The free egg takes Desk 1, so the bought eggs need Desks 2 and 3, one price per egg tier (LG:38); this also fixes LONG's list, which buys the first hire (economy_sim.py:1067-1077). **E1:** each level adds half the old Income, as in Series C+D (LG:38, 77; economy_sim.py:1064); `--fit` spaces them evenly after the Server Rack with Seed at 1:30-1:31, which raises Seed's entry from $492K to $669K and every later one by $177K. Saves list upgrades by name and buying follows the list (TycoonCore.lua:258-262, 316-322, 771), so level I keeps the shipped names; only `Whiteboard II` and `Neon Logo II` are new. The sims own the re-fit (build item 9; a read-only comparison is in docs/GAMEPLAY_NOTES.md).
 
 ### 3.4 D2: milestones in every rung (amounts placeholders)
 
@@ -193,7 +193,7 @@ Action (today: 1.1, 1.2): the phone-safe visual; its slots.
 
 Same size and place, so the gift chip, the Goals card and the tray tests stay (IpoClient.lua:233-256; tools/daily_test.py:3159-3176). **Row 1** (today's stage label, y 4, white): `$4,630 · +$18/s`: Cash with `ShopConfig.formatCash` below $100K ("$21,116"), `IpoConfig.formatShort` from $100K ("$110K"); Income `+$X/s`, short from $10K/s; counts up between ticks. **Row 2:** the valuation track. **Row 3** (today's info label, y 40): `🏚️ Garage → Seed · $9.3K / $669K`; multiplier and Shares only when not x1 and 0 (else in the IPO window).
 
-**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $669K". Insets and safe areas not measured. **Would change:** IpoClient.lua:183-185, :197-207 (row 1), :221-231 (row 3), :823-832 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside :952. No server change.
+**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $669K". Insets and safe areas not measured. **Would change:** IpoClient.lua:183-185, :197-207 (row 1), :221-231 (row 3), :823-832 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside IpoClient.lua:952. No server change.
 
 ## 6. Monetization that feels fair (D9)
 
@@ -308,7 +308,8 @@ By first-hour impact; each PR claims its files first. Each item: change (files);
 ## 11. Open questions (most important first)
 
 1. **Purchase gaps in the late Garage:** E1's longest wait is 10:51, but 20-21 min pass between the Whiteboard II, Neon Logo I and Neon Logo II, a milestone and calls in between (3.2). Recommend keeping E1's fit for the playtest; add a third level only if players stall there.
-2. **Is a poach paid with Cash a paid random item?** D9_POLICY_OPTIONS.md:15-20 does not settle it (unverified); after E2 no Robux touches a chance. Recommend treating it as not one, declaring poaching as today, and asking the D9 doc's owner to confirm.
+2. **Is a poach paid with Cash a paid random item?** D9_POLICY_OPTIONS.md never names poaching, but its egg rule (:15-17: Cash is one pool while Cash packs are sold) fits a poach's random result too; E2 only removes the Robux chance. Recommend asking the D9 doc's owner before launch and, if it counts, giving restricted players a fixed outcome order like `fixedHire`, decided with D6.
 3. **First-hour poaching** (with D6): a Garage poach then costs about one egg. Recommend LG R3 (14 days and 10 engaged hours, either side: LG:108), so nobody poaches or loses a hire in hour one.
 4. **Changing a sold pass (E2):** whether buyers or Roblox need notice is unverified; today only the creator owns it. Recommend shipping E2 before the public launch, after checking its sales in Creator Hub.
 5. **The launch Garage Egg's other odds:** the 5% Rare stays; the model assumes 70/25 for the rest ($4.97/s). Recommend keeping 70/25 until the sims re-fit (build item 9).
+6. **Props for the split levels:** the plot has six upgrade stations and one shared prop list, with fingerprint tests (CLAUDE.md, PlotArt). Recommend level II reusing its level I station with a visible upgrade, so there are still six.

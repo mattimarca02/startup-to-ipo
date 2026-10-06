@@ -8,8 +8,8 @@ Worktree `../gameplay-fold2` from `origin/gameplay-design` (38a9642), branch `ga
 
 - [x] Claim the two docs and `tools/first_hour_model.py` (4f0eb93)
 - [x] Item 1 (2b982b5): the model splits the Whiteboard and Neon Logo (E1), `--fit` re-fits the Garage, `--previous` checks models A, B, D, G and session 2's Garage; the doc's 8 blocks re-generated (prose updated in item 2)
-- [x] Item 2: E1, E2 and the defaults recorded (section 0 and every section they touch); milestones, script and tables from the model; build order 1 bar, 2 tutorial order, 3 SHOP_UX S1-S2 (calls with the Desk moved to 4: built on `task-needs-desk`, not merged); 5 open questions; 5,423 words (`wc -w`), **not** the 5,200 asked: see judgment call 21
-- [ ] Item 3: at least 15 citations verified against `origin/main` (and `origin/task-needs-desk`); `wc -w`; `--check`
+- [x] Item 2 (12f1339): E1, E2 and the defaults recorded (section 0 and every section they touch); milestones, script and tables from the model; build order 1 bar, 2 tutorial order, 3 SHOP_UX S1-S2 (calls with the Desk moved to 4: built on `task-needs-desk`, not merged); 5 open questions (a sixth, the props, added in item 3); 5,423 words (`wc -w`), **not** the 5,200 asked: see judgment call 21
+- [x] Item 3: all 132 explicit `file:line` citation ranges printed from `origin/main` (e3c9e67) and read, plus 18 `LG:` lines, 7 `BIBLE:` lines (`origin/content-bible`), `TUT:25-29` and `:143-146` (`origin/design-tutorial`), and the Desk rule on `origin/task-needs-desk` (TaskConfig.lua:66, TaskServer.lua:11-16, the first call after a normal 20-40 s gap). Five fixed (judgment call 23); open question 6 added (the split levels' props). `--check`: 8 blocks, 0 problems; `--previous` all reproduced; `--fit` matches. `wc -w`: 5,489
 - [ ] Release the three claims
 
 ## Progress (session 2: owner decisions, 2026-10-06)
@@ -95,8 +95,10 @@ Where each input came from (main = `origin/main` at e3c9e67).
     | D1 + E1 (this fit) | 92.3 min | 16.7, 27.7, 39.7, 59.3, 78.7 | 3.81 h, 59.1 h |
 
     So the sim agrees in direction: with E1 the waits between purchases are 11.0, 12.0, 19.6, 19.4 and 13.6 min (x3.1: 29.3, 36.0, 10.3), and its Garage is 1.3 min longer than the model's 1:31:00 (its reference player has no human delays, no Day 1 gift and its own task rate). Its first-IPO total barely moves (59.1 h against 59.9 h).
-21. **The word count.** The brief asked for at most 5,200 words by trimming repetition, never a decision, a number, a citation or an open question. Done: repeated facts merged (offline pay, quiet mode, LG R3 stated 4 times, the Robux rules in section 7, "not changed" notes, the lounge, A13's prices that the D6 list repeats, the Headhunter alternatives' numbers that the table shows), the goals, script, milestone and poach tables became lists (no comparison across columns; every number kept), the model markers lost their spaces (they are invisible but `wc -w` counted 6 words per block), and the sim comparison moved here. New content: E1, E2, the six defaults, E2's exact changes, the save-name rule, a wider Garage table. Result 5,423: the remaining 223 words would have to come from content that is not repeated (candidates: 5.1's layout numbers, about 190 words, could move to the build PR's own plan; section 8's Gaming summary, about 100, repeats SECT 2.2-2.6 outside this doc). Left for the owner.
+21. **The word count.** The brief asked for at most 5,200 words by trimming repetition, never a decision, a number, a citation or an open question. Done: repeated facts merged (offline pay, quiet mode, LG R3 stated 4 times, the Robux rules in section 7, "not changed" notes, the lounge, A13's prices that the D6 list repeats, the Headhunter alternatives' numbers that the table shows), the goals, script, milestone and poach tables became lists (no comparison across columns; every number kept), the model markers lost their spaces (they are invisible but `wc -w` counted 6 words per block), and the sim comparison moved here. New content: E1, E2, the six defaults, E2's exact changes, the save-name rule, a wider Garage table. Result 5,423 at item 2 and 5,489 after item 3 (citation fixes, open question 6): the remaining 289 words would have to come from content that is not repeated (candidates: 5.1's layout numbers, about 190 words, could move to the build PR's own plan; section 8's Gaming summary, about 100, repeats SECT 2.2-2.6 outside this doc). Left for the owner.
 22. **Tokens checked.** A scratch script compared every citation and number in the prose before and after the rewrite. Gone on purpose: "$40" and "12 min" (now Whiteboard I's $20 and "about 10 min"), "1.5 h" (the old question 1), "0.8" kept as "x 0.8", the -35% and A13's $900, $6,000, $310K, $2,300 (all in model blocks), and ShopConfig.lua:46 (inside the VIP bullet's :44-51).
+
+23. **Citations fixed in item 3.** (1) E1's "as in Series C+D" cited LG:76 (the line that introduces the three Series C+D fixes); the I and II rule is LG:38 and LG:77, now cited. (2) "beside :952" in 5.1 followed a TycoonCore citation, but TycoonCore.lua:952 is blank: it is IpoClient.lua:952 (`player.AttributeChanged:Connect(refreshAll)`), now named. (3) "a call pays 7 s of it": TaskServer.lua:254 multiplies by Income, :253 computes the seconds paid: now 253-254. (4) 1.1's calls line now cites the Desk rule on its branch (TaskConfig.lua:66, TaskServer.lua:11-16 on `task-needs-desk`; line numbers elsewhere are `main`'s). (5) Open question 2 said D9_POLICY_OPTIONS.md:15-20 "does not settle" whether a Cash poach is a paid random item, and recommended treating it as not one. The doc never names poaching, but its own egg rule (:17: "Cash is one pool ... every egg bought with Cash counts as a paid random item while Cash packs are sold") fits a poach's random result as well: the question is reworded, and the recommendation is now to ask the D9 doc's owner and, if it counts, give restricted players a fixed outcome order. This also corrects session 2's "Not verified" line about it.
 
 ## The model (session 3)
 
@@ -159,6 +161,14 @@ Defaults picked where the owner's taste decides. Rows 1, 3, 4, 8, 13 and 15 were
 | 17 | D2 milestone shares (Garage 1 / 24 / 49 / 84% since E1's fit, was 1 / 12 / 30 / 50%, others 20 / 40 / 60 / 80%) and the 24 titles | `IpoConfig` or a title list (build item 10) | 3.4 |
 | 18 | D6 rule: Income x the home tier's egg price per Income, floor at the egg price, 2 significant digits | `CreatureConfig.Poaching` (build item 14) | 6.2 |
 | 19 | OWNER DEFAULT. Music off by default, effects on | `SoundConfig` | 5, SOUND |
+
+## Not verified (session 3)
+
+- E1's fit is this model's player (assumptions 1-14) and placeholder prices; `economy_sim.py`'s own fit was only fed this Garage from a scratch script (judgment call 20), never re-fitted (build item 9). The sim's `--long` default output was run once, read-only; its other sections were not.
+- Whether a Cash poach is a paid random item under Roblox's rules (open question 2), and whether changing the Headhunter pass's effect needs notice to buyers or Roblox (open question 4): not checked with Roblox or Creator Hub.
+- How the split levels look in the Office tab (SHOP_UX S1-S2) and on the room's props: not designed (open question 6); PlotArt's part budget and fingerprint tests not checked.
+- The tables turned into lists were checked as Markdown by reading the raw file only, not rendered.
+- No Studio, no MCP, no playtest; `tools/daily_test.py` not run (docs and the model only).
 
 ## Not verified (session 2)
 
