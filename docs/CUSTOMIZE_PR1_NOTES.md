@@ -198,3 +198,16 @@ end
 **What the tests do now.** The fake `SetAsync` refuses, like the reviewer says the real one does, a table that mixes list and string keys and a list with holes (or keys 0, negative, fractional), recursively through the whole payload (and a function value, and a table that contains itself). It is used where a payload goes to `SetAsync` (the `commitIpo` / `save()` test, including the locked-section runtime test, and the `buildPayload` test) and as a screen on every section any test serializes (the Pokedex loader's `toSave`, `CompanyServer.serialize`, and `DailyServer`, `IpoServer`, `TaskServer` and `fixedHires` serialize); there is a named check that the fake itself refuses each bad shape. The locked-section tests now use a storable unknown shape (a map) where they used a mixed table, because the store can't hold a mixed one.
 
 **Order of the merges.** The docs PR first, then the sims PR, and `customize-pr1` **last, after the Studio test** (the command-bar block above and the steps in docs/STUDIO_SYNC.md (d)). A small conflict in the claim rows of CONTRIBUTING.md is expected between the branches; the second branch to merge must re-run `python3 tools/daily_test.py` (the claim rows are the only thing that should conflict).
+
+
+## Moved text from docs/CUSTOMIZE_PROPOSAL.md (word-cap trim, branch `integration-trim`)
+
+Two passages moved word for word out of the proposal to bring it under its 5,000-word cap. Each has a one-line pointer in the proposal. Nothing else changed in them.
+
+1. **CLAUDE.md:29, the exact text** (proposal section 7, "CLAUDE.md:29 (approved by the owner)": the build PR changes the line to exactly this):
+
+   "Never add a second DataStore, save loop or PlayerAdded data owner. One exception: `BoardServer` (ServerScriptService) may use the OrderedDataStores `Collection_v1` and `HallOfFame_v1` (and their `_Studio` twins) for the leaderboard. It writes only values read from the loaded save after that save succeeded, never saves player data, and wraps every call in `pcall`. Every other store stays under this rule."
+
+2. **Post-launch income sketches** (proposal section 6, "Post-launch: Fintech and Biotech"):
+
+   Income sketches (deterministic, capped, engaged only, on the :866 call): **Fintech** interest on Cash held, capped at H seconds of base Income (works against the buy loop: revisit); **Biotech** P seconds of base Income every N engaged minutes (a visible timer).
