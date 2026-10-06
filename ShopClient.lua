@@ -102,6 +102,14 @@ local function textHeight(text, font, width)
 	return ok and math.ceil(size.Y) or 2 * MIN_TEXT
 end
 
+-- How wide a 16 px text is on one line
+local function textWidth(text, font)
+	local ok, size = pcall(function()
+		return TextService:GetTextSize(text, MIN_TEXT, font, Vector2.new(10000, 10000))
+	end)
+	return ok and math.ceil(size.X) or #text * MIN_TEXT
+end
+
 -- Puts inst on rectangle r (GUI pixels, from ShopLayout); origin = the rectangle of its parent
 local function place(inst, r, origin)
 	inst.Position = UDim2.fromOffset(r.x - (origin and origin.x or 0), r.y - (origin and origin.y or 0))
@@ -416,25 +424,53 @@ local function makeCard(page, order, icon, name, cardName)
 	round(button, 10)
 	fitText(button, 20)
 
-	table.insert(cardParts, { card = card, icon = iconLabel, name = nameLabel, desc = descLabel, button = button, seen = {} })
-	return descLabel, button
+	local parts = { card = card, icon = iconLabel, name = nameLabel, desc = descLabel, button = button, seen = {} }
+	table.insert(cardParts, parts)
+	return descLabel, button, parts
+end
+
+-- A factual badge on a card, hidden until its refresh shows it (BEST VALUE: computed from ShopConfig)
+local function addBadge(parts, text)
+	local badge = make("TextLabel", {
+		Name = "Badge",
+		BackgroundColor3 = COLORS.gold,
+		Font = Enum.Font.GothamBold,
+		Text = text,
+		TextColor3 = COLORS.panel,
+		Visible = false,
+		Parent = parts.card,
+	})
+	round(badge, 6)
+	fixedText(badge)
+	parts.badge = badge
+	return badge
 end
 
 -- A card's pieces for the current width; its texts are measured again only when they (or the width) changed
 local function layoutCard(parts)
 	local seen = parts.seen
-	if seen.name ~= parts.name.Text or seen.desc ~= parts.desc.Text or seen.width ~= cardWidth then
-		local nameW, descW = ShopLayout.cardWidths(cardWidth)
-		seen.name, seen.desc, seen.width = parts.name.Text, parts.desc.Text, cardWidth
+	local badgeW = 0
+	if parts.badge and parts.badge.Visible then
+		if seen.badgeText ~= parts.badge.Text then
+			seen.badgeText, seen.badgeTextW = parts.badge.Text, textWidth(parts.badge.Text, parts.badge.Font)
+		end
+		badgeW = seen.badgeTextW + 16
+	end
+	if seen.name ~= parts.name.Text or seen.desc ~= parts.desc.Text or seen.width ~= cardWidth or seen.badgeW ~= badgeW then
+		local nameW, descW = ShopLayout.cardWidths(cardWidth, badgeW)
+		seen.name, seen.desc, seen.width, seen.badgeW = parts.name.Text, parts.desc.Text, cardWidth, badgeW
 		seen.nameH = textHeight(seen.name, parts.name.Font, nameW)
 		seen.descH = textHeight(seen.desc, parts.desc.Font, descW)
 	end
-	local C = ShopLayout.card(cardWidth, seen.nameH, seen.descH)
+	local C = ShopLayout.card(cardWidth, seen.nameH, seen.descH, badgeW)
 	parts.card.Size = UDim2.new(1, 0, 0, C.height)
 	place(parts.icon, C.icon)
 	place(parts.name, C.name)
 	place(parts.desc, C.desc)
 	place(parts.button, C.button)
+	if C.badge then
+		place(parts.badge, C.badge)
+	end
 end
 
 -- A label as tall as its 16 px text, at the page's width (the Debug status, the Office error line)
@@ -712,11 +748,18 @@ end
 for i, product in ipairs(ShopConfig.Products) do
 	local page = tabPages[product.tab]
 	if page then
-		local desc, button = makeCard(page, i, product.icon, product.name, product.key)
+		local desc, button, parts = makeCard(page, i, product.icon, product.name, product.key)
 		button.Activated:Connect(function()
 			promptPurchase(product, false)
 		end)
+		-- BEST VALUE: the Cash pack with the most minutes of Income per Robux, among the ones on sale (from ShopConfig)
+		local bestBadge = product.effect.incomeMinutes and addBadge(parts, "BEST VALUE")
 		table.insert(cards, function()
+			if bestBadge then
+				bestBadge.Visible = ShopLayout.bestValue(ShopConfig.Products, function(item)
+					return ShopConfig.isForSale(item, randomRestricted())
+				end) == product.key
+			end
 			-- Luck Boost (changesOdds) is hidden where paid random items are restricted: their hires follow
 			-- a fixed order, so it would do nothing. Everything else stays on sale.
 			desc.Parent.Visible = not (product.changesOdds and randomRestricted())

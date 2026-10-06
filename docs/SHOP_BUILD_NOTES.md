@@ -19,8 +19,9 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 - [x] 2.1 `ShopLayout.lua`: ladder state, bar fill, time text, best value, row and hero geometry
 - [x] 2.2 `ShopClient.lua` S2: the Office ladder (pushed together with 2.3: alone it fails daily_test's old "Locked" check)
 - [x] 2.3 `tools/daily_test.py`: "daily_test: Locked check follows the new ladder" (the one edit there)
-- [ ] 2.4 `tools/shop_ux_test.py`: the S2 checks
-- [ ] 2.5 S2 mutants (at least 40 in all, each caught by a named check)
+- [x] 2.4 `ShopClient.lua`: the BEST VALUE badge on the Cash pack `ShopLayout.bestValue` picks (added after 2.2: the task asks ShopClient to use it)
+- [ ] 2.5 `tools/shop_ux_test.py`: the S2 checks
+- [ ] 2.6 S2 mutants (at least 40 in all, each caught by a named check)
 
 **Phase 3: Studio sync and wrap-up**
 - [ ] 3.1 README rows for `ShopLayout.lua` and `tools/shop_ux_test.py` (moved here from phase 1: written once, for S1 and S2)
