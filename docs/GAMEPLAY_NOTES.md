@@ -2,6 +2,16 @@
 
 Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, worktree `../gameplay-design`, started 2026-10-06). Docs only: no code, no Studio, no MCP. The only existing-file edit is the two claim rows in `CONTRIBUTING.md`.
 
+## Progress (session 3: E1, E2 and the owner defaults, 2026-10-06)
+
+Worktree `../gameplay-fold2` from `origin/gameplay-design` (38a9642), branch `gameplay-fold2`, each commit pushed to `gameplay-design` (fast-forward). Docs and `tools/first_hour_model.py` only; no Studio, no MCP; `tools/economy_sim.py` and `docs/SIMS_RESULTS.md` only read (`--long` run read-only, and imported from a scratch script).
+
+- [x] Claim the two docs and `tools/first_hour_model.py` (4f0eb93)
+- [x] Item 1: the model splits the Whiteboard and Neon Logo (E1), `--fit` re-fits the Garage, `--previous` checks models A, B, D, G and session 2's Garage; the doc's 8 blocks re-generated (prose updated in item 2)
+- [ ] Item 2: E1, E2 and the defaults recorded; milestones, script and tables; trimmed to at most 5,200 words; open questions; build order
+- [ ] Item 3: at least 15 citations verified against `origin/main` (and `origin/task-needs-desk`); `wc -w`; `--check`
+- [ ] Release the three claims
+
 ## Progress (session 2: owner decisions, 2026-10-06)
 
 Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gameplay-fold`, each commit pushed to `gameplay-design` (fast-forward). Docs and one new tool; no Studio, no MCP; `tools/economy_sim.py` and `docs/SIMS_RESULTS.md` only read.

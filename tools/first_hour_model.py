@@ -2,7 +2,8 @@
 
 Run:   python3 tools/first_hour_model.py             prints every table the proposal quotes
        python3 tools/first_hour_model.py --check     exit 1 if a table in the doc or a copied constant differs
-       python3 tools/first_hour_model.py --previous  the previous session's model G, reproduced (not in the doc)
+       python3 tools/first_hour_model.py --previous  sessions 1-2's models A, B, D, G and session 2's x3.1 Garage, reproduced
+       python3 tools/first_hour_model.py --fit       re-runs the E1 Garage fit (6 s) and compares it with E1_LEVELS
 
 Why a separate model: tools/economy_sim.py (never edited from here) has no free egg, no customer calls and no
 Day 1 gift, and its typical player is not a brand-new one. This file follows ONE new player second by second,
@@ -27,9 +28,12 @@ ASSUMPTIONS (estimates, not measured; every number printed is an estimate or a p
     first pause after minute 10). Cash only, never valuation (DailyServer).
 11. Valuation = all Cash earned from Income and calls. In the first hour the LONG daily cap (3 engaged hours) and the
     Garage task budget (0.85 s of Income per second) never bind, so neither is modelled.
-12. D1 keeps LONG's buying order; after the Neon Logo nothing is left to buy until Seed. To keep the Garage as long
-    as LONG planned (1.5 h), this model raises the Whiteboard and Neon Logo by the smallest factor (steps of 0.1)
-    that puts Seed at 1:30:00 or later. The real re-fit is economy_sim.py --long's job (build order item 8).
+12. D1 keeps LONG's buying order. E1 (owner, 2026-10-06) splits the Whiteboard and the Neon Logo into levels I and II,
+    each with half the Income (+$20, +$20, +$60, +$60: the Garage's total Income is unchanged), like LONG's Series C+D
+    (economy_sim.py:1064). Their four prices and the Garage milestone shares 2-4 are placeholders found by `--fit`:
+    Seed between 1:30:00 and 1:31:00, milestone 1 by 10:00, no wait over 6:30 in minutes 0-20, then the waits after
+    20:00 as short as possible (largest first). Seed's valuation follows the prices (LONG_K x everything in the Garage),
+    so every later rung's entry moves with them. The real re-fit is economy_sim.py --long's job (build order item 9).
 13. "Longest wait" = the longest time between two consecutive events (purchase, hire, stage, milestone), from 0:00 to
     the last event before 20:00. Calls and Cash ticks are not events.
 14. Prices of later IPO runs scale with LONG's StageScale; every price here is the first run's.
@@ -96,12 +100,16 @@ D1_LADDER = [  # (name, price, kind, Income; None = a Garage Egg hire at GARAGE_
     ("Desk 3", 5000, "desk", 0), ("Garage Egg", 400, "egg", None), ("Server Rack", 13000, "up", 15),
     ("Whiteboard", 28000, "up", 40), ("Neon Logo", 72000, "up", 120),
 ]
-D1_FIT = ("Whiteboard", "Neon Logo")       # the two prices this model scales (assumption 12)
+D1_FIT = ("Whiteboard", "Neon Logo")       # session 2 scaled these two; E1 splits them (assumption 12)
 GARAGE_TARGET = 90 * 60                    # LONG's fitted Garage: 1.5 h (LG:7)
+E1_LEVELS = [("Whiteboard I", 30000, 20), ("Whiteboard II", 55000, 20),         # E1 placeholders, from --fit
+             ("Neon Logo I", 120000, 60), ("Neon Logo II", 220000, 60)]
+E1_SLOTS = "BBMBMBMS"   # the fit's target order after the Server Rack: B = a level bought, M = milestones 2-4, S = Seed
 
-MILESTONE_SHARES = {"Garage": (0.01, 0.12, 0.30, 0.50), "other": (0.20, 0.40, 0.60, 0.80)}  # D2: share of the rung's valuation distance
-# The Garage shares are front-loaded so milestone 1 comes before 10:00 and the others fall in the long waits after the
-# Server Rack; the other rungs use LONG 4(b)'s 20/40/60/80% (LG:78).
+MILESTONE_SHARES = {"Garage": (0.01, 0.24, 0.49, 0.84), "other": (0.20, 0.40, 0.60, 0.80)}  # D2: share of the rung's valuation distance
+# Garage: milestone 1 comes before 10:00, milestones 2-4 sit in the middle of the waits after the Server Rack (--fit);
+# the other rungs use LONG 4(b)'s 20/40/60/80% (LG:78).
+S2_GARAGE_SHARES = (0.01, 0.12, 0.30, 0.50)   # session 2's Garage shares (before E1), for --previous
 MILESTONE_TITLES = {  # D2 placeholders; Board Favorite, Almost Public and Big Bell Boss are the content bible's (BIBLE:174, 224)
     "Garage": ("Side Hustler", "Coffee Powered", "Garage Hero", "Ready to Raise"),
     "Seed": ("Pitch Practicer", "Demo Day Pro", "Growth Hacker", "Series A Bound"),
@@ -302,11 +310,17 @@ def pacing(ev, calls):
 
 
 def garage_items(scale):
+    """Session 2's Garage: D1's ladder with the Whiteboard and Neon Logo scaled (kept for --previous and "unfitted")."""
     rows = [list(r) for r in D1_LADDER]
     for r in rows:
         if r[0] in D1_FIT:
             r[1] = sig2(r[1] * scale)
     return rows
+
+
+def e1_items(prices):
+    """D1's ladder with the Whiteboard and Neon Logo split into levels I and II (E1); `prices` may be a prefix."""
+    return [list(r) for r in D1_LADDER if r[0] not in D1_FIT] + [[n, p, "up", i] for (n, _, i), p in zip(E1_LEVELS, prices)]
 
 
 def thresholds(garage_sum):
@@ -315,25 +329,104 @@ def thresholds(garage_sum):
     return [LONG_K * sum(sums[: r + 1]) for r in range(len(sums))]
 
 
-def milestones_for(rung, entry, nxt):
-    shares = MILESTONE_SHARES["Garage" if rung == 0 else "other"]
+def milestones_for(rung, entry, nxt, shares=None):
+    shares = shares or MILESTONE_SHARES["Garage" if rung == 0 else "other"]
     return [sig2(entry + s * (nxt - entry)) for s in shares]
 
 
-def d1_run(scale, minutes=4 * 60):
-    rows = garage_items(scale)
+def garage_run(rows, shares, minutes=4 * 60):
     seed = thresholds(sum(r[1] for r in rows))[0]
-    ev, trace, calls = ladder_run(rows, GARAGE_EGG_EV, milestones_for(0, 0, seed), stop_val=seed, minutes=minutes)
-    return dict(ev=ev, trace=trace, calls=calls, rows=rows, seed=seed, scale=scale)
+    ev, trace, calls = ladder_run(rows, GARAGE_EGG_EV, milestones_for(0, 0, seed, shares), stop_val=seed, minutes=minutes)
+    return dict(ev=ev, trace=trace, calls=calls, rows=rows, seed=seed)
+
+
+def d1_run(scale, minutes=4 * 60):
+    return dict(garage_run(garage_items(scale), S2_GARAGE_SHARES, minutes), scale=scale)
 
 
 def fit_scale():
+    """Session 2's fit: the smallest factor (steps of 0.1) that puts Seed at 1:30:00 or later."""
     for k in range(10, 101):
         run = d1_run(k / 10)
         seed_t = pacing(run["ev"], run["calls"])["seed"]
         if seed_t is not None and seed_t >= GARAGE_TARGET:
             return run
     raise SystemExit("no factor up to 10 reaches the Garage target")
+
+
+def late_gaps(ev):
+    """Every wait from the last event before 20:00 to Seed, largest first (assumption 13's events)."""
+    ts = [t for t, k, _ in ev if k in ("buy", "hire", "stage", "milestone")]
+    late = [max([t for t in ts if t <= 20 * 60] or [0])] + [t for t in ts if t > 20 * 60]
+    return sorted((b - a for a, b in zip(late, late[1:])), reverse=True)
+
+
+def fit_score(prices, shares):
+    run = garage_run(e1_items(prices), shares, minutes=3 * 60)
+    pc = pacing(run["ev"], run["calls"])
+    if pc["seed"] is None or pc["mile"] is None:
+        return (1e9,)
+    return (max(0, GARAGE_TARGET - pc["seed"]) + max(0, pc["seed"] - GARAGE_TARGET - 60), max(0, pc["mile"] - 600),
+            max(0, pc["wait"] - 390), tuple(late_gaps(run["ev"])))
+
+
+def fit():
+    """--fit (assumption 12). 1) Levels on evenly spaced slots after the Server Rack (E1_SLOTS): each price is the
+    highest 2-digit price still bought by its slot; the spacing is the shortest that puts Seed at 1:30:00 or later.
+    2) Milestones 2-4 at the valuation halfway (in time) through the waits after the Whiteboard II, the
+    Neon Logo I and the Neon Logo II. 3) Steps of
+    1 or 3 in a price's second digit and 1 or 2 points in a share, kept while fit_score improves. Deterministic."""
+    grid = sorted({sig2(v) for v in range(10000, 1000000, 100)})
+    rack = next(t for t, k, n in ladder_run(e1_items([]), GARAGE_EGG_EV, [])[0] if n.startswith("Server Rack"))
+    buys = [i + 1 for i, c in enumerate(E1_SLOTS) if c == "B"]
+
+    def bought(prices):
+        name = E1_LEVELS[len(prices) - 1][0] + " $"
+        return next((t for t, k, n in ladder_run(e1_items(prices), GARAGE_EGG_EV, [], minutes=3 * 60)[0] if n.startswith(name)), None)
+
+    for gap in range(8 * 60, 13 * 60, 5):
+        prices = []
+        for slot in buys:
+            lo, hi = grid.index(prices[-1]) if prices else 0, len(grid) - 1
+            while lo < hi:                                # the highest price bought by the slot
+                mid = (lo + hi + 1) // 2
+                t = bought(prices + [grid[mid]])
+                lo, hi = (mid, hi) if t is not None and t <= rack + slot * gap else (lo, mid - 1)
+            prices.append(grid[lo])
+        run = garage_run(e1_items(prices), S2_GARAGE_SHARES, minutes=3 * 60)
+        if pacing(run["ev"], run["calls"])["seed"] >= GARAGE_TARGET:
+            break
+
+    def midpoints(prices):
+        run = garage_run(e1_items(prices), S2_GARAGE_SHARES, minutes=3 * 60)
+        at_ = [next(t for t, k, n in run["ev"] if n.startswith(name + " $")) for name, _, _ in E1_LEVELS]
+        ends = at_[1:] + [next(t for t, k, n in run["ev"] if k == "stage")]
+        return (MILESTONE_SHARES["Garage"][0],) + tuple(round(run["trace"][(a + b) // 2][2] / run["seed"], 2)
+                                                        for a, b in zip(ends, ends[1:]))
+
+    shares = midpoints(prices)
+    best = fit_score(prices, shares)
+    better = True
+    while better:
+        better = False
+        for i in range(len(prices)):
+            unit = 10 ** (int(math.floor(math.log10(prices[i]))) - 1)
+            for d in (-3, -1, 1, 3):
+                cand = prices[:i] + [sig2(prices[i] + d * unit)] + prices[i + 1:]
+                if cand != sorted(cand):
+                    continue
+                for sh in (shares, midpoints(cand)):
+                    sc = fit_score(cand, sh)
+                    if sc < best:
+                        best, prices, shares, better = sc, cand, sh, True
+        for i in range(1, len(shares)):
+            for d in (-0.02, -0.01, 0.01, 0.02):
+                sh = shares[:i] + (round(shares[i] + d, 2),) + shares[i + 1:]
+                if list(sh) == sorted(sh) and sh[-1] < 1:
+                    sc = fit_score(prices, sh)
+                    if sc < best:
+                        best, shares, better = sc, sh, True
+    return prices, shares, gap
 
 
 def scenarios():
@@ -344,7 +437,8 @@ def scenarios():
                   ("Server Rack", 13000, 15), ("Whiteboard", 28000, 40), ("Neon Logo", 72000, 120)]
     planned = greedy_run(planned_up, p["egg"], 3.0, [("Seed", LONG_K * LONG_RUNG_SUMS[0])], calls=True,
                          desk2=p["Desk 2"], minutes=30)
-    return dict(today=today[:2], today_snaps=today[2], studio=studio, planned=planned[:2], unfit=d1_run(1.0), d1=fit_scale())
+    d1 = garage_run(e1_items([p for _, p, _ in E1_LEVELS]), MILESTONE_SHARES["Garage"])
+    return dict(today=today[:2], today_snaps=today[2], studio=studio, planned=planned[:2], unfit=d1_run(1.0), d1=d1)
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -378,7 +472,7 @@ def table_pacing(s):
             ("First milestone (today: stage)", "≤ 10:00", clock(a["mile"]) + " Seed", "none before Seed", clock(g["mile"])),
             ("Third hire", "≤ 15:00", clock(a["third"]), "none in 30 min" if d["third"] is None else clock(d["third"]), clock(g["third"])),
             ("Seed", "about 1:30:00", clock(a["seed"]), "1:30:00 (LONG's fit)", f"{clock(g['seed'])} ({clock(u['seed'])} unfitted)")]
-    out = ["| Moment (model) | Target | Today | Launch as planned | Launch with D1 |", "|---|---|---|---|---|"]
+    out = ["| Moment (model) | Target | Today | Launch as planned | Launch with D1, E1 |", "|---|---|---|---|---|"]
     return out + ["| " + " | ".join(r) + " |" for r in rows]
 
 
@@ -397,13 +491,13 @@ def table_script(s):
     rows.append((run["calls"][2][0], "third call answered"))
     rows.append((run["calls"][9][0], "10th call answered"))
     rows.sort()
-    out = ["| Time | Event (D1 run) | Tutorial, goal, reward | Cash / Income |", "|---|---|---|---|"]
+    out = ["| Time | Event (D1, E1 run) | Tutorial, goal, reward | Cash / Income |", "|---|---|---|---|"]
     for t, name in rows:
         cash, inc, *_ = at(run, t)
         beat = next((b for key, b in BEATS if key in name), "")
         out.append(f"| {clock(t)} | {name} | {beat} | {money(cash)} / ${inc:.0f} |")
     cash, inc, val, hires, bought, ms, answered = at(run, 600)
-    out.append(f"| 10:00 | {answered} calls, {hires} hires, {bought} of 9 items | next: Server Rack | {money(cash)} / ${inc:.0f} |")
+    out.append(f"| 10:00 | {answered} calls, {hires} hires, {bought} of {len(run['rows'])} items | next: Server Rack | {money(cash)} / ${inc:.0f} |")
     return out
 
 
@@ -422,12 +516,12 @@ def table_hour(s):
              ("Reach milestone 4", find(lambda k, n: n == "milestone 4")),
              ("Reach Seed", find(lambda k, n: k == "stage")),
              ("(not a goal) TUT 6: " + next(n for t, k, n in ev if k == "gift"), find(lambda k, n: k == "gift"))]
-    out = ["| Goal (D1 run) | Done at |", "|---|---|"]
+    out = ["| Goal (D1, E1 run) | Done at |", "|---|---|"]
     out += [f"| {g} | {clock(t) if t is not None else 'not in 4 h'} |" for g, t in goals]
-    out += ["", "| At (D1 run) | Items bought | Hires | Calls answered | Milestones | Cash / Income | Seed bar |", "|---|---|---|---|---|---|---|"]
+    out += ["", "| At (D1, E1 run) | Items bought | Hires | Calls answered | Milestones | Cash / Income | Seed bar |", "|---|---|---|---|---|---|---|"]
     for m in (5, 20, 60):
         cash, inc, val, hires, bought, ms, answered = at(run, m * 60)
-        out.append(f"| {m} min | {bought} of 9 | {hires} | {answered} | {ms} | {money(cash)} / ${inc:.0f} | {val / run['seed']:.0%} |")
+        out.append(f"| {m} min | {bought} of {len(run['rows'])} | {hires} | {answered} | {ms} | {money(cash)} / ${inc:.0f} | {val / run['seed']:.0%} |")
     return out
 
 
@@ -435,14 +529,19 @@ def table_garage(s):
     run = s["d1"]
     p = LONG_GARAGE_PLANNED
     plan = {"Coffee Machine": p["Coffee Machine"], "Laptop": p["Laptop"], "Desk 2": p["Desk 2"], "Garage Egg": p["egg"],
-            "Server Rack": 13000, "Whiteboard": 28000, "Neon Logo": 72000}
-    out = ["| D1 Garage item | LONG plan | D1 placeholder |", "|---|---|---|"]
+            "Server Rack": 13000, "Whiteboard I": 28000, "Neon Logo I": 72000}
+    out = ["| Garage item (D1, E1) | LONG plan | Placeholder | Income | Bought at |", "|---|---|---|---|---|"]
     seen = set()
     for name, price, kind, inc in run["rows"]:
-        if name not in seen:
-            seen.add(name)
-            out.append(f"| {name} | {money(plan[name]) if name in plan else 'none'} | {money(price)} |")
-    out.append(f"| Enter Seed at | {money(LONG_K * LONG_RUNG_SUMS[0])} | {money(run['seed'])} (Whiteboard, Neon Logo x{run['scale']:.1f}) |")
+        if name in seen:
+            continue                                  # the two Garage Eggs share one row
+        seen.add(name)
+        times = [t for t, k, n in run["ev"] if k == "buy" and n == f"{name} {money(price)}"]
+        cost = money(plan[name]) + (" (one level)" if name.endswith(" I") else "") if name in plan else "in level I" if name.endswith(" II") else "none"
+        gain = {"up": f"+${inc}/s", "desk": "a desk", "egg": "a hire"}[kind]
+        out.append(f"| {name} | {cost} | {money(price)} | {gain} | {', '.join(clock(t) for t in times)} |")
+    seed_t = next(t for t, k, n in run["ev"] if k == "stage")
+    out.append(f"| Enter Seed at | {money(LONG_K * LONG_RUNG_SUMS[0])} | {money(run['seed'])} | | {clock(seed_t)} |")
     return out
 
 
@@ -519,6 +618,44 @@ def previous_g():
     ladder[3][3], ladder[5][3] = 3, 8
     ev, trace, calls = ladder_run(ladder, 3, [5000, 20000, 60000, 120000], gift=False, minutes=40, int_pay=True)
     return [f"{clock(t)} {n}" for t, k, n in ev]
+
+
+PREVIOUS = {  # what sessions 1 and 2 printed (docs/GAMEPLAY_NOTES.md, "The model"); --previous fails if one drifts
+    "A, B (today, live and with Studio calls)": "Today, live (model): Cash / Income at 1:00 $29 / $1, 2:00 $398 / $13, 4:00 $3,989 / $68, "
+        "5:00 $6,997 / $188, 10:00 $67,672 / $208; Neon Logo 4:20, five hires 7:10, IPO-ready 10:25. With Studio calls: "
+        "first call 0:53, Seed 2:30, Garage done 3:48, IPO-ready 8:40.",
+    "D (launch as planned)": "first call 0:53; 0:30 Desk (free), 1:22 hire 1, 5:01 Coffee Machine $1,100, 13:20 Desk 2 $3,600, "
+        "18:11 egg $2,300, 19:31 hire 2, 25:04 Laptop $4,200; longest wait 8:19",
+    "G (session 1's D1)": "0:30 Desk (free), 1:22 free egg hatched: hire 1, 1:43 Coffee Machine $150, 3:34 Laptop $800, 4:51 Desk 2 $1,000, "
+        "5:21 Garage Egg $400, 6:41 egg hatched: hire 2, 8:02 milestone 1, 10:25 Desk 3 $5,000, 10:54 Garage Egg $400, "
+        "12:14 egg hatched: hire 3, 18:27 milestone 2, 19:00 Server Rack $13,000, 28:37 Whiteboard $28,000, 30:05 milestone 3, "
+        "39:13 milestone 4",
+    "session 2's D1 (before E1)": "x3.1: Whiteboard $87,000 at 41:02, Neon Logo $220K at 1:18:59, Seed $492K at 1:30:04 (37:02 unfitted); "
+        "longest wait 0-20 min 2:52, 20 min to Seed 17:11; milestones 6:47, 27:55, 49:43, 1:06:54",
+}
+
+
+def previous():
+    s = scenarios()
+    ev, calls = s["planned"]
+    d, g = pacing(ev, calls), fit_scale()
+    pg, u = pacing(g["ev"], g["calls"]), pacing(s["unfit"]["ev"], s["unfit"]["calls"])
+    find = lambda name: clock(next(t for t, k, n in g["ev"] if n.startswith(name)))
+    got = {
+        "A, B (today, live and with Studio calls)": table_today(s)[0],
+        "D (launch as planned)": f"first call {clock(d['call'])}; " + ", ".join(f"{clock(t)} {n}" for t, k, n in ev) + f"; longest wait {clock(d['wait'])}",
+        "G (session 1's D1)": ", ".join(previous_g()),
+        "session 2's D1 (before E1)": f"x{g['scale']:.1f}: Whiteboard {money(g['rows'][7][1])} at {find('Whiteboard')}, Neon Logo "
+            f"{money(g['rows'][8][1])} at {find('Neon Logo')}, Seed {money(g['seed'])} at {clock(pg['seed'])} ({clock(u['seed'])} unfitted); "
+            f"longest wait 0-20 min {clock(pg['wait'])}, 20 min to Seed {clock(pg['late'])}; milestones "
+            + ", ".join(clock(t) for t, k, n in g["ev"] if k == "milestone"),
+    }
+    bad = 0
+    for name, want in PREVIOUS.items():
+        ok = got[name] == want
+        bad += not ok
+        print(f"{name}: {'reproduced' if ok else 'DIFFERS'}\n  {got[name]}" + ("" if ok else f"\n  was: {want}"))
+    return 1 if bad else 0
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -602,13 +739,21 @@ def check():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="compare the doc's blocks and the copied constants")
-    ap.add_argument("--previous", action="store_true", help="print the previous session's model G events")
+    ap.add_argument("--previous", action="store_true", help="reproduce sessions 1-2's models A, B, D, G and session 2's Garage")
+    ap.add_argument("--fit", action="store_true", help="re-run the E1 Garage fit and compare it with E1_LEVELS")
     args = ap.parse_args()
     if args.check:
         sys.exit(check())
     if args.previous:
-        print("\n".join(previous_g()))
-        return
+        sys.exit(previous())
+    if args.fit:
+        prices, shares, gap = fit()
+        sc = fit_score(prices, shares)
+        same = prices == [p for _, p, _ in E1_LEVELS] and shares == MILESTONE_SHARES["Garage"]
+        print(f"fit: levels {', '.join(money(p) for p in prices)}; Garage milestone shares {', '.join(f'{x:.0%}' for x in shares)}; "
+              f"start spacing {clock(gap)}; waits after 20:00 {', '.join(clock(x) for x in sc[3])}")
+        print("matches E1_LEVELS and MILESTONE_SHARES" if same else "DIFFERS from E1_LEVELS / MILESTONE_SHARES: copy the fit into them")
+        sys.exit(0 if same else 1)
     for table in all_tables():
         print(BEGIN)
         print("\n".join(table))

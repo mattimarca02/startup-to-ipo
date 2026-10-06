@@ -76,7 +76,7 @@ Assumes the launch build, D1-D4, the goal chain (4) and this tutorial order.
 ### 3.1 The script
 
 <!-- first-hour-model:begin -->
-| Time | Event (D1 run) | Tutorial, goal, reward | Cash / Income |
+| Time | Event (D1, E1 run) | Tutorial, goal, reward | Cash / Income |
 |---|---|---|---|
 | 0:30 | Desk (free) | TUT 1; Cash on the bar | $1 / $1 |
 | 0:53 | first call answered +$7 | TUT 5; goal: 3 calls | $31 / $1 |
@@ -88,10 +88,10 @@ Assumes the launch build, D1-D4, the goal chain (4) and this tutorial order.
 | 4:27 | Garage Egg $400 |  | $88 / $13 |
 | 5:47 | egg hatched: hire 2 | hires 2/3 | $1,221 / $18 |
 | 6:23 | 10th call answered | decor: Beanbag Throne | $2,130 / $18 |
-| 6:47 | milestone 1 | a star, title Side Hustler | $2,560 / $18 |
+| 7:58 | milestone 1 | a star, title Side Hustler | $4,512 / $18 |
 | 8:32 | Desk 3 $5,000 |  | $121 / $18 |
 | 8:48 | Garage Egg $400 |  | $134 / $18 |
-| 10:00 | 16 calls, 2 hires, 6 of 9 items | next: Server Rack | $1,550 / $18 |
+| 10:00 | 16 calls, 2 hires, 6 of 11 items | next: Server Rack | $1,550 / $18 |
 <!-- first-hour-model:end -->
 
 Before 0:30: the picker (D3), one tap. Step 5's move fixes A6; sources: LG:88 (3 upgrades), LG:60 (a hire per desk), BIBLE:26, 261 (Beanbag); office arranging comes with CUST PR 3. **TUT 6 (the gift)** opens 10 s after the third hire, the first pause after minute 10 (4), and speeds the Server Rack instead of minutes 2-5 (fixes A9). TUT 7-9 keep their triggers (TUT:143-146): poaching when it opens (7), the first round (FUND 8), near IPO-ready.
@@ -99,17 +99,17 @@ Before 0:30: the picker (D3), one tap. Step 5's move fixes A6; sources: LG:88 (3
 ### 3.2 Pacing targets
 
 <!-- first-hour-model:begin -->
-| Moment (model) | Target | Today | Launch as planned | Launch with D1 |
+| Moment (model) | Target | Today | Launch as planned | Launch with D1, E1 |
 |---|---|---|---|---|
 | Desk | ≤ 0:30 | 0:30 | 0:30 | 0:30 |
 | First call | ≤ 1:00 | none live | 0:53 | 0:53 |
 | First hire | ≤ 1:30 | 1:22 | 1:22 | 1:22 |
 | Second purchase | ≤ 2:00 | 1:01 | 5:01 | 1:36 |
 | Longest wait, 0-20 min | ≤ 6:30 | 3:15 | 8:19 | 2:52 |
-| Longest wait, 20 min to Seed | ≤ 15:00 | Seed before 20 min | not modelled | 17:11 |
-| First milestone (today: stage) | ≤ 10:00 | 2:49 Seed | none before Seed | 6:47 |
+| Longest wait, 20 min to Seed | ≤ 15:00 | Seed before 20 min | not modelled | 10:51 |
+| First milestone (today: stage) | ≤ 10:00 | 2:49 Seed | none before Seed | 7:58 |
 | Third hire | ≤ 15:00 | 5:51 | none in 30 min | 10:08 |
-| Seed | about 1:30:00 | 2:49 | 1:30:00 (LONG's fit) | 1:30:04 (37:02 unfitted) |
+| Seed | about 1:30:00 | 2:49 | 1:30:00 (LONG's fit) | 1:31:00 (37:02 unfitted) |
 <!-- first-hour-model:end -->
 
 D1 meets every target to minute 20, **not the late Garage:** keeping 1.5 h with the Whiteboard and Neon Logo x3.1 leaves 17-min waits after the Server Rack, milestones included (question 1).
@@ -117,17 +117,19 @@ D1 meets every target to minute 20, **not the late Garage:** keeping 1.5 h with 
 ### 3.3 D1: Garage prices (placeholders)
 
 <!-- first-hour-model:begin -->
-| D1 Garage item | LONG plan | D1 placeholder |
-|---|---|---|
-| Coffee Machine | $1,100 | $150 |
-| Laptop | $4,200 | $800 |
-| Desk 2 | $3,600 | $1,000 |
-| Garage Egg | $2,300 | $400 |
-| Desk 3 | none | $5,000 |
-| Server Rack | $13,000 | $13,000 |
-| Whiteboard | $28,000 | $87,000 |
-| Neon Logo | $72,000 | $220K |
-| Enter Seed at | $197K | $492K (Whiteboard, Neon Logo x3.1) |
+| Garage item (D1, E1) | LONG plan | Placeholder | Income | Bought at |
+|---|---|---|---|---|
+| Coffee Machine | $1,100 | $150 | +$2/s | 1:36 |
+| Laptop | $4,200 | $800 | +$5/s | 3:00 |
+| Desk 2 | $3,600 | $1,000 | a desk | 4:04 |
+| Garage Egg | $2,300 | $400 | a hire | 4:27, 8:48 |
+| Desk 3 | none | $5,000 | a desk | 8:32 |
+| Server Rack | $13,000 | $13,000 | +$15/s | 13:00 |
+| Whiteboard I | $28,000 (one level) | $30,000 | +$20/s | 23:12 |
+| Whiteboard II | in level I | $55,000 | +$20/s | 33:59 |
+| Neon Logo I | $72,000 (one level) | $120K | +$60/s | 54:32 |
+| Neon Logo II | in level I | $220K | +$60/s | 1:15:58 |
+| Enter Seed at | $197K | $669K | | 1:31:00 |
 <!-- first-hour-model:end -->
 
 The free egg takes Desk 1, so the two bought eggs need Desks 2 and 3, one price per egg tier (LG:38); this also fixes LONG's list, which buys the first hire (economy_sim.py:1067-1077). The x3.1 is this model's, so the milestones have numbers; `economy_sim.py --long` owns the re-fit (build item 9).
@@ -139,14 +141,14 @@ Four per rung, at shares of the rung's valuation distance: Garage 1, 12, 30, 50%
 <!-- first-hour-model:begin -->
 | Rung (LONG, D1 Garage) | Enters at | Milestones 1-4 (valuation) | Titles 1-4 | Next rung at |
 |---|---|---|---|---|
-| Garage | $0 | $4,900, $59,000, $150K, $250K | Side Hustler, Coffee Powered, Garage Hero, Ready to Raise | $492K |
-| Seed | $492K | $1.8M, $3M, $4.3M, $5.5M | Pitch Practicer, Demo Day Pro, Growth Hacker, Series A Bound | $6.79M |
-| Series A | $6.79M | $13M, $19M, $25M, $32M | Team Builder, Product Shipper, Market Maker, Series B Bound | $37.8M |
-| Series B | $37.8M | $61M, $84M, $110M, $130M | Scale-up Boss, Campus Planner, Unicorn Tamer, Big League Ready | $153M |
+| Garage | $0 | $6,700, $160K, $330K, $560K | Side Hustler, Coffee Powered, Garage Hero, Ready to Raise | $669K |
+| Seed | $669K | $1.9M, $3.2M, $4.4M, $5.7M | Pitch Practicer, Demo Day Pro, Growth Hacker, Series A Bound | $6.97M |
+| Series A | $6.97M | $13M, $19M, $26M, $32M | Team Builder, Product Shipper, Market Maker, Series B Bound | $38M |
+| Series B | $38M | $61M, $84M, $110M, $130M | Scale-up Boss, Campus Planner, Unicorn Tamer, Big League Ready | $153M |
 | Series C+D | $153M | $310M, $470M, $620M, $780M | Global Thinker, Board Favorite, Tower Builder, Pre-IPO Bound | $938M |
 | Pre-IPO | $938M | $1.1B, $1.3B, $1.5B, $1.7B | Roadshow Regular, Almost Public, Big Bell Boss, Ready for the Bell | $1.86B |
 
-With today's IpoConfig stages instead: Garage $18, $220, $540, $900; Seed $2,700, $3,600, $4,500, $5,400; Series A $9,700, $13,000, $17,000, $20,000; Series B $35,000, $46,000, $58,000, $69,000.
+With today's IpoConfig stages instead: Garage $18, $430, $880, $1,500; Seed $2,700, $3,600, $4,500, $5,400; Series A $9,700, $13,000, $17,000, $20,000; Series B $35,000, $46,000, $58,000, $69,000.
 <!-- first-hour-model:end -->
 
 ## 4. The first hour (launch, Software)
@@ -154,25 +156,25 @@ With today's IpoConfig stages instead: Garage $18, $220, $540, $900; Seed $2,700
 **Goals**, two on the card at a time (new kinds beside `employees` and `stage`, OnboardingServer.lua:136-146; keys `Hire3` and `Seed` kept):
 
 <!-- first-hour-model:begin -->
-| Goal (D1 run) | Done at |
+| Goal (D1, E1 run) | Done at |
 |---|---|
 | Answer 3 calls | 1:54 |
 | Own 3 upgrades | 3:00 |
-| Reach milestone 1 | 6:47 |
+| Reach milestone 1 | 7:58 |
 | Hire 3 employees | 10:08 |
 | Get a x2 chain | 29:23 |
 | Buy the Server Rack | 13:00 |
-| Reach milestone 2 | 27:55 |
-| Reach milestone 3 | 49:43 |
-| Reach milestone 4 | 1:06:54 |
-| Reach Seed | 1:30:04 |
+| Reach milestone 2 | 44:01 |
+| Reach milestone 3 | 1:05:23 |
+| Reach milestone 4 | 1:23:42 |
+| Reach Seed | 1:31:00 |
 | (not a goal) TUT 6: Day 1 gift +$6,870 | 10:18 |
 
-| At (D1 run) | Items bought | Hires | Calls answered | Milestones | Cash / Income | Seed bar |
+| At (D1, E1 run) | Items bought | Hires | Calls answered | Milestones | Cash / Income | Seed bar |
 |---|---|---|---|---|---|---|
-| 5 min | 4 of 9 | 1 | 7 | 0 | $516 / $13 | 1% |
-| 20 min | 7 of 9 | 3 | 34 | 1 | $21,116 / $38 | 7% |
-| 60 min | 8 of 9 | 3 | 110 | 3 | $110K / $78 | 43% |
+| 5 min | 4 of 11 | 1 | 7 | 0 | $516 / $13 | 0% |
+| 20 min | 7 of 11 | 3 | 34 | 1 | $21,116 / $38 | 5% |
+| 60 min | 10 of 11 | 3 | 110 | 2 | $57,123 / $138 | 41% |
 <!-- first-hour-model:end -->
 
 **IPO tease** (milestone 1): a dot on IPO; "The road to the bell": seven stages, "Seed: your first funding round", two empty Pokedex frames (CUST 1.4), no countdown. **The gift hook** (TUT 6): Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61), calm text (:53-69). **Tomorrow:** Day 2-3, the away card (LG:24), a named target ("Whiteboard, about 12 min"), the next title, Seed's round, room and three tasks shown ahead (BIBLE:271), Gaming's trending genre (SECT 2.3).
