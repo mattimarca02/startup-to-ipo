@@ -19,8 +19,8 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 9: Measurement
 - [x] Section 10: What to build, in order
 - [x] Section 11: Open questions
-- [x] Word count at most 5,500 (`wc -w`): 5,445 after section 11
-- [ ] Release both claims in `CONTRIBUTING.md`
+- [x] Word count at most 5,500 (`wc -w`): 5,445 after section 11, 5,466 after the review pass
+- [x] Release both claims in `CONTRIBUTING.md` (rows kept, set to free)
 
 ## Sources
 
@@ -58,7 +58,7 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 2 | The cheaper first Garage items are paid back by raising the **Whiteboard and Neon Logo**, so the Garage keeps about 1.5 h (LG:42). The other choice is a shorter Garage | the sims (`--long`, S10) | 3 |
 | 3 | Placeholder Garage prices: Coffee Machine $150, Laptop $800, the Garage Egg $400 (one price per tier, LG:42), Desk 2 $1,000, a new Desk 3 $5,000 | `LONG_ITEMS`, then TycoonCore UPGRADES and CreatureConfig in LONG PR 2 | 3 |
 | 4 | Garage milestones at $5K / $20K / $60K / $120K valuation, giving a title, decor, a task preview, decor (no Cash) | the sims; a config list | 3, 4 |
-| 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:20)** | `TutorialConfig` (TUT PR A) | 3 |
+| 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:15)** | `TutorialConfig` (TUT PR A) | 3 |
 | 6 | The goal chain and its texts: "Answer 3 calls", "Own 3 upgrades", "Hire 3 employees", "Reach milestone 1", "Get a x2 chain", "Buy the Server Rack", milestones 2-4, "Reach Seed" (shipped keys `Hire3` and `Seed` kept) | `OnboardingConfig.Goals` plus new goal kinds | 4 |
 | 7 | A "Cheer" on a neighbor's sign as the first social moment (a clap, no reward, rate-limited); poaching stays closed in the first hour | a new small feature, or drop it | 4 |
 | 8 | **Silent by default.** Sounds only from Roblox-made Creator Store assets the owner picks, in a `SoundConfig` with `id = 0` placeholders; volume 0.5; a "Sounds" toggle | `SoundConfig` | 5 |
@@ -68,6 +68,7 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 12 | At launch the Extra Employee Slots pass means **+3 desks**, capped like every desk (LG:60 estimates up to +15% Income) | LONG PR 3 (desks) | 6 |
 | 13 | A first founding **hides the Fintech and Biotech "Coming soon" cards** (CUST 1.3 shows them greyed); they appear from the second founding. Picker texts: Software "Answer customers, grow steady", Gaming "Make games, launch hits" | the picker (CUST PR 4) | 8 |
 | 14 | Funnel targets (95 / 85 / 85 / 60 / 50 / 25% ..., day 1 ≥ 25%, day 7 ≥ 8%, first IPO 3% by day 30) are placeholders to replace after the first 100 players | the analytics PR | 9 |
+| 15 | **Cash and +$/s go on the valuation bar's top line**; the stage name moves to its second line (no new HUD element: the top row and the left column are full) | IpoClient (build order 1) | 1, 10 |
 
 ## Not verified
 
@@ -77,3 +78,13 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 - An API that tells a script the player's graphics quality, to drop particles on low settings (section 5).
 - Creator Hub's built-in analytics (which charts exist today) and `AnalyticsService` method names: written from memory, no dashboard or docs opened (section 9).
 - Streaming the plot in before the teleport (WORLD §3 marks it unverified too); how a phone behaves when the plot arrives late (section 7).
+- Launch-build poaching economics (A13): LONG prices against today's poach cost rule, not simulated (SIMS §7 lists poaching as not modeled).
+- The time a new player spends on the sector picker and on reading tutorial cards: the model starts the Desk at 0:30 and ignores reading time.
+- No Studio, no MCP and no playtest were used; `tools/daily_test.py` was not run (docs only). Gaming numbers are SECT's placeholders, read, not re-run.
+
+## Results
+
+- Proposal: `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md`, 11 sections, 5,466 words (`wc -w`), 20 audit findings, 18 build items, 8 open questions.
+- Commits (each pushed right after): 9f54c8d claim, 243e2ae notes, db8b721 section 1, 289bde8 section 2, c314c0b section 3, 6111003 section 4, 3412bb9 section 5, c667ada section 6, 669fd5a section 7, 59db7c8 section 8, 097856c section 9, 4e5f9a5 section 10, b047237 section 11, 66b8c95 review pass, then the claim release.
+- Scratch files (outside the repo, not committed): the sim's default output, `first_hour_model.py` (models A-H), `g3_model.py` (the proposal's model G).
+- Every explicit `file:line` citation in the proposal was printed against the file and checked once more at the end.
