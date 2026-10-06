@@ -9,7 +9,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Read the docs and scripts listed in the brief (all found; see Sources)
 - [x] Run `python tools/economy_sim.py` (default output, read-only; 5.5 s, exit 0)
 - [x] Section 1: Audit
-- [ ] Section 2: The core loop
+- [x] Section 2: The core loop
 - [ ] Section 3: The first 10 minutes
 - [ ] Section 4: The first hour
 - [ ] Section 5: Game feel

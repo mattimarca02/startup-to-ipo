@@ -64,3 +64,24 @@ The sim has no free egg: Seed at 4 min, IPO-ready at 12 (sim §4).
 | A18 | **Income has no feel:** the loop only changes numbers (TycoonCore.lua:859-871). | Low | "+$" floaters (section 5) |
 | A19 | **Emoji icons** everywhere (ShopConfig.lua:38-154; EmployeeClient.lua:175-176). | Low | SHOP_UX S3/S3b (planned) |
 | A20 | **Today Cash piles up:** after ~7 min only HR levels ($522,500) are left (sim §5). | Low (today) | LONG PR 2 (planned) |
+
+## 2. The core loop (launch, Software)
+
+| Every | The player | Pulled by |
+|---|---|---|
+| 10 s | Answers a call (every 20-40 s, faster with more hires: TaskConfig.lua:53, 61-62); Cash ticks | the ringing chip, the chain (x1.1 to x2) |
+| minute | Buys the next upgrade, egg or desk; hatches | the Office bar "$1,234 / $1,500 · about 7 s" (SHOP_UX 3.2) |
+| 10 min | A milestone: decor, title, a goal, a new task kind | the goal card |
+| session | A funding stage, its round (Raise, Later, Skip: FUND 1), a new room | the valuation bar |
+| day | The gift, 3 engaged hours at full value (LG:23), a trending genre (Gaming) | the calendar, the away bank |
+
+**Three layers, one loop.** *Active* play (calls, later events and pitches) is the only thing that moves the IPO clock (LG:5) and adds about a third to Income in the Garage (G1 target f 0.32, LG:115). *Passive* Income (upgrades, hires) is the unit every reward is paid in: a call pays 7 s of Income (TaskServer.lua:254), so every purchase makes every call worth more. *Decisions* (which upgrade, egg or desk; raise or skip) turn active Cash into passive Income. Answer, buy, earn more per answer, see the next price: that is the game.
+
+**AFK against active.**
+
+| | Active (answers calls) | Online, not answering | Offline |
+|---|---|---|---|
+| Today | Income (no calls live) | the same Income | 50% for 8 h, all valuation (TycoonCore.lua:77-78, 825) |
+| Launch | Income + calls, valuation 100% for 3 h a day, then 5% (LG:23) | quiet mode after 90 s (TaskConfig.lua:92); the away bank: 10% of base Income, 2 h, 10% of it valuation (LG:24) | the same away bank |
+
+An hour away is worth about 1/130 of an engaged Garage hour toward the IPO (0.1 x 0.1 against 1.32, estimate), but its Cash still buys the next item. The welcome-back card (section 5) says so calmly: "Your startup saved $X while you were away."
