@@ -873,11 +873,30 @@ local function moneyValue(value)
 	return math.clamp(math.floor(value), 0, MONEY_CAP)
 end
 
--- 1234567 -> "$1M" (whole numbers only: the shortest form, 1000 and up)
+-- IpoConfig.formatShort with one fix: it turns 999,950 to 999,999 into "$1000K" (and the same in M and B). The bar
+-- shows "$1M" there. (IpoConfig is not changed.)
+local function shortAmount(amount)
+	local text = IpoConfig.formatShort(amount)
+	local promoted = { K = "M", M = "B", B = "T" }
+	local unit = text:match("^%$1000([KMB])$")
+	if unit then
+		return "$1" .. promoted[unit]
+	end
+	return text
+end
+
+-- 1234567 -> "$1M" (whole numbers only: the shortest form, 1000 and up). Rounds to the nearest, like the other
+-- forms: 99,999 is "$100K" in all of them; 999,500 and up is "$1M", never "$1000K".
 local function wholeShort(amount)
-	for _, unit in ipairs({ { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "K" } }) do
+	local units = { { 1e3, "K" }, { 1e6, "M" }, { 1e9, "B" }, { 1e12, "T" } }
+	for i = #units, 1, -1 do
+		local unit = units[i]
 		if amount >= unit[1] then
-			return string.format("$%d%s", math.floor(amount / unit[1]), unit[2])
+			local whole = math.floor(amount / unit[1] + 0.5)
+			if whole >= 1000 and units[i + 1] then
+				return "$1" .. units[i + 1][2]
+			end
+			return string.format("$%d%s", whole, unit[2])
 		end
 	end
 	return "$" .. amount
@@ -893,7 +912,7 @@ local function moneyText(amount, tier, fullBelow)
 	elseif tier == 3 then
 		return wholeShort(amount)
 	end
-	return IpoConfig.formatShort(amount)
+	return shortAmount(amount)
 end
 
 -- "$4,630 · +$18/s", then shorter forms of it. Only the part that exists (Cash, Income) is shown.
@@ -1024,11 +1043,11 @@ end
 -- "🏚️ Garage → Seed · $9.3K / $492K · x1.5 · 📜 3", then shorter forms of it. The multiplier and the Shares
 -- are only there when they are not x1 and 0 (the IPO window has them).
 local function infoTexts(info)
-	local now = IpoConfig.formatShort(moneyValue(valuation()) or 0)
+	local now = shortAmount(moneyValue(valuation()) or 0)
 	if info.ready then
 		return { "🔔 IPO-ready! Tap to go public", "🔔 IPO-ready! · " .. now, "🔔 IPO-ready!", "🔔 IPO!" }
 	end
-	local progress = string.format("%s / %s", now, IpoConfig.formatShort(moneyValue(info.to) or 0))
+	local progress = string.format("%s / %s", now, shortAmount(moneyValue(info.to) or 0))
 	local stage, nextStage = info.stage, IpoConfig.Stages[info.index + 1]
 	local texts = {}
 	local extras = {}

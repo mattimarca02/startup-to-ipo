@@ -572,7 +572,7 @@ local VALUES = {
 	{ 100000, 10000, "$100K · +$10K/s" },
 	{ 123456, 12345, "$123.5K · +$12.3K/s" },
 	{ 1500000, 45000, "$1.5M · +$45K/s" },
-	{ 999999, 99999, "$1000K · +$100K/s" },
+	{ 999999, 99999, "$1M · +$100K/s" },
 	{ 1e9, 5e6, "$1B · +$5M/s" },
 	{ 1.5e12, 2e9, "$1.5T · +$2B/s" },
 	{ 1e12, 1e12, "$1T · +$1T/s" },
@@ -614,13 +614,77 @@ for _, case in ipairs(VALUES) do
 	end)
 end
 
+-- 1b. Rounding: every form rounds to the nearest, and nothing says $1000K -----------------------------------------------
+-- The shortest form used to round down ("$99K" for 99,999 while the others said "$100K"), and IpoConfig.formatShort
+-- turns 999,950 to 999,999 into "$1000K" (IpoConfig is not changed: the bar guards it).
+scenario("rounding", function()
+	local UNIT = { K = 1e3, M = 1e6, B = 1e9, T = 1e12 }
+	-- "$123.5K" -> 123500, 123.5 (the digits), "K"; a plain "$4,630" -> 4630
+	local function parse(token)
+		local plain = token:gsub("^%+", ""):gsub("/s$", "")
+		local digits, unit = plain:match("^%$([%d%.]+)([KMBT])$")
+		if digits then return tonumber(digits) * UNIT[unit], digits, unit end
+		local exact = plain:match("^%$([%d,]+)$")
+		return exact and tonumber((exact:gsub(",", ""))) or nil
+	end
+	local AMOUNTS = { 999, 1000, 1049, 1050, 1500, 4630, 9950, 9999, 10000, 12345, 99949, 99950, 99999, 100000, 123456, 949999, 999949, 999950,
+		999999, 1000000, 1499999, 1500000, 9999999, 99999999, 999949999, 999950000, 999999999, 1e9, 999949999999, 999950000000, 999999999999, 1e12, 999e12 }
+	local bad, shown = {}, 0
+	for _, amount in ipairs(AMOUNTS) do
+		for _, scale in ipairs({ 0.01, 0.6, 0.8, 1, 1.2, 1.5, 2, 3, 10 }) do
+			local E = boot({ widthScale = scale, stats = { amount, amount } })
+			local text = E.money.Text
+			shown += 1
+			for token in text:gmatch("%S+") do
+				if token ~= "·" then
+					local value, digits, unit = parse(token)
+					local tol = 0
+					if unit then tol = (digits:find(".", 1, true) and 0.05 or 0.5) * UNIT[unit] end
+					if value == nil or math.abs(value - amount) > tol + 1e-6 or (unit and tonumber(digits) >= 1000) or (unit == nil and value ~= amount) then
+						bad[#bad + 1] = amount .. " at scale " .. scale .. ": " .. text
+					end
+				end
+			end
+		end
+	end
+	check("rounding: " .. shown .. " texts (33 amounts, 9 font widths, all three forms): every number is within half a step of the amount, none says 1000 of a unit (" .. (bad[1] or "ok") .. ")", #bad == 0, bad[1])
+	-- the shortest form (a font ten times wider than the estimate forces it): whole numbers, to the nearest
+	local WHOLE = { { 999, "$999" }, { 1000, "$1K" }, { 1499, "$1K" }, { 1500, "$2K" }, { 4630, "$5K" }, { 99999, "$100K" }, { 100000, "$100K" }, { 123456, "$123K" },
+		{ 999499, "$999K" }, { 999500, "$1M" }, { 999999, "$1M" }, { 1499999, "$1M" }, { 1500000, "$2M" }, { 999499999, "$999M" }, { 999500000, "$1B" },
+		{ 999999999, "$1B" }, { 999499999999, "$999B" }, { 999500000000, "$1T" }, { 999e12, "$999T" }, { 1e18, "$999T" } }
+	for _, case in ipairs(WHOLE) do
+		local E = boot({ widthScale = 10, stats = { case[1], case[1] } })
+		check("rounding, shortest form: " .. case[1] .. " is " .. case[2], E.money.Text == case[2] .. " +" .. case[2], E.money.Text)
+	end
+	local ninetyNine = boot({ widthScale = 10, stats = { 99999, 99999 } })
+	local roomy = boot({ widthScale = 0.01, stats = { 123456, 99999 } })
+	check("rounding: 99,999 is $100K in the shortest form and in the full form", ninetyNine.money.Text == "$100K +$100K" and roomy.money.Text == "$123.5K · +$100K/s", ninetyNine.money.Text .. " / " .. roomy.money.Text)
+	-- IpoConfig.formatShort's $1000K, guarded in the bar (the full form, with room)
+	local GUARD = { { 999949, "$999.9K" }, { 999950, "$1M" }, { 999999, "$1M" }, { 999949999, "$999.9M" }, { 999950000, "$1B" }, { 999999999, "$1B" }, { 999950000000, "$1T" }, { 999999999999, "$1T" } }
+	for _, case in ipairs(GUARD) do
+		local E = boot({ widthScale = 0.01, stats = { case[1], case[1] } })
+		check("rounding, the bar's own guard: " .. case[1] .. " is " .. case[2] .. " (never $1000 of a unit)", E.money.Text == case[2] .. " · +" .. case[2] .. "/s", E.money.Text)
+	end
+	check("rounding: IpoConfig.formatShort still has the $1000K the bar guards against (so the guard is needed, IpoConfig is not changed)", IpoConfig.formatShort(999960) == "$1000K", IpoConfig.formatShort(999960))
+	-- the bottom row says the valuation the same way
+	local seen, thousand = {}, nil
+	for _, scale in ipairs({ 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 1, 1.2 }) do
+		local E = boot({ widthScale = scale, attrs = { IpoValuation = 999960, IpoCount = 0 }, stats = { 5, 5 } })
+		seen[E.info.Text] = true
+		if has(E.info.Text, "1000") then thousand = E.info.Text end
+	end
+	local has1M = false
+	for text in pairs(seen) do if has(text, "· $1M") then has1M = true end end
+	check("rounding: the bottom row never says $1000K for a valuation of 999,960 (and says $1M in at least one form)", thousand == nil and has1M, thousand)
+end)
+
 -- The narrowest bar: the fullest text that fits, checked against the estimate
 scenario("narrow", function()
 	local cases = {
 		-- cash, income, the three forms of the text, fullest first (the bar shows the first that fits, at 16 px, then 14)
-		{ 4630, 18, { "$4,630 · +$18/s", "$4.6K · +$18/s", "$4K +$18" } },
+		{ 4630, 18, { "$4,630 · +$18/s", "$4.6K · +$18/s", "$5K +$18" } },
 		{ 123456, 12345, { "$123.5K · +$12.3K/s", "$123.5K · +$12.3K/s", "$123K +$12K" } },
-		{ 99999, 9999, { "$99,999 · +$9,999/s", "$100K · +$10K/s", "$99K +$9K" } },
+		{ 99999, 9999, { "$99,999 · +$9,999/s", "$100K · +$10K/s", "$100K +$10K" } },
 		{ 1e15, 1e15, { "$999T · +$999T/s", "$999T · +$999T/s", "$999T +$999T" } },
 	}
 	for _, c in ipairs(cases) do
@@ -1322,7 +1386,7 @@ MUTATIONS = [
     ("wrong format: Cash without thousands commas", 'return ShopConfig.formatCash(amount)\n\telseif tier == 2', 'return "$" .. amount\n\telseif tier == 2'),
     ("wrong format: Income shown without its /s", '(tier < 3 and "/s" or "")', '""'),
     ("wrong format: the Income sign + dropped", 'table.insert(parts, "+" .. moneyText(income, tier, 10000)', 'table.insert(parts, moneyText(income, tier, 10000)'),
-    ("wrong format: short form uses the wrong function (no K, M)", 'return IpoConfig.formatShort(amount)\nend\n\n-- "$4,630', 'return ShopConfig.formatCash(amount)\nend\n\n-- "$4,630'),
+    ("wrong format: short form uses the wrong function (no K, M)", 'return shortAmount(amount)\nend\n\n-- "$4,630', 'return ShopConfig.formatCash(amount)\nend\n\n-- "$4,630'),
     ("Cash and Income swapped in the read", 'return read("Cash"), read("Income")', 'return read("Income"), read("Cash")'),
     ("Cash and Income swapped in the text (Income first)", '''		if cash then
 			table.insert(parts, moneyText(cash, tier, 100000))
@@ -1407,6 +1471,14 @@ end)''', ''),
     ("loading: the row is shown at the signal but not drawn (waits for the next change)", 'if not moneyShown then\n\t\tmoneyShown = true\n\t\tdrawMoney()\n\tend', 'if not moneyShown then\n\t\tmoneyShown = true\n\tend'),
     ("loading: a signal listener added on every rebind (leak)", 'restartMoneyRule(stats)\n\tif stats then', 'restartMoneyRule(stats)\n\tplayer:GetAttributeChangedSignal(LOADED_ATTRIBUTE):Connect(function() end)\n\tif stats then'),
     ("loading: a polling loop waits for the signal", 'moneyWait = task.delay(MONEY_WAIT, function()', 'task.spawn(function()\n\t\t\twhile player:GetAttribute(LOADED_ATTRIBUTE) == nil do\n\t\t\t\ttask.wait(0.5)\n\t\t\tend\n\t\t\tshowMoney()\n\t\tend)\n\t\tmoneyWait = task.delay(MONEY_WAIT, function()'),
+    # rounding of the shortest form and the $1000K guard
+    ("rounding: the shortest form rounds down again", 'local whole = math.floor(amount / unit[1] + 0.5)', 'local whole = math.floor(amount / unit[1])'),
+    ("rounding: the shortest form rounds .5 down", 'local whole = math.floor(amount / unit[1] + 0.5)', 'local whole = math.floor(amount / unit[1] + 0.4)'),
+    ("rounding: the shortest form says $1000K", 'if whole >= 1000 and units[i + 1] then', 'if false then'),
+    ("rounding: the shortest form promotes to the wrong unit", 'return "$1" .. units[i + 1][2]', 'return "$1" .. unit[2]'),
+    ("rounding: the guard is gone (the bar says $1000K)", 'if unit then\n\t\treturn "$1" .. promoted[unit]', 'if false then\n\t\treturn "$1" .. promoted[unit]'),
+    ("rounding: the guard promotes to the wrong unit", 'local promoted = { K = "M", M = "B", B = "T" }', 'local promoted = { K = "M", M = "M", B = "T" }'),
+    ("rounding: the bottom row is not guarded", 'local now = shortAmount(moneyValue(valuation()) or 0)', 'local now = IpoConfig.formatShort(moneyValue(valuation()) or 0)'),
 ]
 
 

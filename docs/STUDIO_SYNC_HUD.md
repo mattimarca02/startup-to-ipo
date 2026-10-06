@@ -8,7 +8,7 @@ What changed: the valuation bar (top left, next to the IPO button) now has three
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `IpoClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `a69bd9acbc221359e04da88f5427bc57223c0f3dab43faba0c365886a55e7fe0` | 40899 |
+| `IpoClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `e7937d8785ee5451154b6b99e2b80c37dff050e5aaf5a64fc5e64e25a1a09511` | 41550 |
 
 Exact Explorer path: **StarterPlayer > StarterPlayerScripts > IpoClient**. Hash and size are of the repo file `IpoClient.lua` at commit `7e63187` (the last commit that touches it; later commits on this branch are only the test and this doc). The hash was computed with the block in section (c) run in Luau on the real file, and it matches `shasum -a 256`. The file uses `\n` line endings and ends with one newline; Studio may drop that last newline, so the block prints both cases as OK.
 
@@ -22,7 +22,7 @@ Exact Explorer path: **StarterPlayer > StarterPlayerScripts > IpoClient**. Hash 
 1. In a terminal in the project folder: `git fetch`, then `git switch hud-cash`, then `git pull`. (Or open the file on GitHub on the `hud-cash` branch.)
 2. Open `IpoClient.lua`, select all (Cmd+A), copy (Cmd+C).
 3. In Studio: Explorer > StarterPlayer > StarterPlayerScripts > double-click `IpoClient`, select all, paste over everything.
-4. Paste the block from section (c) into **View > Command Bar** and press Enter. The line `IpoClient OK 40899 bytes` must appear. `DIFFERENT` means the paste was not complete: paste again.
+4. Paste the block from section (c) into **View > Command Bar** and press Enter. The line `IpoClient OK 41550 bytes` must appear. `DIFFERENT` means the paste was not complete: paste again.
 5. View > Drafts: commit the `IpoClient` draft.
 
 ## (c) Hash check (command bar)
@@ -71,7 +71,7 @@ end
 
 local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
 local WANT = {
-	IpoClient = { "a69bd9acbc221359e04da88f5427bc57223c0f3dab43faba0c365886a55e7fe0", 40899 },
+	IpoClient = { "e7937d8785ee5451154b6b99e2b80c37dff050e5aaf5a64fc5e64e25a1a09511", 41550 },
 }
 for name, want in pairs(WANT) do
 	local script = SPS:FindFirstChild(name)
