@@ -133,3 +133,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SOUND_PLAN.md | (repo only) | free | | |
 | tools/first_hour_model.py | (repo only) | free | | |
 | docs/SIMS_RESULTS.md | (repo only) | free | | |
+| CompanyServer | ServerScriptService | free | | |
+| CompanyConfig | ReplicatedStorage | free | | |
+| SectorConfig | ReplicatedStorage | free | | |
+| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
