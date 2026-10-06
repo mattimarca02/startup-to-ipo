@@ -11,7 +11,7 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 0.2 This notes file with the checklist
 
 **Phase 1: shop UX (docs only)**
-- [x] 1.1 `docs/SHOP_UX_PROPOSAL.md` (3,409 words; 6 open questions)
+- [x] 1.1 `docs/SHOP_UX_PROPOSAL.md` (3,409 words; 6 open questions, all answered by the owner in phase 6)
 
 **Phase 2: world pass**
 - [x] 2.1 `docs/WORLD_PASS_PROPOSAL.md` (2,481 words; numbers re-checked after the build in 2.4)
@@ -52,6 +52,14 @@ Each item is one commit, pushed right after. An item is ticked in the same commi
 - [x] 5.7 Item 7: the props drift test now pins each copy's scale to the factor PlotArt.lua declares (`scaled(laptop, 1.5)`, read from its source), so a copy resized as a whole is caught, and compares transparency; board texts and the coffee steam stay out on purpose (recorded below). The cap of 8 is recorded as a guess. A light test block (`StarterGui.PREVIEW_LIGHT`, one white cube lit like every 3D icon) and its line in the Studio checklist settle `LightDirection`'s meaning by eye
 - [x] 5.8 Release the claims (the 11 rows stay, set to free)
 
+**Phase 6: the owner's shop decisions (2026-10-06, docs only, branch `shop-decisions` pushed to `world-icons-pass`)**
+- [x] 6.1 Claim `docs/SHOP_UX_PROPOSAL.md` and this file
+- [x] 6.2 Proposal section 7 now holds only what is unresolved (2 questions)
+- [x] 6.3 The six decisions recorded in proposal 3.1, 3.2, 3.3, 3.6, 3.10, the test plan and the PR plan (S5 gated on CUSTOMIZE PR 2 and PR 3; S1 gets the rail); proposal 3,478 words
+- [x] 6.4 Proposal citations re-checked against `origin/main` (`e3c9e67`): about 45 line references, two fixed
+- [x] 6.5 OWNER CHOICE: the shop's six items marked decided (this commit)
+- [x] 6.6 Release the claims (rows kept, set to free)
+
 ## OWNER DEFAULT (decided by the owner for the review fixes)
 
 1. **The ViewportFrame cap is global** across every window and every cache on the client.
@@ -76,7 +84,7 @@ The world builder never moves, resizes, replaces or deletes either of them, and 
 
 - **Shop proposal (phase 1):** the phone numbers use a 36 px Roblox top bar (GUI 667 x 339 and 320 x 532), the same assumption as TUTORIAL_PROPOSAL section 3; portrait's window is capped at 470 px tall, so the shop looks the same with a 0 px bar. Text widths (characters per line) are marked as estimates.
 - **Shop proposal:** its future tests go in a new `tools/shop_ux_test.py`, not in `tools/daily_test.py` (other branches own that file).
-- **Shop proposal:** Robux buys keep Roblox's own prompt as their only confirmation; the two-tap confirm is proposed for Cash buys above a threshold (open question 2).
+- **Shop proposal:** Robux buys keep Roblox's own prompt as their only confirmation; the two-tap confirm applies only to buildings and furniture above half the player's Cash (decided by the owner, 2026-10-06).
 - **World: the plots' reach.** The world keeps out of a box around each plot (36 studs to the sides, 50 behind, 40 in front of the center, 32 up), not just the 60 x 60 floor: today's rooms reach 35.5 to the sides (stage 1's dirt), 49 behind (stage 5's skyline) and 36.2 in front (stage 1's dirt), and the building pass (branch `building-pass`, not merged) puts ground pieces up to 40 in front. `tools/world_test.py` builds all five rooms and fails if one reaches past the box.
 - **World: the front walks** are the only pieces that enter a plot's box: a flat strip from the floor's front edge to the front street, 0.1 stud above stage 1's yard dirt (so the two never flicker). If the building pass lands, its doorstep path lies under the walk's first studs.
 - **World: the Studio preview rooms** (`PREVIEW_STAGES`, x -630 to -290) are a keep-out only at spacing 90: they were placed for it. At spacing 112 plot 1 itself would stand on them, so the preview snippet in docs/STUDIO_SYNC.md would have to move (to about x -700) first.
@@ -119,7 +127,14 @@ Defaults picked where the owner's taste decides. Each is implemented; the place 
 14. **3D views:** the Office props from the front-left and a little above (`PROP_VIEW`, yaw -28, pitch 22); creatures from the front, a little to one side (`CREATURE_VIEW`).
 15. **The cap of 8 ViewportFrames on the whole client** (`Style.viewportCap`; past it a card shows its drawn fallback), and the outline 4 grid units wide (`Style.outline`: 2 px at 56, 3 px at 72).
 
-**Shop** (`docs/SHOP_UX_PROPOSAL.md`, section 7): six open questions, most important first: the landscape tab rail, confirming Cash buys, showing the locked rungs, badges, 3D or drawn icons on phones, the details sheet.
+**Shop** (`docs/SHOP_UX_PROPOSAL.md`): the six questions of its section 7 were answered by the owner on 2026-10-06. Each is **DECIDED BY THE OWNER** and recorded in the section it touches:
+- **S1. Landscape tabs: DECIDED BY THE OWNER.** A vertical rail on the left (112 x 44 buttons); portrait keeps the top row (3.1, 3.10).
+- **S2. Confirmations: DECIDED BY THE OWNER.** Office upgrades never ask. The two-tap confirm ("Tap again: $5,000", 3 s) applies only to buildings and furniture (CUSTOMIZE PR 2 and PR 3) priced above half the player's current Cash, from `ShopConfig.ConfirmCashAboveShare = 0.5`, with no effect until those items exist. Robux buys keep Roblox's own prompt as the only confirmation (3.2, 3.3; S5 in the PR plan).
+- **S3. Office ladder: DECIDED BY THE OWNER.** All six rungs: owned folded into a summary row, the next upgrade as the hero card with a progress bar, locked rungs dimmed with "Unlocks after X" (3.2).
+- **S4. Badges: DECIDED BY THE OWNER.** Factual only: OWNED, ACTIVE (with the timer), LEFT, and BEST VALUE computed from `ShopConfig`. "POPULAR"-type tags can be added later, when real sales data exists (3.3).
+- **S5. Icons: DECIDED BY THE OWNER.** 3D (`ViewportFrame`) for the Office upgrades and the creatures, drawn UI shapes for everything else (3.6). This confirms choices 14 and 15 above as defaults; the cap of 8 stays a guess (risk 6), and a Test > Device check on a weak phone decides it.
+- **S6. Details sheet: DECIDED BY THE OWNER.** It slides up inside the shop window, never a separate pop-up (3.3).
+- Still open in the proposal's section 7: whether 8 ViewportFrames is right for a weak phone, and whether a "where it stands" text is wanted later.
 
 ## Blocked
 
