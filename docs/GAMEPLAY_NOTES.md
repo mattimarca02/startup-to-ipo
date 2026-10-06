@@ -10,7 +10,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Run `python tools/economy_sim.py` (default output, read-only; 5.5 s, exit 0)
 - [x] Section 1: Audit
 - [x] Section 2: The core loop
-- [ ] Section 3: The first 10 minutes
+- [x] Section 3: The first 10 minutes
 - [ ] Section 4: The first hour
 - [ ] Section 5: Game feel
 - [ ] Section 6: Monetization that feels fair
@@ -43,13 +43,21 @@ Where each input came from (main = `origin/main` at e3c9e67).
 2. **Scratch model.** `economy_sim.py` has no free egg, no calls and no Day 1 gift, and its default run uses today's prices. I wrote a small model outside the repo (same config numbers; LONG Garage prices read from `LONG_ITEMS`, economy_sim.py:1067-1077) with human delays as estimates: Desk at 0:30, a ready egg noticed in 20 s, purchases 5 s after they are affordable, 80% of calls answered, egg hires at their average Income ($4.97/s Garage, $3/s for LONG's planned Coding Cat). Every model number in the proposal is marked as an estimate.
 3. **Checked and dropped:** I suspected that keeping a window open for 90 s starts quiet mode the moment it closes. It doesn't: `settle` moves the idle clock while paused (TaskServer.lua:232).
 4. **LG R3** (poaching needs 14+ days of account age and 10 engaged hours, LG:108) is treated as proposed, not decided: LG:128 lists R1 and R2 among the decisions, not R3.
-5. **Findings about today that LONG PR 2 fixes** (A4, A5, A20) are kept in the list, marked "(today)" and "planned", so the owner sees what a launch on today's code would feel like.
+5. **A third Garage desk.** Model G (cheaper first items only) still left a 10-minute wait from 8:00 to the Server Rack. Adding Desk 3 and a Bug Beetle egg (model G2) brings the longest wait in minutes 0-20 to about 6 minutes, and it also fixes the free-egg conflict (the free hire takes Desk 1 in LONG's list, which assumes the first hire is bought).
+6. **The Day 1 gift goes after minute 10, not at 7:00.** At 7:00 the $4,200 gift would buy Desk 3 and an egg at once and leave an 8-minute wait after it; after the third hire (~12:20) its ~$6,600 shortens the longest wait instead.
+7. **Findings about today that LONG PR 2 fixes** (A4, A5, A20) are kept in the list, marked "(today)" and "planned", so the owner sees what a launch on today's code would feel like.
 
 ## OWNER CHOICE
 
 Defaults picked where the owner's taste decides. Each one is marked in the proposal too.
 
-None yet.
+| # | Default picked | Where it is decided later | Section |
+|---|---|---|---|
+| 1 | The very first founding shows the sector picker (D-C) with **Software preselected**, because both sectors are "not done" for a new player (CUST 1.3) and Software teaches the shared engine | `SectorConfig` / the picker (CUST PR 4) | 3, 8 |
+| 2 | The cheaper first Garage items are paid back by raising the **Whiteboard and Neon Logo**, so the Garage keeps about 1.5 h (LG:42). The other choice is a shorter Garage | the sims (`--long`, S10) | 3 |
+| 3 | Placeholder Garage prices: Coffee Machine $150, Laptop $800, first egg $400, Desk 2 $1,000, new Desk 3 $2,500, Bug Beetle egg $3,000 | `LONG_ITEMS`, then TycoonCore UPGRADES and CreatureConfig in LONG PR 2 | 3 |
+| 4 | Garage milestones at $5K / $20K / $60K / $120K valuation, giving a title, decor, a task preview, decor (no Cash) | the sims; a config list | 3, 4 |
+| 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:20)** | `TutorialConfig` (TUT PR A) | 3 |
 
 ## Not verified
 

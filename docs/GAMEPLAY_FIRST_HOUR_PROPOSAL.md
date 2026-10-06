@@ -85,3 +85,45 @@ The sim has no free egg: Seed at 4 min, IPO-ready at 12 (sim §4).
 | Launch | Income + calls, valuation 100% for 3 h a day, then 5% (LG:23) | quiet mode after 90 s (TaskConfig.lua:92); the away bank: 10% of base Income, 2 h, 10% of it valuation (LG:24) | the same away bank |
 
 An hour away is worth about 1/130 of an engaged Garage hour toward the IPO (0.1 x 0.1 against 1.32, estimate), but its Cash still buys the next item. The welcome-back card (section 5) says so calmly: "Your startup saved $X while you were away."
+
+## 3. The first 10 minutes (launch, Software)
+
+Assumes the launch build plus this doc's proposals: placeholder Garage prices (3.3), Cash on the bar (A1), the goal chain (section 4), Garage milestones (3.3). Cash and Income are a model (estimates). Sounds are optional; the game is complete without them (section 5).
+
+### 3.1 The script
+
+| Time | Sees, hears | Does | Cash / Income | Tutorial and goal card |
+|---|---|---|---|---|
+| 0:00 | Sector picker, Software preselected (CUST 1.3; OWNER CHOICE) | Taps Start | $0 / $0 | none |
+| 0:10 | Garage; SHOP outlined; Office hero "Get it free" | Gets the Desk: "+$1/s" floats, a coin sound | $0 / $1 | **TUT 1** |
+| 0:30-0:55 | The desk phone rings (20-40 s after the Desk, TaskConfig.lua:53) | Answers: "+$7", chain x1.1 | $36 / $1 | **TUT 5 moved here** (fixes A6); goal "Answer 3 calls" |
+| 1:00-1:22 | EGGS badge "READY", arrow to the incubator | Hatches: reveal, first hire | $167 / $6 at 2:00 | **TUT 2**; goal "Hire 3 employees 1/3" |
+| 1:43 | Hero bar full, a soft pulse | **First purchase with own Cash:** Coffee Machine $150 | | **TUT 4** |
+| 2:00-3:30 | Calls every ~25 s, the chain grows | Answers, saves | $581 / $6 at 3:00 | "Answer 3 calls" ✓ |
+| 3:34 | | Laptop $800 | / $11 | "Own 3 upgrades" ✓ (LG:88) |
+| 4:51-5:21 | TEAM "1/1 desks" | Desk 2 ($1,000), an egg ($400) | | **TUT 3** rewritten: one hire per desk (LG:60) |
+| 6:41 | Reveal | Second hire | $1,465 / $14 at 7:00 | "Hire 3 employees 2/3" |
+| ~7:00 | 10th call answered | Decor: Beanbag Throne (BIBLE:26, 261) | | |
+| ~8:00 | **Milestone 1** ($5K valuation): the funding sign gets a star, a short fanfare | Desk 3 ($2,500); title "Garage Dreamer" (BIBLE:28) | | "Reach milestone 1" ✓ |
+| 10:00 | Next target "Bug Beetle egg · about 1 min" | Calls; arranges the office (CUST, after PR 3) | $2,130 / $14 | |
+
+TUT 6 (the gift) comes at the first pause after minute 10, the third hire (~12:20): Day 1 is 5 min of Income (~$6,600 at $22/s), so it fills the longest wait (12:21 to the Server Rack at 19:04) instead of rushing minutes 2-5 (fixes A9). TUT 7-9 wait for their own triggers (TUT:143-146): poaching when it opens (section 7), funding at the first round (FUND 8), going public near IPO-ready.
+
+### 3.2 Pacing targets
+
+| Moment | Target | Today (model A) | Launch as planned (model D) | With 3.3 (model G2) |
+|---|---|---|---|---|
+| Desk | ≤ 0:30 | 0:30 | 0:30 | 0:30 |
+| First call | ≤ 1:00 | none live | 0:53 | 0:53 |
+| First hire | ≤ 1:30 | 1:22 (sim, no free egg: 5 min) | 1:22 | 1:22 |
+| Second purchase | ≤ 2:00 | 1:01 | **5:01** | 1:43 |
+| Longest wait for a purchase or unlock, 0-20 min | ≤ 6:00 | 3:15 | **8:19** | 6:09 |
+| First milestone | ≤ 10:00 | Seed 2:49 (too early) | none before Seed | 8:02 |
+| Third hire | ≤ 15:00 | 5:51 | none in 30 min | 12:21 |
+| First Seed | inside session 1 | 4 min (sim §4) | ~90 min (LG:42) | re-fit to ~90 min |
+
+### 3.3 Number changes (placeholders for the sims)
+
+- **Garage prices:** Coffee Machine $1,100 → $150, Laptop $4,200 → $800, the first egg $2,300 → $400, Desk 2 $3,600 → $1,000 (economy_sim.py:1068-1073); add Desk 3 $2,500 and a Bug Beetle egg $3,000. The sims raise the Whiteboard and Neon Logo so the Garage keeps ~1.5 h (LONG_K, LG:38; OWNER CHOICE).
+- **The free egg is not in the ladder:** `LONG_ITEMS` buys the first hire (economy_sim.py:1071), but OnboardingConfig.lua:20 gives one; that hire takes Desk 1, so the planned Bug Beetle has no desk in the Garage. Add the free egg and Desk 3 to the sim.
+- **Garage milestones** at $5K, $20K, $60K and $120K valuation (about 8, 18, 30 and 39 min before the re-fit, estimate): LG 4(b)'s milestones in every rung, giving a title, decor, a task preview, decor. Never Cash (LG:5).
