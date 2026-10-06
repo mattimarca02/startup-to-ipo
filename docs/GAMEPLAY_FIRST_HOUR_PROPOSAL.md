@@ -56,7 +56,7 @@ The sim (no free egg) has Seed at 4 min (§4) and IPO 1, 2, 3, 4 at 12, 22, 40, 
 - **A16 Low. "Steal your rivals' best staff"** (STORE_PAGE.md:30) needs another player; LG R3 (proposed) waits 10 engaged hours. → say when it opens (7).
 - **A17 Low. The lounge door prompts Robux on touch** (ShopServer.lua:683-694). → a "See VIP" button.
 - **A18 Low. Income has no feel** (TycoonCore.lua:859-871). → "+$" floaters (5).
-- **A19 Low. Emoji icons** (ShopConfig.lua:38-154; EmployeeClient.lua:175-176). → SHOP_UX S3/S3b.
+- **A19 Low. Emoji icons** (ShopConfig.lua:38-153; EmployeeClient.lua:175-176). → SHOP_UX S3/S3b.
 - **A20 Low (today). Cash piles up** once only HR is left (1.1). → LONG PR 2.
 
 ## 2. The core loop (launch, Software)
@@ -202,7 +202,7 @@ Effects are client-only and change no data (CLAUDE.md); phone-safe = no shake, n
 
 Same size and place, so the gift chip, the Goals card and the tray tests stay (IpoClient.lua:233-256; tools/daily_test.py:3159-3176). **Row 1** (today's stage label, y 4, white): `$4,630 · +$18/s`: Cash with `ShopConfig.formatCash` below $100K ("$21,116"), `IpoConfig.formatShort` from $100K ("$110K"); Income `+$X/s`, short from $10K/s; counts up between ticks. **Row 2:** the valuation track. **Row 3** (today's info label, y 40): `🏚️ Garage → Seed · $9.3K / $492K`; multiplier and Shares only when not x1 and 0 (else in the IPO window).
 
-**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $492K". Estimates: insets and safe areas not measured. **Would change** (not changed): IpoClient.lua:183-185, :196-205 (row 1), :216-225 (row 3), :823-835 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside :952. No server change.
+**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $492K". Estimates: insets and safe areas not measured. **Would change** (not changed): IpoClient.lua:183-185, :197-207 (row 1), :221-231 (row 3), :823-832 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside :952. No server change.
 
 ## 6. Monetization that feels fair (D9)
 
@@ -269,7 +269,7 @@ The welcome-back card stays free. Still planning the product (not edited): ROADM
 - **A failed save:** 3 load tries, then a kick saying progress is safe (TycoonCore.lua:79-80, 746-751); a message after 2 failed saves (:457-472). → plus a cloud icon on the bar.
 - **Alone** (PoachClient.lua:506): → the Poach tab says when poaching opens; no computer rival giving employees (it bypasses R2, LG:108); Max Players 6 (PUBLISH_RULES.md:5-11).
 - **Low-end phone:** rooms up to 260 parts (PLOT_VISUALS.md:34), FR-16, FR-17; the plot streams in after the teleport (WORLD §3). → section 5's budgets, stream first (unverified), short mono sounds (SOUND §3).
-- **Very young players:** no text input (FULL_REVIEW.md:517). → words a 10-year-old reads (BIBLE:7), calm texts, no timed Robux, no "chance" in new copy (D9).
+- **Very young players:** no text input (docs/reviews/FULL_REVIEW.md:517). → words a 10-year-old reads (BIBLE:7), calm texts, no timed Robux, no "chance" in new copy (D9).
 
 ## 8. Sectors
 

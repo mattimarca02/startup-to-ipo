@@ -9,8 +9,8 @@ Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gam
 - [x] Claim the two docs and the new `docs/SOUND_PLAN.md`, `tools/first_hour_model.py` (99ca4c1)
 - [x] Item 1 (5345cb3): D1-D8 recorded as DECIDED BY THE OWNER, open questions replaced (8 left), build order re-tagged (the bar is 1, `SoundConfig` 5, assets 15); 5,490 words (the numbers come from the item 2 model, committed next)
 - [x] Item 2 (4416dfb): `tools/first_hour_model.py` (standard library, deterministic, 0.1 s; `--check` compares the 8 doc blocks and 17 copied constants with their sources; `--previous` prints model G); doc numbers from it
-- [x] Item 3: `docs/SOUND_PLAN.md`, 1,994 words: 17 slots (16 effects and optional music; window open and close share a row), `SoundConfig` design, phone, id 0 and failed loads, the owner's shopping list and record template, Creator Hub checks (all unverified), 10 tests; no asset id named
-- [ ] Item 4: 15+ citations checked against `origin/main` (and `origin/task-needs-desk`), word counts
+- [x] Item 3 (380ddd0): `docs/SOUND_PLAN.md`, 1,994 words: 17 slots (16 effects and optional music; window open and close share a row), `SoundConfig` design, phone, id 0 and failed loads, the owner's shopping list and record template, Creator Hub checks (all unverified), 10 tests; no asset id named
+- [x] Item 4: citations checked against `origin/main` (e3c9e67): all 122 explicit `file:line` citations printed and read, plus the bare `:n` ones (the ten ShopConfig item ranges, ShopClient :554-561, OnboardingConfig :27, DailyConfig :53-69, CreatureConfig :390-393, PoachServer :815, TycoonCore :272-288 and :457-472), 17 `LG:` lines, 7 `BIBLE:` lines (`content-bible`), `TUT:25-29` and `:143-146` (`design-tutorial`), and the Desk rule on `task-needs-desk` (TaskConfig.lua:66 there, TaskServer.lua:11-16, 139, 663). Five fixed: IpoClient.lua:196-205 → 197-207 and :216-225 → 221-231 (the two bar labels; 216-225 was the fill bar), :823-835 → 823-832, FULL_REVIEW.md → docs/reviews/FULL_REVIEW.md, ShopConfig.lua:38-154 → 38-153. Word counts (`wc -w`): proposal 5,490, sound plan 1,994.
 - [ ] Release the four claims
 
 ## Progress (session 1)
@@ -117,7 +117,17 @@ Defaults picked where the owner's taste decides. Rows 1, 3, 4, 8, 13 and 15 were
 | 18 | D6 rule: Income x the home tier's egg price per Income, floor at the egg price, 2 significant digits | `CreatureConfig.Poaching` (build item 14) | 6.2 |
 | 19 | Music off by default, effects on | `SoundConfig` | 5, SOUND |
 
-## Not verified
+## Not verified (session 2)
+
+- D4's text sizes at 667x339 and 320x568: computed from the layout code, not seen on a device; the top-bar inset and safe areas not measured.
+- Whether a poach paid with Cash counts as a paid random item (D9_POLICY_OPTIONS.md:15-20 does not say); whether changing a sold pass's effect (Headhunter, D5) needs anything from Roblox (today only the creator owns it, unverified).
+- Every Roblox audio fact in docs/SOUND_PLAN.md section 7; no Creator Store search, no asset id.
+- The model's player (assumptions 1-14 in its header), the launch Garage Egg's odds, and its Garage fit (x3.1), which `economy_sim.py --long` should replace.
+- `tools/economy_sim.py` was not re-run this session: "sim §n" numbers are session 1's (default output on `main`); old models C, E, F, H not re-run.
+- Section references into CUST, FUND, SECT, SHOP_UX, WORLD and SIMS were not re-checked this session (only `LG:`, `BIBLE:` and `TUT:` line numbers were).
+- `tools/daily_test.py` not run (docs only; it needs the Luau tool). No Studio, no MCP.
+
+## Not verified (session 1)
 
 - Whether Roblox's player list (the only place Cash and Income show today) is visible by default on phones (finding A1).
 - Everything about real players: the model's delays are guesses until the 5-friend playtest (section 9).
