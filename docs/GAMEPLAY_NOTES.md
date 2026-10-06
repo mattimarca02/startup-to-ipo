@@ -7,8 +7,8 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gameplay-fold`, each commit pushed to `gameplay-design` (fast-forward). Docs and one new tool; no Studio, no MCP; `tools/economy_sim.py` and `docs/SIMS_RESULTS.md` only read.
 
 - [x] Claim the two docs and the new `docs/SOUND_PLAN.md`, `tools/first_hour_model.py` (99ca4c1)
-- [x] Item 1: D1-D8 recorded as DECIDED BY THE OWNER, open questions replaced (8 left), build order re-tagged (the bar is 1, `SoundConfig` 5, assets 15); 5,490 words (the numbers come from the item 2 model, committed next)
-- [ ] Item 2: `tools/first_hour_model.py` (standard library, deterministic, `--check`, `--previous`); doc numbers from it
+- [x] Item 1 (5345cb3): D1-D8 recorded as DECIDED BY THE OWNER, open questions replaced (8 left), build order re-tagged (the bar is 1, `SoundConfig` 5, assets 15); 5,490 words (the numbers come from the item 2 model, committed next)
+- [x] Item 2: `tools/first_hour_model.py` (standard library, deterministic, 0.1 s; `--check` compares the 8 doc blocks and 17 copied constants with their sources; `--previous` prints model G); doc numbers from it
 - [ ] Item 3: `docs/SOUND_PLAN.md` (at most 2,000 words)
 - [ ] Item 4: 15+ citations checked against `origin/main` (and `origin/task-needs-desk`), word counts
 - [ ] Release the four claims
@@ -68,6 +68,28 @@ Where each input came from (main = `origin/main` at e3c9e67).
 13. **D3's "later"** is read as the second founding (session 1's default, CUST 1.3's greyed cards).
 14. **D5 table** uses D6 prices and base chances; the Recruiter Network perk (IpoConfig.lua:104-106) is left at level 0.
 15. **Word budget.** `wc -w` counts table pipes and spaced separators, so tables became lists where a table carried no comparison, and every dropped sentence was a repeat. Session 1's numbers and citations were kept: its minute-by-minute table of today became one model line (reproduced exactly), and the session's "1.3 findings" are now 1.2.
+
+## The model (session 2)
+
+`tools/first_hour_model.py` replaces session 1's scratch files (`first_hour_model.py` with models A-H, `g3_model.py` = model G), which survived in that session's scratch folder and were read, not copied. Two engines: a fixed buying order for the launch Garage, and a line-by-line port of the old greedy model for the "Today" and "Launch as planned" columns.
+
+**Reproduced exactly:** model A (today, live: every pacing time and the Cash / Income line, $398 / $13 at 2:00 ... $67,672 / $208 at 10:00; the old model truncated Cash, so the line does too), model B (Studio calls: first call 0:53, Seed 2:30, Garage done 3:48, IPO-ready 8:40), model D (launch as planned: call 0:53, hire 1:22, Coffee Machine 5:01, Desk 2 13:20, egg 18:11, hire 19:31, Laptop 25:04, longest wait 8:19) and model G (`--previous`: all 16 events, 0:30 to 39:13). **Not re-run:** models C, E, F, H; the doc keeps one number from E (the Coffee Machine at ~16:00 without the free egg) and says so.
+
+**What changed in D1's numbers against model G** (G = session 1's proposal):
+
+| | Model G | D1 now | Why |
+|---|---|---|---|
+| Coffee Machine, Laptop | 1:43, 3:34 | 1:36, 3:00 | the free hire is worth $4.97/s, not $3 |
+| Desk 2, egg, hire 2 | 4:51, 5:21, 6:41 | 4:04, 4:27, 5:47 | same |
+| Milestone 1 | 8:02 ($5,000) | 6:47 ($4,900) | D2's 1% of a $492K Garage |
+| Desk 3, egg, hire 3 | 10:25, 10:54, 12:14 | 8:32, 8:48, 10:08 | Incomes as above |
+| Day 1 gift | not modelled | 10:18, +$6,870 | added (TUT 6) |
+| Server Rack | 19:00 | 13:00 | the gift |
+| Longest wait 0-20 min | 6:13 | 2:52 | all of the above |
+| Whiteboard, Neon Logo | 28:37 ($28K), not bought | 41:02 ($87K), 1:18:59 ($220K) | the x3.1 Garage fit (judgment call 10) |
+| Milestones 2-4 | 18:27, 30:05, 39:13 | 27:55, 49:43, 1:06:54 | D2 amounts on the fitted Garage |
+| Longest wait 20 min to Seed | not measured | 17:11 | new row |
+| Seed | ~90 min (assumed) | 1:30:04 (37:02 unfitted) | measured |
 
 ## OWNER CHOICE
 
