@@ -18,7 +18,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 **Phase 2: S2 (the Office ladder)**
 - [x] 2.1 `ShopLayout.lua`: ladder state, bar fill, time text, best value, row and hero geometry
 - [x] 2.2 `ShopClient.lua` S2: the Office ladder (pushed together with 2.3: alone it fails daily_test's old "Locked" check)
-- [ ] 2.3 `tools/daily_test.py`: "daily_test: Locked check follows the new ladder" (the one edit there)
+- [x] 2.3 `tools/daily_test.py`: "daily_test: Locked check follows the new ladder" (the one edit there)
 - [ ] 2.4 `tools/shop_ux_test.py`: the S2 checks
 - [ ] 2.5 S2 mutants (at least 40 in all, each caught by a named check)
 

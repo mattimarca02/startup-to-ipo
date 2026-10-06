@@ -4496,7 +4496,7 @@ def pads_gone_checks():
     check("ShopClient: an Office tab, first and the one shown when the shop opens",
           'local tabNames = { "Office",' in client and 'showTab("Office")' in client)
     check("ShopClient: Buy is only offered for the next upgrade when the Cash is there (the server decides anyway)",
-          'setButton(button, "Locked", COLORS.disabled, false)' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
+          'button.Visible = row.state ~= "locked"' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
 
     poach = code_only(read("PoachClient.lua"))
     check("PoachClient: Buy HR sends only the action", 'request("BuyHr")' in poach and 'request("BuyHr",' not in poach)
