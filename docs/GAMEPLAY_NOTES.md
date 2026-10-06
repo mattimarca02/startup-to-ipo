@@ -2,7 +2,18 @@
 
 Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, worktree `../gameplay-design`, started 2026-10-06). Docs only: no code, no Studio, no MCP. The only existing-file edit is the two claim rows in `CONTRIBUTING.md`.
 
-## Progress
+## Progress (session 2: owner decisions, 2026-10-06)
+
+Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gameplay-fold`, each commit pushed to `gameplay-design` (fast-forward). Docs and one new tool; no Studio, no MCP; `tools/economy_sim.py` and `docs/SIMS_RESULTS.md` only read.
+
+- [x] Claim the two docs and the new `docs/SOUND_PLAN.md`, `tools/first_hour_model.py` (99ca4c1)
+- [x] Item 1: D1-D8 recorded as DECIDED BY THE OWNER, open questions replaced (8 left), build order re-tagged (the bar is 1, `SoundConfig` 5, assets 15); 5,490 words (the numbers come from the item 2 model, committed next)
+- [ ] Item 2: `tools/first_hour_model.py` (standard library, deterministic, `--check`, `--previous`); doc numbers from it
+- [ ] Item 3: `docs/SOUND_PLAN.md` (at most 2,000 words)
+- [ ] Item 4: 15+ citations checked against `origin/main` (and `origin/task-needs-desk`), word counts
+- [ ] Release the four claims
+
+## Progress (session 1)
 
 - [x] Worktree `../gameplay-design` from `origin/main` (e3c9e67), branch `gameplay-design`
 - [x] Claim both docs in `CONTRIBUTING.md` (9f54c8d, pushed)
@@ -48,27 +59,41 @@ Where each input came from (main = `origin/main` at e3c9e67).
 7. **The Day 1 gift goes after minute 10, not at 7:00.** At 7:00 the $4,200 gift would buy Desk 3 and an egg at once and leave a long wait after it; after the third hire (~12:15) its ~$6,600 shortens the longest wait (12:14 to 19:00) instead.
 8. **Findings about today that LONG PR 2 fixes** (A4, A5, A20) are kept in the list, marked "(today)" and "planned", so the owner sees what a launch on today's code would feel like.
 
+## Judgment calls (session 2)
+
+9. **Where D1's numbers changed.** The new model gives every Garage Egg hire the egg's average ($4.97/s, today's odds) instead of model G's fixed 3 / 3 / 8 (a $400 egg cannot promise a Bug Beetle), adds the Day 1 gift after the third hire, and stops flooring call pay. So Desk 3 comes at 8:32 instead of 10:25 and the Server Rack at 13:00 instead of 19:00.
+10. **Keeping the Garage at 1.5 h.** With D1 prices and LONG_K unchanged, Seed comes at 37:02. The model raises the Whiteboard and Neon Logo by the smallest factor that brings Seed back to 1:30 (x3.1), only so D2's milestones have amounts. That leaves a 17-minute wait after the Server Rack, so it is open question 1, not a proposal; `economy_sim.py --long` owns the re-fit.
+11. **D2 shares.** The Garage uses 1 / 12 / 30 / 50% (milestone 1 before 10:00, the others inside the late waits); every other rung keeps LONG 4(b)'s 20 / 40 / 60 / 80%. Series C+D keeps LG 4(b)'s decor and task tier besides the title and star. Entry titles stay the content bible's, so "Garage Dreamer" is no longer milestone 1's title (it was in session 1's draft).
+12. **D6 reference Income.** A tier's price per Income = its egg price ÷ the Income of the hire LONG prices that egg at (LG:38: "egg price = the rung's first hire"), because the five later tiers have no odds yet. For the Garage that is the Coding Cat (3/s), not the egg's $4.97/s average.
+13. **D3's "later"** is read as the second founding (session 1's default, CUST 1.3's greyed cards).
+14. **D5 table** uses D6 prices and base chances; the Recruiter Network perk (IpoConfig.lua:104-106) is left at level 0.
+15. **Word budget.** `wc -w` counts table pipes and spaced separators, so tables became lists where a table carried no comparison, and every dropped sentence was a repeat. Session 1's numbers and citations were kept: its minute-by-minute table of today became one model line (reproduced exactly), and the session's "1.3 findings" are now 1.2.
+
 ## OWNER CHOICE
 
-Defaults picked where the owner's taste decides. Each one is marked in the proposal too.
+Defaults picked where the owner's taste decides. Rows 1, 3, 4, 8, 13 and 15 were settled by the owner on 2026-10-06 (D1-D4, D8: see the proposal's section 0); row 2 is now open question 1. Rows 16-19 are session 2's.
 
 | # | Default picked | Where it is decided later | Section |
 |---|---|---|---|
-| 1 | The very first founding shows the sector picker (D-C) with **Software preselected**, because both sectors are "not done" for a new player (CUST 1.3) and Software teaches the shared engine | `SectorConfig` / the picker (CUST PR 4) | 3, 8 |
-| 2 | The cheaper first Garage items are paid back by raising the **Whiteboard and Neon Logo**, so the Garage keeps about 1.5 h (LG:42). The other choice is a shorter Garage | the sims (`--long`, S10) | 3 |
-| 3 | Placeholder Garage prices: Coffee Machine $150, Laptop $800, the Garage Egg $400 (one price per tier, LG:42), Desk 2 $1,000, a new Desk 3 $5,000 | `LONG_ITEMS`, then TycoonCore UPGRADES and CreatureConfig in LONG PR 2 | 3 |
-| 4 | Garage milestones at $5K / $20K / $60K / $120K valuation, giving a title, decor, a task preview, decor (no Cash) | the sims; a config list | 3, 4 |
+| 1 | DECIDED (D3). The very first founding shows the sector picker (D-C) with **Software preselected**, because both sectors are "not done" for a new player (CUST 1.3) and Software teaches the shared engine | `SectorConfig` / the picker (CUST PR 4) | 3, 8 |
+| 2 | NOW OPEN QUESTION 1. The cheaper first Garage items are paid back by raising the **Whiteboard and Neon Logo**, so the Garage keeps about 1.5 h (LG:42). The other choice is a shorter Garage | the sims (`--long`, S10) | 3 |
+| 3 | DECIDED (D1). Placeholder Garage prices: Coffee Machine $150, Laptop $800, the Garage Egg $400 (one price per tier, LG:42), Desk 2 $1,000, a new Desk 3 $5,000 | `LONG_ITEMS`, then TycoonCore UPGRADES and CreatureConfig in LONG PR 2 | 3 |
+| 4 | DECIDED (D2), amounts replaced: milestones in every rung, a title and a star each (proposal 3.4) | the sims; a config list | 3, 4 |
 | 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:15)** | `TutorialConfig` (TUT PR A) | 3 |
 | 6 | The goal chain and its texts: "Answer 3 calls", "Own 3 upgrades", "Hire 3 employees", "Reach milestone 1", "Get a x2 chain", "Buy the Server Rack", milestones 2-4, "Reach Seed" (shipped keys `Hire3` and `Seed` kept) | `OnboardingConfig.Goals` plus new goal kinds | 4 |
 | 7 | A "Cheer" on a neighbor's sign as the first social moment (a clap, no reward, rate-limited); poaching stays closed in the first hour | a new small feature, or drop it | 4 |
-| 8 | **Silent by default.** Sounds only from Roblox-made Creator Store assets the owner picks, in a `SoundConfig` with `id = 0` placeholders; volume 0.5; a "Sounds" toggle | `SoundConfig` | 5 |
+| 8 | REPLACED (D8: sound at launch). **Silent by default.** Sounds only from Roblox-made Creator Store assets the owner picks, in a `SoundConfig` with `id = 0` placeholders; volume 0.5; a "Sounds" toggle | `SoundConfig` | 5 |
 | 9 | Employee states Work / Stroll / React / Rest ("Zz" in quiet mode), and Coffee Capybara's coffee breaks | EmployeeClient | 5 |
 | 10 | Effect budgets: walkers 20 Hz within 80 studs and on screen; 6 floating texts; one burst of 30 particles; tweens 0.6 s or less | the juice PRs | 5 |
 | 11 | **No starter offer and no unprompted Robux surface:** the first Robux prompt is the player's own tap on a price in SHOP; no badge points at a Robux tab | ShopClient (SHOP_UX S4) | 6 |
 | 12 | At launch the Extra Employee Slots pass means **+3 desks**, capped like every desk (LG:60 estimates up to +15% Income) | LONG PR 3 (desks) | 6 |
-| 13 | A first founding **hides the Fintech and Biotech "Coming soon" cards** (CUST 1.3 shows them greyed); they appear from the second founding. Picker texts: Software "Answer customers, grow steady", Gaming "Make games, launch hits" | the picker (CUST PR 4) | 8 |
+| 13 | DECIDED (D3). A first founding **hides the Fintech and Biotech "Coming soon" cards** (CUST 1.3 shows them greyed); they appear from the second founding. Picker texts: Software "Answer customers, grow steady", Gaming "Make games, launch hits" | the picker (CUST PR 4) | 8 |
 | 14 | Funnel targets (95 / 85 / 85 / 60 / 50 / 25% ..., day 1 ≥ 25%, day 7 ≥ 8%, first IPO 3% by day 30) are placeholders to replace after the first 100 players | the analytics PR | 9 |
-| 15 | **Cash and +$/s go on the valuation bar's top line**; the stage name moves to its second line (no new HUD element: the top row and the left column are full) | IpoClient (build order 1) | 1, 10 |
+| 15 | DECIDED (D4). **Cash and +$/s go on the valuation bar's top line**; the stage name moves to its second line (no new HUD element: the top row and the left column are full) | IpoClient (build order 1) | 1, 10 |
+| 16 | Headhunter's fixed effect: **A, 20% off every poach** (stacks with Recruiter Network) | the owner (D5) | 6.1 |
+| 17 | D2 milestone shares (Garage 1 / 12 / 30 / 50%, others 20 / 40 / 60 / 80%) and the 24 titles | `IpoConfig` or a title list (build item 10) | 3.4 |
+| 18 | D6 rule: Income x the home tier's egg price per Income, floor at the egg price, 2 significant digits | `CreatureConfig.Poaching` (build item 14) | 6.2 |
+| 19 | Music off by default, effects on | `SoundConfig` | 5, SOUND |
 
 ## Not verified
 
