@@ -209,6 +209,59 @@ def esc(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+CHAR_W = 0.6  # a generous estimate of a Helvetica character's width, in font sizes (bold is about 0.6, regular 0.55)
+
+
+def text_box(x, y, size, text, anchor="start"):
+    """The estimated box of an SVG text (x0, y0, x1, y1) in px."""
+    w = len(text) * size * CHAR_W
+    left = x - w / 2 if anchor == "middle" else (x - w if anchor == "end" else x)
+    return (left, y - size * 0.8, left + w, y + size * 0.25)
+
+
+def overlap(a, b):
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def wrap(text, size, room):
+    """Words of text in lines that fit `room` px at this font size (estimated)."""
+    lines, line = [], ""
+    for word in text.split(" "):
+        test = (line + " " + word).strip()
+        if line and len(test) * size * CHAR_W > room:
+            lines.append(line)
+            line = word
+        else:
+            line = test
+    return lines + ([line] if line else [])
+
+
+def layout_problems(svg):
+    """What a reader would trip over: a text past the picture's edges, two texts on top of each other, or a sign's label
+    on a tree, lamp or bush. Read back from the SVG itself (estimated text sizes)."""
+    width, height = (float(v) for v in re.search(r'<svg [^>]*width="([\d.]+)" height="([\d.]+)"', svg).groups())
+    texts = []
+    for m in re.finditer(r'<text x="([-\d.]+)" y="([-\d.]+)" font-size="(\d+)"([^>]*)>([^<]*)</text>', svg):
+        anchor = "middle" if 'text-anchor="middle"' in m.group(4) else ("end" if 'text-anchor="end"' in m.group(4) else "start")
+        texts.append((m.group(5), text_box(float(m.group(1)), float(m.group(2)), int(m.group(3)), m.group(5), anchor), 'class="label"' in m.group(4)))
+    problems = []
+    for t, b, _ in texts:
+        if b[0] < 0 or b[2] > width or b[1] < 0 or b[3] > height:
+            problems.append("text past the edge of the picture: %r" % t[:60])
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            if overlap(texts[i][1], texts[j][1]):
+                problems.append("texts on top of each other: %r and %r" % (texts[i][0][:40], texts[j][0][:40]))
+    decor = [(float(m.group(1)) - float(m.group(3)), float(m.group(2)) - float(m.group(3)), float(m.group(1)) + float(m.group(3)), float(m.group(2)) + float(m.group(3)))
+             for m in re.finditer(r'<circle class="decor" cx="([-\d.]+)" cy="([-\d.]+)" r="([\d.]+)"', svg)]
+    decor += [(float(m.group(1)), float(m.group(2)), float(m.group(1)) + float(m.group(3)), float(m.group(2)) + float(m.group(4)))
+              for m in re.finditer(r'<rect class="decor" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg)]
+    for t, b, is_label in texts:
+        if is_label and any(overlap(b, d) for d in decor):
+            problems.append("a label on a tree, lamp, bush or sign: %r" % t)
+    return problems
+
+
 def n(v):
     s = "%.2f" % float(v)
     s = s.rstrip("0").rstrip(".")
@@ -231,7 +284,7 @@ def world_svg():
     width_map, height_map = (x1 - x0) * scale, (z1 - z0) * scale
     pad_top, pad_side, pad_bottom, inset = 70, 24, 40, 230
     width = int(width_map + pad_side * 2)
-    height = int(height_map + pad_top + pad_bottom + inset + 30)
+    height = int(height_map + pad_top + pad_bottom + inset + 30 + 22)  # room for a second legend line
 
     def px(x):
         return pad_side + (x - x0) * scale
@@ -265,9 +318,14 @@ def world_svg():
         if r[0] == "R" and r[1] in ("Plot",):
             out.append(box(r, ' stroke="#3a3d48" stroke-width="1"'))
     world = sorted((r for r in parts if r[0] == "W" and r[1] != "Hills"), key=lambda r: (float(r[8]), r[3], r[2]))
+    decor_px = []
     for r in world:
         stroke = ' stroke="#1c1e26" stroke-width="0.6" stroke-opacity="0.5"' if r[1] == "Decor" else ""
-        out.append(box(r, stroke))
+        shape = box(r, stroke)
+        if r[1] == "Decor":
+            shape = shape.replace("<circle ", '<circle class="decor" ', 1).replace("<rect ", '<rect class="decor" ', 1)
+            decor_px.append((px(float(r[5])), pz(float(r[10])), px(float(r[6])), pz(float(r[9]))))
+        out.append(shape)
         if r[15] == "1":  # a lit lamp: its light's reach
             cx, cz = (float(r[5]) + float(r[6])) / 2, (float(r[9]) + float(r[10])) / 2
             out.append('<circle cx="%s" cy="%s" r="%s" fill="#ffd690" fill-opacity="0.18" stroke="#e8a838" stroke-opacity="0.5"/>' % (n(px(cx)), n(pz(cz)), n(20 * scale)))
@@ -281,9 +339,21 @@ def world_svg():
     for p in plots:
         label(float(p[2]), float(p[3]) + 4, "Plot %s" % p[1], 15, "#f4f1ea")
         label(float(p[2]), float(p[3]) - 6, "(room, 60 x 60)", 10, "#dfe3ea", False)
+    # A sign's label: the first spot near its sign that covers no tree, lamp, bush or other label (estimated text size)
+    placed = []
     for t in texts:
         if t[1].startswith("StreetSign"):
-            label(float(t[3]), float(t[4]) + 6, "sign " + t[2], 10, "#1c1e26")
+            sx, sz, text = float(t[3]), float(t[4]), "sign " + t[2]
+            spots = [(sx + dx, sz + dz) for dz in (6, 10, 14, 18) for dx in (0, -10, 10, -16, 16)]
+            spot = spots[0]
+            for cx, cz in spots:
+                b = text_box(px(cx), pz(cz), 10, text, "middle")
+                if not any(overlap(b, d) for d in decor_px + placed) and pz(cz) - 10 > pad_top:
+                    spot = (cx, cz)
+                    break
+            placed.append(text_box(px(spot[0]), pz(spot[1]), 10, text, "middle"))
+            out.append('<text x="%s" y="%s" font-size="10" text-anchor="middle" fill="#1c1e26" font-weight="bold" class="label" stroke="#f4f1ea" '
+                       'stroke-width="2.5" paint-order="stroke">%s</text>' % (n(px(spot[0])), n(pz(spot[1])), esc(text)))
     spawn = next(r for r in parts if r[1] == "Spawn")
     label((float(spawn[5]) + float(spawn[6])) / 2, min(float(r[9]) for r in world) - 6, "spawn plaza, around the SpawnLocation (Studio fact)", 11)
     lounge = [r for r in parts if r[1] == "Lounge"]
@@ -300,10 +370,13 @@ def world_svg():
     bar_x, bar_y = pad_side + 10, pad_top + height_map + 24
     out.append('<rect x="%d" y="%d" width="%s" height="6" fill="#1c1e26"/>' % (bar_x, bar_y, n(50 * scale)))
     out.append('<text x="%d" y="%d" font-size="12" fill="#1c1e26">50 studs</text>' % (bar_x + int(50 * scale) + 8, bar_y + 7))
-    out.append('<text x="%d" y="%d" font-size="12" fill="#1c1e26">Paving and streets: light gray and sand. Kerbs: white. Lawns: green tints. Trees and bushes: round greens. '
-               'Lamps: dark squares (yellow circle: a lit lamp\'s light).</text>' % (bar_x + 180, bar_y + 7))
+    legend = ("Paving and streets: light gray and sand. Kerbs: white. Lawns: green tints. Trees and bushes: round greens. "
+              "Lamps: dark squares (yellow circle: a lit lamp's light).")
+    legend_lines = wrap(legend, 12, width - pad_side - (bar_x + 180))
+    for i, line in enumerate(legend_lines):
+        out.append('<text x="%d" y="%d" font-size="12" fill="#1c1e26">%s</text>' % (bar_x + 180, bar_y + 7 + i * 16, esc(line)))
     # The whole Baseplate, with the hills
-    m_top = pad_top + height_map + 50
+    m_top = pad_top + height_map + 50 + (len(legend_lines) - 1) * 22
     side = inset - 20
     bx0, bx1, bz0, bz1 = (float(v) for v in base[1:5])
     mscale = side / (bx1 - bx0)
@@ -452,8 +525,11 @@ def main():
         for path, text in pictures:
             if not os.path.exists(path) or open(path, encoding="utf-8").read() != text:
                 stale.append(os.path.relpath(path, ROOT))
+        problems = layout_problems(pictures[0][1])
+        for problem in problems:
+            print("FAIL: world_topdown.svg layout: " + problem)
         print("previews up to date" if not stale else "previews out of date (run python3 tools/render_previews.py): " + ", ".join(stale))
-        return 1 if stale else 0
+        return 1 if stale or problems else 0
     os.makedirs(OUT_DIR, exist_ok=True)
     for path, text in pictures:
         with open(path, "w", encoding="utf-8") as f:
