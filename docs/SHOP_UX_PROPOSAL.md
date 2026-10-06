@@ -171,9 +171,7 @@ One PR at a time owns `ShopClient` (each claims it, merges, releases). The order
 
 ## 7. Open questions for the owner (most important first)
 
-1. **Landscape tab rail** (recommended: 32 px more page, everything 44 px) or keep the tab row on top?
-2. **Confirm Cash buys:** never for Office (recommended), two taps only for future buildings and furniture above a threshold? Which threshold ($1,000, or "more than half your Cash")?
-3. **Office ladder:** show all six rungs with the locked ones (recommended: the player sees the goal), or only the owned summary and the next one?
-4. **Badges:** factual only (OWNED, ACTIVE, LEFT, computed BEST VALUE), or also hand-picked ones like "POPULAR" (needs sales data)?
-5. **Icons on phones:** 3D props in ViewportFrames for the Office and the creatures, drawn shapes for the rest (recommended), or drawn shapes everywhere (lighter)?
-6. **Details sheet:** a panel that slides up inside the window (recommended: one window at a time) or a separate pop-up?
+The six earlier questions are answered (**DECIDED BY THE OWNER**, sections 3.1, 3.2, 3.3 and 3.6). Still unresolved:
+
+1. **The cap of 8 ViewportFrames:** is it right for a weak phone? A Test > Device check decides (3.6); lower `Style.viewportCap` if it stutters.
+2. **"Where it stands" on an Office icon:** no text in S1-S5 (3.4). Does the owner want it later? It needs a server change (a `station` field in `upgradeList`, a TycoonCore claim).
