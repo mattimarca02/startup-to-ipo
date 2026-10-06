@@ -174,7 +174,7 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 13. `BoardServer` (exception approved, section 7), FR-11; needs S7.
 14. Picker and funding on for live servers; PUBLISH_RULES "2d" (FUND 4's rollback note); publish.
 
-**Post-launch: Fintech and Biotech**, each its own PRs: the same package, **no new save field** (keys from PR 1), `SectorConfig` enables it, a new goal key (1.5), S3-S5 rerun, a content bible, D9 words, `id = 0`. Income sketches (deterministic, capped, engaged only, on the :866 call): **Fintech** interest on Cash held, capped at H seconds of base Income (works against the buy loop: revisit); **Biotech** P seconds of base Income every N engaged minutes (a visible timer).
+**Post-launch: Fintech and Biotech**, each its own PRs: the same package, **no new save field** (keys from PR 1), `SectorConfig` enables it, a new goal key (1.5), S3-S5 rerun, a content bible, D9 words, `id = 0`. Income sketches (Fintech, Biotech): docs/CUSTOMIZE_PR1_NOTES.md, "Moved text", item 2.
 
 ## 7. Impact on other docs and branches
 
@@ -191,7 +191,7 @@ Each PR: claim its scripts; `python3 tools/daily_test.py` passes; F5 clean; publ
 - **`building-pass`: park it** (its patch and BuildingClient.lua assume 60 x 60; its roof blocks the edit camera); reuse its shell data and `pcall` plug-in.
 - **`visuals-garage`, PLOT_VISUALS.md (14, 37), CLAUDE.md "Plot visuals" (32):** 60 x 60, the skyline, "six props identical in every room", "the only solid" and "room of `IpoConfig.Stages[i]`" change.
 - **CLAUDE.md, README, ROADMAP, PUBLISH_RULES:** `pokedex`, modules and order, `CompanyRemotes`, "2d".
-- **CLAUDE.md:29 (approved by the owner):** the build PR changes it to exactly: "Never add a second DataStore, save loop or PlayerAdded data owner. One exception: `BoardServer` (ServerScriptService) may use the OrderedDataStores `Collection_v1` and `HallOfFame_v1` (and their `_Studio` twins) for the leaderboard. It writes only values read from the loaded save after that save succeeded, never saves player data, and wraps every call in `pcall`. Every other store stays under this rule."
+- **CLAUDE.md:29 (approved by the owner):** the build PR changes it to the exact text in docs/CUSTOMIZE_PR1_NOTES.md, "Moved text", item 1.
 
 ## 8. Open questions (unresolved, most important first)
 
