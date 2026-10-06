@@ -12,7 +12,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 2: The core loop
 - [x] Section 3: The first 10 minutes
 - [x] Section 4: The first hour
-- [ ] Section 5: Game feel
+- [x] Section 5: Game feel
 - [ ] Section 6: Monetization that feels fair
 - [ ] Section 7: Frustration and safety nets
 - [ ] Section 8: Sectors
@@ -57,11 +57,16 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 2 | The cheaper first Garage items are paid back by raising the **Whiteboard and Neon Logo**, so the Garage keeps about 1.5 h (LG:42). The other choice is a shorter Garage | the sims (`--long`, S10) | 3 |
 | 3 | Placeholder Garage prices: Coffee Machine $150, Laptop $800, first egg $400, Desk 2 $1,000, new Desk 3 $2,500, Bug Beetle egg $3,000 | `LONG_ITEMS`, then TycoonCore UPGRADES and CreatureConfig in LONG PR 2 | 3 |
 | 4 | Garage milestones at $5K / $20K / $60K / $120K valuation, giving a title, decor, a task preview, decor (no Cash) | the sims; a config list | 3, 4 |
+| 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:20)** | `TutorialConfig` (TUT PR A) | 3 |
 | 6 | The goal chain and its texts: "Answer 3 calls", "Own 3 upgrades", "Hire 3 employees", "Reach milestone 1", "Get a x2 chain", "Buy the Server Rack", milestones 2-4, "Reach Seed" (shipped keys `Hire3` and `Seed` kept) | `OnboardingConfig.Goals` plus new goal kinds | 4 |
 | 7 | A "Cheer" on a neighbor's sign as the first social moment (a clap, no reward, rate-limited); poaching stays closed in the first hour | a new small feature, or drop it | 4 |
-| 5 | Tutorial order: TUT 1 Desk, **TUT 5 on the first ring**, TUT 2 hatch, TUT 4, TUT 3 as "one hire per desk", **TUT 6 after the third hire (~12:20)** | `TutorialConfig` (TUT PR A) | 3 |
+| 8 | **Silent by default.** Sounds only from Roblox-made Creator Store assets the owner picks, in a `SoundConfig` with `id = 0` placeholders; volume 0.5; a "Sounds" toggle | `SoundConfig` | 5 |
+| 9 | Employee states Work / Stroll / React / Rest ("Zz" in quiet mode), and Coffee Capybara's coffee breaks | EmployeeClient | 5 |
+| 10 | Effect budgets: walkers 20 Hz within 80 studs and on screen; 6 floating texts; one burst of 30 particles; tweens 0.6 s or less | the juice PRs | 5 |
 
 ## Not verified
 
 - Whether Roblox's player list (the only place Cash and Income show today) is visible by default on phones (finding A1).
 - Everything about real players: the model's delays are guesses until the 5-friend playtest (section 9).
+- Roblox audio: the Creator Store license terms for Roblox-made sounds, the current upload allowance and fees, and which assets the 2022 audio privacy rules let any experience play (section 5).
+- An API that tells a script the player's graphics quality, to drop particles on low settings (section 5).

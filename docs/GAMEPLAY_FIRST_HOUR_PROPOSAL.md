@@ -147,3 +147,28 @@ TUT 6 (the gift) comes at the first pause after minute 10, the third hire (~12:2
 | 5 min | Desk, 2 upgrades, 1 hire, ~8 calls, goal 3 started; the next target named |
 | 20 min | 3 hires, the Server Rack, milestones 1-2, Day 1 claimed, Day 2 shown, the away bank filling |
 | 60 min | 5 upgrades, 4 milestones, an arranged office, the Seed bar about two-thirds full (estimate after the re-fit): a reason to return today |
+
+## 5. Game feel
+
+Every effect is client-only and changes no data (CLAUDE.md, client visuals). "Phone-safe" = no camera shake, no full-white flash, works with sound off.
+
+| Action | Today | Visual | Sound (optional) | Phone-safe |
+|---|---|---|---|---|
+| Buy | prop pops in, toast (TycoonCore.lua:285; ShopClient.lua:507) | icon pops 1.08x, "+$2/s" floats from the card, 8 sparkles at the prop | register | pop and float |
+| Hatch | wobble, flash, card (EmployeeClient.lua:866-940) | flash at 50%, rarity-colored burst | shell crack | no burst |
+| Hire | appears at its spot | walks from the incubator to its desk, TEAM count pops | soft ding | same |
+| Call answered | toast "+$7" (TaskServer.lua:453-457) | chip flies to the Cash line, "+$7" there, chain grows | pick-up click | float only |
+| Call missed | nothing (A11) | chip shakes twice, fades "Missed"; "Chain reset" in gray | none | same |
+| Income tick | nothing (A18) | Cash counts up; every 5 s one "+$X" over the top earner on screen | none | count-up only |
+| Milestone, stage-up | room flash (TycoonCore.lua:182-186) | card 2.5 s "Seed! New: ..."; the sign spins once; 20 confetti | short fanfare | card |
+| IPO | banner 4 s (IpoClient.lua:932-939) | the bell swings, the Pokedex card flips in with its stamp (CUST 1.4) | bell | card |
+| Round raised | none yet | a cheque slides in "Raised $X for Y%", the stake ring shrinks | pen and coins | cheque |
+| Poach win | result card (PoachClient.lua:1145) | the hire walks in from the street | deal sting | card |
+| Poach loss | card, Counter-Offer (:1183-1194) | the hire waves and walks out; a shield bubble over the plot | soft low note | no red flashing |
+| Daily claim | toast "Day 1: +$300" (DailyServer.lua:129-142) | the tile flips, Cash counts up, tomorrow's tile glows | gift unwrap | same |
+
+**Sound.** Every sound is an audio asset: uploaded by the owner (it goes through Roblox moderation and counts against an upload allowance) or taken from the Creator Store. Plan: a `SoundConfig` (ReplicatedStorage) with one row per event and `id = 0` until the owner picks a sound, like ShopConfig's IDs; only Roblox-made sounds whose Creator Store page allows use in any experience; volume 0.5; one sound per event at a time; a "Sounds" toggle. **Default: silent**, every event already has its visual. Not verified: the library's license terms, upload limits and fees, which assets the 2022 audio privacy rules still let any experience play.
+
+**Employees.** Today they stroll within 3 studs of their `Home` point every 2-6 s, every frame, within 160 studs (EmployeeClient.lua:978-1002; FR-16). Proposed states: *Work* (a typing bob at the desk), *Stroll* (today's), *React* (a 0.4 s hop when a call is answered, an item pops or a teammate joins; once per 5 s each), *Rest* ("Zz" while quiet mode is on: the office waits for the founder). Coffee Capybara takes breaks at the Coffee Machine.
+
+**Budgets (placeholders):** walkers at 20 Hz, within 80 studs, on screen only (FR-16's fix); at most 6 floating texts and one particle burst (30 particles) at a time; tweens 0.6 s or less; no particles at low graphics quality (unverified API).
