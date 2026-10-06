@@ -128,3 +128,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
+| docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md | (repo only) | free | | |
+| docs/GAMEPLAY_NOTES.md | (repo only) | free | | |
+| docs/SOUND_PLAN.md | (repo only) | free | | |
+| tools/first_hour_model.py | (repo only) | free | | |
