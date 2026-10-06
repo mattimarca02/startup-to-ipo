@@ -1122,43 +1122,62 @@ local function checkBlock()
 __CHECK__
 end
 local StarterGui = SERVICES.StarterGui
-local icons = newInstance("Folder")
-icons.Name = "PREVIEW_ICONS"
-icons.Parent = StarterGui
-local shopGui = newInstance("Folder")
-shopGui.Name = "ShopGui"
-shopGui.Parent = StarterGui
+local function folderAt(name, parent)
+	local f = newInstance("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
+end
+local function contains(text, piece)
+	return string.find(text, piece, 1, true) ~= nil
+end
+local icons = folderAt("PREVIEW_ICONS", StarterGui)
+local lightTest = folderAt("LightTest", icons)
+local shopGui = folderAt("ShopGui", StarterGui)
 local holder = newInstance("Model")
 holder.Name = "Props"
 holder.Parent = workspace
-local nested = newInstance("Folder")
-nested.Name = "PREVIEW_OLD"
-nested.Parent = holder
-local inner = newInstance("Folder")
-inner.Name = "PREVIEW_INNER"
-inner.Parent = workspace:FindFirstChild("PREVIEW_WORLD")
+local nested = folderAt("PREVIEW_OLD", holder)             -- an unknown PREVIEW_ object, deep down
+local stray = folderAt("PREVIEW_X", workspace)             -- unrelated, at the top: must survive the cleanup
+local misplaced = folderAt("PREVIEW_WORLD", holder)        -- a known name in the wrong place: unknown
+local oldLight = folderAt("PREVIEW_LIGHT", StarterGui)     -- what an older light test left: unknown
+local inner = folderAt("PREVIEW_INNER", workspace:FindFirstChild("PREVIEW_WORLD")) -- inside a known one: goes with it
+local twin = folderAt("PREVIEW_STAGES", workspace)         -- two with a known name at the right place: both go
 local okC, errC, said = runBlock(checkBlock)
-check("check block: with previews there it prints FAIL and every name (PREVIEW_WORLD, PREVIEW_STAGES, PREVIEW_ICONS, a nested one)", okC
-	and string.sub(said, 1, 5) == "FAIL " and string.find(said, "PREVIEW_WORLD", 1, true) and string.find(said, "PREVIEW_STAGES", 1, true)
-	and string.find(said, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(said, "Props.PREVIEW_OLD", 1, true), errC or said)
-check("check block: it changes nothing", workspace:FindFirstChild("PREVIEW_WORLD") ~= nil and StarterGui:FindFirstChild("PREVIEW_ICONS") ~= nil)
+check("check block: with previews there it prints FAIL and every PREVIEW_ object, known and unknown", okC and string.sub(said, 1, 5) == "FAIL "
+	and contains(said, "Workspace.PREVIEW_WORLD (known") and contains(said, "Workspace.PREVIEW_STAGES (known") and contains(said, "StarterGui.PREVIEW_ICONS (known")
+	and contains(said, "Workspace.PREVIEW_WORLD.PREVIEW_INNER (known") and contains(said, "Workspace.Props.PREVIEW_OLD (unknown")
+	and contains(said, "Workspace.PREVIEW_X (unknown") and contains(said, "Workspace.Props.PREVIEW_WORLD (unknown")
+	and contains(said, "StarterGui.PREVIEW_LIGHT (unknown") and contains(said, "FAIL 9 PREVIEW_"), errC or said)
+check("check block: it changes nothing", workspace:FindFirstChild("PREVIEW_WORLD") ~= nil and icons.Parent == StarterGui and stray.Parent == workspace
+	and nested.Parent == holder and twin.Parent == workspace)
 local okR, errR, cleaned = runBlock(cleanupBlock)
-local leftover = {}
-for _, place in ipairs({ workspace, StarterGui }) do
-	for _, d in ipairs(place:GetDescendants()) do if string.sub(d.Name, 1, 8) == "PREVIEW_" then table.insert(leftover, d.Name) end end
-end
-check("cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which", okR and #leftover == 0
-	and string.find(cleaned, "Removed: ", 1, true) and string.find(cleaned, "Workspace.PREVIEW_WORLD", 1, true) and string.find(cleaned, "Workspace.PREVIEW_STAGES", 1, true)
-	and string.find(cleaned, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(cleaned, "Workspace.Props.PREVIEW_OLD", 1, true)
-	and not string.find(cleaned, "PREVIEW_INNER", 1, true), errR or (cleaned .. " | left " .. table.concat(leftover, ",")))
-check("cleanup block: it prints OK once nothing is left", string.find(cleaned, "\nOK no PREVIEW_ object is left in Workspace or StarterGui", 1, true) ~= nil, cleaned)
+local removedLine = ""
+for _, line in ipairs(string.split(cleaned, "\n")) do if string.sub(line, 1, 9) == "Removed: " then removedLine = line end end
+local removedCount = #string.split(string.sub(removedLine, 10), ", ")
+check("cleanup block: it removes exactly the three known previews (Workspace.PREVIEW_STAGES, Workspace.PREVIEW_WORLD, StarterGui.PREVIEW_ICONS) and says which",
+	okR and workspace:FindFirstChild("PREVIEW_WORLD") == nil and workspace:FindFirstChild("PREVIEW_STAGES") == nil and StarterGui:FindFirstChild("PREVIEW_ICONS") == nil
+	and twin.Parent == nil and not lightTest:IsDescendantOf(StarterGui) and not inner:IsDescendantOf(workspace)
+	and contains(removedLine, "Workspace.PREVIEW_WORLD") and contains(removedLine, "Workspace.PREVIEW_STAGES") and contains(removedLine, "StarterGui.PREVIEW_ICONS")
+	and removedCount == 4 and not contains(removedLine, "PREVIEW_INNER") and not contains(removedLine, "Props"), errR or (removedLine .. " | " .. cleaned))
+check("cleanup block: an unrelated PREVIEW_X, a PREVIEW_WORLD in the wrong place, a nested PREVIEW_OLD and an old PREVIEW_LIGHT all survive",
+	stray.Parent == workspace and misplaced.Parent == holder and nested.Parent == holder and oldLight.Parent == StarterGui, cleaned)
+check("cleanup block: each unknown PREVIEW_ object is reported: unknown PREVIEW_ object: <path>, delete it by hand",
+	contains(cleaned, "unknown PREVIEW_ object: Workspace.PREVIEW_X, delete it by hand") and contains(cleaned, "unknown PREVIEW_ object: Workspace.Props.PREVIEW_OLD, delete it by hand")
+	and contains(cleaned, "unknown PREVIEW_ object: Workspace.Props.PREVIEW_WORLD, delete it by hand") and contains(cleaned, "unknown PREVIEW_ object: StarterGui.PREVIEW_LIGHT, delete it by hand"), cleaned)
+check("cleanup block: with unknown PREVIEW_ objects left it ends with FAIL, not OK", contains(cleaned, "\nFAIL 4 unknown PREVIEW_ object(s) left, not deleted: ")
+	and not contains(cleaned, "\nOK "), cleaned)
 check("cleanup block: everything else stays (Baseplate, SpawnLocation, Terrain, StarterGui.ShopGui, Workspace.Props)",
 	baseplate.Parent == workspace and spawnPad.Parent == workspace and terrain.Parent == workspace and shopGui.Parent == StarterGui and holder.Parent == workspace)
+local _, _, between = runBlock(checkBlock)
+check("check block: after the cleanup it lists only the unknown ones", contains(between, "FAIL 4 PREVIEW_") and contains(between, "Workspace.PREVIEW_X (unknown")
+	and not contains(between, "(known"), between)
+for _, gone in ipairs({ stray, misplaced, nested, oldLight }) do gone:Destroy() end -- deleted by hand
 local _, _, after = runBlock(checkBlock)
-check("check block: after the cleanup it prints OK", after == "OK no PREVIEW_ object in Workspace or StarterGui", after)
+check("check block: once they are deleted by hand it prints OK", after == "OK no PREVIEW_ object in Workspace or StarterGui", after)
 local okAgain, _, again = runBlock(cleanupBlock)
-check("cleanup block: run again, it says nothing was there and OK", okAgain and string.find(again, "Removed: nothing (no preview was there)", 1, true) ~= nil
-	and string.find(again, "OK no PREVIEW_ object is left", 1, true) ~= nil, again)
+check("cleanup block: run again, it says nothing was there and OK", okAgain and contains(again, "Removed: nothing (no preview was there)")
+	and contains(again, "OK no PREVIEW_ object is left") and not contains(again, "unknown"), again)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -2028,14 +2047,34 @@ MUTANTS_C = [
      "hash block: a script with one newline added at the end prints OK"),
     ("the hash block refuses a newline Studio dropped", D, 'matches(source) or matches(source .. "\\n") or', "matches(source) or",
      "hash block: a script whose last newline Studio dropped prints OK"),
-    ("the cleanup block only looks at the top level", D, "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
-     "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
-     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
-    ("the cleanup block destroys what is already gone and lists it twice", D, ' and d:IsDescendantOf(place) then', " then",
-     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
-    ("the check block forgets StarterGui", D, 'for _, place in ipairs({ workspace, game:GetService("StarterGui") }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
-     'for _, place in ipairs({ workspace }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
-     "check block: with previews there it prints FAIL and every name"),
+    ("the cleanup block deletes every PREVIEW_ object at the top level", D,
+     '\t\tif known(d) then\n\t\t\ttable.insert(removed, d:GetFullName())', '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(removed, d:GetFullName())',
+     "cleanup block: an unrelated PREVIEW_X"),
+    ("the cleanup block looks for the three names at any depth", D,
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif known(d) then',
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD" or d.Name == "PREVIEW_ICONS" then',
+     "cleanup block: an unrelated PREVIEW_X"),
+    ("the cleanup block forgets PREVIEW_STAGES", D,
+     '\treturn (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))\n\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS")\nend\nlocal removed',
+     '\treturn (d.Parent == workspace and d.Name == "PREVIEW_WORLD")\n\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS")\nend\nlocal removed',
+     "cleanup block: it removes exactly the three known previews"),
+    ("the cleanup block reports nothing unknown", D, '\t\t\tprint("unknown PREVIEW_ object: " .. d:GetFullName() .. ", delete it by hand")\n', "",
+     "cleanup block: each unknown PREVIEW_ object is reported"),
+    ("the cleanup block's report only looks at the top level", D,
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(unknown,',
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(unknown,',
+     "cleanup block: each unknown PREVIEW_ object is reported"),
+    ("the cleanup block says OK with unknown objects left", D, 'print(#unknown == 0 and "OK no PREVIEW_ object is left', 'print(true and "OK no PREVIEW_ object is left',
+     "cleanup block: with unknown PREVIEW_ objects left it ends with FAIL"),
+    ("the check block forgets StarterGui", D, 'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     'for _, place in ipairs({ workspace }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
+    ("the check block lists only the unknown ones", D, '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" and not known(d) then\n\t\t\ttable.insert(found,',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
+    ("the check block calls a known name anywhere known", D, '\t\tif (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))\n\t\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS") then',
+     '\t\tif d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD" or d.Name == "PREVIEW_ICONS" then',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
 ]
 
 

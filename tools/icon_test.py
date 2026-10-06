@@ -1080,20 +1080,33 @@ table.clear(PRINTED)
 local lightOk, lightErr = pcall(function()
 __LIGHTTEST__
 end)
-local lgui = StarterGui:FindFirstChild("PREVIEW_LIGHT")
-local lview = lgui and lgui:FindFirstChild("Slot") and lgui:FindFirstChild("Slot"):FindFirstChild("View")
+local lgui = StarterGui:FindFirstChild("PREVIEW_ICONS")
+local lslot = lgui and lgui:FindFirstChild("LightTest")
+local lview = lslot and lslot:FindFirstChild("View")
 local inCamera = lview and lview.CurrentCamera.CFrame:VectorToObjectSpace(lview.LightDirection)
 local s3 = 1 / math.sqrt(3)
-check("light test: the block builds StarterGui.PREVIEW_LIGHT, one cube in a ViewportFrame, and prints OK", lightOk and lview ~= nil and has("OK light test built")
-	and #lview:FindFirstChild("Model"):GetChildren() == 1, lightErr)
+check("light test: the block adds LightTest to StarterGui.PREVIEW_ICONS (the sheet stays), one cube in a ViewportFrame, and prints OK", lightOk and lview ~= nil
+	and has("OK light test built") and lgui:FindFirstChild("Sheet") ~= nil and #lview:FindFirstChild("Model"):GetChildren() == 1, lightErr)
 check("light test: the cube is lit like the icons (toward the picture's right, down and away: (1, -1, -1) in the camera's frame)", inCamera ~= nil
 	and math.abs(inCamera.X - s3) < 1e-6 and math.abs(inCamera.Y + s3) < 1e-6 and math.abs(inCamera.Z + s3) < 1e-6, inCamera and (inCamera.X .. " " .. inCamera.Y .. " " .. inCamera.Z))
 pcall(function()
 __LIGHTTEST__
 end)
 local lights = 0
-for _, c in ipairs(StarterGui:GetChildren()) do if c.Name == "PREVIEW_LIGHT" then lights += 1 end end
-check("light test: running it again replaces the old one", lights == 1)
+for _, c in ipairs(lgui:GetChildren()) do if c.Name == "LightTest" then lights += 1 end end
+check("light test: running it again replaces the old one (one LightTest)", lights == 1)
+lgui:Destroy()
+table.clear(PRINTED)
+local aloneOk, aloneErr = pcall(function()
+__LIGHTTEST__
+end)
+local alone = StarterGui:FindFirstChild("PREVIEW_ICONS")
+check("light test: without the icon sheet it makes StarterGui.PREVIEW_ICONS itself, turned on, with LightTest in it", aloneOk and alone ~= nil and alone.Enabled ~= false
+	and alone:FindFirstChild("LightTest") ~= nil and alone:FindFirstChild("LightTest"):FindFirstChild("View") ~= nil, aloneErr)
+local previews = {}
+for _, c in ipairs(StarterGui:GetDescendants()) do if string.sub(c.Name, 1, 8) == "PREVIEW_" then table.insert(previews, c.Name) end end
+check("light test: it makes no PREVIEW_ object but StarterGui.PREVIEW_ICONS (one of the three the cleanup block removes)",
+	#previews == 1 and previews[1] == "PREVIEW_ICONS", table.concat(previews, ","))
 local saved = {}
 for _, c in ipairs(RS:GetChildren()) do if c.Name == "IconArt" or c.Name == "IconVisuals" then table.insert(saved, c); c.Parent = nil end end
 local missingOk, missingErr = runPreview()
