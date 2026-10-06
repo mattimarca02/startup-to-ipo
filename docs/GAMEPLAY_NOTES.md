@@ -13,7 +13,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 3: The first 10 minutes
 - [x] Section 4: The first hour
 - [x] Section 5: Game feel
-- [ ] Section 6: Monetization that feels fair
+- [x] Section 6: Monetization that feels fair
 - [ ] Section 7: Frustration and safety nets
 - [ ] Section 8: Sectors
 - [ ] Section 9: Measurement
@@ -63,6 +63,8 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 8 | **Silent by default.** Sounds only from Roblox-made Creator Store assets the owner picks, in a `SoundConfig` with `id = 0` placeholders; volume 0.5; a "Sounds" toggle | `SoundConfig` | 5 |
 | 9 | Employee states Work / Stroll / React / Rest ("Zz" in quiet mode), and Coffee Capybara's coffee breaks | EmployeeClient | 5 |
 | 10 | Effect budgets: walkers 20 Hz within 80 studs and on screen; 6 floating texts; one burst of 30 particles; tweens 0.6 s or less | the juice PRs | 5 |
+| 11 | **No starter offer and no unprompted Robux surface:** the first Robux prompt is the player's own tap on a price in SHOP; no badge points at a Robux tab | ShopClient (SHOP_UX S4) | 6 |
+| 12 | At launch the Extra Employee Slots pass means **+3 desks**, capped like every desk (LG:60 estimates up to +15% Income) | LONG PR 3 (desks) | 6 |
 
 ## Not verified
 

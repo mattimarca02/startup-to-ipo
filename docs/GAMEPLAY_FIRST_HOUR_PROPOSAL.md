@@ -172,3 +172,26 @@ Every effect is client-only and changes no data (CLAUDE.md, client visuals). "Ph
 **Employees.** Today they stroll within 3 studs of their `Home` point every 2-6 s, every frame, within 160 studs (EmployeeClient.lua:978-1002; FR-16). Proposed states: *Work* (a typing bob at the desk), *Stroll* (today's), *React* (a 0.4 s hop when a call is answered, an item pops or a teammate joins; once per 5 s each), *Rest* ("Zz" while quiet mode is on: the office waits for the founder). Coffee Capybara takes breaks at the Coffee Machine.
 
 **Budgets (placeholders):** walkers at 20 Hz, within 80 studs, on screen only (FR-16's fix); at most 6 floating texts and one particle burst (30 particles) at a time; tweens 0.6 s or less; no particles at low graphics quality (unverified API).
+
+## 6. Monetization that feels fair (D9)
+
+**Rules.** No Robux surface in the first 3 minutes, and none the player didn't open: Robux items live in SHOP and appear in context below, never as pop-ups, timers, badges, during a loss (FR-14) or on a touch (A17). **The first Robux prompt** is the player's own tap on a price in SHOP (OWNER CHOICE: no "starter offer").
+
+| Item (ShopConfig.lua) | Shown in context | Promise | Risk |
+|---|---|---|---|
+| 2x Cash, 199 (:35-42) | Passes tab | double Cash | runs ~6% shorter (CUST 1.5); valuation must stay base (LG:93), so "forever" copy needs care |
+| VIP, 249 (:44-51) | a "See VIP" button at the lounge | +50% Cash, tag, lounge | the lounge is a glass box with two seats (ShopServer.lua:626-680) |
+| Extra Employee Slots, 149 (:53-61) | the "team full" card | +3 hires | at launch desks cap hires (LG:60): define it as +3 desks, worth up to +15% |
+| Auto-Hatch, 199 (:63-71) | Eggs tab after ~10 hatches | no clicking | Income x0.99 (sim §3); online only (EmployeeServer.lua:813-832): say "comfort" |
+| Headhunter, 149 (:73-80) | when poaching opens | "+10% success chance" | sells a better chance at a random PvP result, and is sold to restricted players (not `changesOdds`, :193-196): review (question 4) |
+| Shareholder, 199 (:82-89) | IPO window near IPO-ready | 2x Shares | perks sooner (~6%, CUST 1.5) |
+| Pile / Bag / Vault of Cash, 29 / 99 / 299 (:94-123) | Cash tab only | 10 / 45 / 180 min of Income | today they raise valuation (ShopServer.lua:540): paid IPO speed; launch: gifts (LG:93) |
+| Luck Boost, 49 (:124-136) | beside a Startup or Unicorn egg | exact odds before buying (`luckText`) | the only odds copy (SHOP_UX 3.8); hidden when restricted |
+| Instant Hatch, 25 (:137-147) | an incubator with 5+ min left | skip one timer | low: the roll is the same (D9_POLICY_OPTIONS.md:20) |
+| Poach Shield, 49 (:148-157) | Defense tab, the card after a loss | 1 h of protection | fear selling if timed (FR-14) |
+
+**A free player can always** reach every stage, IPO and sector, hatch every creature (restricted players by the fixed order, EmployeeServer.lua:258-266), earn every stamp tier (targets shrink only by pass share, CUST 1.5) and claim every daily reward (DailyConfig.lua:6).
+
+**The leaderboard.** Today's board ranks IPO count, then best valuation (IpoClient.lua:754), and Cash packs raise valuation: bought speed. At launch it ranks Collection, stamps plus IPOs (CUST 1.6), and valuation counts base Cash only (LG:93): passes buy a little speed, never a higher ceiling.
+
+**Never sold:** valuation, stage or rung skips, engaged time, stamps, tiers, eggs or creatures, random boxes, Gaming's work, quality or wishlists (SECT 2.8); bundles have fixed contents (LG:95).
