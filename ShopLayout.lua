@@ -8,8 +8,14 @@
 -- and every tap target is at least ShopLayout.TAP (44 px) in both directions.
 --   ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)  -> the window: header, tabs, pages, bottom slot
 --   ShopLayout.cardWidths(cardW)                              -> how wide a card's name and description wrap
---   ShopLayout.card(cardW, nameH, descH)                      -> the pieces of one Robux or Debug card
+--   ShopLayout.card(cardW, nameH, descH, badgeW)              -> the pieces of one Robux or Debug card
 --   ShopLayout.helpCard(w, h, lineHeights)                    -> the "How the shop works" card (HelpButton)
+-- The Office ladder (docs/SHOP_UX_PROPOSAL.md 3.2):
+--   ShopLayout.ladder(upgrades, owned, cash, income, money, bought, busy)  -> what every rung shows (the state)
+--   ShopLayout.barFill(cash, price), ShopLayout.timeText(cash, price, income)  -> the hero's bar and its time
+--   ShopLayout.officeRow(cardW, kind), ShopLayout.hero(cardW)  -> a rung's pieces (owned, locked, summary, banner, hero)
+--   ShopLayout.stack(heights, gap), ShopLayout.revealScroll(y, h, view, total)  -> the Office page, top to bottom
+--   ShopLayout.bestValue(products, forSale)  -> the Cash pack with the most minutes of Income per Robux (BEST VALUE)
 
 local ShopLayout = {}
 
@@ -32,6 +38,12 @@ ShopLayout.TITLE_RIGHT = 106 -- the title ends this far from the right edge (X, 
 ShopLayout.WIDE_CARD = 420 -- a card at least this wide keeps its text between the icon and the button
 ShopLayout.SCROLLBAR_ROOM = 10 -- the pages' right padding, where the scrollbar goes
 ShopLayout.TOAST_MAX_W = 520 -- the pop-up message at the bottom center (only while the shop is closed)
+ShopLayout.BADGE_H = 22 -- a factual badge on a card (BEST VALUE)
+ShopLayout.HERO_WIDE = 132 -- the Office's next upgrade (the hero card) on a wide page (landscape)
+ShopLayout.HERO_NARROW = 202 -- and on a narrow one (portrait): the bar, the time and a full-width button under the name
+ShopLayout.ROW_WIDE = 64 -- an owned or locked rung, the summary row and the "Office complete" banner
+ShopLayout.ROW_NARROW = 72 -- on a narrow page: room for a second line
+ShopLayout.OFFICE_GAP = 6 -- between the Office page's rows
 
 local function finite(value, default)
 	value = tonumber(value)
@@ -131,26 +143,34 @@ end
 
 -- Cards -------------------------------------------------------------------------------------------------------
 
--- How wide a card's name and description wrap (ShopClient measures both at 16 px at these widths)
-function ShopLayout.cardWidths(cardW)
+-- How wide a card's name and description wrap (ShopClient measures both at 16 px at these widths). badgeW: the
+-- width of a badge (BEST VALUE) the card shows, 0 for none: on a wide card it sits at the end of the name's row.
+function ShopLayout.cardWidths(cardW, badgeW)
 	cardW = math.max(0, finite(cardW, 0))
+	badgeW = math.max(0, finite(badgeW, 0))
 	if cardW < ShopLayout.WIDE_CARD then
 		return math.max(0, cardW - 52 - 88), math.max(0, cardW - 16)
 	end
-	return math.max(0, cardW - 208), math.max(0, cardW - 208)
+	local nameW = cardW - 208
+	if badgeW > 0 then
+		nameW -= badgeW + 8
+	end
+	return math.max(0, nameW), math.max(0, cardW - 208)
 end
 
 -- One Robux or Debug card, cardW wide (ShopLayout.layout(...).cardW). nameH and descH are the measured heights of
--- its name and description at 16 px, wrapped at ShopLayout.cardWidths. Returns height and the rectangles icon, name,
--- desc and button in the card's own pixels.
---   Wide (landscape): the name and the description between the icon and the button, like before.
+-- its name and description at 16 px, wrapped at ShopLayout.cardWidths. badgeW: a badge's width (0: none). Returns
+-- height and the rectangles icon, name, desc, button (and badge) in the card's own pixels.
+--   Wide (landscape): the name and the description between the icon and the button, like before; the badge at the
+--   end of the name's row.
 --   Narrow (portrait): the icon, the name and the button on a top row, the description across the whole card under
---   them, so a long text stays at 16 px instead of shrinking.
-function ShopLayout.card(cardW, nameH, descH)
+--   them (the badge first), so a long text stays at 16 px instead of shrinking.
+function ShopLayout.card(cardW, nameH, descH, badgeW)
 	cardW = math.max(0, finite(cardW, 0))
 	nameH = math.max(0, finite(nameH, 0))
 	descH = math.max(0, finite(descH, 0))
-	local nameW, descW = ShopLayout.cardWidths(cardW)
+	badgeW = math.max(0, finite(badgeW, 0))
+	local nameW, descW = ShopLayout.cardWidths(cardW, badgeW)
 	local buttonH = ShopLayout.BUTTON_H
 	local C = { narrow = cardW < ShopLayout.WIDE_CARD }
 	if C.narrow then
@@ -158,16 +178,241 @@ function ShopLayout.card(cardW, nameH, descH)
 		C.icon = rect(8, 8 + math.floor((top - 36) / 2), 36, 36)
 		C.button = rect(cardW - 8 - 72, 8 + math.floor((top - buttonH) / 2), 72, buttonH)
 		C.name = rect(52, 8, nameW, top)
-		C.desc = rect(8, 8 + top + 4, descW, descH)
+		local y = 8 + top + 4
+		if badgeW > 0 then
+			C.badge = rect(8, y, math.min(badgeW, descW), ShopLayout.BADGE_H)
+			y += ShopLayout.BADGE_H + 4
+		end
+		C.desc = rect(8, y, descW, descH)
 		C.height = C.desc.y + descH + 8
 	else
 		C.name = rect(68, 8, nameW, math.max(24, nameH))
+		if badgeW > 0 then
+			C.badge = rect(68 + nameW + 8, 9, badgeW, ShopLayout.BADGE_H)
+		end
 		C.desc = rect(68, C.name.y + C.name.h + 2, descW, descH)
 		C.height = math.max(84, C.desc.y + descH + 8)
 		C.icon = rect(8, math.floor((C.height - 52) / 2), 52, 52)
 		C.button = rect(cardW - 8 - 124, math.floor((C.height - buttonH) / 2), 124, buttonH)
 	end
 	return C
+end
+
+-- The Cash pack with the most minutes of Income per Robux among the products forSale(product) allows (never one
+-- that is "Coming soon"): its key, or nil. Computed from ShopConfig, so it moves when the minutes or prices change.
+-- A tie keeps the first in config order.
+function ShopLayout.bestValue(products, forSale)
+	local best, bestRate
+	for _, product in ipairs(products or {}) do
+		local minutes = product.effect and finite(product.effect.incomeMinutes, 0) or 0
+		local price = finite(product.price, 0)
+		if minutes > 0 and price > 0 and forSale(product) then
+			local rate = minutes / price
+			if bestRate == nil or rate > bestRate then
+				best, bestRate = product.key, rate
+			end
+		end
+	end
+	return best
+end
+
+-- The Office ladder ---------------------------------------------------------------------------------------------
+
+-- The hero's bar: the Cash against the price, from 0 to 1 (a free upgrade is full; nothing gives a NaN)
+function ShopLayout.barFill(cash, price)
+	cash, price = finite(cash, 0), finite(price, 0)
+	if price <= 0 then
+		return 1
+	end
+	return math.clamp(cash / price, 0, 1)
+end
+
+-- How long until the Cash reaches the price at this Income: "about 25 s" (minutes from 2 minutes on, hours from 2
+-- hours on). nil when the Cash is already there or the Income is 0: never a negative or an infinite time.
+function ShopLayout.timeText(cash, price, income)
+	cash, price, income = finite(cash, 0), finite(price, 0), finite(income, 0)
+	local need = price - cash
+	if need <= 0 or income <= 0 then
+		return nil
+	end
+	local seconds = math.ceil(need / income)
+	if seconds ~= seconds or seconds == math.huge or seconds < 1 then
+		return nil
+	end
+	if seconds < 120 then
+		return "about " .. seconds .. " s"
+	end
+	local minutes = math.ceil(seconds / 60)
+	if minutes < 120 then
+		return "about " .. minutes .. " min"
+	end
+	local hours = math.ceil(minutes / 60)
+	if hours > 99999 then
+		return nil
+	end
+	return "about " .. hours .. " h"
+end
+
+-- What every Office rung shows. upgrades = the server's list ({ name, cost, income }) in buying order, owned[i] =
+-- true for an upgrade the player owns (the Upgrade<i> attributes), cash and income = leaderstats, money = the Cash
+-- format (ShopConfig.formatCash), bought = the upgrade just bought (its card stays the hero a moment, "Bought!"),
+-- busy = a buy request is running ("..."). Returns:
+--   count, owned (how many), incomeOwned (what they earn), nextIndex (nil once all are bought), complete,
+--   summary = { title = "3 of 6 bought", info = "+$8/s" } (nil while none is owned),
+--   banner = { title = "Office complete", info = ... } (only when complete),
+--   rows[i] = { state = "owned" | "next" | "locked", info, button (nil: no button), color = "owned" | "buy" | "disabled" },
+--   hero = { index, name, info, fill, progress, time, button, color, action, hint } for the next upgrade, where action
+--   is "buy" (the only state that sends a request), "short" (not enough Cash: nothing is sent) or "wait"
+function ShopLayout.ladder(upgrades, owned, cash, income, money, bought, busy)
+	upgrades = upgrades or {}
+	owned = owned or {}
+	cash = math.max(0, finite(cash, 0))
+	income = math.max(0, finite(income, 0))
+	money = money or function(amount)
+		return "$" .. tostring(math.floor(amount))
+	end
+	local S = { count = #upgrades, owned = 0, incomeOwned = 0, rows = {} }
+	for i, upg in ipairs(upgrades) do
+		local mine = owned[i] == true and i ~= bought
+		if mine then
+			S.owned += 1
+			S.incomeOwned += math.max(0, finite(upg.income, 0))
+			S.rows[i] = { state = "owned", info = "+" .. money(finite(upg.income, 0)) .. "/s", button = "Owned", color = "owned" }
+		elseif S.nextIndex == nil then
+			S.nextIndex = i
+			S.rows[i] = { state = "next" }
+		else
+			local before = upgrades[i - 1]
+			S.rows[i] = { state = "locked", info = "Unlocks after " .. tostring(before and before.name or "the one before"), color = "disabled" }
+		end
+	end
+	S.complete = S.count > 0 and S.nextIndex == nil
+	if S.owned > 0 then
+		S.summary = { title = S.owned .. " of " .. S.count .. " bought", info = "+" .. money(S.incomeOwned) .. "/s" }
+	end
+	if S.complete then
+		S.banner = { title = "Office complete", info = "Your next step: the IPO window" }
+	end
+	local i = S.nextIndex
+	if i then
+		local upg = upgrades[i]
+		local cost = math.max(0, finite(upg.cost, 0))
+		local H = { index = i, name = tostring(upg.name), info = "+" .. money(finite(upg.income, 0)) .. " every second" }
+		H.fill = ShopLayout.barFill(cash, cost)
+		H.progress = cost == 0 and "Free" or (money(math.min(cash, cost)) .. " / " .. money(cost))
+		H.time = ShopLayout.timeText(cash, cost, income)
+		if bought == i then
+			H.button, H.color, H.action = "Bought!", "buy", "wait"
+			H.fill, H.time = 1, nil
+			H.progress = cost == 0 and "Free" or (money(cost) .. " / " .. money(cost))
+		elseif busy then
+			H.button, H.color, H.action = "...", "disabled", "wait"
+		elseif cost == 0 then
+			H.button, H.color, H.action = "Get it free", "buy", "buy"
+		elseif cash >= cost then
+			H.button, H.color, H.action = "Buy " .. money(cost), "buy", "buy"
+		else
+			H.button, H.color, H.action = "Need " .. money(math.ceil(cost - cash)) .. " more", "disabled", "short"
+		end
+		H.hint = H.time and (H.time .. " at your Income") or ("Your Income is " .. money(0) .. " a second right now")
+		S.hero = H
+		S.rows[i].button, S.rows[i].color = H.button, H.color
+	end
+	return S
+end
+
+-- One Office row that is not the hero, cardW wide: kind = "owned" (with its "Owned" button), "locked" (no button),
+-- "summary" (the owned rungs folded: "Show"/"Hide" where the button would be) or "banner" ("Office complete").
+-- Returns height and the rectangles icon, badge (a check or a padlock over the icon's corner, on purpose), name,
+-- info and button (owned and summary only).
+function ShopLayout.officeRow(cardW, kind)
+	cardW = math.max(0, finite(cardW, 0))
+	local narrow = cardW < ShopLayout.WIDE_CARD
+	local h = narrow and ShopLayout.ROW_NARROW or ShopLayout.ROW_WIDE
+	local R = { height = h, narrow = narrow }
+	if kind == "banner" then
+		R.name = rect(12, 6, cardW - 24, 26)
+		R.info = narrow and rect(12, 32, cardW - 24, 36) or rect(12, 34, cardW - 24, 22)
+		return R
+	end
+	R.icon = rect(8, math.floor((h - 48) / 2), 48, 48)
+	R.badge = rect(R.icon.x + 30, R.icon.y + 30, 20, 20)
+	local right = cardW - 8
+	if kind == "owned" or kind == "summary" then
+		local buttonW = narrow and 72 or 124
+		R.button = rect(right - buttonW, math.floor((h - ShopLayout.BUTTON_H) / 2), buttonW, ShopLayout.BUTTON_H)
+		right = R.button.x - 8
+	end
+	local textW = right - 64
+	if narrow and R.button then -- the name may take two lines beside the button
+		R.name = rect(64, 6, textW, 38)
+		R.info = rect(64, 46, textW, 20)
+	elseif narrow then -- "Unlocks after ..." may take two lines
+		R.name = rect(64, 6, textW, 22)
+		R.info = rect(64, 30, textW, 38)
+	else
+		R.name = rect(64, 8, textW, 24)
+		R.info = rect(64, 34, textW, 22)
+	end
+	return R
+end
+
+-- The hero card (the next upgrade), cardW wide: height and the rectangles icon, name, info (what it earns), bar,
+-- progress ("$12 / $25"), time ("about 7 s"), status (a refusal or a hint) and button. On a narrow card the status
+-- takes the time's place (statusSharesTime) for its 3 s.
+function ShopLayout.hero(cardW)
+	cardW = math.max(0, finite(cardW, 0))
+	local H = { narrow = cardW < ShopLayout.WIDE_CARD }
+	if H.narrow then
+		local textW = cardW - 96
+		H.height = ShopLayout.HERO_NARROW
+		H.icon = rect(8, 8, 72, 72)
+		H.name = rect(88, 8, textW, 24)
+		H.info = rect(88, 34, textW, 20)
+		H.progress = rect(88, 56, textW, 20)
+		H.bar = rect(8, 88, cardW - 16, 12)
+		H.time = rect(8, 104, cardW - 16, 38)
+		H.status = H.time
+		H.button = rect(8, 146, cardW - 16, ShopLayout.BUTTON_H)
+	else
+		local buttonW = math.clamp(math.floor(cardW * 0.3), 120, 160)
+		local textW = cardW - 92 - buttonW - 20
+		local half = math.floor((cardW - 102) / 2)
+		H.height = ShopLayout.HERO_WIDE
+		H.icon = rect(10, 10, 72, 72)
+		H.button = rect(cardW - 10 - buttonW, 10, buttonW, ShopLayout.BUTTON_H)
+		H.name = rect(92, 10, textW, 24)
+		H.info = rect(92, 36, textW, 20)
+		H.bar = rect(92, 64, cardW - 102, 12)
+		H.progress = rect(92, 80, half, 20)
+		H.time = rect(92 + half, 80, cardW - 102 - half, 20)
+		H.status = rect(10, 104, cardW - 20, 20)
+	end
+	H.statusSharesTime = H.narrow
+	return H
+end
+
+-- The Office page from its top: the heights of the pieces shown, in order, and the gap between them. Returns the y
+-- of each (same order) and the total height (the page's canvas).
+function ShopLayout.stack(heights, gap)
+	gap = math.max(0, finite(gap, 0))
+	local ys, y = {}, 0
+	for i, h in ipairs(heights or {}) do
+		if i > 1 then
+			y += gap
+		end
+		ys[i] = y
+		y += math.max(0, finite(h, 0))
+	end
+	return ys, y
+end
+
+-- How far to scroll a page that shows view pixels so a piece at y, h tall, shows whole: the least scroll that shows
+-- its bottom, never past its top, never past the end of the canvas (total)
+function ShopLayout.revealScroll(y, h, view, total)
+	y, h, view, total = finite(y, 0), finite(h, 0), finite(view, 0), finite(total, 0)
+	local want = math.min(math.max(0, y + h - view), y)
+	return math.clamp(want, 0, math.max(0, total - view))
 end
 
 -- The help card ------------------------------------------------------------------------------------------------
