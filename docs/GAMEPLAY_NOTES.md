@@ -2,6 +2,15 @@
 
 Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, worktree `../gameplay-design`, started 2026-10-06). Docs only: no code, no Studio, no MCP. The only existing-file edit is the two claim rows in `CONTRIBUTING.md`.
 
+## Progress (session 4: trim the proposal to 5,200 words, 2026-10-06)
+
+Worktree `../gameplay-fold3` from `origin/gameplay-design` (4d9ed9a), branch `gameplay-fold3`, each commit pushed to `gameplay-design` (fast-forward). Docs only; no Studio, no MCP; `tools/economy_sim.py` not touched.
+
+- [x] Claim the two docs (fccfd05, claim rows only)
+- [ ] Trim the proposal from 5,426 to at most 5,200 words (`wc -w`); the moved paragraphs are under "Moved text (session 4)" below
+- [ ] `python tools/first_hour_model.py --check`, `wc -w` of the proposal and `docs/SOUND_PLAN.md`, one end-to-end read, 10 citations spot-checked against `origin/main`
+- [ ] Release the two claims (rows kept, set to free)
+
 ## Progress (session 3: E1, E2 and the owner defaults, 2026-10-06)
 
 Worktree `../gameplay-fold2` from `origin/gameplay-design` (38a9642), branch `gameplay-fold2`, each commit pushed to `gameplay-design` (fast-forward). Docs and `tools/first_hour_model.py` only; no Studio, no MCP; `tools/economy_sim.py` and `docs/SIMS_RESULTS.md` only read (`--long` run read-only, and imported from a scratch script).
@@ -42,6 +51,32 @@ Worktree `../gameplay-fold` from `origin/gameplay-design` (e48dfc0), branch `gam
 - [x] Section 11: Open questions
 - [x] Word count at most 5,500 (`wc -w`): 5,445 after section 11, 5,466 after the review pass
 - [x] Release both claims in `CONTRIBUTING.md` (rows kept, set to free)
+
+## Moved text (session 4)
+
+Text taken out of `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (session 4) to bring it under 5,200 words. Each paragraph is the original, word for word; the proposal keeps a one-line pointer to it. Nothing here is new.
+
+**Phones (proposal 5.1; the original paragraph, its "Would change" list stays in the proposal):**
+
+**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $669K". Insets and safe areas not measured.
+
+**5-friend playtest (proposal 9):**
+
+**5-friend playtest** (20 min, a phone, a fresh save, sound on). The observer only says "Play as you would at home and think out loud. I can't help." Note times: finding SHOP, the first call, hatching by window or on foot, looking at Cash, the first "what now?", taps on non-buttons, the goal card, Robux screens, muting. Then ask: what is the game about; what were you doing at the end; best and most boring moment; when were you lost; what do calls do; would you play tomorrow; anything unfair or pushy; any annoying sound; did you want to greet other players (the "Cheer").
+
+**Gaming's first hour (proposal 8):**
+
+**Gaming's first hour** (SECT 2.2-2.6): Bedroom Studio, a free Gaming PC, no calls; first tasks Bug Squash and Art Sprint (SECT 2.5, 5). At ~1:00 a Puzzle or Platformer Game Jam pitch; a 15-engaged-minute build (SECT 2.4), a Playtest card at 50%; at ~16-20 min **Launch** shows the Forecast tier, then Reviews ring like calls. 20 timed moments an hour against Software's 7.3 (SIMS S10). Risk: three new verbs in 20 minutes, so the Forecast is one line ("Score 64 · Solid · +6 Polish for Hit"). Tutorial: SECT 5's "Pitch your first game", "Launch it".
+
+**Employees (proposal 5):**
+
+**Employees** stroll within 3 studs of `Home` every 2-6 s, every frame, within 160 studs (EmployeeClient.lua:978-1002; FR-16). Proposed states: Work (typing bob), Stroll, React (a 0.4 s hop, once per 5 s), Rest ("Zz" in quiet mode); Coffee Capybara breaks at the Coffee Machine. **Budgets (placeholders):** walkers 20 Hz within 80 studs, on screen; 6 floating texts and one 30-particle burst at most; tweens ≤ 0.6 s; no particles at low graphics quality (unverified API).
+
+**Funnel (proposal 9) and the gift hook (proposal 4): the two whole original paragraphs; the proposal keeps the "Without code" and "IPO tease" parts and the funnel targets:**
+
+**Without code**, Creator Hub gives retention (day 1, 7, 30), session length, daily players, play-through rate, revenue, payers, frame rate (unverified). **With code**, `AnalyticsService` funnel, economy and custom events (names unverified), planned in ROADMAP.md:107 and ACTIVE §5; logged on the server once per player, guarded by saved state (`onboarding.goals`, `tasks.done`, `daily`). **Funnel** (event, target placeholder): spawn, `data.ready` (TycoonCore.lua:831), 100%; first_desk, `buyUpgrade` (:272-288), 95%; first_call (TaskServer.lua:436-457), 85%; first_hire, `hatch` (EmployeeServer.lua:285-308), 85%; goal_3, `Hire3` (OnboardingServer.lua:157-158), 60%; milestone_1, 50%; seed, 25%; day2_return, 25%; first_ipo, `goPublic` (IpoServer.lua:177-243), 3% by day 30. Plus Cash in and out by source and a `first_hour` event (purchases, calls answered and missed, quiet mode).
+
+**IPO tease** (milestone 1): a dot on IPO; "The road to the bell": seven stages, "Seed: your first funding round", two empty Pokedex frames (CUST 1.4), no countdown. **The gift hook** (TUT 6): Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61), calm text (:53-69). **Tomorrow:** the away card (LG:24), a named target ("Whiteboard I, about 10 min"), the next title, Seed's round, room and three tasks shown ahead (BIBLE:271), Gaming's trending genre (SECT 2.3).
 
 ## Sources
 

@@ -44,7 +44,7 @@ The sim (no free egg) has Seed at 4 min (§4) and IPO 1, 2, 3, 4 at 12, 22, 40, 
 
 - **A1 High. No Cash or Income on screen:** the bar shows valuation (IpoClient.lua:831), Cash sits in the player list (TycoonCore.lua:717-727), hidden on phones (unverified); prices go gray (ShopClient.lua:560-563). → D4.
 - **A2 High. The first pointer is a sign that does nothing** (1.1; CanTouch off, TycoonCore.lua:228-230). → tutorial step 1 outlines SHOP (TUT §3).
-- **A3 High (launch). Garage waits:** LONG's second upgrade ($1,100, economy_sim.py:1068) leaves 8 min of nothing (3.2; ~16:00 without the free egg: the previous model E, not re-run); longest Garage gap 18 min (SIMS S10). → D1, E1.
+- **A3 High (launch). Garage waits:** LONG's second upgrade ($1,100, economy_sim.py:1068) leaves 8 min of nothing (3.2; ~16:00 without the free egg: model E, not re-run); longest Garage gap 18 min (SIMS S10). → D1, E1.
 - **A4 High (today). Nothing active between purchases live:** calls are Studio only. → LONG PR 2.
 - **A5 High (today). Three resets in hour one** (1.1) against 50 hours (LG:3). → LONG PR 2.
 - **A6 Medium. Step 5 clashes with the Desk rule:** calls ring at once, the tutorial teaches them later (TUT:25-29); early misses start quiet mode. → step 5 on the first ring.
@@ -65,17 +65,17 @@ The sim (no free egg) has Seed at 4 min (§4) and IPO 1, 2, 3, 4 at 12, 22, 40, 
 
 ## 2. The core loop (launch, Software)
 
-- **Every 10 s:** answer a call (1.1; faster with hires: TaskConfig.lua:53, 61-62), pulled by the ringing chip and the chain (x1.1 to x2); Cash ticks.
+- **Every 10 s:** answer a call (1.1; faster with hires: TaskConfig.lua:53, 61-62), pulled by the ringing chip and the chain (x1.1 to x2).
 - **Every minute:** buy the next upgrade, egg or desk; hatch. Pulled by Cash on the bar (D4) and the Office bar "$1,234 / $1,500 · about 7 s" (SHOP_UX 3.2).
 - **Every 10 min:** a milestone (D2), a goal, a new task kind. **Every session:** a funding stage, its round (Raise, Later, Skip: FUND 1), a new room. **Every day:** the gift, 3 engaged hours at full value (LG:23), a trending genre (Gaming).
 
 *Active* play alone moves the IPO clock (LG:5) and adds about a third to Garage Income (G1 target f 0.32, LG:115). *Passive* Income is every reward's unit: a call pays 7 s of it (TaskServer.lua:253-254), so each purchase raises each call. *Decisions* turn active Cash into Income.
 
-**AFK against active.** Today offline Cash (1.1) is all valuation (TycoonCore.lua:77-78, 825). At launch engaged Cash is valuation for 3 h a day, then 5% (LG:23); idle (quiet mode, 7) and offline share the away bank, 10% of base Income for 2 h, 10% of it valuation (LG:24): an hour away is about 1/130 of an engaged Garage hour toward the IPO (0.1 x 0.1 against 1.32), yet its Cash still buys things. The welcome-back card says "Your startup saved $X while you were away", with no Robux (D7).
+**AFK against active.** Today offline Cash (1.1) is all valuation (TycoonCore.lua:77-78, 825). At launch engaged Cash is valuation for 3 h a day, then 5% (LG:23); idle (quiet mode, 7) and offline share the away bank, 10% of base Income for 2 h, 10% of it valuation (LG:24): an hour away is about 1/130 of an engaged Garage hour toward the IPO (0.1 x 0.1 against 1.32), but its Cash still buys things. Welcome-back card: "Your startup saved $X while you were away", no Robux (D7).
 
 ## 3. The first 10 minutes (launch, Software)
 
-Assumes the launch build, D1-D4, E1, the goal chain (4) and this tutorial order.
+Assumes the launch build, D1-D4, E1, the goal chain (4), this tutorial order.
 
 ### 3.1 The script
 
@@ -115,7 +115,7 @@ Before 0:30: the picker (D3), one tap. Step 5's move fixes A6; sources: LG:88 (3
 | Seed | about 1:30:00 | 2:49 | 1:30:00 (LONG's fit) | 1:31:00 (37:02 unfitted) |
 <!--first-hour-model:end-->
 
-E1 meets every target: the longest wait after minute 20 falls from 17:11 (session 2's x3.1) to 10:51, milestones included; 21:26 between purchases alone (question 1).
+E1 meets every target: the longest wait after minute 20 falls from 17:11 (session 2's x3.1) to 10:51 with milestones; 21:26 between purchases alone (question 1).
 
 ### 3.3 D1 and E1: Garage prices (placeholders)
 
@@ -135,11 +135,11 @@ E1 meets every target: the longest wait after minute 20 falls from 17:11 (sessio
 | Enter Seed at | $197K | $669K | | 1:31:00 |
 <!--first-hour-model:end-->
 
-The free egg takes Desk 1, so the bought eggs need Desks 2 and 3, one price per egg tier (LG:38); this also fixes LONG's list, which buys the first hire (economy_sim.py:1067-1077). **E1:** each level adds half the old Income, as in Series C+D (LG:38, 77; economy_sim.py:1064); `--fit` spaces them evenly after the Server Rack with Seed at 1:30-1:31, which raises Seed's entry from $492K to $669K and every later one by $177K. Saves list upgrades by name and buying follows the list (TycoonCore.lua:258-262, 316-322, 771), so level I keeps the shipped names; only `Whiteboard II` and `Neon Logo II` are new. The sims own the re-fit (build item 9; a read-only comparison is in docs/GAMEPLAY_NOTES.md).
+The free egg takes Desk 1, so the bought eggs need Desks 2 and 3, one price per egg tier (LG:38); this also fixes LONG's list, which buys the first hire (economy_sim.py:1067-1077). **E1:** each level adds half the old Income, as in Series C+D (LG:38, 77; economy_sim.py:1064); `--fit` spaces them after the Server Rack with Seed at 1:30-1:31, raising Seed's entry from $492K to $669K and every later one by $177K. Saves list upgrades by name, bought in list order (TycoonCore.lua:258-262, 316-322, 771), so level I keeps the shipped names; only `Whiteboard II` and `Neon Logo II` are new. The sims own the re-fit (build item 9; read-only comparison: docs/GAMEPLAY_NOTES.md).
 
 ### 3.4 D2: milestones in every rung (amounts placeholders)
 
-Four per rung, at shares of the rung's valuation distance: Garage 1, 24, 49, 84% (the first before 10:00, the rest halfway through the late waits: E1's fit), others LONG 4(b)'s 20, 40, 60, 80% (LG:78); thresholds = LONG_K x everything so far (LG:38). Each gives a **title** and a **star on the funding sign**, never Cash or Shares (LG:5); C+D keeps LG 4(b)'s decor and task tier. Titles avoid luck, chance and prize words (D9; the model checks); entry titles stay the bible's (BIBLE:28-224). On today's stages the Garage ones all fall inside 2 minutes: ship with LONG PR 2.
+Four per rung, at shares of the rung's valuation distance: Garage 1, 24, 49, 84% (the first before 10:00, the rest halfway through the late waits: E1's fit), others LONG 4(b)'s 20, 40, 60, 80% (LG:78); thresholds = LONG_K x everything so far (LG:38). Each gives a **title** and a **star on the funding sign**, never Cash or Shares (LG:5); C+D keeps LG 4(b)'s decor and task tier. Titles avoid luck, chance and prize words (D9; the model checks); entry titles stay the bible's (BIBLE:28-224). On today's stages the Garage ones fall inside 2 minutes: ship with LONG PR 2.
 
 <!--first-hour-model:begin-->
 Rung (LONG, D1 and E1 Garage) from its entry: milestones 1-4 (valuation); titles 1-4; the next rung:
@@ -167,7 +167,7 @@ Goals done (D1, E1 run): Answer 3 calls: 1:54; Own 3 upgrades: 3:00; Reach miles
 | 60 min | 10 of 11 | 3 | 110 | 2 | $57,123 / $138 | 41% |
 <!--first-hour-model:end-->
 
-**IPO tease** (milestone 1): a dot on IPO; "The road to the bell": seven stages, "Seed: your first funding round", two empty Pokedex frames (CUST 1.4), no countdown. **The gift hook** (TUT 6): Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61), calm text (:53-69). **Tomorrow:** the away card (LG:24), a named target ("Whiteboard I, about 10 min"), the next title, Seed's round, room and three tasks shown ahead (BIBLE:271), Gaming's trending genre (SECT 2.3).
+**IPO tease** (milestone 1): a dot on IPO; "The road to the bell": seven stages, "Seed: your first funding round", two empty Pokedex frames (CUST 1.4), no countdown. **The gift hook** (TUT 6) and the **tomorrow** hooks (Day 2 and Day 3 rewards, the away card, a named target, the next title, Seed's round, room and tasks shown ahead, Gaming's trending genre): docs/GAMEPLAY_NOTES.md ("Moved text").
 
 **First social moment**, visual: new players are shielded (1.1; question 3); neighbors' rooms (WORLD §4), stars, titles, the board (6); a "Cheer" (a clap on a neighbor's sign, no reward, rate-limited) only if the playtest asks; later the paired demo (ACTIVE §3).
 
@@ -175,7 +175,7 @@ Goals done (D1, E1 run): Answer 3 calls: 1:54; Own 3 upgrades: 3:00; Reach miles
 
 ## 5. Game feel
 
-Effects are client-only and change no data (CLAUDE.md); phone-safe = no shake, no white flash, works muted. **Sound (D8):** each event has a `SoundConfig` slot (SOUND §1); id 0 plays nothing, so the game ships complete while the owner picks assets; music off by default; no sound suggests chance or a prize reel for anything sold with Robux (D9).
+Effects are client-only and change no data (CLAUDE.md); phone-safe = no shake, no white flash, works muted. **Sound (D8):** each event has a `SoundConfig` slot (SOUND §1); id 0 plays nothing, so the game ships without assets; music off by default; nothing sold with Robux sounds like chance or a prize reel (D9).
 
 Action (today: 1.1, 1.2): the phone-safe visual; its slots.
 - **Buy** (pop, toast: ShopClient.lua:507): icon pops 1.08x, "+$2/s" floats, 8 sparkles (float only); Buy, BuyRefused.
@@ -187,17 +187,17 @@ Action (today: 1.1, 1.2): the phone-safe visual; its slots.
 - **Poach** (cards: PoachClient.lua:1145, 1183-1194): the hire walks in or out; a shield bubble (no red flashing); PoachWin, PoachLoss.
 - **Daily** ("Day 1: +$300": DailyServer.lua:129-142): the tile flips, Cash counts up; DailyClaim.
 
-**Employees** stroll within 3 studs of `Home` every 2-6 s, every frame, within 160 studs (EmployeeClient.lua:978-1002; FR-16). Proposed states: Work (typing bob), Stroll, React (a 0.4 s hop, once per 5 s), Rest ("Zz" in quiet mode); Coffee Capybara breaks at the Coffee Machine. **Budgets (placeholders):** walkers 20 Hz within 80 studs, on screen; 6 floating texts and one 30-particle burst at most; tweens ≤ 0.6 s; no particles at low graphics quality (unverified API).
+**Employees** stroll within 3 studs of `Home` every 2-6 s, every frame, within 160 studs (EmployeeClient.lua:978-1002; FR-16). Proposed states (Work, Stroll, React, Rest) and the budgets (placeholders, unverified API): docs/GAMEPLAY_NOTES.md ("Moved text").
 
 ### 5.1 D4: Cash and Income on the bar
 
 Same size and place, so the gift chip, the Goals card and the tray tests stay (IpoClient.lua:233-256; tools/daily_test.py:3159-3176). **Row 1** (today's stage label, y 4, white): `$4,630 · +$18/s`: Cash with `ShopConfig.formatCash` below $100K ("$21,116"), `IpoConfig.formatShort` from $100K ("$110K"); Income `+$X/s`, short from $10K/s; counts up between ticks. **Row 2:** the valuation track. **Row 3** (today's info label, y 40): `🏚️ Garage → Seed · $9.3K / $669K`; multiplier and Shares only when not x1 and 0 (else in the IPO window).
 
-**667x339** (short, HUD row): x 370, y 6, 233 px wide (667−370−10−54, IpoClient.lua:238-242), the chip at x 609; row 1 at 16 pt, row 3 about 12 pt (`TextScaled`, min 8). **320x568** (tall, left column): x 98, y 12, 158 px (320−108−54, :253); row 1 (15 characters) about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $669K". Insets and safe areas not measured. **Would change:** IpoClient.lua:183-185, :197-207 (row 1), :221-231 (row 3), :823-832 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside IpoClient.lua:952. No server change.
+**Phones:** 667x339 (233 px wide, row 1 at 16 pt) and 320x568 (158 px, row 1 about 15 pt; under 200 px row 3 shows icons, "🏚️→🌱 $9.3K / $669K"; IpoClient.lua:238-242, :253); positions and sums: docs/GAMEPLAY_NOTES.md ("Moved text"). Insets and safe areas not measured. **Would change:** IpoClient.lua:183-185, :197-207 (row 1), :221-231 (row 3), :823-832 (`refreshHud`, the narrow variant), and a `Changed` listener on `leaderstats.Cash` and `Income` (TycoonCore.lua:717-727) beside IpoClient.lua:952. No server change.
 
 ## 6. Monetization that feels fair (D9)
 
-**Rules.** No Robux in the first 3 minutes and none the player didn't open: in SHOP, in context, never pop-ups, timers, badges, during a loss (FR-14) or on a touch (A17); the first prompt is the player's own tap (OWNER CHOICE: no "starter offer"). Items (ShopConfig.lua), moment, risk:
+**Rules.** No Robux in the first 3 minutes, none the player didn't open: in SHOP, in context, never pop-ups, timers, badges, during a loss (FR-14) or on a touch (A17); the first prompt is the player's own tap (OWNER CHOICE: no "starter offer"). Items (ShopConfig.lua), moment, risk:
 - **2x Cash** 199 (:35-42): Passes tab; ~6% shorter runs (CUST 1.5); base valuation (LG:93), so careful "forever" copy.
 - **VIP** 249 (:44-51): a "See VIP" button; the lounge, a glass box with two seats (ShopServer.lua:626-680), stays paid.
 - **Extra Employee Slots** 149 (:53-61): the "team full" card; +3 desks, up to +15% (LG:60).
@@ -212,7 +212,7 @@ Same size and place, so the gift chip, the Goals card and the tray tests stay (I
 
 ### 6.1 D5, E2: Headhunter = 20% off every poach
 
-Today it adds 0.1 to the chance of a random PvP result (ShopConfig.lua:75-79; CreatureConfig.lua:404-410): the buyer's gain is the victim's risk, and without `changesOdds` it is sold to restricted players (ShopConfig.lua:193-196). Cash per success on D6 prices; an attempt = 9 s negotiation + 30 s cooldown (PoachServer.lua:391, 415):
+Today it adds 0.1 to the chance of a random PvP result (ShopConfig.lua:75-79; CreatureConfig.lua:404-410): the buyer's gain is the victim's risk, and without `changesOdds` it is sold to restricted players (ShopConfig.lua:193-196). Cash per success on D6 prices; an attempt is 9 s of negotiation + 30 s cooldown (PoachServer.lua:391, 415):
 
 <!--first-hour-model:begin-->
 | Headhunter effect | Coding Cat $400, 60% | Bug Beetle $1,100, 50% | Sales Shark $310K, 40% | Server Sloth $780K, 30% | Attempts per hour |
@@ -224,11 +224,11 @@ Today it adds 0.1 to the chance of a random PvP result (ShopConfig.lua:75-79; Cr
 | C. 50% back when a poach fails | $533 (-20%) | $1,650 (-25%) | $542K (-30%) | $1.69M (-35%) | 92 |
 <!--first-hour-model:end-->
 
-**Why A (E2):** one number, worth about today's +10%; the victim's risk and the attempt rate stay. B sells pressure (13% more attempts); C pays most on the hardest poaches, tied to a random result.
+**Why A (E2):** one number, worth about today's +10%; the victim's risk and attempt rate stay. B sells pressure (13% more attempts); C pays most on the hardest poaches, tied to a random result.
 
 **The changes** (no save change, no shutdown):
-- **ShopConfig** (ShopConfig.lua:73-80): key `"Headhunter"`, name, icon, price 149 and id 1998465892 kept; `description = "Poaching costs 20% less."`; `effect = { poachDiscount = 0.2 }` instead of `{ poachBonus = 0.1 }`; still no `changesOdds`, now correctly (restricted players may buy it).
-- **Cost:** `costFor` (PoachServer.lua:156-161) becomes `math.floor(cost * math.max(0, 1 - perk) * (1 - discount))`, stacking with Recruiter Network (IpoConfig.lua:104-106): price x (1−perk) x 0.8. The discount comes from `ShopServer.getPoachDiscount`, replacing `getPoachBonus` (ShopServer.lua:13, 216-225); `chanceFor` (PoachServer.lua:166) passes no bonus. The client shows the server's price (PoachServer.lua:538; PoachClient.lua:526, 651); its `poachBonus` (:131-137) and status line (:633-634) become "🎯 Headhunter −20%".
+- **ShopConfig** (ShopConfig.lua:73-80): key `"Headhunter"`, name, icon, price 149 and id 1998465892 kept; `description = "Poaching costs 20% less."`; `effect = { poachDiscount = 0.2 }` instead of `{ poachBonus = 0.1 }`; no `changesOdds`, now correctly (restricted players may buy it).
+- **Cost:** `costFor` (PoachServer.lua:156-161) becomes `math.floor(cost * math.max(0, 1 - perk) * (1 - discount))`, stacking with Recruiter Network (IpoConfig.lua:104-106): price x (1−perk) x 0.8. `ShopServer.getPoachDiscount` replaces `getPoachBonus` (ShopServer.lua:13, 216-225), `chanceFor` (PoachServer.lua:166) passes no bonus, and the client's `poachBonus` and status line (PoachClient.lua:131-137, 633-634) become "🎯 Headhunter −20%", showing the server's price (PoachServer.lua:538; PoachClient.lua:526, 651).
 - **PUBLISH_RULES 3b** (docs/PUBLISH_RULES.md:81), one line: "Headhunter changes no odds (20% off every poach): sold to everyone, restricted or not."
 - **The questionnaire answers stay as they are** (STORE_PAGE.md:167, PREPUBLISH C9): real-money items, random chances (eggs), player-to-player interaction (poaching); no Robux buys a better chance now.
 
@@ -246,7 +246,7 @@ Home egg tier (egg at launch), seconds of Income: reference and priciest hire, t
 - **Blue-Chip** ($70M), 129,630 s: Brand Badger $162K → $70M; Board Bison $186K → $80M; per success rarity not set
 <!--first-hour-model:end-->
 
-**Would change:** CreatureConfig.lua:117-118 (a per-tier table), a home tier per creature, `poachCost` (:390-393), PoachServer.lua:156-161 and the dummy (:815), the new creatures' rarities (LONG PR 3), first-hour poaching (question 3), the sims (SIMS §7 leaves poaching out).
+**Would change:** CreatureConfig.lua:117-118 (a per-tier table), a home tier per creature, `poachCost` (:390-393), PoachServer.lua:156-161 and the dummy (:815), the new creatures' rarities (LONG PR 3), first-hour poaching (question 3), the sims (SIMS §7 skips poaching).
 
 ### 6.3 D7: no 2x offline product
 
@@ -267,17 +267,17 @@ The welcome-back card stays free. Still planning the product (not edited): ROADM
 
 **The picker (D3):** two cards, a verb and a picture each: Software "Answer customers, grow steady" (preselected), then Gaming "Make games, launch hits". Fintech and Biotech are hidden on the first founding (CUST 1.3 greys them) and appear from the second: "Found the other one after your first IPO."
 
-**Gaming's first hour** (SECT 2.2-2.6): Bedroom Studio, a free Gaming PC, no calls; first tasks Bug Squash and Art Sprint (SECT 2.5, 5). At ~1:00 a Puzzle or Platformer Game Jam pitch; a 15-engaged-minute build (SECT 2.4), a Playtest card at 50%; at ~16-20 min **Launch** shows the Forecast tier, then Reviews ring like calls. 20 timed moments an hour against Software's 7.3 (SIMS S10). Risk: three new verbs in 20 minutes, so the Forecast is one line ("Score 64 · Solid · +6 Polish for Hit"). Tutorial: SECT 5's "Pitch your first game", "Launch it".
+**Gaming's first hour** (SECT 2.2-2.6): Bedroom Studio, a free Gaming PC, no calls; a Game Jam pitch at ~1:00, **Launch** at ~16-20 min; 20 timed moments an hour against Software's 7.3 (SIMS S10). Risk: three new verbs in 20 minutes, so the Forecast is one line. Tutorial: SECT 5. Tasks and Forecast text: docs/GAMEPLAY_NOTES.md ("Moved text").
 
 **Shared** (CUST 2): engine, creatures, eggs, IPO, stamps, rounds, milestones, Office, poaching, daily, HUD, sounds. **Per sector:** names, buildings, upgrades, furniture, task rows, bundles, art, the `extra` hook. **The second company** opens with "What's new": the other sector preselected; company #1 as a Pokedex card (CUST 1.4); kept employees (SECT 2.7), perks, HR, decor; seed Cash ≤ 25% of the first rung (CUST 5.1); task level +1 per IPO (TaskConfig.lua:151-153); Gold on a replay (CUST 1.5).
 
 ## 9. Measurement
 
-**Without code**, Creator Hub gives retention (day 1, 7, 30), session length, daily players, play-through rate, revenue, payers, frame rate (unverified). **With code**, `AnalyticsService` funnel, economy and custom events (names unverified), planned in ROADMAP.md:107 and ACTIVE §5; logged on the server once per player, guarded by saved state (`onboarding.goals`, `tasks.done`, `daily`). **Funnel** (event, target placeholder): spawn, `data.ready` (TycoonCore.lua:831), 100%; first_desk, `buyUpgrade` (:272-288), 95%; first_call (TaskServer.lua:436-457), 85%; first_hire, `hatch` (EmployeeServer.lua:285-308), 85%; goal_3, `Hire3` (OnboardingServer.lua:157-158), 60%; milestone_1, 50%; seed, 25%; day2_return, 25%; first_ipo, `goPublic` (IpoServer.lua:177-243), 3% by day 30. Plus Cash in and out by source and a `first_hour` event (purchases, calls answered and missed, quiet mode).
+**Without code**, Creator Hub gives retention (day 1, 7, 30), session length, daily players, play-through rate, revenue, payers, frame rate (unverified). **With code**, `AnalyticsService` funnel, economy and custom events (names unverified), planned in ROADMAP.md:107 and ACTIVE §5; logged on the server once per player, guarded by saved state (`onboarding.goals`, `tasks.done`, `daily`). **Funnel** (target placeholder): spawn 100%, first_desk 95%, first_call 85%, first_hire 85%, goal_3 60%, milestone_1 50%, seed 25%, day2_return 25%, first_ipo 3% by day 30; the code hooks: docs/GAMEPLAY_NOTES.md ("Moved text"). Plus Cash in and out by source and a `first_hour` event (purchases, calls answered and missed, quiet mode).
 
 **Retention:** day 7 brings its reward, Series A's tasks, the weekly event (ROADMAP.md:93-97). Watch day 1 ≥ 25%, day 7 ≥ 8% (placeholders); if day 1 is short, read funnel steps 2-6.
 
-**5-friend playtest** (20 min, a phone, a fresh save, sound on). The observer only says "Play as you would at home and think out loud. I can't help." Note times: finding SHOP, the first call, hatching by window or on foot, looking at Cash, the first "what now?", taps on non-buttons, the goal card, Robux screens, muting. Then ask: what is the game about; what were you doing at the end; best and most boring moment; when were you lost; what do calls do; would you play tomorrow; anything unfair or pushy; any annoying sound; did you want to greet other players (the "Cheer").
+**5-friend playtest** (20 min, a phone, a fresh save, sound on). The observer only says "Play as you would at home and think out loud. I can't help." Times to note and questions: docs/GAMEPLAY_NOTES.md ("Moved text").
 
 ## 10. What to build, in order
 
@@ -307,8 +307,8 @@ By first-hour impact; each PR claims its files first. Each item: change (files);
 
 ## 11. Open questions (most important first)
 
-1. **Purchase gaps in the late Garage:** E1's longest wait is 10:51, but 20-21 min pass between the Whiteboard II, Neon Logo I and Neon Logo II, a milestone and calls in between (3.2). Recommend keeping E1's fit for the playtest; add a third level only if players stall there.
-2. **Is a poach paid with Cash a paid random item?** D9_POLICY_OPTIONS.md never names poaching, but its egg rule (:15-17: Cash is one pool while Cash packs are sold) fits a poach's random result too; E2 only removes the Robux chance. Recommend asking the D9 doc's owner before launch and, if it counts, giving restricted players a fixed outcome order like `fixedHire`, decided with D6.
+1. **Purchase gaps in the late Garage:** 20-21 min pass between Whiteboard II, Neon Logo I and Neon Logo II, with a milestone and calls between (3.2; E1's longest wait is 10:51). Recommend keeping E1's fit for the playtest; add a third level only if players stall.
+2. **Is a poach paid with Cash a paid random item?** D9_POLICY_OPTIONS.md never names poaching, but its egg rule (:15-17: Cash is one pool while Cash packs are sold) fits a poach's random result too; E2 only removes the Robux chance. Recommend asking the D9 doc's owner before launch; if it counts, restricted players get a fixed outcome order like `fixedHire`, decided with D6.
 3. **First-hour poaching** (with D6): a Garage poach then costs about one egg. Recommend LG R3 (14 days and 10 engaged hours, either side: LG:108), so nobody poaches or loses a hire in hour one.
 4. **Changing a sold pass (E2):** whether buyers or Roblox need notice is unverified; today only the creator owns it. Recommend shipping E2 before the public launch, after checking its sales in Creator Hub.
 5. **The launch Garage Egg's other odds:** the 5% Rare stays; the model assumes 70/25 for the rest ($4.97/s). Recommend keeping 70/25 until the sims re-fit (build item 9).
