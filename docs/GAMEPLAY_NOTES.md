@@ -15,7 +15,7 @@ Notes for `docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md` (branch `gameplay-design`, work
 - [x] Section 5: Game feel
 - [x] Section 6: Monetization that feels fair
 - [x] Section 7: Frustration and safety nets
-- [ ] Section 8: Sectors
+- [x] Section 8: Sectors
 - [ ] Section 9: Measurement
 - [ ] Section 10: What to build, in order
 - [ ] Section 11: Open questions
@@ -66,6 +66,7 @@ Defaults picked where the owner's taste decides. Each one is marked in the propo
 | 10 | Effect budgets: walkers 20 Hz within 80 studs and on screen; 6 floating texts; one burst of 30 particles; tweens 0.6 s or less | the juice PRs | 5 |
 | 11 | **No starter offer and no unprompted Robux surface:** the first Robux prompt is the player's own tap on a price in SHOP; no badge points at a Robux tab | ShopClient (SHOP_UX S4) | 6 |
 | 12 | At launch the Extra Employee Slots pass means **+3 desks**, capped like every desk (LG:60 estimates up to +15% Income) | LONG PR 3 (desks) | 6 |
+| 13 | A first founding **hides the Fintech and Biotech "Coming soon" cards** (CUST 1.3 shows them greyed); they appear from the second founding. Picker texts: Software "Answer customers, grow steady", Gaming "Make games, launch hits" | the picker (CUST PR 4) | 8 |
 
 ## Not verified
 

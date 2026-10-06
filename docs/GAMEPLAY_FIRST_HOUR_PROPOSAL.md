@@ -208,3 +208,18 @@ Every effect is client-only and changes no data (CLAUDE.md, client visuals). "Ph
 | Alone in a server | "Nobody else is in this server yet" (PoachClient.lua:506) | everything else works alone; the Poach tab says when poaching opens; no computer rival that gives employees (it would bypass R2, LG:108); Max Players 6 (PUBLISH_RULES.md:5-11) |
 | Low-end phone | rooms up to 260 parts (PLOT_VISUALS.md:34), FR-16, FR-17; the plot streams in after the teleport (WORLD §3) | section 5's budgets, FR-16 and FR-17 fixes, stream the plot in before the teleport (unverified) |
 | A very young player | no text input (FULL_REVIEW.md:517) | words a 10-year-old reads (BIBLE:7), calm texts like DailyConfig's (:53), no timed Robux, no "chance" in new copy (D9) |
+
+## 8. Sectors
+
+**Gaming's first hour** (SECT 2.2-2.6). Bedroom Studio, the free Gaming PC. No calls (Reviews need a live title): the first tasks are Bug Squash and Art Sprint while building (SECT 2.5, 5). At ~1:00 the player pitches a Puzzle or Platformer Game Jam (three fixed names); the build takes 15 engaged minutes (SECT 2.4), with a Playtest card at 50%; at ~16-20 min **Launch** shows the Forecast tier, then Reviews ring like calls while revenue fades, and the second pitch follows. Its Garage has 20 timed moments an hour against Software's 7.3 (SIMS S10). Risk: three new verbs in 20 minutes, so the Forecast reads in one line ("Score 64 · Solid · +6 Polish for Hit"). Tutorial: SECT 5's "Pitch your first game" and "Launch it".
+
+**Shared and per sector** (CUST 2). Shared: the task engine, creatures, eggs, odds, IPO, stamps, rounds, placement, SHOP > Office, poaching, daily, onboarding, HUD, the clock. Per sector: names, buildings, upgrades, furniture, task rows, creature names, bundles, art and the `extra` income hook.
+
+**The picker** (D-C): two big cards, a verb and a picture each: Software "Answer customers, grow steady", Gaming "Make games, launch hits". A first founding preselects Software and hides Fintech and Biotech (CUST 1.3 greys them: OWNER CHOICE), with one line: "Found the other one after your first IPO."
+
+**The second company** opens with a "What's new" card:
+- the other sector preselected (CUST 1.3): new verbs;
+- company #1 is a Pokedex card with its stamp and map (CUST 1.4);
+- kept: employees (renamed, SECT 2.7), perks, HR, kept decor; seed Cash, at most 25% of the first rung (CUST 5.1), skips the Desk-only minutes; kept hires refill desks free (LG:60);
+- harder: task level +1 per IPO (TaskConfig.lua:151-153);
+- new goals: Gold on a replay (CUST 1.5), the Hall of Fame.
