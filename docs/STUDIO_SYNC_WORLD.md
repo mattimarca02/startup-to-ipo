@@ -10,8 +10,8 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 |---|---|---|---|---|
 | `WorldArt` | ModuleScript, ServerScriptService | new | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 |
 | `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
-| `IconArt` | ModuleScript, ReplicatedStorage | new | `e2b936bb74d60ac263ff1939590dee0f8ff989e3be9e71044be775d2943f6b5c` | 30143 |
-| `IconVisuals` | ModuleScript, ReplicatedStorage | new | `59c365eee783730ddd9b58c5e0949326994f782890592cd953a2b19d320b4d77` | 37198 |
+| `IconArt` | ModuleScript, ReplicatedStorage | new | `9fa113c553f3e9ea17c857c62aca75be48a86ee833426b1c5a0ca2eddbda099d` | 30355 |
+| `IconVisuals` | ModuleScript, ReplicatedStorage | new | `fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98` | 48178 |
 | `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file with `docs/world_pass_integration.patch` applied | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
 
 The files use `\n` line endings and end with one newline (Studio may add or drop that last newline: the check prints both). Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
@@ -82,8 +82,8 @@ end
 local WANT = {
 	WorldArt = { "972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9", 13042, "ServerScriptService" },
 	WorldVisuals = { "81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343", 48782, "ServerScriptService" },
-	IconArt = { "e2b936bb74d60ac263ff1939590dee0f8ff989e3be9e71044be775d2943f6b5c", 30143, "ReplicatedStorage" },
-	IconVisuals = { "59c365eee783730ddd9b58c5e0949326994f782890592cd953a2b19d320b4d77", 37198, "ReplicatedStorage" },
+	IconArt = { "9fa113c553f3e9ea17c857c62aca75be48a86ee833426b1c5a0ca2eddbda099d", 30355, "ReplicatedStorage" },
+	IconVisuals = { "fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98", 48178, "ReplicatedStorage" },
 }
 for name, want in pairs(WANT) do
 	local script = game:GetService(want[3]):FindFirstChild(name)
@@ -162,7 +162,7 @@ print(string.format("PREVIEW_WORLD: %d parts (budget %d), %d lights (budget %d).
 
 ## The icon preview (command bar)
 
-Only to look at the icons in Studio; it never plays the game. It needs `IconArt` and `IconVisuals` as ModuleScripts in **ReplicatedStorage** (next to the existing `CreatureConfig`, `CreatureModels` and `ShopConfig`). Paste the block into **View > Command Bar** and press Enter: it builds a ScreenGui **`StarterGui.PREVIEW_ICONS`** with every icon in a grid at card size (56 px), each with a caption (its group and its drawing's name), the HUD icons on their real button colors, and prints one line per check (`OK` or `PROBLEM` and the first problem). It shows all 18 3D icons at once; the game never has more than 8 alive (the cap). Running it again replaces the old sheet.
+Only to look at the icons in Studio; it never plays the game. It needs `IconArt` and `IconVisuals` as ModuleScripts in **ReplicatedStorage** (next to the existing `CreatureConfig`, `CreatureModels` and `ShopConfig`). Paste the block into **View > Command Bar** and press Enter: it builds a ScreenGui **`StarterGui.PREVIEW_ICONS`** with every icon in a grid at card size (56 px), each with a caption (its group and its drawing's name), the HUD icons on their real button colors, and prints one line per check (`OK` or `PROBLEM` and the first problem). It shows all 18 3D icons at once (it builds them with `IconVisuals.buildUncapped`, outside the cap); in the game every icon goes through the cap of 8 ViewportFrames for the whole client, and a card past it shows its drawn fallback. Running it again replaces the old sheet.
 
 **Delete `StarterGui.PREVIEW_ICONS` before publishing**, and before any playtest (everything in StarterGui is copied onto every player's screen).
 
@@ -247,7 +247,7 @@ for _, group in ipairs(IconVisuals.GROUPS) do
 			round.Parent = slot
 		end
 		slot.Parent = cell
-		local icon = IconVisuals.build(slot, IconArt, group, key, 56, deps)
+		local icon = IconVisuals.buildUncapped(slot, IconArt, group, key, 56, deps)
 		local caption = Instance.new("TextLabel")
 		caption.Name = "Caption"
 		caption.Position = UDim2.new(0, 4, 1, -32)

@@ -124,7 +124,7 @@ local toLight = (-Vector3.new(d[1], d[2], d[3])).Unit -- in the camera's frame
 for _, group in ipairs(IconVisuals.GROUPS) do
 	for _, key in ipairs(EXPECT[group]) do
 		local recipe = IconArt[group][key]
-		local icon = IconVisuals.build(holder, IconArt, group, key, SIZE, DEPS)
+		local icon = IconVisuals.buildUncapped(holder, IconArt, group, key, SIZE, DEPS)
 		local plate = recipe.plate and IconArt.Palette[recipe.plate]
 		out("I", group, key, recipe.name, recipe.kind, plate and plate[1] or -1, plate and plate[2] or -1, plate and plate[3] or -1)
 		if recipe.kind == "ui" then

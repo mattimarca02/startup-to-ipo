@@ -42,7 +42,10 @@ IconArt.Style = {
 	padding = 0.1, -- share of the picture left free around a 3D model
 	plate = { 4, 4, 92, 92 }, -- the round plate on the grid (with its outline it fills 0-100)
 	sizes = { card = 56, hero = 72 }, -- px at phone size
-	viewportCap = 8, -- at most this many 3D icons (ViewportFrames) exist at once (docs/WORLD_ICONS_NOTES.md)
+	-- At most this many 3D icons (ViewportFrames) exist at once on the whole client: every window, list and direct
+	-- IconVisuals.build together (IconVisuals' one registry enforces it; past it an icon shows its drawn fallback).
+	-- A reasoned guess, not measured on a phone (docs/WORLD_ICONS_NOTES.md)
+	viewportCap = 8,
 	maxParts = 30, -- parts in one 3D icon
 	maxShapes = 16, -- shapes in one UI icon (without its plate and outline copies)
 }
