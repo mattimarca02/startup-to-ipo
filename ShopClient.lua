@@ -179,6 +179,7 @@ local toast = make("TextLabel", {
 	BackgroundTransparency = 0.1,
 	Font = Enum.Font.GothamBold,
 	TextColor3 = COLORS.gold,
+	TextWrapped = true, -- two lines at 16 px in its 48 px lane, rather than one line too small to read
 	Visible = false,
 	ZIndex = 10,
 	Parent = gui,

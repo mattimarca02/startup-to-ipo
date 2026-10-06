@@ -1679,6 +1679,8 @@ do
 	run(0)
 	check(label .. ": with the shop closed a message is the toast at the bottom",
 		prop(toast, "Visible", false) and prop(toast, "Text") == "Saving works again: your progress is safe.")
+	check(label .. ": the toast wraps (two lines at 16 px in its 48 px lane, the bottom-center pop-up lanes)",
+		prop(toast, "TextWrapped", false) and rectOrEmpty(toast).h == 48 and rectOrEmpty(toast).w <= 520)
 	openShop(w, label)
 	local window = win(w)
 	local status, pagesFrame = kid(window, "StatusLine"), kid(window, "Pages")

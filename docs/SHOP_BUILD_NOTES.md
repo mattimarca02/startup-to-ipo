@@ -14,6 +14,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 - [x] 1.1 `ShopLayout.lua` (new, pure): `layout(guiW, guiH, topBar, ...)` and the card geometry
 - [x] 1.2 `ShopClient.lua` S1: the layout from ShopLayout (landscape rail, portrait row), 44 px header items and tap targets, 16 px minimum text, the Names, `HelpButton` and its card, `TutorialStrip`, the in-window status line
 - [x] 1.3 `tools/shop_ux_test.py` (new): the fake Roblox, the S1 checks and the S1 mutants (one commit: the mutants came with the checks)
+- [x] 1.4 The toast wraps (two lines at 16 px in its 48 px lane), found when re-reading ShopClient after S2
 
 **Phase 2: S2 (the Office ladder)**
 - [x] 2.1 `ShopLayout.lua`: ladder state, bar fill, time text, best value, row and hero geometry
