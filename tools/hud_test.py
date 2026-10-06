@@ -1,0 +1,1218 @@
+#!/usr/bin/env python3
+"""Tests for the valuation bar's Cash and Income row (IpoClient.lua), outside Studio.
+
+Run:   python3 tools/hud_test.py
+       python3 tools/hud_test.py --no-mutations   (skip the mutation runs)
+       python3 tools/hud_test.py --layout-table   (also print, for each size, what the bar touches)
+
+It needs the free Luau command-line tool (https://github.com/luau-lang/luau/releases, the "luau" file from
+luau-macos.zip, luau-windows.zip or luau-ubuntu.zip). Put it on your PATH, or point to it:
+       LUAU=/path/to/luau python3 tools/hud_test.py
+
+It runs the REAL IpoClient.lua (the whole script, up to its last loop) with a fake Roblox: Instances with parents,
+properties, signals and layout (position, size, anchor), a virtual clock that runs task.spawn, task.delay and
+task.wait, a leaderstats folder the test fills, and a text measure. It checks the three rows of the bar (Cash and
+Income, the progress bar, the stage and the valuation) for many values, their rectangles at five screen sizes with
+three top bars each, that nothing overlaps, that the text fits at the narrowest bar, that the rows update on Changed
+events and no faster than the minimum interval, that a missing or late leaderstats is safe, that nothing is polled,
+and that the progress bar is what it was. Then it breaks IpoClient.lua on purpose (mutation runs): each break must
+be caught by a named check, never by a crash.
+
+The fake's text WIDTHS are an estimate (a safe, wide one: digits 0.68 em, capitals 0.74 em, emoji 1.4 em). The
+real client asks TextService for the real width, so on the real font it picks by real measurements; only what the
+test sees depends on the estimate. Studio is the only way to see the real font (docs/STUDIO_SYNC_HUD.md).
+
+It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CLIENT = "IpoClient.lua"
+
+
+def read(name):
+    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+        return f.read()
+
+
+def marked_source(name, filename):
+    text = read(filename)
+    start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
+    return text[start:text.index("-- %s-END" % name)]
+
+
+def onboarding_goal_count():
+    """How many goals OnboardingConfig.Goals has (the Goals card is 30 + 22 per goal + 8 high)."""
+    text = read("OnboardingConfig.lua")
+    block = text[text.index("OnboardingConfig.Goals = {"):]
+    block = block[:block.index("\n}")]
+    return len(re.findall(r"\{\s*key = ", block))
+
+
+def run_luau(luau, source):
+    with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
+        f.write(source)
+        path = f.name
+    try:
+        return subprocess.run([luau, path], capture_output=True, text=True, timeout=600)
+    finally:
+        os.unlink(path)
+
+
+def code_only(text):
+    """Lua source without comments (a line's -- tail is cut, like tools/daily_test.py does)."""
+    out = []
+    for line in text.split("\n"):
+        cut = line.find("--")
+        out.append(line if cut < 0 else line[:cut])
+    return "\n".join(out)
+
+
+PRELUDE = r"""-- Fake Roblox for the valuation bar: Instances with parents, properties, signals and layout; a virtual clock with
+-- task.spawn / delay / defer / wait; services; a text measure. Everything is a local (the Luau CLI's globals are read-only).
+local print_real = print
+local passed, failed = 0, 0
+local function check(name, cond, extra)
+	if cond then
+		passed += 1
+	else
+		failed += 1
+		print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or ""))
+	end
+end
+local W -- the state of the world being tested (newWorld)
+local STOP = "__STOP__"
+local function warn(...)
+	if W then
+		local parts = {}
+		for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+		table.insert(W.warns, table.concat(parts, " "))
+	end
+end
+local function print() end
+
+local Vector2 = { new = function(x, y) return { X = x or 0, Y = y or 0 } end }
+local UDim = { new = function(s, o) return { Scale = s or 0, Offset = o or 0 } end }
+local UDim2 = {
+	new = function(xs, xo, ys, yo) return { X = UDim.new(xs, xo), Y = UDim.new(ys, yo) } end,
+	fromOffset = function(x, y) return { X = UDim.new(0, x), Y = UDim.new(0, y) } end,
+	fromScale = function(x, y) return { X = UDim.new(x, 0), Y = UDim.new(y, 0) } end,
+}
+local Color3 = {
+	fromRGB = function(r, g, b) return { R = r / 255, G = g / 255, B = b / 255 } end,
+	new = function(r, g, b) return { R = r, G = g, B = b } end,
+}
+local TweenInfo = { new = function(...) return { ... } end }
+local function enumType(names)
+	local t = {}
+	for _, n in ipairs(names) do t[n] = { Name = n } end
+	return setmetatable(t, { __index = function(_, k) error("not a valid enum item: " .. tostring(k)) end })
+end
+local Enum = {
+	ApplyStrokeMode = enumType({ "Border", "Contextual" }),
+	AutomaticSize = enumType({ "None", "X", "Y", "XY" }),
+	EasingDirection = enumType({ "In", "Out", "InOut" }),
+	EasingStyle = enumType({ "Linear", "Sine", "Quad" }),
+	FillDirection = enumType({ "Horizontal", "Vertical" }),
+	Font = enumType({ "Gotham", "GothamBold", "GothamBlack", "FredokaOne" }),
+	ScrollingDirection = enumType({ "X", "Y", "XY" }),
+	SortOrder = enumType({ "LayoutOrder", "Name" }),
+	TextTruncate = enumType({ "None", "AtEnd" }),
+	TextXAlignment = enumType({ "Left", "Center", "Right" }),
+	TextYAlignment = enumType({ "Top", "Center", "Bottom" }),
+	ZIndexBehavior = enumType({ "Sibling", "Global" }),
+}
+
+-- Signals ---------------------------------------------------------------------------------------------------------
+local Signal = {}
+Signal.__index = Signal
+local function newSignal() return setmetatable({ conns = {} }, Signal) end
+function Signal:Connect(fn)
+	local conn = { fn = fn, Connected = true }
+	function conn:Disconnect() self.Connected = false end
+	table.insert(self.conns, conn)
+	return conn
+end
+function Signal:Fire(...)
+	for _, c in ipairs(table.clone(self.conns)) do
+		if c.Connected then
+			local ok, err = pcall(c.fn, ...)
+			if not ok then table.insert(W.errors, tostring(err)) end
+		end
+	end
+end
+function Signal:Count()
+	local n = 0
+	for _, c in ipairs(self.conns) do if c.Connected then n += 1 end end
+	return n
+end
+
+-- Virtual clock and tasks -----------------------------------------------------------------------------------------
+local function schedule(delay, thread)
+	W.seq += 1
+	table.insert(W.queue, { t = W.clock + delay, seq = W.seq, thread = thread })
+end
+local function resume(thread, ...)
+	local ok, err = coroutine.resume(thread, ...)
+	if not ok and not tostring(err):find(STOP, 1, true) then table.insert(W.errors, tostring(err)) end
+end
+local function advance(dt)
+	local target = W.clock + dt
+	local guard = 0
+	while true do
+		local best, bi
+		for i, item in ipairs(W.queue) do
+			if item.t <= target and (not best or item.t < best.t or (item.t == best.t and item.seq < best.seq)) then best, bi = item, i end
+		end
+		if not best then break end
+		guard += 1
+		if guard > 20000 then table.insert(W.errors, "the virtual clock ran away (a loop without a wait)") break end
+		table.remove(W.queue, bi)
+		if best.t > W.clock then W.clock = best.t end
+		resume(best.thread)
+	end
+	W.clock = target
+end
+local os = { clock = function() return W.clock end, time = function() return 1700000000 + math.floor(W.clock) end, date = os.date }
+local task = {
+	spawn = function(fn, ...)
+		local co = coroutine.create(fn)
+		resume(co, ...)
+		return co
+	end,
+	delay = function(t, fn)
+		table.insert(W.delays, t)
+		schedule(t, coroutine.create(fn))
+	end,
+	defer = function(fn) schedule(0, coroutine.create(fn)) end,
+	wait = function(t)
+		t = t or 0
+		table.insert(W.waits, { t = t, at = W.clock })
+		if not coroutine.isyieldable() then error(STOP) end
+		schedule(t, coroutine.running())
+		coroutine.yield()
+		return t
+	end,
+}
+
+-- Instances -------------------------------------------------------------------------------------------------------
+local CLASSES = {}
+for _, c in ipairs({ "Folder", "PlayerGui", "ScreenGui", "Frame", "TextLabel", "TextButton", "TextBox", "ScrollingFrame", "ImageLabel",
+	"UICorner", "UIStroke", "UIPadding", "UIListLayout", "UISizeConstraint", "UITextSizeConstraint", "UIGradient", "UIAspectRatioConstraint",
+	"IntValue", "NumberValue", "StringValue", "BoolValue", "Player", "ModuleScript", "RemoteEvent", "RemoteFunction" }) do CLASSES[c] = true end
+local VALUE = { IntValue = true, NumberValue = true, StringValue = true, BoolValue = true }
+local GUI = { Frame = true, TextLabel = true, TextButton = true, TextBox = true, ScrollingFrame = true, ImageLabel = true }
+local SIGNALS = { Changed = true, ChildAdded = true, ChildRemoved = true, Activated = true, OnClientEvent = true,
+	AttributeChanged = true, Destroying = true, MouseButton1Click = true, OnServerEvent = true }
+local ZERO2 = UDim2.new(0, 0, 0, 0)
+local DEFAULTS = { Visible = true, Text = "", TextSize = 14, Position = ZERO2, Size = ZERO2, AnchorPoint = Vector2.new(0, 0), TextScaled = false }
+local Inst = {}
+local MT = {}
+local absSize, absPos
+
+local function newInstance(class)
+	assert(CLASSES[class], "fake Roblox: unknown class " .. tostring(class))
+	local self = setmetatable({ _class = class, _p = { Name = class }, _kids = {}, _sig = {}, _attrs = {}, _writes = {}, _parent = false }, MT)
+	if class == "IntValue" or class == "NumberValue" then self._p.Value = 0
+	elseif class == "StringValue" then self._p.Value = ""
+	elseif class == "BoolValue" then self._p.Value = false end
+	table.insert(W.all, self)
+	return self
+end
+
+absSize = function(inst)
+	if inst._class == "ScreenGui" then return W.screen end
+	local parent = inst._parent
+	if not parent or not GUI[inst._class] then return Vector2.new(0, 0) end
+	local ps = absSize(parent)
+	local s = inst._p.Size or ZERO2
+	return Vector2.new(s.X.Scale * ps.X + s.X.Offset, s.Y.Scale * ps.Y + s.Y.Offset)
+end
+absPos = function(inst)
+	if inst._class == "ScreenGui" then return Vector2.new(0, 0) end
+	local parent = inst._parent
+	if not parent or not GUI[inst._class] then return Vector2.new(0, 0) end
+	local pp, ps, size = absPos(parent), absSize(parent), absSize(inst)
+	local pos, anchor = inst._p.Position or ZERO2, inst._p.AnchorPoint or DEFAULTS.AnchorPoint
+	return Vector2.new(pp.X + pos.X.Scale * ps.X + pos.X.Offset - anchor.X * size.X, pp.Y + pos.Y.Scale * ps.Y + pos.Y.Offset - anchor.Y * size.Y)
+end
+
+MT.__index = function(self, k)
+	local m = Inst[k]
+	if m ~= nil then return m end
+	if k == "ClassName" then return rawget(self, "_class") end
+	if k == "Parent" then return rawget(self, "_parent") or nil end
+	if SIGNALS[k] then return Inst._signal(self, k) end
+	if k == "AbsoluteSize" then return absSize(self) end
+	if k == "AbsolutePosition" then return absPos(self) end
+	local v = rawget(self, "_p")[k]
+	if v ~= nil then return v end
+	return DEFAULTS[k]
+end
+MT.__newindex = function(self, k, v)
+	if type(k) == "string" and k:sub(1, 1) == "_" then rawset(self, k, v) return end
+	if k == "Parent" then Inst._setParent(self, v) return end
+	if k == "Text" and type(v) ~= "string" then error("unable to assign property Text. string expected, got " .. typeof(v)) end
+	if k == "TextSize" and type(v) ~= "number" then error("unable to assign property TextSize. number expected, got " .. typeof(v)) end
+	if (k == "Position" or k == "Size") and (type(v) ~= "table" or v.X == nil or v.Y == nil) then error("unable to assign property " .. k .. ". UDim2 expected") end
+	self._p[k] = v
+	self._writes[k] = (self._writes[k] or 0) + 1
+	local pc = self._sig["pc:" .. k]
+	if pc then pc:Fire() end
+	if k == "Value" and VALUE[self._class] then
+		local s = self._sig.Changed
+		if s then s:Fire(v) end
+	end
+end
+function Inst._signal(self, name)
+	local s = self._sig[name]
+	if not s then s = newSignal() self._sig[name] = s end
+	return s
+end
+function Inst._setParent(self, p)
+	local old = self._parent
+	if old == (p or false) then return end
+	if old then
+		for i, kid in ipairs(old._kids) do if kid == self then table.remove(old._kids, i) break end end
+	end
+	self._parent = p or false
+	if old and old._sig.ChildRemoved then old._sig.ChildRemoved:Fire(self) end
+	if p then
+		table.insert(p._kids, self)
+		if p._sig.ChildAdded then p._sig.ChildAdded:Fire(self) end
+	end
+end
+function Inst:FindFirstChild(name)
+	for _, kid in ipairs(self._kids) do if kid._p.Name == name then return kid end end
+	return nil
+end
+function Inst:WaitForChild(name)
+	local kid = self:FindFirstChild(name)
+	if kid then return kid end
+	if not coroutine.isyieldable() then return nil end
+	local co = coroutine.running()
+	local done = false
+	local conn
+	conn = self:_signal("ChildAdded"):Connect(function(child)
+		if child._p.Name == name and not done then
+			done = true
+			conn:Disconnect()
+			schedule(0, co)
+		end
+	end)
+	coroutine.yield()
+	return self:FindFirstChild(name)
+end
+function Inst:GetChildren() return table.clone(self._kids) end
+function Inst:GetDescendants()
+	local list = {}
+	local function walk(node) for _, kid in ipairs(node._kids) do table.insert(list, kid) walk(kid) end end
+	walk(self)
+	return list
+end
+function Inst:IsA(class)
+	if class == self._class or class == "Instance" then return true end
+	if class == "ValueBase" then return VALUE[self._class] == true end
+	if class == "GuiObject" then return GUI[self._class] == true end
+	if class == "GuiButton" then return self._class == "TextButton" end
+	if class == "GuiBase2d" then return GUI[self._class] == true or self._class == "ScreenGui" end
+	return false
+end
+function Inst:GetAttribute(name) return self._attrs[name] end
+function Inst:SetAttribute(name, value)
+	if self._attrs[name] == value then return end
+	self._attrs[name] = value
+	local s = self._sig["attr:" .. name]
+	if s then s:Fire() end
+	local all = self._sig.AttributeChanged
+	if all then all:Fire(name) end
+end
+function Inst:GetAttributeChangedSignal(name) return self:_signal("attr:" .. name) end
+function Inst:GetPropertyChangedSignal(name) return self:_signal("pc:" .. name) end
+function Inst:Destroy() self.Parent = nil end
+function Inst:ClearAllChildren() for _, kid in ipairs(table.clone(self._kids)) do kid:Destroy() end end
+function Inst:InvokeServer(...) table.insert(W.invokes, { ... }) return nil end
+function Inst:FireServer(...) table.insert(W.invokes, { ... }) end
+local Instance = { new = newInstance }
+
+-- Text measure: a wide estimate of Gotham Bold (em per character). The real client measures the real font.
+local function charEm(cp)
+	if cp >= 0x30 and cp <= 0x39 then return 0.68 end
+	if cp >= 0x41 and cp <= 0x5A then return 0.74 end
+	if cp >= 0x61 and cp <= 0x7A then return 0.62 end
+	if cp == 0x20 then return 0.30 end
+	if cp == 0x2C or cp == 0x2E or cp == 0xB7 or cp == 0x21 then return 0.32 end
+	if cp == 0x2F then return 0.42 end
+	if cp == 0x24 or cp == 0x2B then return 0.68 end
+	if cp == 0x2D then return 0.45 end
+	if cp == 0x2192 then return 1.0 end
+	if cp == 0xFE0F or cp == 0x200D then return 0 end
+	if cp >= 0x1F000 or (cp >= 0x2600 and cp <= 0x27BF) then return 1.4 end
+	return 0.7
+end
+local function modelWidth(text, size)
+	local em = 0
+	for _, cp in utf8.codes(text) do em += charEm(cp) end
+	return em * size
+end
+
+-- Services and globals --------------------------------------------------------------------------------------------
+local TextService = { GetTextSize = function(_, text, size, font, frame)
+	W.measures += 1
+	return Vector2.new(modelWidth(text, size) * W.widthScale, size)
+end }
+local GuiService = { TouchControlsEnabled = true }
+local TweenService = { Create = function(_, inst, info, goals) return { Play = function() end, Cancel = function() end } end }
+local Players = setmetatable({}, { __index = function(_, k)
+	if k == "LocalPlayer" then return W.player end
+	if k == "GetPlayers" then return function() return { W.player } end end
+	if k == "PlayerAdded" then return W.playerAdded end
+	if k == "PlayerRemoving" then return W.playerRemoving end
+	return nil
+end })
+local ALLOWED_SERVICES = { Players = true, ReplicatedStorage = true, GuiService = true, TweenService = true, TextService = true }
+local game = { GetService = function(_, name)
+	W.services[name] = true
+	if name == "Players" then return Players end
+	if name == "ReplicatedStorage" then return W.rs end
+	if name == "GuiService" then return GuiService end
+	if name == "TweenService" then return TweenService end
+	if name == "TextService" then return TextService end
+	if name == "RunService" then return W.run end
+	error("fake Roblox: unknown service " .. tostring(name))
+end }
+local workspace = { GetServerTimeNow = function() return 1700000000 + W.clock end }
+local script = { Parent = { WaitForChild = function() return nil end } }
+local MODULES = {}
+local function require(inst) return assert(MODULES[inst._p.Name], "no module " .. tostring(inst._p.Name)) end
+
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.ShopConfig = (function()
+__SHOPCONFIG__
+end)()
+MODULES.DailyConfig = (function()
+__DAILYCONFIG__
+end)()
+local IpoConfig, ShopConfig, DailyConfig = MODULES.IpoConfig, MODULES.ShopConfig, MODULES.DailyConfig
+
+local function RUN_IPOCLIENT()
+__IPOCLIENT__
+end
+
+-- The real tray layout (TaskClient.lua, between its TRAY markers)
+__TRAY__
+"""
+
+SCENARIOS = r"""
+-- Worlds --------------------------------------------------------------------------------------------------------
+local function newWorld(opts)
+	opts = opts or {}
+	W = { clock = 5000, seq = 0, queue = {}, waits = {}, delays = {}, errors = {}, warns = {}, invokes = {}, all = {}, services = {},
+		screen = Vector2.new(opts.w or 667, opts.h or 339), widthScale = opts.widthScale or 1, measures = 0 }
+	W.run = { Heartbeat = newSignal(), RenderStepped = newSignal(), Stepped = newSignal() }
+	W.playerAdded, W.playerRemoving = newSignal(), newSignal()
+	W.player = newInstance("Player")
+	W.player.Name = "Tester"
+	W.playerGui = newInstance("PlayerGui")
+	W.playerGui.Name = "PlayerGui"
+	W.playerGui.Parent = W.player
+	W.rs = newInstance("Folder")
+	for name in pairs(MODULES) do
+		local m = newInstance("ModuleScript")
+		m.Name = name
+		m.Parent = W.rs
+	end
+	local remotes = newInstance("Folder")
+	remotes.Name = "IpoRemotes"
+	remotes.Parent = W.rs
+	W.ipoAction = newInstance("RemoteFunction")
+	W.ipoAction.Name = "IpoAction"
+	W.ipoAction.Parent = remotes
+	W.ipoEvent = newInstance("RemoteEvent")
+	W.ipoEvent.Name = "IpoEvent"
+	W.ipoEvent.Parent = remotes
+	for k, v in pairs(opts.attrs or {}) do W.player:SetAttribute(k, v) end
+	return W
+end
+
+-- leaderstats like the server makes it (TycoonCore onPlayerAdded): a folder with Cash and Income (IntValues)
+local function makeStats(cash, income, parentFirst)
+	local folder = newInstance("Folder")
+	folder.Name = "leaderstats"
+	local c = newInstance("IntValue")
+	c.Name = "Cash"
+	local i = newInstance("IntValue")
+	i.Name = "Income"
+	if parentFirst then folder.Parent = W.player end
+	if cash ~= nil then c.Value = cash end
+	if income ~= nil then i.Value = income end
+	c.Parent = folder
+	i.Parent = folder
+	if not parentFirst then folder.Parent = W.player end
+	return folder, c, i
+end
+
+local function sortedByY(list)
+	table.sort(list, function(a, b) return a._p.Position.Y.Offset < b._p.Position.Y.Offset end)
+	return list
+end
+local function find()
+	local E = { W = W }
+	E.gui = W.playerGui:FindFirstChild("IpoGui")
+	E.front = W.playerGui:FindFirstChild("IpoWindowGui")
+	E.bar = E.gui and E.gui:FindFirstChild("ValuationBar")
+	E.button = E.gui and E.gui:FindFirstChild("IpoButton")
+	if E.bar then
+		local labels, frames = {}, {}
+		for _, kid in ipairs(E.bar:GetChildren()) do
+			if kid._class == "TextLabel" then table.insert(labels, kid) end
+			if kid._class == "Frame" then table.insert(frames, kid) end
+		end
+		sortedByY(labels)
+		E.money, E.info = labels[1], labels[#labels]
+		E.labels = labels
+		E.track = frames[1]
+		E.fill = E.track and E.track:GetChildren()[1]
+		for _, kid in ipairs(E.track and E.track:GetChildren() or {}) do if kid._class == "Frame" then E.fill = kid end end
+	end
+	return E
+end
+-- Runs IpoClient.lua as the game does (a script that ends in its 1 s loop)
+local function boot(opts)
+	opts = opts or {}
+	newWorld(opts)
+	if opts.stats then makeStats(opts.stats[1], opts.stats[2], opts.parentFirst) end
+	W.client = task.spawn(RUN_IPOCLIENT)
+	advance(0)
+	return find()
+end
+local function setScreen(w, h)
+	W.screen = Vector2.new(w, h)
+	for _, inst in ipairs(W.all) do
+		if inst._class == "ScreenGui" and inst._sig["pc:AbsoluteSize"] then inst._sig["pc:AbsoluteSize"]:Fire() end
+	end
+	advance(0)
+end
+
+local function scenario(name, fn)
+	local ok, err = pcall(fn)
+	if not ok then check(name .. ": the test ran to its end (it stopped: " .. tostring(err) .. ")", false) end
+end
+local function noErrors(label)
+	check(label .. ": no error in the script, its events or its tasks", #W.errors == 0, W.errors[1])
+end
+
+local function R(x, y, w, h) return { x = x, y = y, w = w, h = h } end
+local function rectOf(inst) local p, s = inst.AbsolutePosition, inst.AbsoluteSize return R(p.X, p.Y, s.X, s.Y) end
+local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
+local function inside(a, b) return a.x >= b.x and a.y >= b.y and a.x + a.w <= b.x + b.w and a.y + a.h <= b.y + b.h end
+local function has(text, part) return string.find(text, part, 1, true) ~= nil end
+local function first(texts, size, room)
+	for _, text in ipairs(texts) do
+		if modelWidth(text, size) <= room then return text end
+	end
+	return texts[#texts]
+end
+local NAN = 0 / 0
+
+-- 0. The script runs as the game runs it ---------------------------------------------------------------------------
+scenario("start", function()
+	local E = boot({ stats = { 4630, 18 } })
+	noErrors("start")
+	check("start: the script reaches its last loop and waits 1 s there (the cooldown tick), nothing else waits", #W.waits == 1 and W.waits[1].t == 1, #W.waits)
+	check("start: the bar, its three rows and the IPO button exist", E.bar ~= nil and E.money ~= nil and E.track ~= nil and E.fill ~= nil and E.info ~= nil and E.button ~= nil and E.money ~= E.info)
+	check("start: the bar is a button 233 x 64 at x 370, y 6 on a 667x339 screen (unchanged)", E.bar.Size.X.Offset == 233 and E.bar.Size.Y.Offset == 64 and E.bar.Position.X.Offset == 370 and E.bar.Position.Y.Offset == 6, E.bar.Size.X.Offset)
+	check("start: the bar keeps its name, the daily chip and the Goals card look it up by name", E.bar.Name == "ValuationBar" and E.bar.Parent == E.gui and E.gui.Name == "IpoGui")
+	local used = {}
+	for name in pairs(W.services) do used[#used + 1] = name end
+	table.sort(used)
+	local extra = {}
+	for _, name in ipairs(used) do if not ALLOWED_SERVICES[name] then extra[#extra + 1] = name end end
+	check("start: only the services it used before are used (no RunService, no frame loop)", #extra == 0, table.concat(extra, ","))
+	check("start: nothing listens to a frame event", W.run.Heartbeat:Count() == 0 and W.run.RenderStepped:Count() == 0 and W.run.Stepped:Count() == 0)
+	check("start: no remote is called at start (no new request)", #W.invokes == 0, #W.invokes)
+	check("start: the top row shows the Cash and Income at once", E.money.Text == "$4,630 · +$18/s", E.money.Text)
+	advance(5)
+	local stats = W.player:FindFirstChild("leaderstats")
+	check("start: the bar only reads leaderstats, it never writes Cash or Income", stats:FindFirstChild("Cash")._writes.Value == 1 and stats:FindFirstChild("Income")._writes.Value == 1, stats:FindFirstChild("Cash")._writes.Value)
+end)
+
+-- 1. Cash and Income text for many values --------------------------------------------------------------------------
+-- wide = the bar at 667x339 (233 px, rows 213 px); narrow = the bar at 320x568 (158 px, rows 138 px)
+local VALUES = {
+	-- cash, income, the text on a wide bar
+	{ 0, 0, "$0 · +$0/s" },
+	{ 1, 1, "$1 · +$1/s" },
+	{ 999, 999, "$999 · +$999/s" },
+	{ 1000, 1000, "$1,000 · +$1,000/s" },
+	{ 4630, 18, "$4,630 · +$18/s" },
+	{ 12345, 678, "$12,345 · +$678/s" },
+	{ 99999, 9999, "$99,999 · +$9,999/s" },
+	{ 100000, 10000, "$100K · +$10K/s" },
+	{ 123456, 12345, "$123.5K · +$12.3K/s" },
+	{ 1500000, 45000, "$1.5M · +$45K/s" },
+	{ 999999, 99999, "$1000K · +$100K/s" },
+	{ 1e9, 5e6, "$1B · +$5M/s" },
+	{ 1.5e12, 2e9, "$1.5T · +$2B/s" },
+	{ 1e12, 1e12, "$1T · +$1T/s" },
+	{ 1e15, 1e15, "$999T · +$999T/s" },
+	{ 1e18, 1e18, "$999T · +$999T/s" },
+	{ math.huge, math.huge, "$999T · +$999T/s" },
+	{ -5, -5, "$0 · +$0/s" },
+	{ -math.huge, 18, "$0 · +$18/s" },
+	{ 4630.9, 18.7, "$4,630 · +$18/s" },
+	{ NAN, NAN, "" },
+	{ NAN, 18, "+$18/s" },
+	{ 4630, NAN, "$4,630" },
+}
+local function label(v) return (v ~= v) and "NaN" or tostring(v) end
+local function shownOk(text)
+	local plain = text:gsub("·", "")
+	return string.find(plain, "^[%$%+%d,%.KMBT/s ]*$") ~= nil
+end
+for _, case in ipairs(VALUES) do
+	local cash, income, want = case[1], case[2], case[3]
+	scenario("values " .. label(cash) .. "/" .. label(income), function()
+		local name = "Cash " .. label(cash) .. " Income " .. label(income)
+		local E = boot({ w = 667, h = 339, stats = { cash, income } })
+		check("wide bar, " .. name .. ": the top row reads " .. want, E.money.Text == want, E.money.Text)
+		check("wide bar, " .. name .. ": nothing but digits, $ + , . K M B T / s and the dot", shownOk(E.money.Text), E.money.Text)
+		check("wide bar, " .. name .. ": no nil, nan, inf or minus sign in the text", not has(E.money.Text:lower(), "nil") and not has(E.money.Text:lower(), "nan") and not has(E.money.Text:lower(), "inf") and not has(E.money.Text, "-") and not has(E.money.Text, "e+"), E.money.Text)
+		noErrors("wide bar, " .. name)
+		for _, size in ipairs({ { 667, 339 }, { 320, 568 }, { 568, 262 }, { 844, 354 } }) do
+			local E2 = boot({ w = size[1], h = size[2], stats = { cash, income } })
+			local room = E2.bar.Size.X.Offset - 20
+			local text = E2.money.Text
+			local tag = size[1] .. "x" .. size[2] .. " (" .. room .. " px), " .. name
+			check(tag .. ": the top row text fits its row", modelWidth(text, E2.money.TextSize) <= room, modelWidth(text, E2.money.TextSize))
+			check(tag .. ": the top row text is 14 or 16 px", E2.money.TextSize == 14 or E2.money.TextSize == 16, E2.money.TextSize)
+			check(tag .. ": only digits and the money letters", shownOk(text), text)
+			check(tag .. ": empty only when there is nothing to show", (text == "") == (want == ""), text)
+			noErrors(tag)
+		end
+	end)
+end
+
+-- The narrowest bar: the fullest text that fits, checked against the estimate
+scenario("narrow", function()
+	local cases = {
+		-- cash, income, the three forms of the text, fullest first (the bar shows the first that fits, at 16 px, then 14)
+		{ 4630, 18, { "$4,630 · +$18/s", "$4.6K · +$18/s", "$4K +$18" } },
+		{ 123456, 12345, { "$123.5K · +$12.3K/s", "$123.5K · +$12.3K/s", "$123K +$12K" } },
+		{ 99999, 9999, { "$99,999 · +$9,999/s", "$100K · +$10K/s", "$99K +$9K" } },
+		{ 1e15, 1e15, { "$999T · +$999T/s", "$999T · +$999T/s", "$999T +$999T" } },
+	}
+	for _, c in ipairs(cases) do
+		local E = boot({ w = 320, h = 568, stats = { c[1], c[2] } })
+		local room = 138
+		check("narrow bar is 158 px wide on 320x568", E.bar.Size.X.Offset == 158, E.bar.Size.X.Offset)
+		local want
+		for _, text in ipairs(c[3]) do
+			if want == nil and modelWidth(text, 16) <= room then want = { text, 16 } end
+			if want == nil and modelWidth(text, 14) <= room then want = { text, 14 } end
+		end
+		want = want or { c[3][#c[3]], 14 }
+		check("narrow bar, Cash " .. c[1] .. " Income " .. c[2] .. ": the fullest text that fits, at the biggest size that fits (" .. want[1] .. " at " .. want[2] .. ")",
+			E.money.Text == want[1] and E.money.TextSize == want[2], E.money.Text .. " at " .. E.money.TextSize)
+	end
+	local E = boot({ w = 320, h = 568, stats = { 4630, 18 } })
+	check("narrow bar: '$4,630 · +$18/s' is shown whole at 16 px (the doc's example)", E.money.Text == "$4,630 · +$18/s" and E.money.TextSize == 16, E.money.Text .. " " .. E.money.TextSize)
+	-- A wider font than the estimate: the bar measures, so it still fits
+	for _, scale in ipairs({ 1.15, 1.3 }) do
+		local E2 = boot({ w = 320, h = 568, stats = { 123456, 12345 }, widthScale = scale })
+		check("narrow bar with a font " .. scale .. "x wider than the estimate: the top row still fits (the bar measures)", modelWidth(E2.money.Text, E2.money.TextSize) * scale <= 138 or E2.money.Text == "$123K +$12K", E2.money.Text)
+	end
+end)
+
+-- 2. Missing leaderstats, late leaderstats, odd values ---------------------------------------------------------------
+scenario("missing", function()
+	local E = boot({})
+	noErrors("no leaderstats at start")
+	check("no leaderstats at start: the top row is empty (no $nil, no $0)", E.money.Text == "", E.money.Text)
+	check("no leaderstats at start: the other rows are there", E.info.Text ~= "" and E.fill ~= nil)
+	check("no leaderstats at start: nothing waits but the 1 s tick", #W.waits == 1 and W.waits[1].t == 1)
+	advance(3)
+	check("no leaderstats for 3 s: still empty, still no error", E.money.Text == "" and #W.errors == 0)
+
+	-- the folder first, then Cash, then Income (as the server builds it)
+	local folder = newInstance("Folder")
+	folder.Name = "leaderstats"
+	folder.Parent = W.player
+	advance(0.5)
+	check("an empty leaderstats folder: still empty", E.money.Text == "")
+	local cash = newInstance("IntValue")
+	cash.Name = "Cash"
+	cash.Value = 250
+	cash.Parent = folder
+	advance(0.5)
+	check("Cash appears first: the top row shows Cash alone", E.money.Text == "$250", E.money.Text)
+	local income = newInstance("IntValue")
+	income.Name = "Income"
+	income.Value = 5
+	income.Parent = folder
+	advance(0.5)
+	check("Income appears next: the top row shows both", E.money.Text == "$250 · +$5/s", E.money.Text)
+	cash.Value = 300
+	advance(0.5)
+	check("a change after that shows", E.money.Text == "$300 · +$5/s", E.money.Text)
+	noErrors("leaderstats comes late")
+
+	-- the values first, the folder after
+	local E2 = boot({})
+	local f2, c2, i2 = makeStats(70, 3, false)
+	advance(0.5)
+	check("a finished leaderstats parented at once: shown", E2.money.Text == "$70 · +$3/s", E2.money.Text)
+	-- the folder goes away
+	f2.Parent = nil
+	advance(0.5)
+	check("leaderstats removed: the top row goes empty", E2.money.Text == "", E2.money.Text)
+	local writes = E2.money._writes.Text
+	c2.Value = 99
+	advance(1)
+	check("leaderstats removed: the old Cash no longer redraws the row", E2.money._writes.Text == writes and E2.money.Text == "", E2.money._writes.Text)
+	local f3 = makeStats(8, 1, true)
+	advance(0.5)
+	check("a new leaderstats after that: shown again", E2.money.Text == "$8 · +$1/s", E2.money.Text)
+	noErrors("leaderstats removed and back")
+
+	-- values that are not numbers, or not values
+	local E3 = boot({})
+	local f4 = newInstance("Folder")
+	f4.Name = "leaderstats"
+	f4.Parent = W.player
+	local bad = newInstance("StringValue")
+	bad.Name = "Cash"
+	bad.Value = "lots"
+	bad.Parent = f4
+	local notValue = newInstance("Folder")
+	notValue.Name = "Income"
+	notValue.Parent = f4
+	advance(1)
+	check("Cash a string and Income not a value: the row is empty, no error", E3.money.Text == "" and #W.errors == 0, E3.money.Text)
+end)
+
+-- 3. Changed events and the minimum interval -------------------------------------------------------------------------
+scenario("events", function()
+	local E = boot({ stats = { 100, 5 } })
+	local folder = W.player:FindFirstChild("leaderstats")
+	local cash, income = folder:FindFirstChild("Cash"), folder:FindFirstChild("Income")
+	check("events: starts with the values", E.money.Text == "$100 · +$5/s", E.money.Text)
+	advance(1)
+	local w0 = E.money._writes.Text
+	cash.Value = 200
+	check("events: a change after a quiet second shows at once (no wait)", E.money.Text == "$200 · +$5/s" and E.money._writes.Text == w0 + 1, E.money.Text)
+	cash.Value = 300
+	cash.Value = 400
+	income.Value = 6
+	cash.Value = 500
+	check("events: more changes in the same instant do not redraw yet", E.money._writes.Text == w0 + 1 and E.money.Text == "$200 · +$5/s", E.money._writes.Text - w0)
+	advance(0.1)
+	check("events: still waiting after 0.1 s", E.money._writes.Text == w0 + 1)
+	advance(0.2)
+	check("events: after the interval one redraw shows the latest values", E.money._writes.Text == w0 + 2 and E.money.Text == "$500 · +$6/s", E.money.Text)
+	advance(5)
+	check("events: nothing changes, nothing redraws (no loop)", E.money._writes.Text == w0 + 2, E.money._writes.Text - w0)
+	-- the server's real pattern: Cash and Income every second
+	local before = E.money._writes.Text
+	for second = 1, 10 do
+		cash.Value += 18
+		advance(1)
+	end
+	check("events: one Cash change a second for 10 s shows 10 times", E.money._writes.Text - before == 10 and E.money.Text == "$680 · +$6/s", E.money._writes.Text - before)
+	-- a fast ticker: a change every 0.05 s for 10 s
+	before = E.money._writes.Text
+	for step = 1, 200 do
+		cash.Value += 1
+		advance(0.05)
+	end
+	local draws = E.money._writes.Text - before
+	check("events: 200 changes in 10 s redraw at most 4 times a second (" .. draws .. " draws)", draws <= 41, draws)
+	check("events: and still keep up (at least 3 a second)", draws >= 30, draws)
+	advance(1)
+	check("events: after the burst the row shows the last value", E.money.Text == "$880 · +$6/s", E.money.Text)
+	noErrors("events")
+
+	-- connections do not pile up
+	local base = cash:_signal("Changed"):Count()
+	for n = 1, 10 do
+		local extra = newInstance("IntValue")
+		extra.Name = "Extra" .. n
+		extra.Parent = folder
+		extra.Parent = nil
+	end
+	advance(1)
+	check("events: adding and removing other stats does not add listeners to Cash (" .. base .. " before and after)", cash:_signal("Changed"):Count() == base, cash:_signal("Changed"):Count())
+	check("events: Income has one listener from the bar", income:_signal("Changed"):Count() == 1, income:_signal("Changed"):Count())
+
+	-- replacing Cash: the old one stops driving the row
+	local old = cash
+	old.Parent = nil
+	local new = newInstance("IntValue")
+	new.Name = "Cash"
+	new.Value = 7
+	new.Parent = folder
+	advance(1)
+	check("events: a new Cash value is shown", E.money.Text == "$7 · +$6/s", E.money.Text)
+	local w1 = E.money._writes.Text
+	old.Value = 123456
+	advance(1)
+	check("events: the old, removed Cash does not redraw the row", E.money._writes.Text == w1 and E.money.Text == "$7 · +$6/s", E.money._writes.Text - w1)
+	check("events: the bar's listener left the old Cash (only the confirm screen's one stays)", old:_signal("Changed"):Count() == 1, old:_signal("Changed"):Count())
+	new.Value = 9
+	advance(1)
+	check("events: the new Cash drives the row", E.money.Text == "$9 · +$6/s", E.money.Text)
+	noErrors("events, replaced Cash")
+end)
+
+-- 4. Nothing is polled ------------------------------------------------------------------------------------------------
+scenario("idle", function()
+	local E = boot({ stats = { 100, 5 } })
+	local writes, measures, delays = E.money._writes.Text, W.measures, #W.delays
+	advance(30)
+	check("idle: 30 s without a change: the top row is not redrawn", E.money._writes.Text == writes, E.money._writes.Text - writes)
+	check("idle: 30 s without a change: no text is measured and no delay is started", W.measures == measures and #W.delays == delays, W.measures - measures)
+	local ones = 0
+	for _, w in ipairs(W.waits) do if w.t == 1 then ones += 1 end end
+	check("idle: the only loop is the existing 1 s one (about 30 waits, all of 1 s)", ones == #W.waits and #W.waits >= 29 and #W.waits <= 31, #W.waits)
+	check("idle: nothing listens to a frame event", W.run.Heartbeat:Count() == 0 and W.run.RenderStepped:Count() == 0 and W.run.Stepped:Count() == 0)
+	noErrors("idle")
+end)
+
+-- 5. The progress bar and the bottom row ------------------------------------------------------------------------------
+scenario("progress", function()
+	local stages = IpoConfig.Stages
+	local function progressFor(valuation, count)
+		local index = IpoConfig.stageIndex(valuation, count)
+		local last = index == #stages
+		local from = IpoConfig.stageValuation(index, count)
+		local to = last and from or IpoConfig.stageValuation(index + 1, count)
+		return last and 1 or math.clamp((valuation - from) / math.max(1, to - from), 0, 1)
+	end
+	local cases = { { 0, 0 }, { 900, 0 }, { 1800, 0 }, { 4050, 0 }, { 6299, 0 }, { 30000, 0 }, { 81000, 0 }, { 500000, 0 }, { 0, 1 }, { 2250, 1 }, { 11000, 3 } }
+	for _, c in ipairs(cases) do
+		local E = boot({ attrs = { IpoValuation = c[1], IpoCount = c[2] }, stats = { 123, 4 } })
+		local want = progressFor(c[1], c[2])
+		check("progress, valuation " .. c[1] .. " after " .. c[2] .. " IPOs: the fill is " .. string.format("%.4f", want) .. " of the track",
+			math.abs(E.fill.Size.X.Scale - want) < 1e-9 and E.fill.Size.Y.Scale == 1 and E.fill.Size.X.Offset == 0, E.fill.Size.X.Scale)
+		check("progress, " .. c[1] .. "/" .. c[2] .. ": the track is 12 px high, 10 px in from each side, at y 26 (unchanged)",
+			E.track.Position.X.Offset == 10 and E.track.Position.Y.Offset == 26 and E.track.Size.X.Offset == -20 and E.track.Size.Y.Offset == 12 and E.track.Size.X.Scale == 1, E.track.Size.Y.Offset)
+	end
+	local E = boot({ attrs = { IpoValuation = 900, IpoCount = 0 }, stats = { 123, 4 } })
+	check("progress: half way to Seed is 0.5", math.abs(E.fill.Size.X.Scale - 0.5) < 1e-9, E.fill.Size.X.Scale)
+	E.W.player:SetAttribute("IpoValuation", 1200)
+	advance(0)
+	check("progress: it follows the valuation attribute", math.abs(E.fill.Size.X.Scale - 1200 / 1800) < 1e-9, E.fill.Size.X.Scale)
+	local ready = boot({ attrs = { IpoValuation = 90000 }, stats = { 123, 4 } })
+	check("progress: IPO-ready shows a full bar and the IPO button says IPO!", ready.fill.Size.X.Scale == 1 and ready.button.Text == "🔔\nIPO!", ready.button.Text)
+	check("progress: the IPO button text is back to normal below IPO-ready", E.button.Text == "📈\nIPO", E.button.Text)
+end)
+
+scenario("bottom", function()
+	local function room(E) return E.bar.Size.X.Offset - 20 end
+	local icon = function(i) return IpoConfig.Stages[i].icon end
+	local BELL = "🔔"
+	-- wide bar
+	local E = boot({ attrs = { IpoValuation = 0 }, stats = { 123, 4 } })
+	local tiers = { icon(1) .. " Garage → Seed · $0 / $1.8K", icon(1) .. " Garage · $0 / $1.8K", icon(1) .. " $0 / $1.8K", "$0 / $1.8K" }
+	check("bottom, wide, Garage at 0: the fullest of the stage forms that fits", E.info.Text == first(tiers, 14, room(E)), E.info.Text)
+	check("bottom, wide: the multiplier and Shares are not shown at x1 and 0 Shares", not has(E.info.Text, "x1") and not has(E.info.Text, "📜"), E.info.Text)
+	E = boot({ attrs = { IpoValuation = 2000 }, stats = { 123, 4 } })
+	tiers = { icon(2) .. " Seed → Series A · $2K / $6.3K", icon(2) .. " Seed · $2K / $6.3K", icon(2) .. " $2K / $6.3K", "$2K / $6.3K" }
+	check("bottom, wide, Seed at 2000", E.info.Text == first(tiers, 14, room(E)), E.info.Text)
+	-- a font half as wide as the estimate: the whole line fits, so the extras show too
+	local roomy = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 0, IpoShares = 12 }, stats = { 123, 4 } })
+	check("bottom: with room, 12 Shares add ' · 📜 12' to the line", roomy.info.Text == icon(2) .. " Seed → Series A · $2K / $6.3K · 📜 12", roomy.info.Text)
+	local index = IpoConfig.stageIndex(2000, 2)
+	local mult = IpoConfig.formatMultiplier(IpoConfig.multiplier(2))
+	local want = string.format("%s %s → %s · $2K / %s · %s · 📜 12", icon(index), IpoConfig.Stages[index].name, IpoConfig.Stages[index + 1].name, IpoConfig.formatShort(IpoConfig.stageValuation(index + 1, 2)), mult)
+	local two = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 2, IpoShares = 12 }, stats = { 123, 4 } })
+	check("bottom: after 2 IPOs with 12 Shares and room, the multiplier and the Shares follow the valuation: " .. want, two.info.Text == want, two.info.Text)
+	local onlyMult = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 2, IpoShares = 0 }, stats = { 123, 4 } })
+	check("bottom: after 2 IPOs and 0 Shares only the multiplier is added", has(onlyMult.info.Text, mult) and not has(onlyMult.info.Text, "📜"), onlyMult.info.Text)
+	-- narrow bar
+	local N = boot({ w = 320, h = 568, attrs = { IpoValuation = 0 }, stats = { 123, 4 } })
+	check("bottom, narrow (138 px): fits at 14 px", modelWidth(N.info.Text, N.info.TextSize) <= 138 and N.info.TextSize == 14, N.info.Text)
+	check("bottom, narrow: the valuation and its target are both there", has(N.info.Text, "$0 / $1.8K"), N.info.Text)
+	N = boot({ w = 320, h = 568, attrs = { IpoValuation = 2000, IpoCount = 1, IpoShares = 99 }, stats = { 123, 4 } })
+	check("bottom, narrow, with a multiplier and 99 Shares: still fits at 14 px", modelWidth(N.info.Text, N.info.TextSize) <= 138, N.info.Text)
+	check("bottom, narrow: the valuation is kept (the extras go first)", has(N.info.Text, "$2K / "), N.info.Text)
+	-- IPO-ready
+	local Rd = boot({ attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
+	local rt = { BELL .. " IPO-ready! Tap to go public", BELL .. " IPO-ready! · $81K", BELL .. " IPO-ready!", BELL .. " IPO!" }
+	check("bottom, wide, IPO-ready: the fullest IPO-ready text that fits", Rd.info.Text == first(rt, 14, room(Rd)), Rd.info.Text)
+	Rd = boot({ w = 320, h = 568, attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
+	check("bottom, narrow, IPO-ready: fits at 14 px and says IPO", modelWidth(Rd.info.Text, 14) <= 138 and has(Rd.info.Text, "IPO"), Rd.info.Text)
+	Rd = boot({ widthScale = 0.5, attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
+	check("bottom, IPO-ready with room: 'IPO-ready! Tap to go public' (the text it had before)", Rd.info.Text == BELL .. " IPO-ready! Tap to go public", Rd.info.Text)
+	-- odd attribute values do not break the row
+	local Odd = boot({ attrs = { IpoValuation = NAN, IpoCount = 0, IpoShares = 0 }, stats = { 123, 4 } })
+	check("bottom: a NaN valuation does not put nan on the bar", not has(Odd.info.Text:lower(), "nan") and #W.errors == 0, Odd.info.Text)
+	Odd = boot({ attrs = { IpoValuation = 1e30 }, stats = { 123, 4 } })
+	check("bottom: a huge valuation is capped, so the row stays short", #W.errors == 0 and modelWidth(Odd.info.Text, Odd.info.TextSize) <= room(Odd), Odd.info.Text)
+end)
+
+-- 6. Resizing refits the rows ------------------------------------------------------------------------------------------
+scenario("resize", function()
+	local E = boot({ w = 667, h = 339, attrs = { IpoValuation = 2000, IpoShares = 5, IpoCount = 1 }, stats = { 123456, 12345 } })
+	local wide = E.money.Text
+	check("resize: wide at first (233 px bar)", E.bar.Size.X.Offset == 233 and wide == "$123.5K · +$12.3K/s", wide)
+	setScreen(320, 568)
+	advance(0.5)
+	check("resize: 320x568 makes the bar 158 px", E.bar.Size.X.Offset == 158, E.bar.Size.X.Offset)
+	check("resize: the top row fits again on the narrow bar", modelWidth(E.money.Text, E.money.TextSize) <= 138, E.money.Text)
+	check("resize: the bottom row fits again on the narrow bar", modelWidth(E.info.Text, E.info.TextSize) <= 138, E.info.Text)
+	setScreen(667, 339)
+	advance(0.5)
+	check("resize: back to the wide bar, the fuller text comes back", E.money.Text == wide, E.money.Text)
+	noErrors("resize")
+end)
+
+-- 7. Rectangles at five sizes with three top bars ---------------------------------------------------------------------------
+local GOALS = __GOALCOUNT__
+local SIZES = { { 667, 375 }, { 320, 568 }, { 568, 320 }, { 640, 360 }, { 844, 390 } }
+local BARS = { 0, 36, 58 }
+local LANE_OFFSETS = { 16, 72, 128, 184, 240 }
+local function oldBar(w, h) -- where the bar was before the change (IpoClient.lua, placeHud)
+	if h < 460 then
+		local width = math.clamp(w - 370 - 10 - 54, 0, 250)
+		if width >= 180 then return R(370, 6, width, 64) end
+		return R(10, 76, math.min(250, w - 20 - 54), 64)
+	end
+	return R(98, 12, math.clamp(w - 108 - 54, 150, 250), 64)
+end
+local function hudButtonRect(slot, w, h)
+	if h < 460 then return R(10 + slot * 72, 6, 64, 64) end
+	return R(12, h * 0.5 + (slot - 2) * 86 - 38, 76, 76)
+end
+local function lane(w, h, offset)
+	local width = math.min(0.6 * w, 520)
+	return R((w - width) / 2, h - offset - 48, width, 48)
+end
+local function others(w, h, bar)
+	local list = {}
+	for slot, name in ipairs({ "EGGS", "SHOP", "TEAM", "POACH" }) do list[name .. " button"] = hudButtonRect(slot - 1, w, h) end
+	local chipX = math.min(bar.x + bar.w + 6, w - 48 - 2)
+	list["daily chip"] = R(chipX, bar.y + (64 - 48) / 2, 48, 48)
+	list["Goals card"] = R(bar.x, bar.y + 70, bar.w, 30 + 22 * GOALS + 8)
+	local tray = trayLayout(w, h)
+	list["call tray"] = R(tray.x, tray.y, tray.w, tray.h)
+	list["call tray line"] = R(tray.x, tray.infoY, tray.w, tray.infoH)
+	for _, offset in ipairs(LANE_OFFSETS) do
+		if h >= 460 or offset ~= 240 then list["lane -" .. offset] = lane(w, h, offset) end
+	end
+	list["thumbstick"] = R(0, h - 170, 170, 170)
+	list["jump button"] = R(w - 150, h - 130, 150, 130)
+	return list
+end
+local function touching(rect, list)
+	local names = {}
+	for name, other in pairs(list) do if overlaps(rect, other) then table.insert(names, name) end end
+	table.sort(names)
+	return table.concat(names, ", ")
+end
+-- What the bar touches today and did before this change, per size and top bar. The call tray, the pop-up lanes,
+-- the thumbstick and the jump button are not moved by this change; the HUD buttons, the chip and the Goals card
+-- must never be touched. (Same overlaps tools/daily_test.py lists as ACCEPTED for the tray at 568x320.)
+local TOUCHES = __TOUCHES__
+local DUMP = __DUMP__
+for _, size in ipairs(SIZES) do
+	for _, bar in ipairs(BARS) do
+		local dw, dh = size[1], size[2]
+		local gw, gh = dw, dh - bar
+		local tag = dw .. "x" .. dh .. " top bar " .. bar .. " (screen " .. gw .. "x" .. gh .. ")"
+		scenario(tag, function()
+			local E = boot({ w = gw, h = gh, attrs = { IpoValuation = 2000, IpoShares = 5, IpoCount = 1 }, stats = { 123456, 12345 } })
+			noErrors(tag)
+			local barRect, was = rectOf(E.bar), oldBar(gw, gh)
+			check(tag .. ": the bar is where it was (x " .. was.x .. ", y " .. was.y .. ", " .. was.w .. " x " .. was.h .. ")",
+				barRect.x == was.x and barRect.y == was.y and barRect.w == was.w and barRect.h == was.h, barRect.x .. "," .. barRect.y .. "," .. barRect.w .. "," .. barRect.h)
+			local money, track, info = rectOf(E.money), rectOf(E.track), rectOf(E.info)
+			check(tag .. ": the three rows are inside the bar", inside(money, barRect) and inside(track, barRect) and inside(info, barRect))
+			check(tag .. ": the top row is above the progress bar and the bottom row below it, none overlap", money.y + money.h <= track.y and track.y + track.h <= info.y and money.y < track.y)
+			check(tag .. ": the rows keep 10 px from the bar's left and right edges", money.x - barRect.x == 10 and barRect.x + barRect.w - (money.x + money.w) == 10 and info.x - barRect.x == 10 and barRect.x + barRect.w - (info.x + info.w) == 10)
+			check(tag .. ": each text row is as high as its text (16 px text in 22, 14 px in 20)", money.h >= E.money.TextSize and info.h >= E.info.TextSize and E.info.TextSize == 14, E.money.TextSize)
+			check(tag .. ": the progress bar is where it was (y +26, 12 high, 10 in from the sides)", track.x == barRect.x + 10 and track.y == barRect.y + 26 and track.h == 12 and track.w == barRect.w - 20)
+			local ipoButton = rectOf(E.button)
+			local list = others(gw, gh, barRect)
+			list["IPO button"] = ipoButton
+			local hit = touching(barRect, list)
+			local strict = {}
+			for name, other in pairs(list) do
+				if (name:find("button") and not name:find("jump")) or name == "daily chip" or name == "Goals card" then strict[name] = other end
+			end
+			check(tag .. ": the bar touches no HUD button, no daily chip and no Goals card", touching(barRect, strict) == "", touching(barRect, strict))
+			local key = dw .. "x" .. dh .. "/" .. bar
+			if DUMP then print_real(key .. " -> " .. hit) end
+			check(tag .. ": what the bar touches is what it touched before (" .. (TOUCHES[key] or "nothing") .. ")", hit == (TOUCHES[key] or ""), hit)
+			-- the rows' text sizes: every text on the bar is 14 or more
+			local smallest = 99
+			for _, label in ipairs(E.labels) do
+				smallest = math.min(smallest, label.TextSize)
+				if label.TextScaled then smallest = 0 end
+				for _, kid in ipairs(label:GetChildren()) do
+					if kid._class == "UITextSizeConstraint" and (kid._p.MinTextSize or 0) < 14 then smallest = 0 end
+				end
+			end
+			check(tag .. ": every text on the bar is 14 px or more, fixed size, never scaled below it", smallest >= 14, smallest)
+			check(tag .. ": a text that is too long is cut with ... (TextTruncate), never drawn over the bar's edge", E.money.TextTruncate == Enum.TextTruncate.AtEnd and E.info.TextTruncate == Enum.TextTruncate.AtEnd)
+			-- the longest top row the bar can show fits in the rows
+			for _, c in ipairs({ { 123456, 12345 }, { 999999, 99999 }, { 1e15, 1e15 }, { 4630, 18 } }) do
+				local F = boot({ w = gw, h = gh, attrs = { IpoValuation = 2000, IpoShares = 5, IpoCount = 1 }, stats = c })
+				local width = F.bar.Size.X.Offset - 20
+				check(tag .. ", Cash " .. c[1] .. ": the top row fits its row (" .. F.money.Text .. ")", modelWidth(F.money.Text, F.money.TextSize) <= width, F.money.Text)
+				check(tag .. ": the bottom row fits its row (" .. F.info.Text .. ")", modelWidth(F.info.Text, F.info.TextSize) <= width, F.info.Text)
+			end
+		end)
+	end
+end
+
+-- 8. Words: no odds, chance, luck or random; no emoji in the top row ------------------------------------------------------
+scenario("words", function()
+	local seen = {}
+	local function look(E)
+		for _, text in ipairs({ E.money.Text, E.info.Text }) do seen[text] = true end
+	end
+	for _, v in ipairs(VALUES) do look(boot({ stats = { v[1], v[2] } })) end
+	for _, valuation in ipairs({ 0, 2000, 7000, 30000, 81000, 900000 }) do
+		for _, count in ipairs({ 0, 1, 5 }) do
+			look(boot({ attrs = { IpoValuation = valuation, IpoCount = count, IpoShares = count * 7 }, stats = { 5, 5 } }))
+			look(boot({ w = 320, h = 568, attrs = { IpoValuation = valuation, IpoCount = count, IpoShares = count * 7 }, stats = { 5, 5 } }))
+		end
+	end
+	local bad, emoji = nil, nil
+	for text in pairs(seen) do
+		local low = text:lower()
+		if has(low, "odds") or has(low, "chance") or has(low, "luck") or has(low, "random") then bad = text end
+	end
+	check("words: no text on the bar says odds, chance, luck or random", bad == nil, bad)
+	for _, v in ipairs(VALUES) do
+		for _, size in ipairs({ { 667, 339 }, { 320, 568 } }) do
+			local E = boot({ w = size[1], h = size[2], stats = { v[1], v[2] } })
+			for _, cp in utf8.codes(E.money.Text) do
+				if cp > 127 and cp ~= 0xB7 then emoji = E.money.Text end
+			end
+		end
+	end
+	check("words: the top row has no emoji (letters, digits, $ + , . / and the middle dot only)", emoji == nil, emoji)
+end)
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+# The expected overlaps of the bar (see the comment in SCENARIOS: unchanged by this work). The keys are
+# "<device width>x<device height>/<top bar>".
+TOUCHES = {
+    # 568x320 (a phone held sideways, narrow): the bar sits under the HUD row, over the call tray's spot. The same overlap
+    # tools/daily_test.py lists as ACCEPTED for the tray ("valuation bar"); the bar is where it was before, so nothing is new.
+    "568x320/0": "call tray, call tray line, lane -184",
+    "568x320/36": "call tray, call tray line, lane -128, lane -184, thumbstick",
+    "568x320/58": "call tray, call tray line, lane -128, lane -184, thumbstick",
+}
+
+
+def lua_touches():
+    items = ", ".join('["%s"] = "%s"' % (k, v) for k, v in sorted(TOUCHES.items()))
+    return "{ " + items + " }"
+
+
+# --- static checks on the source (no Studio, no Lua run) ---------------------------------------------------------
+def static_checks(client_text):
+    """(name, passed, extra) for what can be checked on the source itself."""
+    out = []
+    code = code_only(client_text)
+
+    def add(name, cond, extra=None):
+        out.append((name, bool(cond), extra))
+
+    add("static: IpoClient.lua has exactly one `while true do` loop (the existing 1 s cooldown tick, no polling loop added)", len(re.findall(r"\bwhile\s+true\s+do\b", code)) == 1, len(re.findall(r"\bwhile\s+true\s+do\b", code)))
+    add("static: no RunService, Heartbeat, RenderStepped or Stepped in IpoClient.lua", not re.search(r"RunService|Heartbeat|RenderStepped|\.Stepped", code))
+    add("static: no `repeat ... until` loop in IpoClient.lua", not re.search(r"\brepeat\b", code))
+    add("static: IpoClient.lua has no Touched handler", "Touched" not in code)
+    add("static: IpoClient.lua never calls addEarnings, DataStore or MarketplaceService", not re.search(r"addEarnings|DataStore|MarketplaceService", code))
+    add("static: the only remote call is the one IpoAction request function (InvokeServer once, no FireServer)", code.count(":InvokeServer(") == 1 and ":FireServer(" not in code, code.count(":InvokeServer("))
+    remotes = sorted(set(re.findall(r'remotes:WaitForChild\("(\w+)"\)', code)))
+    add("static: no new remote: IpoClient waits for IpoAction and IpoEvent only", remotes == ["IpoAction", "IpoEvent"] and "Instance.new(\"RemoteEvent\")" not in code and "Instance.new(\"RemoteFunction\")" not in code, remotes)
+    sizes = re.search(r"local MONEY_SIZES = \{([^}]*)\}", code)
+    info = re.search(r"local INFO_SIZE = (\d+)", code)
+    numbers = [int(n) for n in re.findall(r"\d+", sizes.group(1))] if sizes else [0]
+    add("static: the top row's text sizes are all 14 or more (MONEY_SIZES = %s)" % (sizes.group(1).strip() if sizes else "missing"), sizes is not None and min(numbers) >= 14, numbers)
+    add("static: the bottom row's text size is 14 or more (INFO_SIZE)", info is not None and int(info.group(1)) >= 14, info.group(1) if info else None)
+    interval = re.search(r"local MONEY_INTERVAL = ([\d.]+)", code)
+    add("static: the top row has a minimum interval of 0.2 s or more between redraws (MONEY_INTERVAL)", interval is not None and float(interval.group(1)) >= 0.2, interval.group(1) if interval else None)
+    # D9: the bar's own code (from the text measure to the end of refreshHud's first lines) has no odds words
+    start = client_text.find("local function textWidth")
+    end = client_text.find("ipoButton.Text = info.ready", start)
+    region = client_text[start:end] if start >= 0 and end > start else ""
+    add("static: the bar's code is found (text measure to refreshHud)", len(region) > 500, len(region))
+    words = [w for w in ("odds", "chance", "luck", "random") if re.search(w, region, re.I)]
+    add("static: the bar's code and texts have no odds, chance, luck or random (D9)", not words, words)
+    add("static: no new string in the bar's code has an emoji except the ones the bar already had (the stage icons come from IpoConfig, then 🔔 and 📜)",
+        all(ch in "🔔📜🏚" or ord(ch) < 0x1F000 for ch in region), None)
+    return out
+
+
+def build_program(client_text, goal_count, dump=False):
+    ipo_config = read("IpoConfig.lua")
+    shop_config = read("ShopConfig.lua")
+    daily_config = read("DailyConfig.lua")
+    prelude = (PRELUDE.replace("__IPOCONFIG__", ipo_config).replace("__SHOPCONFIG__", shop_config)
+               .replace("__DAILYCONFIG__", daily_config).replace("__IPOCLIENT__", client_text)
+               .replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")))
+    scenarios = (SCENARIOS.replace("__GOALCOUNT__", str(goal_count)).replace("__TOUCHES__", lua_touches())
+                 .replace("__DUMP__", "true" if dump else "false"))
+    return prelude + scenarios
+
+
+def run_all(luau, client_text, goal_count, dump=False):
+    """(passed, failed, failure lines, crashed text or None, raw stdout)."""
+    result = run_luau(luau, build_program(client_text, goal_count, dump))
+    out = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    fails = [line for line in out if line.startswith("FAIL: ")]
+    summary = [line for line in out if re.match(r"^\d+ passed, \d+ failed$", line)]
+    crashed = None
+    if result.returncode != 0 or not summary:
+        crashed = (result.stderr.strip() or result.stdout.strip() or "no output")[:600]
+    passed = failed = 0
+    if summary:
+        m = re.match(r"^(\d+) passed, (\d+) failed$", summary[-1])
+        passed, failed = int(m.group(1)), int(m.group(2))
+    static = static_checks(client_text)
+    for name, ok, extra in static:
+        if ok:
+            passed += 1
+        else:
+            failed += 1
+            fails.append("FAIL: " + name + ((" -- " + str(extra)) if extra is not None else ""))
+    return passed, failed, fails, crashed, out
+
+
+# --- mutation runs: break IpoClient.lua on purpose; every break must be caught by a named check ---------------------
+MUTATIONS = [
+    ("wrong format: Cash without thousands commas", 'return ShopConfig.formatCash(amount)\n\telseif tier == 2', 'return "$" .. amount\n\telseif tier == 2'),
+    ("wrong format: Income shown without its /s", '(tier < 3 and "/s" or "")', '""'),
+    ("wrong format: the Income sign + dropped", 'table.insert(parts, "+" .. moneyText(income, tier, 10000)', 'table.insert(parts, moneyText(income, tier, 10000)'),
+    ("wrong format: short form uses the wrong function (no K, M)", 'return IpoConfig.formatShort(amount)\nend\n\n-- "$4,630', 'return ShopConfig.formatCash(amount)\nend\n\n-- "$4,630'),
+    ("Cash and Income swapped in the read", 'return read("Cash"), read("Income")', 'return read("Income"), read("Cash")'),
+    ("Cash and Income swapped in the text (Income first)", '''		if cash then
+			table.insert(parts, moneyText(cash, tier, 100000))
+		end
+		if income then
+			table.insert(parts, "+" .. moneyText(income, tier, 10000) .. (tier < 3 and "/s" or ""))
+		end''', '''		if income then
+			table.insert(parts, "+" .. moneyText(income, tier, 10000) .. (tier < 3 and "/s" or ""))
+		end
+		if cash then
+			table.insert(parts, moneyText(cash, tier, 100000))
+		end'''),
+    ("the progress bar is inverted", 'hudFill.Size = UDim2.fromScale(info.progress, 1)', 'hudFill.Size = UDim2.fromScale(1 - info.progress, 1)'),
+    ("the progress track is thinner", 'Size = UDim2.new(1, -20, 0, 12),\n\tBackgroundColor3 = COLORS.bar,', 'Size = UDim2.new(1, -20, 0, 6),\n\tBackgroundColor3 = COLORS.bar,'),
+    ("the progress track moved down", 'Position = UDim2.fromOffset(10, 26),\n\tSize = UDim2.new(1, -20, 0, 12),', 'Position = UDim2.fromOffset(10, 30),\n\tSize = UDim2.new(1, -20, 0, 12),'),
+    ("a polling loop added (while true, 0.1 s)", '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()', '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()\ntask.spawn(function()\n\twhile true do\n\t\ttask.wait(0.1)\n\t\trequestMoney()\n\tend\nend)'),
+    ("a polling loop added on every frame (Heartbeat)", '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()', '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()\ngame:GetService("RunService").Heartbeat:Connect(function() drawMoney() end)'),
+    ("text min 8 (top row sizes 16 and 8)", 'local MONEY_SIZES = { 16, 14 }', 'local MONEY_SIZES = { 16, 8 }'),
+    ("text min 8 (bottom row size 8)", 'local INFO_SIZE = 14', 'local INFO_SIZE = 8'),
+    ("the top row is scaled text with min 8", 'TextSize = MONEY_SIZES[1],\n\tTextTruncate', 'TextSize = MONEY_SIZES[1],\n\tTextScaled = true,\n\tTextTruncate'),
+    ("row overlap: the top row sits on the progress bar", 'Position = UDim2.fromOffset(10, 2),', 'Position = UDim2.fromOffset(10, 20),'),
+    ("row overlap: the bottom row sits on the progress bar", 'Position = UDim2.fromOffset(10, 40),\n\tSize = UDim2.new(1, -BAR_PADDING, 0, 20),', 'Position = UDim2.fromOffset(10, 30),\n\tSize = UDim2.new(1, -BAR_PADDING, 0, 20),'),
+    ("the bottom row falls out of the bar", 'Position = UDim2.fromOffset(10, 40),\n\tSize = UDim2.new(1, -BAR_PADDING, 0, 20),', 'Position = UDim2.fromOffset(10, 52),\n\tSize = UDim2.new(1, -BAR_PADDING, 0, 20),'),
+    ("nil not handled: a missing Cash value is read without a check", 'return moneyValue(value and value:IsA("ValueBase") and value.Value)', 'return moneyValue(value.Value)'),
+    ("nil not handled: NaN is let through", 'if type(value) ~= "number" or value ~= value then', 'if type(value) ~= "number" then'),
+    ("nil not handled: a missing leaderstats still draws $0", 'hudMoney.Text = "" -- no leaderstats (yet): the top row stays empty\n\t\treturn', 'hudMoney.Text = "$0"\n\t\treturn'),
+    ("negative not clamped", 'return math.clamp(math.floor(value), 0, MONEY_CAP)', 'return math.clamp(math.floor(value), -MONEY_CAP, MONEY_CAP)'),
+    ("no cap: a huge number overflows", 'local MONEY_CAP = 999e12', 'local MONEY_CAP = 1e300'),
+    ("event not disconnected", '\tfor _, connection in ipairs(moneyConnections) do\n\t\tconnection:Disconnect()\n\tend\n', ''),
+    ("rate limit removed", 'local MONEY_INTERVAL = 0.25', 'local MONEY_INTERVAL = 0'),
+    ("rate limit loses the last value", '''		moneyPending = true
+		task.delay(wait, function()
+			moneyPending = false
+			drawMoney()
+		end)''', '''		moneyPending = true
+		task.delay(wait, function()
+			moneyPending = false
+		end)'''),
+    ("the fitting is off: always the fullest text at 16", 'local function pickText(texts, sizes, room)\n', 'local function pickText(texts, sizes, room)\n\tif true then return texts[1], sizes[1] end\n'),
+    ("the measure always says 0 wide", 'return ok and bounds.X or #text * size * 0.6', 'return 0'),
+    ("the room is the whole bar (no padding taken off)", 'return hudBar.Size.X.Offset - BAR_PADDING', 'return hudBar.Size.X.Offset'),
+    ("the bottom row is not fitted", 'hudInfo.Text = pickText(infoTexts(info), { INFO_SIZE }, barRoom())', 'hudInfo.Text = infoTexts(info)[1]'),
+    ("a resize does not refit the rows", '\tplaceHud()\n\trefreshHud() -- the bar may have a new width: its rows fit again\n\trequestMoney()\n', '\tplaceHud()\n'),
+    ("a leaderstats that comes late is not noticed", '''player.ChildAdded:Connect(function(child)
+	if child.Name == "leaderstats" then
+		bindMoney()
+	end
+end)''', ''),
+    ("a leaderstats that goes away is not noticed", '''player.ChildRemoved:Connect(function(child)
+	if child.Name == "leaderstats" then
+		bindMoney()
+	end
+end)''', ''),
+    ("a Cash added to the folder later is not noticed", 'table.insert(moneyConnections, stats.ChildAdded:Connect(bindMoney))', ''),
+    ("the bar is taller (the daily chip and Goals card would move)", 'hudBar.Size = UDim2.fromOffset(math.clamp(gui.AbsoluteSize.X - 108 - CHIP_ROOM, 150, 250), 64)', 'hudBar.Size = UDim2.fromOffset(math.clamp(gui.AbsoluteSize.X - 108 - CHIP_ROOM, 150, 250), 78)'),
+    ("the bar forgets the room for the daily chip", 'local CHIP_ROOM = DailyConfig and DailyConfig.Enabled and (DailyConfig.ChipSize + DailyConfig.ChipGap) or 0', 'local CHIP_ROOM = 0'),
+    ("the IPO button moves onto the POACH slot", 'local HUD_SLOT = 4', 'local HUD_SLOT = 3'),
+    ("the bar ignores attribute changes (progress frozen)", 'player.AttributeChanged:Connect(refreshAll)', ''),
+    ("the client writes to leaderstats", 'return moneyValue(value and value:IsA("ValueBase") and value.Value)', 'if value and value:IsA("ValueBase") then value.Value = value.Value end\n\t\treturn moneyValue(value and value:IsA("ValueBase") and value.Value)'),
+    ("a Touched handler on the bar", '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()', '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()\nhudBar.Touched:Connect(function() end)'),
+    ("the bar is narrower on short screens", 'hudBar.Size = UDim2.fromOffset(width, 64)', 'hudBar.Size = UDim2.fromOffset(width - 20, 64)'),
+    ("the bar moved down", 'hudBar.Position = UDim2.fromOffset(98, 12)', 'hudBar.Position = UDim2.fromOffset(98, 20)'),
+    ("an emoji in the top row", 'table.insert(texts, table.concat(parts, tier < 3 and " · " or " "))', 'table.insert(texts, "💰 " .. table.concat(parts, tier < 3 and " · " or " "))'),
+    ("odds wording in a bar text", '"🔔 IPO!" }', '"🔔 Lucky IPO!" }'),
+    ("a new remote call at start", '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()', '-- Cash and Income on the bar: listens to leaderstats, no loop\nbindMoney()\nipoAction:InvokeServer("Cash")'),
+    ("the top row has no truncate safety net", 'TextSize = MONEY_SIZES[1],\n\tTextTruncate = Enum.TextTruncate.AtEnd,\n', 'TextSize = MONEY_SIZES[1],\n'),
+]
+
+
+def main():
+    luau = os.environ.get("LUAU") or shutil.which("luau")
+    if not luau:
+        print("luau not found. Download it from https://github.com/luau-lang/luau/releases, or set LUAU=/path/to/luau")
+        return 2
+    goals = onboarding_goal_count()
+    client = read(CLIENT)
+    passed, failed, fails, crashed, out = run_all(luau, client, goals, dump="--layout-table" in sys.argv)
+    for line in out:
+        if not line.startswith("FAIL: ") and not re.match(r"^\d+ passed, \d+ failed$", line):
+            print(line)
+    for line in fails:
+        print(line)
+    if crashed:
+        print("CRASH: " + crashed)
+    print("HUD bar check: %d passed, %d failed" % (passed, failed))
+    code = 0 if failed == 0 and not crashed else 1
+
+    if "--no-mutations" not in sys.argv:
+        caught = 0
+        for name, old, new in MUTATIONS:
+            if client.count(old) != 1:
+                print("MUTATION NOT APPLIED (%d matches): %s" % (client.count(old), name))
+                code = 1
+                continue
+            p, f, mfails, mcrash, _ = run_all(luau, client.replace(old, new), goals)
+            names = [line[len("FAIL: "):].split(" -- ")[0] for line in mfails]
+            if mcrash:
+                print("MUTATION CRASHED (not a named check): %s: %s" % (name, mcrash.split("\n")[0]))
+                code = 1
+            elif not names:
+                print("MUTATION NOT CAUGHT: " + name)
+                code = 1
+            else:
+                caught += 1
+                print("caught: %s\n        by: %s%s" % (name, names[0], " (+%d more)" % (len(names) - 1) if len(names) > 1 else ""))
+                if all("the test ran to its end" in n for n in names):
+                    print("        (only by a test that stopped, not by a rule: look at it)")
+        print("HUD bar mutations: %d of %d broken rules caught by a named check" % (caught, len(MUTATIONS)))
+        if caught != len(MUTATIONS):
+            code = 1
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
