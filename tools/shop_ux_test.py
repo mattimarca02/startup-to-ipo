@@ -1837,7 +1837,7 @@ MUTANTS = [
     ("tab buttons without the Tab prefix", C, 'Name = "Tab" .. name,', "Name = name,", "every Name exists after the Office list arrives"),
     ("pages without their names", C, 'Name = name .. "Page",', "Name = name,", "every Name exists after the Office list arrives"),
     ("cards' buttons not named BuyButton", C, 'Name = "BuyButton",', 'Name = "Button",', "every card's button is named BuyButton"),
-    ("Office cards without their names", C, 'upg.name, "Office" .. i)', 'upg.name, "Card" .. i)', "every Name exists after the Office list arrives"),
+    ("Office cards without their names", C, 'Name = "Office" .. i,', 'Name = "Card" .. i,', "every Name exists after the Office list arrives"),
     ("the help button without its name", C, 'Name = "HelpButton",', 'Name = "Help",', "every Name exists after the Office list arrives"),
     ("TutorialStrip shown with no banner", C, "tutorialStrip.Visible = banner ~= nil and statusText == nil", "tutorialStrip.Visible = statusText == nil",
      "TutorialStrip is inert while TutorialBanner is unset"),
