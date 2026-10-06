@@ -127,3 +127,23 @@ TUT 6 (the gift) comes at the first pause after minute 10, the third hire (~12:2
 - **Garage prices:** Coffee Machine $1,100 → $150, Laptop $4,200 → $800, the first egg $2,300 → $400, Desk 2 $3,600 → $1,000 (economy_sim.py:1068-1073); add Desk 3 $2,500 and a Bug Beetle egg $3,000. The sims raise the Whiteboard and Neon Logo so the Garage keeps ~1.5 h (LONG_K, LG:38; OWNER CHOICE).
 - **The free egg is not in the ladder:** `LONG_ITEMS` buys the first hire (economy_sim.py:1071), but OnboardingConfig.lua:20 gives one; that hire takes Desk 1, so the planned Bug Beetle has no desk in the Garage. Add the free egg and Desk 3 to the sim.
 - **Garage milestones** at $5K, $20K, $60K and $120K valuation (about 8, 18, 30 and 39 min before the re-fit, estimate): LG 4(b)'s milestones in every rung, giving a title, decor, a task preview, decor. Never Cash (LG:5).
+
+## 4. The first hour (launch, Software)
+
+**Goals, two on the card at a time** (new goal kinds next to `employees` and `stage`, OnboardingServer.lua:136-146; shipped keys `Hire3` and `Seed` kept): 1 "Answer 3 calls" (~2:00), 2 "Own 3 upgrades" (3:34, LG:88), 3 "Hire 3 employees" (12:21), then "Reach milestone 1" (~8:00), "Get a x2 chain" (10 answers in a row, ~20 min), "Buy the Server Rack" (19:04), milestones 2-4 (18:30, 30:09, 39:13), "Reach Seed" (end of session 1). Times: model G2, estimates.
+
+**The first IPO tease** (milestone 1, ~8:00): a dot on IPO; the window opens on "The road to the bell": the seven stages, "Seed: your first funding round", two empty Pokedex frames ("Go public to stamp a company", CUST 1.4). No countdown.
+
+**The gift hook** (TUT 6, ~12:20): the calendar shows Day 2 (10 min of Income) and Day 3's Garage Egg with "Next reward in 19h 40m" (DailyConfig.lua:23-31, 61). Calm text (:53-69).
+
+**Why come back tomorrow:** Day 2-3; the away bank's "saved $X" card (LG:24); a named next target with a time ("Whiteboard · about 12 min"); Seed's round, room and three new tasks shown ahead (BIBLE:271); in Gaming, tomorrow's trending genre (SECT 2.3).
+
+**The first social moment** is visual: poaching is closed (new players are shielded 15 min, CreatureConfig.lua:126; LG R3 proposes 10 engaged hours, LG:108). Neighbors' rooms across the street (WORLD §4), their milestone stars, the in-server board (IpoClient.lua:754). New, optional: a "Cheer" on a neighbor's sign (a clap over their plot, no reward, rate-limited). Planned: the paired demo (ACTIVE §3). The lounge stays paid (ShopConfig.lua:46).
+
+**The first real trade-off** (~11:00): a $3,000 egg (+$5/s on average, sim §5, odds or the next fixed hire shown) or 8 minutes of saving for the Server Rack (+$15/s, certain). Both cards show "pays for itself in about N min". The big one ends session 1: Seed's round, Raise, Later or Skip (FUND 1), never forced.
+
+| Session | Leaves the player with |
+|---|---|
+| 5 min | Desk, 2 upgrades, 1 hire, ~8 calls, goal 3 started; the next target named |
+| 20 min | 3 hires, the Server Rack, milestones 1-2, Day 1 claimed, Day 2 shown, the away bank filling |
+| 60 min | 5 upgrades, 4 milestones, an arranged office, the Seed bar about two-thirds full (estimate after the re-fit): a reason to return today |
