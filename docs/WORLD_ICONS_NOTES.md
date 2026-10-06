@@ -189,7 +189,30 @@ Nothing was blocked. No file this job needed was claimed by someone else (the Ow
 - Second review fixes, not tested outside the fake: Roblox's `SignalBehavior` Deferred (modelled: handlers queued to a resumption point, a destroyed instance's handlers disconnected, `Destroying` still run), `task.defer`, `GetPropertyChangedSignal("Visible")`/`("Enabled")` and `AncestryChanged` on the nodes above an icon, and that setting `Parent` (even to `nil`) on a destroyed instance throws in Roblox (the sweep's test; the fake throws like the "The Parent property of X is locked" error). The light test inside `PREVIEW_ICONS` in real Studio.
 - Review fixes, not tested outside the fake: Roblox firing `Destroying` for the descendants of a destroyed card (the fake does; the caches also check their own slots, and a direct icon inside a destroyed card at worst keeps counting until another icon needs its room); the drawn fallback's look; the cleanup, check and light test blocks and the hash block's newline cases in real Studio; `--regen-patch` on the real future `main` (tested on `e3c9e67`, a `customize-pr1` copy and synthetic moves); the SVG layout check uses estimated text widths.
 
-## Results (final, after the review fixes)
+## Results (final, after the second review fixes)
+
+| Suite | Checks | Mutation runs |
+|---|---|---|
+| `tools/daily_test.py` (other branches own it; unchanged) | 1,772 pass, 0 failed (as before) | 20 of 20 (its own) |
+| `tools/world_test.py` | 353 pass, 0 failed (155 world program, 56 source, 34 world preview with the cleanup and check blocks, 10 hash block, 9 sync table, 7 integration blocks, 18 patch source, 13 regeneration, 51 default/`--strict-patch` scenarios); 356 with `--review`, 354 with `--strict-patch`, 357 with both | 82 of 82, each caught by its named check (29 builder and checks, 24 data, 12 doc blocks, 6 regeneration, 3 TycoonCore changes, 8 patch modes) |
+| `tools/icon_test.py` | 371 pass, 0 failed (290 icon program: every cache scenario in 4 signal modes; 22 icon preview with the light test; 59 source); 373 with `--review` | 68 of 68, each caught by its named check (50 builder, cap, cache and checks, 18 data) |
+
+Before the second review fixes (`2bcb164`, and `6bc827c` with the docs-only commits): 1,772 / 20, 298 / 65 and 199 / 51.
+
+**The same suites on scratch copies** (the branch's files added; `--integration` for world_test):
+
+| Copy | daily_test | world_test | world_test `--strict-patch` | icon_test |
+|---|---|---|---|---|
+| `origin/main` (`e3c9e67`) | 1,772 pass | 353 pass, 82 of 82 | 354 pass | 371 pass, 68 of 68 |
+| `origin/main` with the patch applied | 1,772 pass | 353 pass, 82 of 82 | 354 pass | 371 pass, 68 of 68 |
+| `origin/customize-pr1` (`3c548ec`, TycoonCore changed) | 2,592 pass | 350 pass, 82 of 82, with a NOTE: the patch applies only with an offset (the hash and byte-for-byte checks skipped with a note) | fails as it should: "patch needs regenerating" (offset, Made for, Result); after `--regen-patch` there, 354 pass | 371 pass, 68 of 68 |
+| `origin/customize-pr1` with the patch applied | 2,592 pass | 351 pass, 82 of 82, the same NOTE | fails as it should (same reasons) | 371 pass, 68 of 68 |
+
+The first review's notes said the patch applied to `customize-pr1` "with fuzz"; `git apply -v` says it applies with an offset (no context dropped). TycoonCore changes tried in scratch copies: its "PlotVisuals, PlotArt = nil, nil" line changed or removed (before: an uncaught `ValueError`; now the named order check, "patch needs regenerating", and groups D and E still run), the PlayerAdded hook moved (the named "applies" check), a context line changed so the patch cannot apply (the named "applies" check; groups D and E skipped with a note: before, "mutation D, E2 put one character early: not caught" was printed next to it).
+
+- **Files:** `IconArt.lua` 30,741 bytes, `IconVisuals.lua` 55,083 (SHA-256 in docs/STUDIO_SYNC_WORLD.md, checked by `tools/world_test.py`, and by its hash block run in luau); `WorldArt.lua`, `WorldVisuals.lua` and the patch unchanged.
+
+## Results (after the first review fixes)
 
 | Suite | Checks | Mutation runs |
 |---|---|---|
