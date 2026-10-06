@@ -16,7 +16,7 @@ The owner's complaints: the shop is plain, not interactive and not UX driven, an
 
 **Buy flow**
 - Robux items: `promptPurchase` (:357-389) marks the item pending ("..."), opens Roblox's prompt, unlocks on `PromptGamePassPurchaseFinished` / `PromptProductPurchaseFinished` (:755-771) or after 30 s (:383-388). Nothing is granted on the client.
-- Pass states: Owned, "...", Coming soon, "R$ 199" (:452-469). Product states: "...", Coming soon, "R$ n" (:471-494). Cash packs show the Cash they give now (`productText`, :422-427).
+- Pass states: Owned, "...", Coming soon, "R$ 199" (:452-469). Product states: "...", Coming soon, "R$ n" (:471-494). Cash packs show the Cash they give now (`productText`, :422-426).
 - Luck Boost: its card face starts with `luckText` (:399-419): "Odds weight x2 for Rare, Epic, Legendary hires. Unicorn Egg Legendary: 8.00% -> 9.70%" (numbers from CreatureConfig and the player's Talent Scouts level), required by Roblox's Paid Random Items policy. Hidden for restricted players (`changesOdds`, :481; ShopConfig.lua:134, 193-196; D9 option B).
 - **The Office tab is built after the server answers:** a `task.spawn` asks `ShopAction` "Upgrades" up to 5 times, 2 s apart (:511-525); on failure it shows "The office upgrades aren't available right now." with no retry (:526-537). Rows have three states (:543-569): owned ("In your garage. Earns +$X every second.", dark green "Owned"), next ("Buy\n$price", green, or gray when Cash is short) and locked ("Buy X first.", "Locked"). A tap sends only the upgrade number (`buyOffice`, :499-509); the server checks everything (TycoonCore.lua:243-288).
 - Feedback is a 3.5 s toast at the bottom center (:116-131, 336-347): "Bought Laptop" or the server's refusal. The window refreshes every second while open (:783-788).
@@ -154,7 +154,7 @@ One PR at a time owns `ShopClient` (claim, merge, release). Order (owner default
 | 9 | **S5** | Two-tap confirm for buildings and furniture (never Office) | `ShopClient`, `ShopConfig` (`ConfirmCashAboveShare`) | S |
 
 - **S5 is gated on CUSTOMIZE PR 2 and PR 3:** it has nothing to confirm before buildings and furniture exist. S2 comes before them: PR 3 builds "Place now" on the ladder.
-- **S2 and `tools/daily_test.py`:** S2 drops the "Locked" button text ("Unlocks after Laptop"), but `daily_test.py` :4498-4499 (the same check on `customize-pr1`) requires `setButton(button, "Locked", COLORS.disabled, false)`. S2 claims `tools/daily_test.py` and updates that check in the same PR (owner default): only the next rung offers Buy.
+- **S2 and `tools/daily_test.py`:** S2 drops the "Locked" button text ("Unlocks after Laptop"), but `daily_test.py` :4499 (:6785 on `customize-pr1`) requires `setButton(button, "Locked", COLORS.disabled, false)`. S2 claims `tools/daily_test.py` and updates that check in the same PR (owner default): only the next rung offers Buy.
 - `TycoonCore` keeps sending `icon` in `upgradeList` (:292-298) so an old client still works; S3 stops reading it. No server change, no new remote, no save change: publish with **Shut down all servers** (docs/PUBLISH_RULES.md).
 - Each PR: `python3 tools/daily_test.py` and `tools/shop_ux_test.py` pass, F5 without red errors.
 
