@@ -1484,6 +1484,33 @@ def regen_command():
     return 0
 
 
+PREAMBLE_LINES = re.compile(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) .*\n"
+                            r".*PLOT_SPACING \(line (\d+)\), MAX_PLOTS \(line (\d+)\) and\n\s+plotCenter \(lines (\d+)-(\d+)\)")
+
+
+def preamble_problems(patch, base):
+    """What the preamble's line numbers point at in base, if not the lines they name (empty = all right)."""
+    m = PREAMBLE_LINES.search(patch)
+    if not m:
+        return ["the preamble's line numbers are missing"]
+    e1, e1a, e1b, e2a, e2b, ps, mp, pc0, pc1 = (int(v) for v in m.groups())
+    lines = [""] + base.split("\n")
+
+    def at(n):
+        return lines[n] if 0 < n < len(lines) else ""
+    problems = []
+    if not (e1 == e1b and at(e1a).startswith("local visualsOk, PlotVisuals = pcall(require") and at(e1b) == "end"
+            and "PlotVisuals, PlotArt = nil, nil" in at(e1b - 1) and "end" not in lines[e1a + 1:e1b - 1]):
+        problems.append("E1: lines %d-%d are not the plot visuals block" % (e1a, e1b))
+    if not (e2b == e2a + 1 and at(e2a) == "end" and at(e2b) == "Players.PlayerAdded:Connect(onPlayerAdded)"):
+        problems.append("E2: lines %d and %d are not the end of onPlayerAdded and the PlayerAdded hook" % (e2a, e2b))
+    if not (at(ps).startswith("local PLOT_SPACING = ") and at(mp).startswith("local MAX_PLOTS = ")):
+        problems.append("PLOT_SPACING or MAX_PLOTS is not on the line named")
+    if not (at(pc0).startswith("local function plotCenter(") and at(pc1) == "end" and pc1 > pc0 and "end" not in lines[pc0 + 1:pc1]):
+        problems.append("plotCenter is not lines %d-%d" % (pc0, pc1))
+    return problems
+
+
 def regen_checks():
     """The regeneration procedure, tested: it reproduces the committed patch from the file it was made for, and on a
     TycoonCore.lua with lines added it gives a patch that applies exactly, with the line numbers and the hash moved."""
@@ -1512,11 +1539,33 @@ def regen_checks():
         again, patched = regen_patch(base, made[2])
         check("regen: from the TycoonCore.lua it was made for, --regen-patch gives the committed patch byte for byte", again == patch,
               next((i for i, (a, b) in enumerate(zip(again, patch)) if a != b), "lengths %d %d" % (len(again), len(patch))))
-        check("regen: the Result line is the hash of that file with the patch applied (committed and regenerated)",
-              sha(patched)[:2] == result and patch_result(again) == sha(patched)[:2])
+        check("regen: the committed Result line is the hash of that file with the patch applied", sha(patched)[:2] == result)
     else:
         print("note: TycoonCore.lua is not the file the patch was made for (main at %s), so the byte-for-byte regeneration "
-              "check is skipped (the moved-lines check below still runs)" % made[2])
+              "check is skipped (the checks on this worktree's TycoonCore.lua below still run)" % made[2])
+    # On this worktree's own TycoonCore.lua, whichever it is
+    try:
+        cur_patch, cur_patched = regen_patch(base, "test")
+    except ValueError as e:
+        cur_patch, cur_patched = None, None
+        check("regen: this worktree's TycoonCore.lua can be regenerated", False, e)
+    if cur_patch is not None:
+        check("regen: the regenerated Made for and Result lines are the hashes of this TycoonCore.lua and of it patched",
+              patch_made_for(cur_patch)[:2] == sha(base)[:2] and patch_result(cur_patch) == sha(cur_patched)[:2])
+        problems = preamble_problems(cur_patch, base)
+        check("regen: every line number in the regenerated preamble points at the line it names", problems == [], problems[:1])
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "TycoonCore.lua")
+            with open(target, "w", encoding="utf-8", newline="\n") as f:
+                f.write(base)
+            with open(os.path.join(tmp, "p.patch"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(cur_patch)
+            exact = subprocess.run(["git", "apply", "p.patch"], cwd=tmp, capture_output=True).returncode == 0
+            with open(target, encoding="utf-8") as f:
+                applied = f.read()
+        committed = apply_patch(base)
+        check("regen: the regenerated patch applies exactly to this TycoonCore.lua and gives the same file as the committed patch",
+              exact and applied == cur_patched and block_order(cur_patched) == [] and (committed is None or committed == cur_patched))
     lines = base.split("\n")
     pc = next(i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded("))
     moved = "\n".join(["-- added line %d" % k for k in range(5)] + lines[:pc] + ["-- moved %d" % k for k in range(3)] + lines[pc:])
@@ -1525,7 +1574,7 @@ def regen_checks():
     except ValueError as e:
         new_patch, new_patched = None, None
         check("regen: a TycoonCore.lua with 5 lines added at the top and 3 before onPlayerAdded can be regenerated", False, e)
-    if new_patch is not None:
+    if new_patch is not None and cur_patch is not None:
         with tempfile.TemporaryDirectory() as tmp:
             target = os.path.join(tmp, "TycoonCore.lua")
             with open(target, "w", encoding="utf-8", newline="\n") as f:
@@ -1535,12 +1584,11 @@ def regen_checks():
             exact = subprocess.run(["git", "apply", "p.patch"], cwd=tmp, capture_output=True).returncode == 0
             with open(target, encoding="utf-8") as f:
                 applied = f.read()
-        nm = re.search(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) ", new_patch)
-        om = re.search(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) ", patch)
+        nm, om = PREAMBLE_LINES.search(new_patch), PREAMBLE_LINES.search(cur_patch)
         check("regen: with lines added, the new patch applies exactly (no fuzz) and gives the file its Result line names",
               exact and applied == new_patched and patch_result(new_patch) == sha(applied)[:2] and patch_made_for(new_patch)[:2] == sha(moved)[:2])
         check("regen: with lines added, E1's line numbers moved by 5 and E2's by 8", nm is not None and om is not None
-              and [int(x) - int(y) for x, y in zip(nm.groups(), om.groups())] == [5, 5, 5, 8, 8], nm and om and (nm.groups(), om.groups()))
+              and [int(x) - int(y) for x, y in zip(nm.groups(), om.groups())] == [5, 5, 5, 8, 8, 5, 5, 5, 5], nm and om and (nm.groups(), om.groups()))
         check("regen: the regenerated hunks add exactly the committed blocks", patch_hunks_of(new_patch) == patch_hunks_of(patch))
         # The command itself, in a scratch copy holding the moved TycoonCore.lua: it rewrites the patch and only the doc's row
         with tempfile.TemporaryDirectory() as tmp:
@@ -1859,14 +1907,14 @@ MUTANTS_C = [
 # TycoonCore.lua, the patch and the doc); its regen_checks() must fail the named check.
 T = "tools/world_test.py"
 MUTANTS_D = [
-    ("the preamble names E2's line one too far", T, "e2_before=e2_after - 1", "e2_before=e2_after", "regen: from the TycoonCore.lua it was made for"),
-    ("E2 put one character early", T, "    j = text.index(E2_ANCHOR) + 1\n", "    j = text.index(E2_ANCHOR)\n", "regen: from the TycoonCore.lua it was made for"),
+    ("the preamble names E2's line one too far", T, "e2_before=e2_after - 1", "e2_before=e2_after", "regen: every line number in the regenerated preamble"),
+    ("E2 put one character early", T, "    j = text.index(E2_ANCHOR) + 1\n", "    j = text.index(E2_ANCHOR)\n", "regen: the regenerated patch applies exactly to this TycoonCore.lua"),
     ("the Result line hashes the unpatched file", T, "    res_sha, res_size = sha(patched)\n    preamble", "    res_sha, res_size = sha(base)\n    preamble",
-     "regen: the Result line is the hash"),
+     "regen: the regenerated Made for and Result lines"),
     ("the command forgets the doc's row", T, "        f.write(SYNC_ROW.sub(lambda _: sync_row(label, res_sha, res_size), doc, count=1))", "        f.write(doc)",
      "regen: the command (--regen-patch)"),
     ("plotCenter's end looked up from the top", T, 'pc0=pc0, pc1=line_of(base, pc0, "end"))', 'pc0=pc0, pc1=line_of(base, 1, "end"))',
-     "regen: from the TycoonCore.lua it was made for"),
+     "regen: every line number in the regenerated preamble"),
     ("a missing anchor is not refused", T, "        if base.count(anchor) != 1:\n            raise ValueError", "        if False:\n            raise ValueError",
      "regen: without its anchor"),
 ]
