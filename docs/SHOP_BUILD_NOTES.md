@@ -30,6 +30,31 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 - [x] 3.3 These notes complete (deviations, questions, what was not tested, results)
 - [x] 3.4 Release the claims (the 7 rows stay, set to free)
 
+**Phase 4: the review fixes** (branch `shop-fix` in the worktree `../shop-fix`, pushed to `shop-build` with `git push origin shop-fix:shop-build` after every commit, after the four suites)
+
+An independent review of `shop-build` at `372e998` found no confirmed blocker and ten items. Each was checked first; the section "Review fixes" below says applied or rejected, with the evidence. One commit per item.
+
+- [x] 4.0 Claim the five files in `CONTRIBUTING.md` (rows only: ShopClient, ShopLayout, tools/shop_ux_test.py, docs/STUDIO_SYNC_SHOP.md, these notes; free on this branch and on `customize-pr1`, `task-needs-desk`, `hud-cash`, `world-icons-pass`, `integration-1`), then this checklist
+- [ ] 4.1 Item 0, base: a plain merge of `origin/world-icons-pass` (no rebase), the four suites after it
+- [ ] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
+- [ ] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
+- [ ] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
+- [ ] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
+- [ ] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
+- [ ] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
+- [ ] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
+- [ ] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
+- [ ] 4.10 Item 9, the two mutants that also raised a runtime error
+- [ ] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
+- [ ] 4.12 Release the claims (rows kept, set to free)
+
+**OWNER DEFAULTS** (given with the review; applied as they are):
+1. OWNER DEFAULT: the shop window draws above the HUD.
+2. OWNER DEFAULT: the tutorial text limit follows the smallest landscape phone (about 40 characters).
+3. OWNER DEFAULT: the client truncates long messages with an ellipsis after 2 lines; the long server texts get shortened at the next server change (not edited now).
+4. OWNER DEFAULT: a message still showing when the shop closes moves to the toast.
+5. OWNER DEFAULT: the Office page jumps to the hero only after a buy, a hero change or a Retry, never on a message line.
+
 ## Preconditions (checked 2026-10-06, before any change)
 
 1. `docs/SHOP_UX_PROPOSAL.md` on `origin/world-icons-pass` (`6bc827c`) records the six owner decisions as **DECIDED BY THE OWNER**: the landscape tab rail (3.1), all six Office rungs with the summary row, hero card and "Unlocks after X" (3.2), Office upgrades never ask for a confirmation and the two-tap confirm only for buildings and furniture above half the player's Cash (3.2, 3.3), factual badges only (3.3), the details sheet sliding up inside the shop window (3.3), 3D icons only for the Office upgrades and the creatures, drawn shapes for the rest (3.6). **Holds.**
