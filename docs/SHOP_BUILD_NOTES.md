@@ -41,7 +41,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
 - [x] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
 - [x] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
-- [ ] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
+- [x] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
 - [ ] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
 - [ ] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
 - [ ] 4.10 Item 9, the two mutants that also raised a runtime error
@@ -171,6 +171,14 @@ Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" l
 **Fix:** `ShopLayout.ladder` gives the hero a short form too, `infoShort = "+$40/s"`; ShopClient shows `info` ("+$40 every second") when it fits its box on one line at 16 px (`textWidth`, Roblox's measure) and `infoShort` otherwise. Only 568 x 320 uses the short form (Server Rack, Whiteboard and Neon Logo; "+$1/s" ... "+$5/s" fit the long form there).
 
 **Tests:** "office hero lines" at every phone and top bar, every hero (Desk to Neon Logo): "every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)" and "what it earns is +$X every second where that fits, +$X/s only where it does not"; the ladder's own check of `infoShort`. **Mutants (3):** always the long form, always the short form, a short form as long as the long one.
+
+### Item 6: Studio's fifth tab in portrait (applied)
+
+**Checked:** true. With Studio's five tabs a 320 x 568 portrait row gave each tab 51 px; "Passes" and "Boosts" need 60 px, "Office" 60 and "Debug" 50 at 16 px bold (the tests' estimate; the review measured 57-58), so three labels could not fit. Even the labels' own widths (and 2 px each side) add up to more than the row (307 of 274 px), so sharing the full width cannot work at 320 px: the row has to scroll.
+
+**Fix:** `ShopLayout.layout(..., tabLabelW)` takes the tab labels' widths (ShopClient measures them once with `textWidth`, 16 px bold). In portrait: the tabs share the row evenly when every label fits (the live game's four tabs: 64 px each at 320 x 568, unchanged); else each tab is its label plus `TAB_TEXT_PAD` (2 px) on each side and an even part of what is left; when even that is wider than the row, the row scrolls sideways (44 px targets kept) and gets `TAB_SCROLLBAR` (4 px) under its tabs for the scroll bar, the pages starting 4 px lower. At 320 x 568 in Studio: Office, Passes and Boosts 64 px, Cash 45, Debug 54; the Debug tab shows 33 of its 54 px until the row is swiped. The landscape rail (112 px tabs) does not change. Without `tabLabelW` the layout is the old one, so every old layout check still holds.
+
+**Tests:** "tab labels" at every phone and top bar, 4 and 5 tabs (pure): every tab as wide as its label (and 44 x 44), no overlap, the canvas reaches the last tab and scrolls exactly when it is longer than the bar, the live four share the row evenly and never scroll, a scrolling row has room for its bar and the pages start under it, Studio's five scroll at 320 px. In the fake place at every phone, live and Studio: "every tab's label fits its tab on one line at 16 px" on every tab page, and in Studio at 320 px "the tab row scrolls sideways to the Debug tab (shown whole, a scroll bar)", then the Debug tab is tapped. **Mutants (5):** the portrait tabs ignore their labels, a too-long row squeezed to even tabs, no room for the bar, the bar never shown, ShopClient never passing the labels.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 

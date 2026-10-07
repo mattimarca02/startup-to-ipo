@@ -8,8 +8,8 @@ Branch `shop-build` (from `world-icons-pass` at `6bc827c`): PR **S1** and **S2**
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `ShopLayout` | ModuleScript, ReplicatedStorage | new | `2ba1c12d3fa1ae0935f291b0c7c89d3ccd8a3ffe8d325bc80689a6aa6e569d44` | 21267 |
-| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `26c6b6d7280b2db849b595a43291d76ba38f0a862411aaaea98619d8d37d9e1d` | 58311 |
+| `ShopLayout` | ModuleScript, ReplicatedStorage | new | `d778376716c4f6744f1f9f84ceea52cd774b7dbe5c756f4e53f2872f5fdffdbd` | 22445 |
+| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `40cd2715575dae8d6766ff2f4dc97757a0b77691220033c80f846039341c479e` | 58519 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as it is.
 
@@ -92,8 +92,8 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	ShopLayout = { "2ba1c12d3fa1ae0935f291b0c7c89d3ccd8a3ffe8d325bc80689a6aa6e569d44", 21267, "ReplicatedStorage" },
-	ShopClient = { "26c6b6d7280b2db849b595a43291d76ba38f0a862411aaaea98619d8d37d9e1d", 58311, "StarterPlayerScripts" },
+	ShopLayout = { "d778376716c4f6744f1f9f84ceea52cd774b7dbe5c756f4e53f2872f5fdffdbd", 22445, "ReplicatedStorage" },
+	ShopClient = { "40cd2715575dae8d6766ff2f4dc97757a0b77691220033c80f846039341c479e", 58519, "StarterPlayerScripts" },
 }
 for name, want in pairs(WANT) do
 	local folder = folderOf(want[3])

@@ -1195,6 +1195,43 @@ for _, size in ipairs(SIZES) do
 	end
 end
 
+-- The tab labels (measured at 16 px): a portrait row fits every label, sharing the row evenly when it can, scrolling
+-- sideways only when even the labels' own widths are too wide (Studio's five tabs on a 320 px phone) --------------
+for _, size in ipairs(SIZES) do
+	for _, bar in ipairs(BARS) do
+		for _, tabs in ipairs({ 4, 5 }) do
+			local labels = {}
+			for i = 1, tabs do labels[i] = measure(({ "Office", "Passes", "Boosts", "Cash", "Debug" })[i], 16, Enum.Font.GothamBold, math.huge).X end
+			local L = ShopLayout.layout(size[1], size[2] - bar, bar, tabs, 0, labels)
+			local label = "tab labels " .. size[1] .. "x" .. size[2] .. "/" .. bar .. " (" .. tabs .. " tabs)"
+			local narrow, bad
+			for i, r in ipairs(L.tabs) do
+				if r.w < labels[i] + 2 * ShopLayout.TAB_TEXT_PAD or r.w < 44 or r.h < 44 then narrow = "tab " .. i .. " " .. r.w .. " for " .. labels[i] end
+				for j, u in ipairs(L.tabs) do
+					if i < j and overlaps(r, u) then bad = "tab " .. i .. " on tab " .. j end
+				end
+				if L.rail and not inside(r, L.tabBar) and not L.tabScrolls then bad = "tab " .. i .. " outside the rail" end
+			end
+			check(label .. ": every tab is as wide as its label at 16 px (and 44 x 44 or more)", narrow == nil, narrow)
+			check(label .. ": tabs never overlap", bad == nil, bad)
+			local last = L.tabs[tabs]
+			local reach = L.rail and (last.y + last.h - L.tabBar.y) or (last.x + last.w - L.tabBar.x)
+			check(label .. ": the row's canvas reaches the last tab, and it scrolls exactly when the tabs are longer than the bar",
+				L.tabCanvas == reach and L.tabScrolls == (L.tabCanvas > (L.rail and L.tabBar.h or L.tabBar.w)), L.tabCanvas .. " / " .. reach)
+			if not L.rail then
+				local even = true
+				for i = 2, tabs do if L.tabs[i].w ~= L.tabs[1].w then even = false end end
+				check(label .. ": a live game's four tabs share the portrait row evenly and never scroll", tabs == 5 or (even and not L.tabScrolls))
+				check(label .. ": a row that scrolls has room for its bar under the tabs, and the pages start under it",
+					L.tabBar.h == 44 + (L.tabScrolls and ShopLayout.TAB_SCROLLBAR or 0) and L.pages.y >= L.tabBar.y + L.tabBar.h + 6, L.tabBar.h)
+				if size[1] == 320 and tabs == 5 then
+					check(label .. ": Studio's five tabs scroll sideways at 320 px (their labels need more than the row)", L.tabScrolls)
+				end
+			end
+		end
+	end
+end
+
 -- The reference phones of docs/SHOP_UX_PROPOSAL.md 3.10 (a 36 px top bar)
 do
 	local L = ShopLayout.layout(667, 339, 36, 4, 0)
@@ -1463,14 +1500,22 @@ end
 local function noErrors(label)
 	check(label .. ": ShopClient runs without an error", #LOG.errors == 0, LOG.errors[1])
 end
+local TAB_NAMES = { "Office", "Passes", "Boosts", "Cash", "Debug" }
+-- The tab labels' widths on one line at 16 px (what ShopClient measures with TextService)
+local function tabLabels(count)
+	local list = {}
+	for i = 1, count do list[i] = measure(TAB_NAMES[i], 16, Enum.Font.GothamBold, math.huge).X end
+	return list
+end
 local function layoutNow(w)
 	local tabs = w.studio and 5 or 4
-	local L = ShopLayout.layout(GUI.w, GUI.h, w.bar, tabs, 0)
+	local labels = tabLabels(tabs)
+	local L = ShopLayout.layout(GUI.w, GUI.h, w.bar, tabs, 0, labels)
 	local strip, status = find(win(w), "TutorialStrip"), find(win(w), "StatusLine")
 	local bottomH = 0
 	if strip and strip.Visible then bottomH = L.stripH end
 	if status and status.Visible then bottomH = math.max(bottomH, rectOf(status).h) end
-	if bottomH > 0 then L = ShopLayout.layout(GUI.w, GUI.h, w.bar, tabs, bottomH) end
+	if bottomH > 0 then L = ShopLayout.layout(GUI.w, GUI.h, w.bar, tabs, bottomH, labels) end
 	return L
 end
 local function sameRect(inst, r)
@@ -1478,7 +1523,6 @@ local function sameRect(inst, r)
 	local a = rectOf(inst)
 	return math.abs(a.x - r.x) < 0.5 and math.abs(a.y - r.y) < 0.5 and math.abs(a.w - r.w) < 0.5 and math.abs(a.h - r.h) < 0.5
 end
-local TAB_NAMES = { "Office", "Passes", "Boosts", "Cash", "Debug" }
 -- The cards: every Frame right under a page that has a name label
 local function cardsOf(w)
 	local list = {}
@@ -1592,6 +1636,14 @@ local function screenChecks(w, label)
 		end
 	end
 	check(label .. ": the window, header, tabs and pages are where ShopLayout.layout puts them", placed and tabsPlaced, rectText(rectOf(window)) .. " vs " .. rectText(L.window))
+	local squeezed
+	for i = 1, (w.studio and 5 or 4) do
+		local t = window:FindFirstChild("Tab" .. TAB_NAMES[i], true)
+		if t and measure(t.Text, 16, t.Font, math.huge).X + 2 * ShopLayout.TAB_TEXT_PAD > rectOf(t).w then
+			squeezed = squeezed or t.Name .. " '" .. t.Text .. "' needs " .. measure(t.Text, 16, t.Font, math.huge).X .. " px in " .. rectOf(t).w
+		end
+	end
+	check(label .. ": every tab's label fits its tab on one line at 16 px", squeezed == nil, squeezed)
 	-- nothing covers a Buy button: header items, tabs, the strip, the status line, the help card, the toast
 	local covers = { title, help, close, window:FindFirstChild("TutorialStrip"), window:FindFirstChild("StatusLine"), window:FindFirstChild("HelpCard"), g:FindFirstChild("Toast") }
 	for _, name in ipairs(TAB_NAMES) do
@@ -1675,7 +1727,16 @@ for _, size in ipairs(SIZES) do
 				screenChecks(w, label .. " " .. name)
 			end
 			if studio then
-				tap(window:FindFirstChild("TabDebug", true), label .. ": the Debug tab")
+				local bar5 = window:FindFirstChild("TabBar")
+				local debugTab = window:FindFirstChild("TabDebug", true)
+				if bar5 and debugTab and visibleRect(debugTab).w < rectOf(debugTab).w then
+					-- the row scrolls sideways (320 px wide): the player swipes it to its end
+					bar5.CanvasPosition = v2(math.max(0, bar5.CanvasSize.X.Offset - rectOf(bar5).w), 0)
+					run(0)
+					check(label .. ": the tab row scrolls sideways to the Debug tab (shown whole, a scroll bar)",
+						visibleRect(debugTab).w == rectOf(debugTab).w and bar5.ScrollBarThickness > 0, rectText(visibleRect(debugTab)))
+				end
+				tap(debugTab, label .. ": the Debug tab")
 				screenChecks(w, label .. " Debug")
 			end
 			tap(window:FindFirstChild("TabOffice", true), label .. ": back to Office")
@@ -3009,6 +3070,16 @@ MUTANTS = [
      "what it earns is +$X every second where that fits"),
     ("the short form as long as the long one", L, 'infoShort = earns .. "/s" }', 'infoShort = earns .. " every second" }',
      "every line of the hero card fits its box on one line at 16 px"),
+    ("the portrait tabs ignore their labels (Passes in 51 px)", L, "local labelW = math.max(0, finite(tabLabelW and tabLabelW[i], 0))", "local labelW = 0",
+     "every tab's label fits its tab on one line at 16 px"),
+    ("a portrait row too long for the bar squeezed to even tabs", L, "local tabW = allFit and even or need[i] + extra", "local tabW = even",
+     "every tab is as wide as its label at 16 px"),
+    ("a portrait row that scrolls has no room for its bar", L, "tap + (L.tabScrolls and ShopLayout.TAB_SCROLLBAR or 0))", "tap)",
+     "a row that scrolls has room for its bar under the tabs"),
+    ("the tab row never shows its scroll bar", C, "tabBar.ScrollBarThickness = L.tabScrolls and ShopLayout.TAB_SCROLLBAR or 0", "tabBar.ScrollBarThickness = 0",
+     "the tab row scrolls sideways to the Debug tab"),
+    ("ShopClient never passes the tab labels", C, "\tlocal L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0, tabLabelW)", "\tlocal L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0)",
+     "every tab's label fits its tab on one line at 16 px"),
     ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
      "after the Retry the hero shows whole"),
 ]

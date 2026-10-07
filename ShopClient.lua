@@ -309,6 +309,7 @@ if debugRemote then
 	table.insert(tabNames, "Debug")
 end
 local tabButtons, tabPages = {}, {}
+local tabLabelW = {} -- each tab label's width on one line at 16 px: a portrait row makes room for it (ShopLayout)
 for i, name in ipairs(tabNames) do
 	local tabButton = make("TextButton", {
 		Name = "Tab" .. name,
@@ -322,6 +323,7 @@ for i, name in ipairs(tabNames) do
 	round(tabButton, 10)
 	fitText(tabButton, 20)
 	tabButtons[name] = tabButton
+	tabLabelW[i] = textWidth(name, tabButton.Font)
 
 	local page = make("ScrollingFrame", {
 		Name = name .. "Page",
@@ -570,7 +572,7 @@ end
 local function applyLayout()
 	local size = gui.AbsoluteSize
 	local inset = guiInset()
-	local L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0)
+	local L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0, tabLabelW)
 	local banner = tutorialBanner()
 	local bottomH = 0
 	if banner then
@@ -580,7 +582,7 @@ local function applyLayout()
 		bottomH = math.max(bottomH, math.clamp(textHeight(statusText, statusLine.Font, L.pages.w - 16) + 12, L.stripH, 72))
 	end
 	if bottomH > 0 then
-		L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, bottomH)
+		L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, bottomH, tabLabelW)
 	end
 
 	local frame = L.window
@@ -591,7 +593,7 @@ local function applyLayout()
 	place(tabBar, L.tabBar, frame)
 	tabBar.ScrollingDirection = L.rail and Enum.ScrollingDirection.Y or Enum.ScrollingDirection.X
 	tabBar.CanvasSize = L.rail and UDim2.fromOffset(0, L.tabCanvas) or UDim2.fromOffset(L.tabCanvas, 0)
-	tabBar.ScrollBarThickness = L.tabScrolls and 4 or 0
+	tabBar.ScrollBarThickness = L.tabScrolls and ShopLayout.TAB_SCROLLBAR or 0
 	for i, name in ipairs(tabNames) do
 		place(tabButtons[name], L.tabs[i], L.tabBar)
 	end

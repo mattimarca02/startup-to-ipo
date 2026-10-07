@@ -6,7 +6,7 @@
 -- Every rectangle is { x, y, w, h } in GUI pixels: the ShopGui's own space. The ShopGui keeps IgnoreGuiInset = false,
 -- so Roblox's top bar is already outside it. Nothing a player must read is smaller than ShopLayout.MIN_TEXT (16 px),
 -- and every tap target is at least ShopLayout.TAP (44 px) in both directions.
---   ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)  -> the window: header, tabs, pages, bottom slot
+--   ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH, tabLabelW)  -> the window: header, tabs, pages, bottom slot
 --   ShopLayout.cardWidths(cardW)                              -> how wide a card's name and description wrap
 --   ShopLayout.card(cardW, nameH, descH, badgeW)              -> the pieces of one Robux or Debug card
 --   ShopLayout.helpCard(w, h, lineHeights)                    -> the "How the shop works" card (HelpButton)
@@ -33,6 +33,8 @@ ShopLayout.STRIP_SHORT = 32 -- the TutorialStrip's height on a short window (one
 ShopLayout.STRIP_TALL = 48 -- and on a taller one (two lines)
 ShopLayout.RAIL_W = 112 -- the landscape tab rail's width (its tabs are 112 x 44)
 ShopLayout.RAIL_GAP_MIN = 2 -- the rail's tabs move closer together on a low window, down to this
+ShopLayout.TAB_TEXT_PAD = 2 -- a portrait tab is at least its label's width plus this on each side
+ShopLayout.TAB_SCROLLBAR = 4 -- a portrait tab row that scrolls sideways has this much room under its tabs for the bar
 ShopLayout.HELP_RIGHT = 50 -- "?" ends this far from the right edge: left of the X, 6 px apart
 ShopLayout.TITLE_RIGHT = 106 -- the title ends this far from the right edge (X, "?" and two gaps)
 ShopLayout.WIDE_CARD = 420 -- a card at least this wide keeps its text between the icon and the button
@@ -64,11 +66,14 @@ ShopLayout.rect = rect
 --            it only gives L.device, the phone's screen, so a check can name the phone it is about
 --   tabCount 4, or 5 with the Studio Debug tab
 --   bottomH  the bottom slot's height: 0 while neither the TutorialStrip nor a status message shows
+--   tabLabelW the tab labels' widths on one line at 16 px (ShopClient measures them; nil: not known). In portrait the
+--            tabs share the row evenly when every label fits; else each gets what its label needs and an even part of
+--            the rest; and when even that is too wide (Studio's five tabs on a 320 px phone) the row scrolls sideways.
 -- Landscape (wider than tall) puts the tabs in a rail on the left, from the top of the window; portrait keeps them
 -- in a row under the header. Returns:
 --   window, content (the window less its padding), title, help, close, tabBar, tabs[i], pages, helpCard, toast,
 --   bottom (only when bottomH > 0), rail, short, stripH, tabGap, tabCanvas, tabScrolls, cardW, device
-function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)
+function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH, tabLabelW)
 	guiW = math.max(0, finite(guiW, 0))
 	guiH = math.max(0, finite(guiH, 0))
 	topBar = math.max(0, finite(topBar, 0))
@@ -120,16 +125,27 @@ function ShopLayout.layout(guiW, guiH, topBar, tabCount, bottomH)
 		L.pages = rect(left, top, right - left, bottom - top)
 	else
 		local top = c.y + header + gap
-		L.tabBar = rect(c.x, top, c.w, tap)
 		L.tabGap = tabCount >= 5 and 4 or gap
-		local tabW = math.max(tap, math.floor((c.w - (tabCount - 1) * L.tabGap) / tabCount))
+		local even = math.max(tap, math.floor((c.w - (tabCount - 1) * L.tabGap) / tabCount))
+		local need, needed, allFit = {}, (tabCount - 1) * L.tabGap, true
 		for i = 1, tabCount do
-			L.tabs[i] = rect(c.x + (i - 1) * (tabW + L.tabGap), top, tabW, tap)
+			local labelW = math.max(0, finite(tabLabelW and tabLabelW[i], 0))
+			need[i] = math.max(tap, math.ceil(labelW) + 2 * ShopLayout.TAB_TEXT_PAD)
+			needed += need[i]
+			allFit = allFit and need[i] <= even
 		end
-		L.tabCanvas = tabCount * tabW + (tabCount - 1) * L.tabGap
-		L.tabScrolls = L.tabCanvas > L.tabBar.w -- a phone narrower than any we know
+		local extra = (not allFit and needed <= c.w) and math.floor((c.w - needed) / tabCount) or 0
+		local x = c.x
+		for i = 1, tabCount do
+			local tabW = allFit and even or need[i] + extra -- the row scrolls when need[i] alone is too wide
+			L.tabs[i] = rect(x, top, tabW, tap)
+			x += tabW + L.tabGap
+		end
+		L.tabCanvas = x - L.tabGap - c.x
+		L.tabScrolls = L.tabCanvas > c.w -- Studio's five tabs on a small phone (or a phone narrower than any we know)
+		L.tabBar = rect(c.x, top, c.w, tap + (L.tabScrolls and ShopLayout.TAB_SCROLLBAR or 0))
 		L.title = rect(c.x, c.y, c.w - ShopLayout.TITLE_RIGHT, header)
-		local pagesTop = top + tap + gap
+		local pagesTop = L.tabBar.y + L.tabBar.h + gap
 		local bottom = slotUnder(c.x, c.w)
 		L.pages = rect(c.x, pagesTop, c.w, bottom - pagesTop)
 	end
