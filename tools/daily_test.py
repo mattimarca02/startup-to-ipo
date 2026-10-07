@@ -1999,6 +1999,11 @@ check("demand factor never above 2.0 (1000 hires)", C.demandFactor(row, 1000) ==
 check("demand factor ignores negative hires", C.demandFactor(row, -5) == 1)
 check("gap at the demand cap: 10 s", near(C.gap(row, 13, 0, 0), 10) and near(C.gap(row, 500, 0, 0), 10))
 check("pace factor", C.paceFactor(0) == 1 and near(C.paceFactor(5), 1.1) and C.paceFactor(100) == 1.4)
+-- The numbers docs/STUDIO_SYNC.md quotes for the first call after the Desk: 20 s at best only with no hires at the Garage rung (the
+-- gap formula is the one from main, never raised to a floor of 10 s)
+check("gap: the numbers the Studio sync steps quote (20 s with no hires; 10 s, 9.26 s and 7.81 s at best with 13+ hires at rung 0, rung 4 and rung 4 after 10 IPOs)",
+	near(C.gap(row, 0, 0, 0), 20) and near(C.gap(row, 13, 0, 0), 10) and near(C.gap(row, 13, C.level(4, 0), 0), 9.2593, 0.0001)
+	and near(C.gap(row, 13, C.level(4, 10), 0), 7.8125) and C.gap(row, 13, C.level(0, 0), 0) >= 10 and C.gap(row, 13, C.level(4, 10), 0) < 10)
 check("limit shrinks with level, never below 65%", C.limitFor(row, 0) == 8 and near(C.limitFor(row, 5), 6.8) and near(C.limitFor(row, 50), 5.2))
 check("auto share: none without employees", C.autoShare(row, 0) == 0)
 check("auto share: 1 employee 20%, 3 employees 48.8%", near(C.autoShare(row, 1), 0.2) and near(C.autoShare(row, 3), 0.488))
@@ -2008,9 +2013,10 @@ check("reward seconds: 7 at the start, 14 at the chain cap", C.rewardSeconds(row
 check("budgets per rung", C.budgetFor(0) == 0.85 and C.budgetFor(1) == 0.85 and C.budgetFor(2) == 0.95 and C.budgetFor(3) == 1.05 and C.budgetFor(4) == 1.15 and C.budgetFor(5) == 1.25 and C.budgetFor(99) == 1.25)
 check("level = rung + IPOs (at most 10)", C.level(0, 0) == 0 and C.level(2, 3) == 5 and C.level(4, 50) == 14)
 row.unlock.rung = 2
-check("a task appears at its rung", not C.isUnlocked(row, 1, 0) and C.isUnlocked(row, 2, 0))
+check("a task appears at its rung", not C.isUnlocked(row, 1, 0, { Desk = true }) and C.isUnlocked(row, 2, 0, { Desk = true }))
 check("after the first IPO every task is on", C.isUnlocked(row, 0, 1))
 row.unlock.rung = 0
+check("the Call row needs rung 0 and the Desk (the first upgrade)", row.unlock.rung == 0 and row.unlock.owns == "Desk")
 local allMapped = true
 for i, stage in ipairs(IC.Stages) do
 	if C.rungForStage(stage.key) ~= i - 1 then allMapped = false end
@@ -2053,6 +2059,7 @@ local function newPlayerFor(server, saved, opts)
 		cash = { Value = 0 }, income = { Value = opts.income or 10 },
 		ipo = { valuation = opts.valuation or 0, count = opts.ipos or 0, busy = false, shares = 0, lifetime = 0 },
 		team = { employees = opts.employees or {} },
+		owned = opts.owned or { Desk = true }, -- the set of upgrade names, like TycoonCore's data.owned (calls start with the Desk)
 	}
 	player.data = data
 	player.base = opts.base
@@ -2176,6 +2183,269 @@ do
 	check("Enabled = false: step() creates nothing, expires nothing, runs no clock and pays nothing",
 		stats(p).offered == offeredBefore and stats(p).arrivals == 0 and stats(p).missed == 0 and stats(p).online == onlineBefore and run.open[id] ~= nil and d.cash.Value == 0)
 	C.Enabled = true
+end
+
+-- 3c. Calls start with the Desk (or after the first IPO) -------------------------------------------------------------------------
+-- (Placed early on purpose: a broken rule stops the later sections, and this one must name the failure before that.)
+-- Owner decision: the phone rings on the desk. The first arrival after the unlock waits a NORMAL gap (not an instant call).
+do
+	local function desk() return { Desk = true } end
+	local function buyDesk(p) p.data.owned.Desk = true end -- what TycoonCore does when the upgrade is bought
+	local function calls(p) local s = stats(p); return s.arrivals + s.offered + s.autoResolved + s.dropped end
+	local function openCount(p) local n = 0; for _ in pairs(p.data.tasks.run.open) do n += 1 end; return n end
+	local function on(owned, rung, ipos) return C.isUnlocked(row, rung, ipos, owned) end
+	RANDOM = 0
+
+	-- the rule itself (TaskConfig.isUnlocked, used by TaskServer)
+	check("desk: isUnlocked, no Desk and no IPO is off, with the Desk it is on", on({}, 0, 0) == false and on(desk(), 0, 0) == true)
+	check("desk: isUnlocked fails closed without an owned list (a row that needs the Desk is off)", on(nil, 0, 0) == false)
+	check("desk: owning other upgrades without the Desk starts no call", on({ ["Coffee Machine"] = true, Laptop = true }, 0, 0) == false)
+	check("desk: isUnlocked, after the first IPO calls are on without the Desk and without a list", on({}, 0, 1) == true and on(nil, 0, 1) == true and on({}, 0, 7) == true)
+	check("desk: isUnlocked, the Desk does not skip the rung", (function()
+		row.unlock.rung = 2
+		local result = on(desk(), 1, 0) == false and on(desk(), 2, 0) == true
+		row.unlock.rung = 0
+		return result
+	end)())
+	check("desk: isUnlocked, a row without `owns` needs no upgrade", (function()
+		local old = row.unlock.owns
+		row.unlock.owns = nil
+		local result = on({}, 0, 0) == true
+		row.unlock.owns = old
+		return result
+	end)())
+
+	-- nothing before the Desk, in a long stretch of time: 2 hours of real 0.5 s ticks, with a big sales team and every kind of roll
+	for _, roll in ipairs({ 0, 0.5, 1 }) do
+		RANDOM = roll
+		local before = #EARNINGS
+		local p, d = newPlayer(nil, { owned = {}, employees = crew(12, "SalesShark") })
+		tick(p, 7200, 0.5)
+		local s = stats(p)
+		check("desk: no call arrives before the Desk, in 2 hours of ticks (roll " .. roll .. ")",
+			s.arrivals == 0 and s.offered == 0 and s.autoResolved == 0 and s.dropped == 0 and openCount(p) == 0, s.arrivals)
+		check("desk: ... the clock really ran in that stretch (the test is not empty)", s.online >= 7000, s.online)
+		check("desk: ... nothing was paid and nothing was earned", d.cash.Value == 0 and #EARNINGS == before)
+		local shown = false
+		for _, event in ipairs(p.events) do
+			if event.kind == "handled" or (event.kind == "state" and (#event.payload.tasks > 0 or event.payload.on ~= false or event.payload.quiet)) then shown = true end
+		end
+		check("desk: ... and no message to the player ever showed a call, 'on' or quiet mode", shown == false and #p.events >= 1)
+	end
+	RANDOM = 0
+
+	-- what a player sees and hears before the Desk
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		tick(p, 300, 1)
+		local st = lastState(p)
+		check("desk: before the Desk the state says calls are off, with no call and no quiet mode", st ~= nil and st.on == false and #st.tasks == 0 and st.quiet == false)
+		check("desk: ... and no arrival timer is set", p.data.tasks.run.nextAt.Call == nil)
+		local ok, msg = onAction(p, "Sync")
+		check("desk: Sync before the Desk is accepted with no 'off' message", ok == true and msg == nil, msg)
+		local okAnswer, msgAnswer = answer(p, 1)
+		check("desk: answering before the Desk finds no call (and says nothing about tasks being off)", okAnswer == false and msgAnswer == TEXTS.Gone, msgAnswer)
+
+		-- the Desk is bought after 5 minutes: no quiet mode, no instant call, 'on' goes true
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		check("desk: buying the Desk after 5 minutes does not start quiet mode", lastState(p).quiet == false and p.data.tasks.run.quiet == false)
+		check("desk: buying the Desk sends 'on' and rings nothing at once", lastState(p).on == true and calls(p) == 0)
+	end
+
+	-- the first call after the Desk is bought: a normal gap, never earlier than the shortest one
+	for _, hires in ipairs({ 0, 5, 13, 50 }) do
+		RANDOM = 0
+		local p, d = newPlayer(nil, { owned = {}, employees = crew(hires, "CodingCat") })
+		tick(p, 300, 1)
+		buyDesk(p)
+		local gap = C.gap(row, hires, 0, 0)
+		local waited = waitForArrival(p, 80)
+		check("desk: the first call after the Desk is bought is not earlier than the shortest gap (" .. hires .. " hires)",
+			waited ~= nil and waited >= gap - 1e-9 and waited <= gap + 1.01, waited)
+	end
+	do
+		RANDOM = 1
+		local p = newPlayer(nil, { owned = {} })
+		tick(p, 300, 1)
+		buyDesk(p)
+		local waited = waitForArrival(p, 80)
+		check("desk: the first call after the Desk is bought follows the same roll as any other (longest roll: 40 s)", waited ~= nil and waited >= 40 and waited <= 41.01, waited)
+		RANDOM = 0
+	end
+	do
+		-- an old timer is never used: the Desk is lost and bought again
+		local p, d = newPlayer(nil)
+		tick(p, 1, 0.5)
+		p.data.tasks.run.nextAt.Call = CLOCK + 1 -- a call due in a second
+		d.owned = {}
+		tick(p, 10, 0.5)
+		check("desk: with the Desk gone nothing rings and the old timer is forgotten", calls(p) == 0 and p.data.tasks.run.nextAt.Call == nil)
+		buyDesk(p)
+		local waited = waitForArrival(p, 80)
+		check("desk: a timer from before the Desk was lost is not used when it is bought again", waited ~= nil and waited >= 20 - 1e-9, waited)
+	end
+
+	-- a rejoin
+	do
+		local saved = { done = 5, bestChain = 3, seen = { Call = true }, engagedDay = DC.dayNumber(NOW), engagedSeconds = 40 }
+		local p, d = newPlayer(saved, { owned = desk() })
+		local waited = waitForArrival(p, 80)
+		check("desk: a rejoin with the Desk owned gets its first call after a normal gap", waited ~= nil and waited >= 20 - 1e-9 and waited <= 21.01 and lastState(p).on == true, waited)
+		check("desk: ... and its saved numbers are kept", d.tasks.done == 5 and TaskServer.serialize(d).done == 5)
+		local q, qd = newPlayer(saved, { owned = {} })
+		tick(q, 600, 1)
+		check("desk: a rejoin without the Desk gets no call, and its saved numbers stay", calls(q) == 0 and qd.tasks.done == 5 and TaskServer.serialize(qd).done == 5)
+	end
+
+	-- after the first IPO: the upgrades are reset (the Desk is gone) and calls go on
+	do
+		local p, d = newPlayer(nil, { employees = crew(3, "CodingCat") })
+		tick(p, 5, 0.5)
+		local run = p.data.tasks.run
+		local timer = run.nextAt.Call
+		check("desk: with the Desk a call timer is running", timer ~= nil and timer > CLOCK)
+		d.owned = {} -- the IPO reset
+		d.ipo.count = 1
+		tick(p, 0.5, 0.5)
+		check("desk: after the first IPO, with the Desk gone, the state still says calls are on", lastState(p).on == true)
+		check("desk: ... and the running call timer is not reset", run.nextAt.Call == timer)
+		local waited = waitForArrival(p, 60)
+		check("desk: after the first IPO calls keep coming without the Desk", waited ~= nil and waited <= 20, waited)
+		local q, qd = newPlayer(nil, { owned = {}, ipos = 1 })
+		local gap = C.gap(row, 0, C.level(0, 1), 0)
+		local waitedQ = waitForArrival(q, 80)
+		check("desk: a player who joins after an IPO without the Desk gets calls after a normal gap", waitedQ ~= nil and waitedQ >= gap - 1e-9 and waitedQ <= gap + 1.01, waitedQ)
+	end
+
+	-- a call that is already waiting is never removed by the condition changing
+	do
+		local p, d = newPlayer(nil)
+		noArrivals(p); richBank(p)
+		local ids = { spawnCall(p), spawnCall(p), spawnCall(p) }
+		advance(1)
+		d.owned = {} -- no Desk and no IPO: calls are off
+		tick(p, 2, 0.5)
+		check("desk: calls already waiting are not removed when calls turn off", openCount(p) == 3 and #waiting(p) == 3 and lastState(p).on == false, openCount(p))
+		check("desk: ... they are still counting down", waiting(p)[1] ~= nil and waiting(p)[1].left > 0 and waiting(p)[1].left < 8)
+		local ok, _, info = answer(p, ids[2])
+		check("desk: ... a waiting call can still be answered and pays", ok == true and info.cash == 70 and #waiting(p) == 2)
+		tick(p, 8, 0.5)
+		check("desk: ... the others leave only by running out", openCount(p) == 0 and stats(p).missed == 2)
+		tick(p, 300, 1)
+		check("desk: ... and with calls off none comes in", stats(p).arrivals == 0)
+	end
+	do
+		local p, d = newPlayer(nil)
+		noArrivals(p)
+		spawnCall(p); spawnCall(p); spawnCall(p)
+		d.owned = {}
+		tick(p, 10, 0.5)
+		check("desk: three calls that run out after the Desk is gone do not start quiet mode or a 'Tap to resume'",
+			stats(p).missed == 3 and p.data.tasks.run.quiet == false and lastState(p).quiet == false)
+	end
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		spawnCall(p) -- the Studio Debug button rings a call even before the Desk
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		check("desk: a call that waits when the Desk is bought is kept", openCount(p) == 1 and lastState(p).on == true)
+	end
+
+	-- Missed calls never carry over (OWNER DEFAULT): when calls turn on, the count of calls that ran out in a row starts at 0 and the idle
+	-- clock starts at the unlock. Only the Studio Debug buttons ("spawn a call", "IpoReset") can ring a call before the Desk, so this
+	-- is reachable only in Studio, but it must not start quiet mode ("Tap to resume") the moment the Desk is bought.
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		spawnCall(p); spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5)
+		local run = p.data.tasks.run
+		check("desk: ... the calls that ran out while calls were off are counted by the engine (the test starts from three misses)", stats(p).missed == 3 and run.misses == 3 and run.quiet == false, run.misses)
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		check("desk: missed calls from before the Desk do not start quiet mode when it is bought (the miss counter starts at 0)",
+			run.misses == 0 and run.quiet == false and lastState(p).quiet == false and lastState(p).on == true, run.misses)
+		local waited = waitForArrival(p, 80)
+		check("desk: ... and the first call comes after a normal gap, with no 'Tap to resume' in between",
+			waited ~= nil and waited + 1 >= 20 - 1e-9 and waited + 1 <= 21.01 and run.quiet == false and lastState(p).quiet == false, waited)
+	end
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5) -- two ran out while calls were off
+		local id = spawnCall(p) -- and one is waiting when the Desk is bought
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		local run = p.data.tasks.run
+		check("desk: when calls turn on the miss counter is reset and the call that is waiting is kept (open, counting down)",
+			run.misses == 0 and openCount(p) == 1 and #waiting(p) == 1 and waiting(p)[1].id == id and waiting(p)[1].left > 0, run.misses)
+		local ok, _, info = answer(p, id)
+		check("desk: ... and that call can still be answered and pays", ok == true and info ~= nil and info.cash == 70 and stats(p).answered == 1)
+	end
+	do
+		local p, d = newPlayer(nil) -- the Desk is owned: calls are on all the time
+		noArrivals(p)
+		spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5)
+		local run = p.data.tasks.run
+		check("desk: with calls on, two calls that ran out stay counted (the counter is reset when calls turn on, not on every tick)", run.misses == 2 and run.quiet == false, run.misses)
+		spawnCall(p)
+		tick(p, 10, 0.5)
+		check("desk: ... and the third in a row still starts quiet mode", run.quiet == true and lastState(p).quiet == true, run.misses)
+	end
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		tick(p, 10, 0.5)
+		buyDesk(p)
+		advance(200) -- one late tick: nothing ran in between (a server hiccup)
+		TaskServer.step(p, CLOCK)
+		local run = p.data.tasks.run
+		check("desk: when calls turn on after a long step the idle clock starts at the unlock (no quiet mode)",
+			run.quiet == false and lastState(p).quiet == false and lastState(p).on == true and run.lastActionAt == CLOCK, run.lastActionAt)
+	end
+
+	-- the team still takes routine calls for the player, once calls are on
+	do
+		RANDOM = 0.1 -- 0.1 < 1 - 0.8^3: the team takes the call
+		local function makeEngaged(p) -- one graded answer makes the player present (the Debug call rings without the Desk too)
+			richBank(p)
+			local id = spawnCall(p)
+			advance(1)
+			answer(p, id)
+		end
+		local p, d = newPlayer(nil, { owned = {}, employees = crew(3, "HustleHamster") })
+		makeEngaged(p)
+		EARNINGS = {}
+		tick(p, 100, 0.5)
+		check("desk: the team takes no call before the Desk (none rings)", stats(p).autoResolved == 0 and stats(p).arrivals == 0 and #EARNINGS == 0)
+		buyDesk(p)
+		local cash = d.cash.Value
+		local waited = waitForArrival(p, 60)
+		check("desk: once the Desk is bought the team takes calls for the player (half pay, through addEarnings)",
+			waited ~= nil and stats(p).autoResolved == 1 and openCount(p) == 0 and d.cash.Value == cash + 35 and #EARNINGS == 1 and EARNINGS[1] == 35, waited)
+		local q, qd = newPlayer(nil, { owned = {}, ipos = 1, employees = crew(3, "HustleHamster") })
+		makeEngaged(q)
+		EARNINGS = {}
+		local waitedQ = waitForArrival(q, 60)
+		check("desk: after the first IPO, without the Desk, the team takes calls too", waitedQ ~= nil and stats(q).autoResolved == 1 and #EARNINGS == 1, waitedQ)
+		RANDOM = 0
+	end
+
+	-- 'Tap to resume' and the Studio rung button
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		p.data.tasks.run.quiet = true
+		advance(1)
+		check("desk: 'Tap to resume' is accepted but brings no call before the Desk", onAction(p, "Start") == true and openCount(p) == 0 and stats(p).offered == 0)
+		tick(p, 1, 0.5)
+		check("desk: ... and leaves no arrival timer behind", p.data.tasks.run.nextAt.Call == nil)
+		local q, qd = newPlayer(nil, { owned = {} })
+		DEBUG.TaskSetRung(q, qd, "4")
+		tick(q, 300, 1)
+		check("desk: a high rung from the Debug button does not start calls without the Desk", calls(q) == 0)
+	end
+	RANDOM = 0
+	EARNINGS = {} -- the later sections count the earnings from zero
 end
 
 -- 4. Saving and loading ---------------------------------------------------------------------
@@ -3172,6 +3442,7 @@ local function check(name, cond, extra)
 end
 __TRAY__
 __PAUSE__
+__SHOWN__
 local GOALS = __GOALCOUNT__ -- OnboardingConfig.Goals: the Goals card is 30 + 22 per goal + 8 high
 local function rect(x, y, w, h) return { x = x, y = y, w = w, h = h } end
 local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
@@ -3410,6 +3681,12 @@ do
 	windowOpen, serverPaused = true, false
 	check("pause sync: a state that disagrees with the open window sends Pause(true) again", pauseToSend(windowOpen, serverPaused) == true)
 end
+
+-- What is on screen before the Desk (SHOWN markers): nothing about calls until the server says calls are on
+check("shown: before the Desk nothing about calls is shown (calls off, none waiting)", callsShown(false, false, 0) == false)
+check("shown: with calls on the tray is shown, with or without a waiting call", callsShown(false, true, 0) == true and callsShown(false, true, 2) == true)
+check("shown: a call that is still waiting stays visible even if calls are off", callsShown(false, false, 1) == true and callsShown(false, false, 3) == true)
+check("shown: an open window hides everything", callsShown(true, true, 3) == false and callsShown(true, false, 0) == false and callsShown(true, true, 0) == false)
 
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
@@ -6792,8 +7069,17 @@ def pads_gone_checks():
     return passed, failed
 
 
-def task_wiring_checks():
-    """Checks on the source text: load order, the save section, addEarnings call sites, D9 words, the client's requests."""
+def source_file(name, files=None):
+    """The text of a file at the repo root; `files` ({name: text}) replaces it (the mutation runner breaks one file in memory)."""
+    if files and name in files:
+        return files[name]
+    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+        return f.read()
+
+
+def task_wiring_checks(files=None, failures=None):
+    """Checks on the source text: load order, the save section, addEarnings call sites, D9 words, the client's requests,
+    and that calls start with the Desk. `files` and `failures` are for the mutation runner (see TASK_MUTANTS)."""
     import re
     passed, failed = 0, 0
 
@@ -6803,11 +7089,14 @@ def task_wiring_checks():
             passed += 1
         else:
             failed += 1
-            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+            line = "FAIL: " + name + (" -- " + str(extra) if extra else "")
+            if failures is None:
+                print(line)
+            else:
+                failures.append(line)
 
     def read(name):
-        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
-            return f.read()
+        return source_file(name, files)
 
     core = read("TycoonCore.lua")
     check("TycoonCore: TaskServer.init comes before DailyServer.init", 0 < core.index("TaskServer.init(") < core.index("DailyServer.init("))
@@ -6865,9 +7154,192 @@ def task_wiring_checks():
     check("TaskClient: its own message sits in a layer above the HUD (TaskFrontGui DisplayOrder 5, like the other pop-ups)", "DisplayOrder = 5" in front_gui and "Parent = front" in client[client.index('Name = "Toast"'):client.index("round(toast, 12)")])
     check("TaskClient: the spots are the named constants PORTRAIT_SPOT and LANDSCAPE_SPOT", "local PORTRAIT_SPOT = {" in client and "local LANDSCAPE_SPOT = {" in client and "PORTRAIT_SPOT.y" in client and "LANDSCAPE_SPOT.y" in client)
 
+    # Calls start with the Desk (owner decision): the Call row names the first upgrade, TaskServer only reads it from the
+    # data it already has, and the client shows nothing about calls until the server says they are on.
+    first_upgrade = re.search(r'local UPGRADES = \{\s*\{ name = "([^"]+)",\s+cost = (\d+)', core)
+    check("desk wiring: TycoonCore's first upgrade is a Desk that costs 0 (the row's `owns` must name it)", first_upgrade is not None and first_upgrade.group(1) == "Desk" and first_upgrade.group(2) == "0", first_upgrade and first_upgrade.groups())
+    check("desk wiring: the Call row's `owns` is the name of TycoonCore's first upgrade",
+          first_upgrade is not None and re.search(r'unlock = \{ rung = 0, owns = "%s" \}' % re.escape(first_upgrade.group(1)), config) is not None)
+    check("desk wiring: TaskServer reads the Desk from data.owned in one place (rowOn) and never writes it",
+          server.count("data.owned") == 1 and "TaskConfig.isUnlocked(row, rungOf(data), ipoCountOf(data), data.owned)" in server
+          and not re.search(r"\.owned\s*(\[[^\]]*\])?\s*(=[^=]|\+=|-=)", server) and "table.insert(data.owned" not in server and "table.clear(data.owned" not in server)
+    check("desk wiring: TaskServer asks TaskConfig.isUnlocked only through rowOn (Start, the tick and the state share it)",
+          server.count("TaskConfig.isUnlocked(") == 1 and server.count("rowOn(data, row)") >= 3 and "on = callsOn(data)," in server)
+    check("desk wiring: TaskServer adds no remote for it (still TaskAction and TaskState)", server.count('Instance.new("Remote') == 2)
+    check("desk wiring: TaskServer reads no TycoonCore field it was not given (only data.owned is new)", "UPGRADES" not in server and "playerData" not in server)
+    check("desk wiring: TaskClient decides what is shown only with callsShown (the tray, its chips, 'Tap to resume' and the line above it)",
+          client.count("callsShown(windowOpen, callsOn, #calls)") == 2 and "local showTray = callsShown(windowOpen, callsOn, #calls)" in client
+          and "tray.Visible = showTray" in client and "tray.Visible = true" not in client and "info.Visible = callsShown(windowOpen, callsOn, #calls) and text ~= \"\"" in client
+          and "chip.button.Visible = showTray and chip.call ~= nil" in client and "resume.Visible = showTray and quiet and #calls == 0" in client)
+    check("desk wiring: TaskClient starts with calls off and only the server's `on` turns them on",
+          "local callsOn = false" in client and "callsOn = state.on == true" in client and client.count("callsOn = ") == 2)
+    check("desk wiring: TaskClient has no 'tasks are off' text of its own (it shows nothing before the Desk)", "TEXTS.Off" not in client and "Tasks are off" not in client)
+
     shop = read("ShopClient.lua")
     check("ShopClient: the task Debug rows are inside the Studio-only Debug block", shop.index("TaskSpawn") > shop.index("if debugRemote then") and shop.index("TaskSpawn") < shop.index("-- Tabs, opening and closing"))
     return passed, failed
+
+
+def marked_text(text, name):
+    """The part of `text` between `-- NAME-START` and `-- NAME-END`."""
+    start = text.index("-- %s-START" % name) + len("-- %s-START" % name)
+    return text[start:text.index("-- %s-END" % name)]
+
+
+def task_engine_source(files=None):
+    """The TASK_TESTS program with the real TaskConfig and TaskServer (`files` replaces a file's text, for the mutants)."""
+    return (TASK_TESTS.replace("__DAILYCONFIG__", source_file("DailyConfig.lua", files)).replace("__IPOCONFIG__", source_file("IpoConfig.lua", files))
+            .replace("__TASKCONFIG__", source_file("TaskConfig.lua", files)).replace("__TASKSERVER__", source_file("TaskServer.lua", files)))
+
+
+def tray_source(files=None, dump=False):
+    """The TRAY_TESTS program with the marked code of the real TaskClient."""
+    client = source_file("TaskClient.lua", files)
+    return (TRAY_TESTS.replace("__DUMP__", "true" if dump else "false").replace("__TRAY__", marked_text(client, "TRAY"))
+            .replace("__PAUSE__", marked_text(client, "PAUSE")).replace("__SHOWN__", marked_text(client, "SHOWN"))
+            .replace("__GOALCOUNT__", str(onboarding_goal_count())))
+
+
+# Each of these breaks one rule of "calls start when the player owns the Desk (or after the first IPO)" in one file, in memory
+# (nothing on disk changes). A mutant counts as caught only when the check NAMED here is among the FAIL lines of its suite
+# ("engine" = the task engine tests, "tray" = the TaskClient tests, "wiring" = the source checks): a crash alone is no catch.
+# (label, file, old text, new text, suite, name the FAIL line must start with)
+TASK_MUTANTS = [
+    ("the Desk condition is ignored (always on)", "TaskConfig.lua",
+     "\treturn needs == nil or (owned ~= nil and owned[needs] == true)\n", "\treturn true\n",
+     "engine", "desk: no call arrives before the Desk"),
+    ("the Desk condition is inverted", "TaskConfig.lua",
+     "needs == nil or (owned ~= nil and owned[needs] == true)", "needs == nil or not (owned ~= nil and owned[needs] == true)",
+     "engine", "desk: no call arrives before the Desk"),
+    ("the Desk check uses the wrong name (config)", "TaskConfig.lua",
+     'owns = "Desk" }', 'owns = "Coffee Machine" }',
+     "engine", "desk: the first call after the Desk is bought is not earlier"),
+    ("the Desk check reads the wrong field (server)", "TaskServer.lua",
+     "ipoCountOf(data), data.owned)", "ipoCountOf(data), data.upgrades)",
+     "engine", "desk: the first call after the Desk is bought is not earlier"),
+    ("the first call is instant when the Desk is bought", "TaskServer.lua",
+     "\t\t\t\tif at == nil then\n\t\t\t\t\tscheduleNext(data, run, row, now)", "\t\t\t\tif at == nil then\n\t\t\t\t\trun.nextAt[row.key] = now",
+     "engine", "desk: the first call after the Desk is bought is not earlier"),
+    ("the IPO bypass is removed", "TaskConfig.lua",
+     "\tif ipoCount >= 1 then\n\t\treturn true\n\tend\n\tif rung", "\tif rung",
+     "engine", "desk: after the first IPO calls keep coming without the Desk"),
+    ("the IPO bypass is always on", "TaskConfig.lua",
+     "\tif ipoCount >= 1 then\n\t\treturn true", "\tif true then\n\t\treturn true",
+     "engine", "desk: no call arrives before the Desk"),
+    ("the IPO bypass starts at the second IPO", "TaskConfig.lua",
+     "\tif ipoCount >= 1 then\n\t\treturn true", "\tif ipoCount >= 2 then\n\t\treturn true",
+     "engine", "desk: after the first IPO calls keep coming without the Desk"),
+    ("a waiting call is removed when calls turn off", "TaskServer.lua",
+     "\t\t\trun.nextAt[row.key] = nil\n\t\tend\n\tend\n\tif not on then",
+     "\t\t\trun.nextAt[row.key] = nil\n\t\t\tfor _, id in ipairs(table.clone(run.order)) do closeTask(run, id) end\n\t\tend\n\tend\n\tif not on then",
+     "engine", "desk: calls already waiting are not removed when calls turn off"),
+    ("quiet mode can start before the Desk", "TaskServer.lua",
+     "\tif on and not run.quiet and not run.paused", "\tif not run.quiet and not run.paused",
+     "engine", "desk: three calls that run out after the Desk is gone"),
+    ("the idle clock is not held before the Desk and not started when it is bought", "TaskServer.lua",
+     "\tif not on then\n\t\trun.lastActionAt = now\n\tend\n\tif run.on ~= on then\n\t\tif on and run.on == false then\n\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n",
+     "\tif run.on ~= on then\n\t\tif on and run.on == false then\n\t\t\trun.misses = 0\n",
+     "engine", "desk: buying the Desk after 5 minutes does not start quiet mode"),
+    ("an old arrival timer is kept while calls are off", "TaskServer.lua",
+     "\t\t\trun.nextAt[row.key] = nil\n\t\tend\n\tend\n\tif not on then", "\t\tend\n\tend\n\tif not on then",
+     "engine", "desk: a timer from before the Desk was lost is not used when it is bought again"),
+    ("'Tap to resume' opens a call before the Desk", "TaskServer.lua",
+     "if row and rowOn(data, row) then", "if row then",
+     "engine", "desk: 'Tap to resume' is accepted but brings no call before the Desk"),
+    ("the state always says calls are on", "TaskServer.lua",
+     "on = callsOn(data),", "on = true,",
+     "engine", "desk: before the Desk the state says calls are off"),
+    ("the rung is ignored", "TaskConfig.lua",
+     "\tif rung < row.unlock.rung then\n\t\treturn false\n\tend\n", "",
+     "engine", "desk: isUnlocked, the Desk does not skip the rung"),
+    ("a missing owned list counts as owning the Desk", "TaskConfig.lua",
+     "(owned ~= nil and owned[needs] == true)", "(owned == nil or owned[needs] == true)",
+     "engine", "desk: isUnlocked fails closed without an owned list"),
+    ("any upgrade counts as the Desk", "TaskConfig.lua",
+     "owned ~= nil and owned[needs] == true", "owned ~= nil and next(owned) ~= nil",
+     "engine", "desk: owning other upgrades without the Desk starts no call"),
+    ("the team's call pays nothing", "TaskServer.lua",
+     "pay(player, data, run, row.reward.seconds * row.teamPays)", "pay(player, data, run, 0)",
+     "engine", "desk: once the Desk is bought the team takes calls for the player"),
+    ("the miss counter is not reset when calls turn on", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.lastActionAt = now\n",
+     "engine", "desk: missed calls from before the Desk do not start quiet mode when it is bought"),
+    ("the miss counter is reset on every tick, calls on or off", "TaskServer.lua",
+     "\tif run.on ~= on then\n\t\tif on and run.on == false then\n", "\trun.misses = 0\n\tif run.on ~= on then\n\t\tif on and run.on == false then\n",
+     "engine", "desk: ... the calls that ran out while calls were off are counted by the engine"),
+    ("the reset removes a waiting call", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n\t\t\tfor _, id in ipairs(table.clone(run.order)) do closeTask(run, id) end\n",
+     "engine", "desk: when calls turn on the miss counter is reset and the call that is waiting is kept"),
+    ("the miss counter is also reset while calls stay on", "TaskServer.lua",
+     "\tif on and not run.quiet and not run.paused\n", "\tif on then run.misses = 0 end\n\tif on and not run.quiet and not run.paused\n",
+     "engine", "desk: with calls on, two calls that ran out stay counted"),
+    ("the idle clock is not started when calls turn on", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.misses = 0\n",
+     "engine", "desk: when calls turn on after a long step the idle clock starts at the unlock"),
+    ("the miss counter is reset when calls turn off instead of on", "TaskServer.lua",
+     "\t\tif on and run.on == false then\n", "\t\tif not on and run.on == true then\n",
+     "engine", "desk: missed calls from before the Desk do not start quiet mode when it is bought"),
+    ("the miss counter is also reset at the first tick (a join)", "TaskServer.lua",
+     "\t\tif on and run.on == false then\n", "\t\tif on and run.on ~= true then\n",
+     "engine", "3 expired calls in a row start quiet mode"),
+    ("the gap formula changes (a faster pace per level)", "TaskConfig.lua",
+     "gapPerLevel = 0.02,", "gapPerLevel = 0.03,",
+     "engine", "gap: the numbers the Studio sync steps quote"),
+    ("the client shows the tray early", "TaskClient.lua",
+     "\treturn not windowOpen and (callsOn or waitingCount > 0)", "\treturn not windowOpen",
+     "tray", "shown: before the Desk nothing about calls is shown"),
+    ("the client hides a call that is still waiting", "TaskClient.lua",
+     "\treturn not windowOpen and (callsOn or waitingCount > 0)", "\treturn not windowOpen and callsOn",
+     "tray", "shown: a call that is still waiting stays visible"),
+    ("the client's tray ignores the rule", "TaskClient.lua",
+     "\tlocal showTray = callsShown(windowOpen, callsOn, #calls)", "\tlocal showTray = not windowOpen",
+     "wiring", "desk wiring: TaskClient decides what is shown only with callsShown"),
+    ("the client's line above the tray ignores the rule", "TaskClient.lua",
+     "info.Visible = callsShown(windowOpen, callsOn, #calls) and text", "info.Visible = not windowOpen and text",
+     "wiring", "desk wiring: TaskClient decides what is shown only with callsShown"),
+    ("the client starts with calls on", "TaskClient.lua",
+     "local callsOn = false", "local callsOn = true",
+     "wiring", "desk wiring: TaskClient starts with calls off"),
+    ("the client ignores the server's flag", "TaskClient.lua",
+     "callsOn = state.on == true", "callsOn = true",
+     "wiring", "desk wiring: TaskClient starts with calls off"),
+    ("the first upgrade is renamed in TycoonCore (the row's name drifts)", "TycoonCore.lua",
+     '{ name = "Desk",           cost = 0,', '{ name = "Writing Desk",    cost = 0,',
+     "wiring", "desk wiring: TycoonCore's first upgrade is a Desk"),
+    ("TaskServer writes the player's Desk", "TaskServer.lua",
+     "local function callsOn(data)\n", "local function callsOn(data)\n\tdata.owned.Desk = true\n",
+     "wiring", "desk wiring: TaskServer reads the Desk from data.owned in one place"),
+]
+
+
+def run_task_mutants(luau):
+    """Runs every TASK_MUTANTS entry. Returns (caught, problems): a mutant is caught only by its named FAIL line."""
+    caught, problems = 0, 0
+    for label, filename, old, new, suite, expected in TASK_MUTANTS:
+        text = source_file(filename)
+        if text.count(old) != 1:
+            print("FAIL: task mutant \"%s\": its target text is in %s %d times (it must be exactly once)" % (label, filename, text.count(old)))
+            problems += 1
+            continue
+        files = {filename: text.replace(old, new)}
+        ran_to_end = True
+        if suite == "wiring":
+            failures = []
+            task_wiring_checks(files, failures)
+        else:
+            source = task_engine_source(files) if suite == "engine" else tray_source(files)
+            result = run_luau(luau, source)
+            failures = [line for line in result.stdout.split("\n") if line.startswith("FAIL: ")]
+            ran_to_end = "passed," in result.stdout
+        named = [line for line in failures if line.startswith("FAIL: " + expected)]
+        if not named:
+            print("FAIL: task mutant not caught by its named check: \"%s\" should fail \"%s\" (%s suite; it failed %d other check(s))" % (label, expected, suite, len(failures)))
+            problems += 1
+        else:
+            caught += 1
+            note = "" if ran_to_end else "  [the later tests then crashed on the broken engine; the catch is the named FAIL line above]"
+            print("  mutant caught: %s -> %s%s" % (label, named[0][len("FAIL: "):].split(" -- ")[0], note))
+    return caught, problems
 
 
 # Rooms were built one stage at a time (visuals-garage); all 5 exist now, one per IpoConfig funding stage.
@@ -7353,24 +7825,21 @@ def main():
     print("IPO shop check (D1, 1,770 Shares): " + (result15.stdout.strip() or result15.stderr.strip()))
     if result15.returncode != 0 or " 0 failed" not in result15.stdout:
         code = 1
-    with open(os.path.join(ROOT, "DailyConfig.lua"), encoding="utf-8") as f:
-        daily_config = f.read()
-    with open(os.path.join(ROOT, "TaskConfig.lua"), encoding="utf-8") as f:
-        task_config = f.read()
-    with open(os.path.join(ROOT, "TaskServer.lua"), encoding="utf-8") as f:
-        task_server = f.read()
-    result16 = run_luau(luau, TASK_TESTS.replace("__DAILYCONFIG__", daily_config).replace("__IPOCONFIG__", ipo_config)
-                        .replace("__TASKCONFIG__", task_config).replace("__TASKSERVER__", task_server))
+    result16 = run_luau(luau, task_engine_source())
     print("TaskServer engine check (PR 1, customer calls): " + (result16.stdout.strip() or result16.stderr.strip()))
     if result16.returncode != 0 or " 0 failed" not in result16.stdout:
         code = 1
-    result17 = run_luau(luau, TRAY_TESTS.replace("__DUMP__", "true" if "--layout-table" in sys.argv else "false").replace("__TRAY__", marked_source("TRAY", "TaskClient.lua")).replace("__PAUSE__", marked_source("PAUSE", "TaskClient.lua")).replace("__GOALCOUNT__", str(onboarding_goal_count())))
+    result17 = run_luau(luau, tray_source(dump="--layout-table" in sys.argv))
     print("TaskClient tray layout check: " + (result17.stdout.strip() or result17.stderr.strip()))
     if result17.returncode != 0 or " 0 failed" not in result17.stdout:
         code = 1
     wiring_passed, wiring_failed = task_wiring_checks()
     print("TaskServer wiring check: %d passed, %d failed" % (wiring_passed, wiring_failed))
     if wiring_failed:
+        code = 1
+    task_caught, task_problems = run_task_mutants(luau)
+    print("Task start mutations (calls start with the Desk): %d of %d broken rules caught by their named check" % (task_caught, len(TASK_MUTANTS)))
+    if task_problems:
         code = 1
     with open(os.path.join(ROOT, "PlotArt.lua"), encoding="utf-8") as f:
         plot_art = f.read()

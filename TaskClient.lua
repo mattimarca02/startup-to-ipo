@@ -25,6 +25,9 @@
 -- all), so the tray draws BELOW every other pop-up (DisplayOrder -2): a pop-up is never hidden by it.
 -- THE FINAL SPOTS MUST BE CONFIRMED IN STUDIO with Test > Device (320x568 and 667x375): change the two constants
 -- PORTRAIT_SPOT and LANDSCAPE_SPOT below, nothing else. (Debug > Task stats shows the real TaskGui size.)
+-- Before the player owns the Desk (and before the first IPO) the server sends `on = false` and nothing about
+-- calls is shown: no tray, no chip, no line, no "Tap to resume", no message. callsShown below is the one rule.
+-- A call that is still waiting stays on screen even then, so it can be answered.
 -- A window open (PlayerGui attribute "OpenPanel") hides the tray and tells the server to freeze the
 -- waiting calls for a moment.
 
@@ -305,12 +308,22 @@ place()
 -- State from the server ----------------------------------------------------------------
 
 local calls = {} -- waiting calls: { id, limit, endsAt (this device's clock, display only) }
+local callsOn = false -- the server says calls are on (the Desk is owned or an IPO was done); false until it says so
 local quiet = false
 local chainMult = 1
 local windowOpen = playerGui:GetAttribute("OpenPanel") ~= nil -- a window may already be open when this script starts
 local serverPaused = false -- what the server last told us (state.paused) or accepted from us
 local answering = {} -- ids already tapped, until the server's next state
 local handledText, handledUntil = "", 0 -- "Team handled 4 calls", shown for a few seconds
+
+-- SHOWN-START
+-- (tools/daily_test.py runs the code between the SHOWN markers, so keep it free of Roblox calls.)
+-- Is anything about calls on screen? Only when the server says calls are on, or a call is still waiting; an open
+-- window hides all of it. Used by the tray, its chips, "Tap to resume" and the line above the tray.
+local function callsShown(windowOpen, callsOn, waitingCount)
+	return not windowOpen and (callsOn or waitingCount > 0)
+end
+-- SHOWN-END
 
 -- The line above the tray: what the team handled for a moment, else the chain
 local function updateInfo()
@@ -321,11 +334,11 @@ local function updateInfo()
 		text = string.format("x%.1f chain", chainMult)
 	end
 	info.Text = text
-	info.Visible = not windowOpen and text ~= ""
+	info.Visible = callsShown(windowOpen, callsOn, #calls) and text ~= ""
 end
 
 local function refresh()
-	local showTray = not windowOpen
+	local showTray = callsShown(windowOpen, callsOn, #calls)
 	tray.Visible = showTray
 	updateInfo()
 	for i, chip in ipairs(chips) do
@@ -381,6 +394,7 @@ local function applyState(state)
 			table.insert(calls, { id = call.id, limit = math.max(0.1, call.limit), endsAt = now + call.left })
 		end
 	end
+	callsOn = state.on == true
 	quiet = state.quiet == true
 	chainMult = state.mult or 1
 	answering = {}
