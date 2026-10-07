@@ -1860,6 +1860,11 @@ check("demand factor never above 2.0 (1000 hires)", C.demandFactor(row, 1000) ==
 check("demand factor ignores negative hires", C.demandFactor(row, -5) == 1)
 check("gap at the demand cap: 10 s", near(C.gap(row, 13, 0, 0), 10) and near(C.gap(row, 500, 0, 0), 10))
 check("pace factor", C.paceFactor(0) == 1 and near(C.paceFactor(5), 1.1) and C.paceFactor(100) == 1.4)
+-- The numbers docs/STUDIO_SYNC.md quotes for the first call after the Desk: 20 s at best only with no hires at the Garage rung (the
+-- gap formula is the one from main, never raised to a floor of 10 s)
+check("gap: the numbers the Studio sync steps quote (20 s with no hires; 10 s, 9.26 s and 7.81 s at best with 13+ hires at rung 0, rung 4 and rung 4 after 10 IPOs)",
+	near(C.gap(row, 0, 0, 0), 20) and near(C.gap(row, 13, 0, 0), 10) and near(C.gap(row, 13, C.level(4, 0), 0), 9.2593, 0.0001)
+	and near(C.gap(row, 13, C.level(4, 10), 0), 7.8125) and C.gap(row, 13, C.level(0, 0), 0) >= 10 and C.gap(row, 13, C.level(4, 10), 0) < 10)
 check("limit shrinks with level, never below 65%", C.limitFor(row, 0) == 8 and near(C.limitFor(row, 5), 6.8) and near(C.limitFor(row, 50), 5.2))
 check("auto share: none without employees", C.autoShare(row, 0) == 0)
 check("auto share: 1 employee 20%, 3 employees 48.8%", near(C.autoShare(row, 1), 0.2) and near(C.autoShare(row, 3), 0.488))
@@ -4984,6 +4989,9 @@ TASK_MUTANTS = [
     ("the miss counter is also reset at the first tick (a join)", "TaskServer.lua",
      "\t\tif on and run.on == false then\n", "\t\tif on and run.on ~= true then\n",
      "engine", "3 expired calls in a row start quiet mode"),
+    ("the gap formula changes (a faster pace per level)", "TaskConfig.lua",
+     "gapPerLevel = 0.02,", "gapPerLevel = 0.03,",
+     "engine", "gap: the numbers the Studio sync steps quote"),
     ("the client shows the tray early", "TaskClient.lua",
      "\treturn not windowOpen and (callsOn or waitingCount > 0)", "\treturn not windowOpen",
      "tray", "shown: before the Desk nothing about calls is shown"),
