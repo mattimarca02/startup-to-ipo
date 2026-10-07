@@ -46,7 +46,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
 - [x] 4.10 Item 9, the two mutants that also raised a runtime error
 - [x] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
-- [ ] 4.12 Release the claims (rows kept, set to free)
+- [x] 4.12 Release the claims (the 5 rows stay, set to free)
 
 **OWNER DEFAULTS** (given with the review; applied as they are):
 1. OWNER DEFAULT: the shop window draws above the HUD.
