@@ -94,7 +94,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | free | | |
+| ShopClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | shop-fix (pushed to shop-build) | 2026-10-07 |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
@@ -141,7 +141,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
-| ShopLayout | ReplicatedStorage | free | | |
-| tools/shop_ux_test.py | (repo only) | free | | |
-| docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
-| docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
+| ShopLayout | ReplicatedStorage | @mattimarca02 (Claude Code) | shop-fix (pushed to shop-build) | 2026-10-07 |
+| tools/shop_ux_test.py | (repo only) | @mattimarca02 (Claude Code) | shop-fix (pushed to shop-build) | 2026-10-07 |
+| docs/STUDIO_SYNC_SHOP.md | (repo only) | @mattimarca02 (Claude Code) | shop-fix (pushed to shop-build) | 2026-10-07 |
+| docs/SHOP_BUILD_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | shop-fix (pushed to shop-build) | 2026-10-07 |
