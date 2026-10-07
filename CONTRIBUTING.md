@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -116,15 +116,15 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
-| TaskServer | ServerScriptService | free | | |
+| TaskServer | ServerScriptService | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
+| CLAUDE.md | (repo only) | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | free | | |
+| README.md | (repo only) | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
-| docs/STUDIO_SYNC.md | (repo only) | free | | |
+| docs/STUDIO_SYNC.md | (repo only) | Claude (for @mattimarca02) | task-needs-desk | 2026-10-07 |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
