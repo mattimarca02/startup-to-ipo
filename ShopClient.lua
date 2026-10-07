@@ -805,6 +805,8 @@ local office = {
 	unfolded = false, -- the owned rungs shown under the summary row (tap the row)
 	bought = nil, -- the upgrade just bought: its card stays the hero a moment ("Bought!")
 	shownHero = nil, -- the hero on screen now (a new one scrolls into view)
+	reveal = false, -- scroll the hero into view at the next placing: only after a buy or a hero change (a Retry is one)
+	buying = nil, -- the upgrade whose buy request runs now
 	actionRemote = nil,
 }
 
@@ -929,11 +931,18 @@ local function ladderNow()
 	for i = 1, #office.list do
 		owned[i] = player:GetAttribute("Upgrade" .. i) == true
 	end
+	-- The server may mark the upgrade as owned before its answer arrives: while the request runs, that rung stays the
+	-- hero (it says Bought!) instead of folding for a moment and coming back with the answer (the page would jump twice)
+	local bought = office.bought
+	if bought == nil and officeBusy and office.buying and owned[office.buying] then
+		bought = office.buying
+	end
 	return ShopLayout.ladder(office.list, owned, cashValue and cashValue.Value or 0, incomeValue and incomeValue.Value or 0,
-		ShopConfig.formatCash, office.bought, officeBusy)
+		ShopConfig.formatCash, bought, officeBusy)
 end
 
--- The hero scrolls into view (just enough to show it whole, never past its top)
+-- The hero scrolls into view (just enough to show it whole, never past its top). Only after a buy or a hero change:
+-- a message line, the tutorial's strip, a tab or a new screen size never move the page (decided by the owner)
 local function revealHero()
 	if office.shownHero and office.heroY then
 		officePage.CanvasPosition = Vector2.new(0, ShopLayout.revealScroll(office.heroY, office.heroH, pagesHeight, office.total or 0))
@@ -1059,16 +1068,22 @@ local function refreshOffice()
 	end
 	office.total = total
 	officePage.CanvasSize = UDim2.fromOffset(0, total)
-	-- a new hero (the list arrived, or the one before was bought) scrolls into view; once all are bought the page
-	-- goes back to its top, where the "Office complete" banner is
+	-- a new hero (the list arrived, also after a Retry, or the one before was bought) scrolls into view; once all are
+	-- bought the page goes back to its top, where the "Office complete" banner is
 	local heroIndex = S and S.nextIndex or nil
 	if heroIndex ~= office.shownHero then
 		office.shownHero = heroIndex
-		if heroIndex then
-			revealHero()
-		else
+		office.reveal = heroIndex ~= nil
+		if heroIndex == nil then
 			officePage.CanvasPosition = Vector2.new(0, 0)
 		end
+	end
+	if office.reveal and office.heroY then
+		office.reveal = false
+		revealHero()
+	elseif officePage.CanvasPosition.Y > math.max(0, total - pagesHeight) then
+		-- anything else keeps the player's place, only clamped to the new canvas (a shorter page, a new screen size)
+		officePage.CanvasPosition = Vector2.new(0, math.max(0, total - pagesHeight))
 	end
 end
 
@@ -1126,14 +1141,15 @@ end
 -- The one request that buys: only the upgrade's number. The server checks everything and answers.
 local function buyOffice(actionRemote, index)
 	if officeBusy then return end
-	officeBusy = true
+	officeBusy, office.buying = true, index
 	refreshAll()
 	local ok, fine, message = pcall(function()
 		return actionRemote:InvokeServer("BuyUpgrade", index)
 	end)
-	officeBusy = false
+	officeBusy, office.buying = false, nil
 	if ok and fine == true then
 		office.bought = index
+		office.reveal = true -- the card says Bought! whole
 		celebrate(index)
 		refreshAll()
 		task.delay(0.8, function()
@@ -1255,10 +1271,7 @@ retryButton.Activated:Connect(function()
 	fetchOffice()
 end)
 table.insert(cards, refreshOffice)
-table.insert(layoutHooks, function()
-	refreshOffice()
-	revealHero()
-end)
+table.insert(layoutHooks, refreshOffice)
 task.spawn(fetchOffice)
 
 -- Studio-only Debug tab: pretend to own passes and push fake receipts through the real server code
@@ -1401,9 +1414,6 @@ local function showTab(name)
 		page.Visible = tabName == name
 		tabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab
 	end
-	if name == "Office" then
-		revealHero()
-	end
 end
 
 for name, tabButton in pairs(tabButtons) do
@@ -1439,7 +1449,6 @@ local function setOpen(open)
 			showStatus(toast.Text)
 		end
 		refreshAll()
-		revealHero()
 	end
 end
 

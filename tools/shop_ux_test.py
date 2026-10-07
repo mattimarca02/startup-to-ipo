@@ -2266,14 +2266,18 @@ for _, case in ipairs({ { 30, true }, { 10, false } }) do
 	noErrors(label)
 end
 
--- The hero shows whole above the TutorialStrip, on every phone and top bar ----------------------------------------
+-- The hero shows whole above the TutorialStrip, on every phone and top bar (the strip was up when it became the hero:
+-- a strip that appears later never moves the page, see "office scroll") ------------------------------------------
 for _, size in ipairs(SIZES) do
 	for _, bar in ipairs(BARS) do
 		for _, k in ipairs({ 0, 1, 3, 5 }) do
 			local label = "office strip " .. size[1] .. "x" .. size[2] .. "/" .. bar .. ", " .. k .. " owned"
-			local w = startOffice({ w = size[1], h = size[2], bar = bar, owned = k, cash = 0, income = 1 })
+			local w = newWorld({ w = size[1], h = size[2], bar = bar, owned = k, cash = 0, income = 1 })
 			w.playerGui:SetAttribute("TutorialBanner", "Tap the hero's button.")
-			run(0)
+			w.start()
+			run(0.3)
+			openShop(w, label)
+			tap(find(win(w), "TabOffice"), label .. ": the Office tab")
 			local hero = heroOf(w)
 			local strip = kid(win(w), "TutorialStrip")
 			check(label .. ": the hero is fully visible above TutorialStrip",
@@ -2282,6 +2286,108 @@ for _, size in ipairs(SIZES) do
 			screenChecks(w, label)
 		end
 	end
+end
+
+-- The Office page moves by itself only after a buy or a hero change: never on a message line, the tutorial's strip, a
+-- tab, opening the shop, the refresh every second or a new screen size (decided by the owner) --------------------------
+for _, case in ipairs({ { 667, 375, 36, 320, 568 }, { 320, 568, 36, 667, 375 }, { 568, 320, 58, 844, 390 } }) do
+	local label = "office scroll " .. case[1] .. "x" .. case[2] .. "/" .. case[3]
+	local w = startOffice({ w = case[1], h = case[2], bar = case[3], owned = 2, cash = 0, income = 1 })
+	run(1.1)
+	local page = officeOf(w)
+	local function y() return prop(page, "CanvasPosition", v2(0, -1)).Y end
+	local function maxY() return page and math.max(0, page.CanvasSize.Y.Offset - rectOf(page).h) or -1 end
+	if page then page.CanvasPosition = v2(0, maxY()) end -- the player scrolls down to the locked rungs
+	run(0)
+	local bottom = y()
+	check(label .. ": the player can scroll the Office page down to the locked rungs", bottom > 0, bottom)
+	w.notify.OnClientEvent:Fire("2x Cash unlocked!")
+	run(0)
+	check(label .. ": a message line appearing never moves the Office page (the player's place is kept, clamped)",
+		prop(kid(win(w), "StatusLine"), "Visible", false) and y() == math.min(bottom, maxY()), y() .. " of " .. maxY())
+	local during = y()
+	run(4)
+	check(label .. ": the message line going away 3.5 s later never moves the Office page", not prop(kid(win(w), "StatusLine"), "Visible", true) and y() == during, y())
+	w.playerGui:SetAttribute("TutorialBanner", "Tap the hero's button.")
+	run(0)
+	check(label .. ": the TutorialStrip appearing never moves the Office page (kept, clamped)", y() == math.min(during, maxY()), y())
+	local withStrip = y()
+	w.playerGui:SetAttribute("TutorialBanner", nil)
+	run(0)
+	check(label .. ": the TutorialStrip going away never moves the Office page", y() == withStrip, y())
+	page.CanvasPosition = v2(0, 0) -- the player scrolls back up to the summary
+	run(0)
+	tap(find(win(w), "TabCash"), label .. ": the Cash tab")
+	tap(find(win(w), "TabOffice"), label .. ": back to the Office tab")
+	check(label .. ": a tab tap never moves the Office page", y() == 0, y())
+	tap(kid(win(w), "CloseButton"), label .. ": close")
+	tap(shopButtonOf(w), label .. ": reopen")
+	run(2.1)
+	check(label .. ": closing and opening the shop, and the refresh every second, never move it", y() == 0, y())
+	page.CanvasPosition = v2(0, maxY())
+	run(0)
+	local before = y()
+	w.resize(case[4], case[5], case[3])
+	check(label .. ": a new screen size keeps the player's place, clamped to the new canvas",
+		y() == math.min(before, maxY()) and y() >= 0, before .. " -> " .. y() .. " of " .. maxY())
+	screenChecks(w, label)
+	noErrors(label)
+end
+
+-- A buy shows the card whole ("Bought!"), even when the player had scrolled part of it away. Both orders of the
+-- server's two signals: the Upgrade attribute before the answer (TycoonCore sets it first), or the answer first --------
+for _, order in ipairs({ "attribute first", "answer first" }) do
+	local label = "office buy reveal (" .. order .. ")"
+	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 30, income = 1 })
+	local real = w.handlers.ShopAction
+	w.handlers.ShopAction = function(action, id)
+		if action ~= "BuyUpgrade" then return real(action, id) end
+		w.cash.Value -= UPGRADES[id].cost
+		w.income.Value += UPGRADES[id].income
+		if order == "attribute first" then
+			w.player:SetAttribute("Upgrade" .. id, true)
+			task.wait(0.05) -- the answer arrives a moment later
+		else
+			task.delay(0.05, function() w.player:SetAttribute("Upgrade" .. id, true) end)
+		end
+		return true, "Bought " .. UPGRADES[id].name
+	end
+	local hero = rung(w, 2)
+	local page = officeOf(w)
+	page.CanvasPosition = v2(0, rectOf(hero).y - canvasOf(page).y + 10) -- the card's top 10 px scrolled away, its button shows
+	run(0)
+	local startY = page.CanvasPosition.Y
+	check(label .. ": the hero is partly scrolled away, its button shows", visibleRect(hero).h < rectOf(hero).h and visibleRect(kid(hero, "BuyButton")).h > 0)
+	tap(kid(hero, "BuyButton"), label .. ": Buy $25")
+	run(0.07) -- the server has done one of its two things, not yet the other
+	local _, between = heroOf(w)
+	check(label .. ": while the request runs the rung stays the hero (never the next one for a moment, then back)",
+		between == 2 and prop(kid(hero, "BuyButton"), "Text") ~= "" and (order == "answer first" or page.CanvasPosition.Y == startY), tostring(between))
+	run(0.05)
+	check(label .. ": after the buy the card says Bought! whole (the page scrolled just enough)",
+		prop(kid(hero, "BuyButton"), "Text") == "Bought!" and visibleRect(hero).h == rectOf(hero).h, rectText(visibleRect(hero)))
+	run(1)
+	local next, nextIndex = heroOf(w)
+	check(label .. ": then the next hero shows whole (a hero change)", nextIndex == 3 and visibleRect(next).h == rectOf(next).h, tostring(nextIndex))
+	officeWiring(w, label)
+	noErrors(label)
+end
+
+-- After a Retry the hero shows whole (the list arriving is a hero change) ---------------------------------------------
+do
+	local label = "office retry reveal"
+	local w = newWorld({ w = 568, h = 320, bar = 58, owned = 3, cash = 0, income = 1 })
+	w.failUpgrades = true
+	w.start()
+	openShop(w, label)
+	run(12)
+	w.failUpgrades = false
+	tap(kid(officeOf(w), "RetryButton"), label .. ": Retry")
+	run(0.2)
+	local hero = heroOf(w)
+	check(label .. ": after the Retry the hero shows whole (the page scrolled to it)", hero ~= nil and visibleRect(hero).h == rectOf(hero).h and prop(officeOf(w), "CanvasPosition", v2()).Y > 0,
+		hero and rectText(visibleRect(hero)))
+	noErrors(label)
 end
 
 -- BEST VALUE on the Cash pack ShopLayout.bestValue picks; only factual badges -----------------------------------------
@@ -2628,8 +2734,8 @@ MUTANTS = [
      "the card says Bought! a moment"),
     ("the free Desk says Buy $0", L, '"Get it free", "buy", "buy"', '"Buy $0", "buy", "buy"', "the free Desk says Get it free"),
     ("Buy offered while the request runs", L, "\t\telseif busy then\n", "\t\telseif false then\n", "while the request runs the hero says ..."),
-    ("no busy state: a second tap sends again", C, ("\tif officeBusy then return end\n", "ShopConfig.formatCash, office.bought, officeBusy)"),
-     ("", "ShopConfig.formatCash, office.bought, false)"), "a second tap while the request runs sends nothing"),
+    ("no busy state: a second tap sends again", C, ("\tif officeBusy then return end\n", "ShopConfig.formatCash, bought, officeBusy)"),
+     ("", "ShopConfig.formatCash, bought, false)"), "a second tap while the request runs sends nothing"),
     ("an Office buy asks for a second tap (a confirmation)", C, "\t\tbuyOffice(office.actionRemote, i)\n", '\t\trungStatus(i, "Tap again to buy", COLORS.gold)\n',
      "an Office upgrade never asks for a confirmation"),
     ("the bar's fill never set", C, "parts.fill.Size = UDim2.fromScale(hero.fill, 1)", "parts.fill.Size = UDim2.fromScale(0, 1)", "the bar's fill is the ladder's"),
@@ -2653,6 +2759,23 @@ MUTANTS = [
      "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab"),
     ("ShopGui under the other windows' layer (3)", C, "\tDisplayOrder = 5,\n", "\tDisplayOrder = 3,\n",
      "layers: the shop window is on the windows' layer, with the Poach, IPO and Daily windows"),
+    ("the hero revealed on every placing again (a message line moves the page)", C, "table.insert(layoutHooks, refreshOffice)",
+     "table.insert(layoutHooks, function()\n\trefreshOffice()\n\trevealHero()\nend)", "a message line appearing never moves the Office page"),
+    ("a tab tap reveals the hero again", C, "\t\ttabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab\n\tend\n",
+     "\t\ttabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab\n\tend\n\tif name == \"Office\" then\n\t\trevealHero()\n\tend\n",
+     "a tab tap never moves the Office page"),
+    ("opening the shop reveals the hero again", C, "\t\trefreshAll()\n\tend\nend\n\nplayerGui:GetAttributeChangedSignal(\"OpenPanel\")",
+     "\t\trefreshAll()\n\t\trevealHero()\n\tend\nend\n\nplayerGui:GetAttributeChangedSignal(\"OpenPanel\")",
+     "closing and opening the shop, and the refresh every second, never move it"),
+    ("a new screen size never clamps the scroll", C, "\telseif officePage.CanvasPosition.Y > math.max(0, total - pagesHeight) then\n",
+     "\telseif false then\n", "a new screen size keeps the player's place, clamped to the new canvas"),
+    ("a buy does not show the card whole", C, "\t\toffice.reveal = true -- the card says Bought! whole\n", "",
+     "after the buy the card says Bought! whole"),
+    ("the rung folds while its buy request runs (the server's attribute came first)", C,
+     "\tif bought == nil and officeBusy and office.buying and owned[office.buying] then\n", "\tif false then\n",
+     "while the request runs the rung stays the hero"),
+    ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
+     "after the Retry the hero shows whole"),
 ]
 
 
