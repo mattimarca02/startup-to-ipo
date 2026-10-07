@@ -2,7 +2,9 @@
 
 The one list for putting **Integration 2** into Studio in one sitting: Integration 1 (design docs, sims, customize PR 1) plus `hud-cash`, `task-needs-desk`, `world-icons-pass` and `shop-build`. It covers every `.lua` file at the repo root. Written on branch `integration-2` at merge commit `8e41718` (the four merges; this file is the only commit after it). Nothing here touches Roblox by itself: it is what the owner does in Studio, by hand. No Studio and no MCP was used to write it.
 
-**How the numbers were made:** each SHA-256 was computed from the real file on the merged tree three ways: the Luau `sha256` of docs/STUDIO_SYNC.md (run in the `luau` tool), `sha256sum` and Python's `hashlib`. All 33 agree. Every file uses `\n` line endings and ends with one newline. The hash block in step 6 was run in `luau` against the real files with a fake `game` (see "What was checked").
+**How the numbers were made:** each SHA-256 was computed from the real file on the merged tree three ways: the Luau `sha256` of docs/STUDIO_SYNC.md (run in the `luau` tool), `sha256sum` and Python's `hashlib`. All 33 agree. Every file uses `\n` line endings and ends with one newline. The hash block in section 6 was run in `luau` against the real files with a fake `game` (see "What was checked").
+
+**The order, in short:** (1) create the scripts that are missing (section 2); (2) paste all 29 PASTE NOW scripts, **in any order** (section 3); (3) commit every draft; (4) run the hash block (section 6) until it prints `ALL OK`; (5) only then playtest. The order of pasting does not matter, because game scripts do not run in Edit mode. What matters is that every one of the 29 exists, with the right source and in the right place, **before the first playtest**. Section 4 says what goes wrong if a playtest starts earlier.
 
 **Status:** 33 scripts. **29 PASTE NOW** (wired in the game: something runs or requires them). **4 PASTE LATER**: `IconArt`, `IconVisuals`, `WorldArt`, `WorldVisuals`. No script requires them yet, so they change nothing in the game:
 
@@ -15,7 +17,7 @@ You may paste the four PASTE LATER modules now if you want the previews (docs/ST
 
 1. **Pull:** `git fetch`, then use `main` once this pull request is merged, or branch `integration-2` before that. Use a folder no other session is working in (for example `git worktree add ~/Developer/studio-sync origin/integration-2`).
 2. **Game Settings > Security > Enable Studio Access to API Services: ON** (CONTRIBUTING.md step 4). Without it saves can't load, and the wipe and read blocks in section 9 can't run.
-3. **Run the hash block (section 6) once before pasting anything.** Its lines tell you what Studio has now. `MISSING` means create the script (section 2). `DIFFERENT` means paste it. `OK` means leave it.
+3. **Optional: run the hash block (section 6) once before pasting anything**, to see what Studio has now. `MISSING` means create the script (section 2). `DIFFERENT` means paste it. `OK` means leave it. This first run only tells you what to do. The run that counts comes after you commit the drafts (section 3).
 
 ## 2. Scripts to create by hand first
 
@@ -34,9 +36,9 @@ The Studio MCP can't create a script inside a service, so create these by hand. 
 
 **PASTE LATER (only when wired, or now for the previews):** `IconArt`, `IconVisuals` (ModuleScript, ReplicatedStorage), `WorldArt`, `WorldVisuals` (ModuleScript, ServerScriptService).
 
-## 3. The list, in paste order
+## 3. The list (paste in any order)
 
-Paste each one the same way: open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste. The order is: ReplicatedStorage configs and modules, then the server modules, then `TycoonCore`, then the client scripts. Inside each group, every module comes before the scripts that wait for it (section 4). Nothing runs in edit mode, so the order only matters if a playtest starts before you finish. Still, follow it: then a playtest started halfway never hangs.
+Paste each one the same way: open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste. **The order does not matter.** Nothing runs in Edit mode, so paste the 29 PASTE NOW scripts in any order, even bottom to top. The table is only sorted so that the hash block's lines come out in a fixed order (ReplicatedStorage, then the server modules, then `TycoonCore`, then the clients). Do **not** start a playtest (F5, F7 or a Studio test) until the hash block says `ALL OK`: section 4 says why.
 
 | # | Name | Class | Parent | sha256 | Bytes | Status | Note |
 |---|---|---|---|---|---|---|---|
@@ -74,11 +76,21 @@ Paste each one the same way: open the `.lua` file, select all, copy; in Studio d
 | 32 | `WorldArt` | ModuleScript | ServerScriptService | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 | **PASTE LATER** | wired by the world patch (TycoonCore) |
 | 33 | `WorldVisuals` | ModuleScript | ServerScriptService | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 | **PASTE LATER** | wired by the world patch (TycoonCore) |
 
-After pasting: **View > Drafts**, commit every draft. An uncommitted draft is not published.
+After pasting all 29: **View > Drafts**, commit every draft. An uncommitted draft is not published. **Commit first, then run the hash block (section 6).** Whether the command bar's `Source` shows a draft that is not committed yet is **unverified** (nobody has checked it in Studio), so a run before the commit may report a script as `DIFFERENT` or as `OK` for the wrong reason. A line you trust comes from a run after the commit.
 
-## 4. Waits with no timeout (why the order matters)
+## 4. Why a half-pasted playtest hangs (background: the order of pasting does not matter)
 
-Each line is a `WaitForChild` with **no time limit** (a `require` of a module that must exist). If the module is missing when the game runs, the waiting script hangs on "Infinite yield possible" for good. If that script is `TycoonCore`, nobody can load a save. Checked in every root `.lua` file (comments skipped): **63 pairs**, and the order in section 3 puts every module before the scripts that wait for it.
+You do not need this section to paste. It explains why section 3 says "no playtest before `ALL OK`". Each line below is a `WaitForChild` with **no time limit** (a `require` of a module that must exist). If the module is missing when the game runs, the waiting script hangs on "Infinite yield possible" for good. If that script is `TycoonCore`, nobody can load a save. Checked in every root `.lua` file (comments skipped): **63 pairs**. In Edit mode none of this runs, so the order in which you paste is free.
+
+**What happens if a module exists but still holds Studio's default template** (a ModuleScript that returns an empty table), when a playtest starts anyway:
+
+- **`CompanyServer`:** `TycoonCore` errors at `CompanyServer.init` (`TycoonCore.lua` ~687: a call of a nil value) **before** it connects `PlayerAdded` (~872). No plot, no save, no load for anyone, and a red error in the Output.
+- **`ShopLayout`:** `ShopClient` errors at about line 200 (`ShopLayout.TOAST_MAX_W` is nil, so `Vector2.new` gets no number). The shop never builds: no shop window. (Not run in Studio; read from the code.)
+- **`PlotArt` / `PlotVisuals`:** every call goes through `pcall` (`looks()`, `TycoonCore.lua` ~166). The game runs with the plain upgrade blocks and no rooms, with a `Plot visuals: ... failed` warning per call. If the two are missing altogether, `TycoonCore` waits 5 s for each and warns `Plot visuals are off`.
+
+The hash block catches every one of these as `DIFFERENT` (a template has a different size and hash), and a script that does not exist as `MISSING`.
+
+The pairs, as background:
 
 - `CompanyConfig` waits for `SectorConfig`, `IpoConfig`
 - `ShopServer` waits for `ShopConfig`
@@ -98,7 +110,7 @@ Each line is a `WaitForChild` with **no time limit** (a `require` of a module th
 - `DailyClient` waits for `DailyConfig`, `CreatureConfig`, `ShopConfig`, `IpoConfig`
 - `TaskClient` waits for `TaskConfig`
 
-The pairs the brief named are in the list: `TycoonCore` waits for `CompanyServer`, `CompanyServer` for `CompanyConfig`, `CompanyConfig` for `SectorConfig` (so all three before `TycoonCore`); `ShopClient` waits for `ShopLayout`; `TaskServer` and `TaskClient` wait for `TaskConfig`, and `TycoonCore` waits for `TaskServer` (so `TaskConfig`, then `TaskServer`, then `TaskClient`).
+The pairs the brief named are in the list: `TycoonCore` waits for `CompanyServer`, `CompanyServer` for `CompanyConfig`, `CompanyConfig` for `SectorConfig`; `ShopClient` waits for `ShopLayout`; `TaskServer` and `TaskClient` wait for `TaskConfig`, and `TycoonCore` waits for `TaskServer`. If all 29 are in place, none of these waits can hang.
 
 **Waits with a time limit (they never hang):** `TycoonCore` waits 5 s for `PlotVisuals` and `PlotArt` inside `pcall` (without them it builds no rooms). `ShopClient` waits 5 s for `TaskConfig` (without it there are no Task Debug rows). `IpoClient` waits 5 s for `DailyConfig`. `DailyConfig` waits 5 s for `CreatureConfig` inside `pcall`. The four PASTE LATER modules and `ShopLayout`, `PlotArt`, `PlotVisuals`, `CreatureModels`, `SectorConfig`, `TaskConfig` and `ChatTags` wait for no other script.
 
@@ -111,9 +123,16 @@ Already written down. Nothing here is new; check them, don't change them:
 - **Enable Studio Access to API Services: ON** (section 1).
 - **Max Players: 6** (a place setting, docs/PUBLISH_RULES.md section 1). Check it after every publish.
 
-## 6. Hash check (command bar): all 33 scripts
+## 6. Hash check (command bar): all 33 scripts (run it after you commit the drafts)
 
-Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints one line per script, in paste order: `OK`, `DIFFERENT` (paste the file again), `MISSING` (create it, section 2) or `WRONG CLASS` (delete it and create it again with the right class). The last line must say `ALL OK: 29 of 29 PASTE NOW scripts match the repo`. The four PASTE LATER lines may say `MISSING (PASTE LATER: not needed yet)`. Studio may drop a script's last newline or add one more, and the block accepts both cases (the same rule as docs/STUDIO_SYNC_SHOP.md (d)).
+Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints one line per script, in the table's order: `OK`, `DIFFERENT` (paste the file again), `MISSING` (create it, section 2) or `WRONG CLASS` (delete it and create it again with the right class). The last line must say `ALL OK: 29 of 29 PASTE NOW scripts match the repo`. The four PASTE LATER lines may say `MISSING (PASTE LATER: not needed yet)`. Studio may drop a script's last newline or add one more, and the block accepts both cases (the same rule as docs/STUDIO_SYNC_SHOP.md (d)).
+
+Run it **after** you commit the drafts (section 3). Whether the command bar's `Source` shows an uncommitted draft is **unverified**.
+
+**Two cases the block does not flag:**
+
+- **A script in the wrong parent** (for example `ShopLayout` in `StarterPlayerScripts`) shows as `MISSING`, because the block only looks in the right parent. **Do not create a second copy.** Drag the script into the right parent, or delete it and create it there.
+- **A duplicate name** (two scripts called `TycoonCore` in the same parent) is **not detected**: the block looks at one of them (`FindFirstChild` returns one) and may print `OK` for it while the other one runs or is the stale copy. Look in the Explorer for double names, and delete the extra one by hand.
 
 ```lua
 local K = {
@@ -157,7 +176,7 @@ local function sha256(msg)
 	return table.concat(out)
 end
 
--- STUDIO_SYNC_MASTER hash check: every script of docs/STUDIO_SYNC_MASTER.md, in paste order. Changes nothing.
+-- STUDIO_SYNC_MASTER hash check: every script of docs/STUDIO_SYNC_MASTER.md, in the table's order. Changes nothing.
 local function folderOf(place)
 	if place == "StarterPlayerScripts" then
 		return game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
@@ -248,7 +267,7 @@ Then paste the **check block** of docs/STUDIO_SYNC_WORLD.md (e): it must print `
 
 ## 8. Before the playtest
 
-- Section 3 is done and the hash block prints `ALL OK`.
+- Sections 2 and 3 are done (all 29 PASTE NOW scripts exist and are pasted, in any order), the drafts are committed, and the hash block (section 6, run after the commit) prints `ALL OK`.
 - Section 7 is done and the check block prints `OK`.
 - The Output window is open (View > Output). Read it the whole time: no red text.
 
