@@ -1343,6 +1343,11 @@ def doc_checks():
     return [
         ("doc: docs/STUDIO_SYNC_HUD.md has the SHA-256 of IpoClient.lua (%s)" % digest[:12], doc.count(digest) >= 2, digest),
         ("doc: docs/STUDIO_SYNC_HUD.md has the size of IpoClient.lua (%d bytes)" % len(raw), "| %d |" % len(raw) in doc and ", %d }" % len(raw) in doc, len(raw)),
+        ("doc: docs/STUDIO_SYNC_HUD.md has the section \"What this rule depends on\" (the coupling, the 30 s delay, the test, the owner defaults)",
+         "## (h) What this rule depends on" in doc and "tools/hud_test.py" in doc.split("## (h) What this rule depends on")[1] and "MONEY_WAIT" in doc.split("## (h) What this rule depends on")[1]
+         and "OWNER DEFAULTS" in doc.split("## (h) What this rule depends on")[1], None),
+        ("doc: docs/STUDIO_SYNC_HUD.md has the Follow-ups line about IpoConfig.formatShort ($1000K)",
+         "## (i) Follow-ups" in doc and "IpoConfig.formatShort" in doc.split("## (i) Follow-ups")[1] and "$1000K" in doc.split("## (i) Follow-ups")[1], None),
     ]
 
 
