@@ -111,7 +111,7 @@ local WANT = {
 	ShopClient = { "41c98119430b29b501160ddd42485fc5316e779a5e380f1efe429fd6e98aae11", 28371 },
 	PoachClient = { "6c32b7fbb9e00ca9d8a3cad5371148a939c6bc0c27ecf5069dea6ab0791f2230", 39678 },
 	TaskConfig = { "a6ec3663f95bb23c87683416ad7ee2dbee5da2fcde3d28d97eb2f5600590fe06", 14607 },
-	TaskServer = { "7ee9ad23e89325cd12170a47e7187e787c811401d74a59c62a83cc3b08d4767c", 34933 },
+	TaskServer = { "11fe77211926581d9d50e049e78cbabaff1086794d07b64a94d13bf6fef8fc99", 35513 },
 	TaskClient = { "75ac0721e1d603222c7fa1f2efb31724210a500e7615066826d8d33a1c321807", 18079 },
 }
 for name, want in pairs(WANT) do
@@ -167,8 +167,10 @@ Last code commit of this change: `7cf891f` (branch `task-needs-desk`, made from 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
 | `TaskConfig` | ModuleScript, **ReplicatedStorage** | changed | `a6ec3663f95bb23c87683416ad7ee2dbee5da2fcde3d28d97eb2f5600590fe06` | 14607 |
-| `TaskServer` | ModuleScript, ServerScriptService | changed | `7ee9ad23e89325cd12170a47e7187e787c811401d74a59c62a83cc3b08d4767c` | 34933 |
+| `TaskServer` | ModuleScript, ServerScriptService | changed | `11fe77211926581d9d50e049e78cbabaff1086794d07b64a94d13bf6fef8fc99` | 35513 |
 | `TaskClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `75ac0721e1d603222c7fa1f2efb31724210a500e7615066826d8d33a1c321807` | 18079 |
+
+Since the first version of this addendum only `TaskServer` changed (old hash `7ee9ad23…`, 34933 bytes); `TaskConfig` and `TaskClient` are byte for byte the same. The hash block in (c) was re-run in Luau against the real files of this branch (a fake `game` that serves each `.lua` file as `Source`): all 13 lines say `OK`, also with the final newline dropped, and a one-character change in `TaskServer` says `DIFFERENT` for it alone. It has not been run in Studio's command bar.
 
 **Which scripts differ, per branch** (hashes re-computed from each branch's files; the first 8 characters of each hash identify it):
 
