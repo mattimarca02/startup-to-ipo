@@ -44,7 +44,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
 - [x] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
 - [x] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
-- [ ] 4.10 Item 9, the two mutants that also raised a runtime error
+- [x] 4.10 Item 9, the two mutants that also raised a runtime error
 - [ ] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
 - [ ] 4.12 Release the claims (rows kept, set to free)
 
@@ -199,6 +199,14 @@ Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" l
 - "Need more sends the buy anyway" (ShopClient sends BuyUpgrade on a short hero): caught by its named check "Need more sends nothing" (4 checks fail).
 
 So the rule "Buy only when the Cash is there" is held by shop_ux_test, and the server still refuses a buy without the Cash (TycoonCore.checkUpgradePurchase, daily_test's 20 Office purchase mutants). tools/daily_test.py is not edited (not claimed by this job).
+
+### Item 9: mutants that also raised a runtime error (applied: both halves)
+
+**Checked:** true (the review's numbers are 0-based indexes of `MUTANTS`: #32 is "a wrong next index", number 33 below; #47 is "a locked rung offers a button", number 48). "A wrong next index" made `nextIndex` point past the sixth upgrade, so ShopLayout.ladder raised "attempt to index nil with 'cost'" in the very block whose named check catches it ("the next rung is the first not owned"); "a locked rung offers a button" showed the locked rung's button and handed `place()` its missing rectangle, so ShopClient raised "attempt to index nil with 'x'" in every block of the Office tests. Both were counted as caught because the named check also failed.
+
+**The harness (tools/shop_ux_test.py):** every block of checks now prints a `SECTION` line first (hidden from the normal output), so a mutation run knows which block each FAIL line came from. A mutant counts as caught only when its named check fails in a block that has no crash of its own ("the checks of ... run to their end") and no error inside ShopClient ("ShopClient runs without an error"); the source checks are a block of their own. Otherwise the report says "its named check failed only next to an uncaught error in the block ...". With this rule, on the code as it was, exactly these two mutants were not caught; every other mutant (all 99, the new ones of items 1 to 7 included) fails its named check in a clean block. Two harness self-tests (`HARNESS_SELF_TESTS`, the two old forms) must be reported as not caught on every run, so the rule cannot quietly weaken.
+
+**The guards (so the named checks fail cleanly):** ShopLayout.ladder now sets the rows that are not owned after `nextIndex` is known (the hero's row is "next", every other one "locked") and drops a `nextIndex` with no upgrade behind it: its rows and its hero always agree, whatever goes wrong inside it. ShopClient's `showRung` places a button only where its row's layout has one. Neither changes anything for a valid list (ipairs never gives an index without an upgrade); both only keep a broken state from crashing.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 

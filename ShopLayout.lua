@@ -301,8 +301,16 @@ function ShopLayout.ladder(upgrades, owned, cash, income, money, bought, busy)
 			S.rows[i] = { state = "owned", info = "+" .. money(finite(upg.income, 0)) .. "/s", button = "Owned", color = "owned" }
 		elseif S.nextIndex == nil then
 			S.nextIndex = i
+		end
+	end
+	if S.nextIndex and not upgrades[S.nextIndex] then
+		S.nextIndex = nil -- never a hero without its upgrade
+	end
+	-- the rows that are not owned follow nextIndex: the hero's row is "next", every other one "locked"
+	for i, upg in ipairs(upgrades) do
+		if S.rows[i] == nil and i == S.nextIndex then
 			S.rows[i] = { state = "next" }
-		else
+		elseif S.rows[i] == nil then
 			local before = upgrades[i - 1]
 			S.rows[i] = { state = "locked", info = "Unlocks after " .. tostring(before and before.name or "the one before"), color = "disabled" }
 		end

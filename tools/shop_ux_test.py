@@ -17,7 +17,9 @@ rectangles at five phones with a top bar of 0, 36 and 58 px (header items never 
 GUI, every tap target is 44 x 44 or more, no text can shrink under 16 px, the bottom slot never covers a Buy button),
 the names the tutorial needs, the help card, the TutorialStrip, the in-window status line, what the shop sends to the
 server, Luck Boost for restricted players and the odds words (D9). Then it breaks ShopLayout and ShopClient on purpose
-(mutation runs): each must be caught by a named check, never by a crash.
+(mutation runs): each must be caught by a named check, never by a crash: the named check must fail in a block of checks
+that ran to its end with no uncaught error (in ShopLayout, the test or ShopClient). Two harness self-tests make sure a
+mutant that fails its named check only next to a crash is reported as not caught.
 
 It changes nothing in the game or in Studio. Text widths are an estimate (Gotham at about 0.56 em a letter): what fits
 exactly is for Test > Device in Studio to confirm.
@@ -91,7 +93,9 @@ end
 local LOG = { warned = {}, errors = {} }
 -- A block of checks: an error inside it (a broken ShopLayout, or a test that met something missing) is a named FAIL,
 -- and the next block still runs
+-- (a SECTION line marks where each block starts, so a mutation run can tell which block a FAIL line came from)
 local function section(name, fn)
+	print_real("SECTION " .. name)
 	local ok, err = pcall(fn)
 	check("the checks of \"" .. name .. "\" run to their end (no error in ShopLayout or in the test)", ok, err)
 end
@@ -3159,7 +3163,37 @@ MUTANTS = [
 ]
 
 
-def run_mutants(luau):
+CRASH_MARKS = ("run to their end (no error in ShopLayout or in the test)", "ShopClient runs without an error")
+
+
+def sections_of(stdout, static):
+    """The FAIL lines of a run, block by block: [(name, lines)]. The source checks are one block of their own."""
+    blocks = [("(before the first block)", [])]
+    for line in stdout.split("\n"):
+        if line.startswith("SECTION "):
+            blocks.append((line[8:], []))
+        elif line.startswith("FAIL: "):
+            blocks[-1][1].append(line)
+    blocks.append(("the source checks", [line for line in static if line.startswith("FAIL: ")]))
+    return blocks
+
+
+# The harness checks itself: these break a rule AND raise an uncaught error in the block that checks it (the two old
+# forms of mutants 32 and 47, before ShopLayout.ladder and ShopClient.showRung were guarded). Each must be reported as
+# not caught: a named check that fails only next to a crash never counts.
+HARNESS_SELF_TESTS = [
+    ("a wrong next index that also crashes (no guard in the ladder)", L,
+     ("\t\t\tS.nextIndex = i\n", "\tif S.nextIndex and not upgrades[S.nextIndex] then\n\t\tS.nextIndex = nil -- never a hero without its upgrade\n\tend\n"),
+     ("\t\t\tS.nextIndex = i + 1\n", ""), "the next rung is the first not owned"),
+    ("a locked rung's button placed with no rectangle (crashes)", C, "\tif button.Visible and R.button then\n", "\tif true then\n",
+     "locked rungs are shown, a padlock, Unlocks after <the one before>, no button"),
+]
+
+
+def run_mutants(luau, mutants=None):
+    """Each mutant counts as caught only when its named check fails in a block of checks that ran to its end with no
+    uncaught error: no crash of the block (ShopLayout or the test) and no error inside ShopClient in that block. A
+    named check that only fails next to a crash does not count."""
     from concurrent.futures import ThreadPoolExecutor
     texts = {LAYOUT: read(LAYOUT), CLIENT: read(CLIENT)}
 
@@ -3171,22 +3205,29 @@ def run_mutants(luau):
         finished = re.search(r"^\d+ passed, \d+ failed$", result.stdout, re.M) is not None
         static = []
         static_checks(layout=changed[LAYOUT], client=changed[CLIENT], out=static)
-        lines = [line for line in result.stdout.split("\n") + static if line.startswith("FAIL: ")]
-        named = [line for line in lines if expected in line]
-        if finished and named:
+        blocks = sections_of(result.stdout, static)
+        lines = [line for _, block in blocks for line in block]
+        crashed = [next((line for line in block if any(mark in line for mark in CRASH_MARKS)), None) for _, block in blocks]
+        named = [(i, line) for i, (_, block) in enumerate(blocks) for line in block if expected in line]
+        clean = [(i, line) for i, line in named if crashed[i] is None]
+        if finished and clean:
             if "--list-mutants" in sys.argv:
-                print("caught: %s -- by FAIL: %s" % (label, named[0][6:160]))
+                print("caught: %s -- by FAIL: %s" % (label, clean[0][1][6:160]))
             return None
         if not finished:
             why = "it crashed: " + (result.stderr.strip().split("\n")[0] if result.stderr.strip() else "no summary")
+        elif named:
+            i = named[0][0]
+            why = "its named check failed only next to an uncaught error in the block \"%s\": %s" % (blocks[i][0][:60], crashed[i][6:200])
         else:
             why = "the check '%s' did not fail (failed instead: %s)" % (expected, lines[0][6:90] if lines else "nothing")
         return "FAIL: mutation %s: not caught by its named check (%s)" % (label, why)
 
+    mutants = MUTANTS if mutants is None else mutants
     with ThreadPoolExecutor(max_workers=4) as pool:
-        outcomes = list(pool.map(one, MUTANTS))
+        outcomes = list(pool.map(one, mutants))
     problems = [o for o in outcomes if o]
-    return len(MUTANTS) - len(problems), problems
+    return len(mutants) - len(problems), problems
 
 
 HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_SHOP.md, run as it is, on the real files in a tiny fake place ----------
@@ -3290,7 +3331,8 @@ def main():
         return 2
     code, total = 0, 0
     result = run_luau(luau, program())
-    print("Shop layout and the real ShopClient in a fake place: " + (result.stdout.strip() or result.stderr.strip()))
+    shown = "\n".join(line for line in result.stdout.split("\n") if not line.startswith("SECTION ")).strip()
+    print("Shop layout and the real ShopClient in a fake place: " + (shown or result.stderr.strip()))
     m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
     if not m or m.group(2) != "0" or result.returncode != 0:
         code = 1
@@ -3313,6 +3355,14 @@ def main():
     total += sync_passed
     if sync_failed:
         code = 1
+    self_caught, self_problems = run_mutants(luau, HARNESS_SELF_TESTS)
+    reported = sum(1 for line in self_problems if "failed only next to an uncaught error" in line)
+    print("Harness self-test (a named check next to a crash never counts): %d of %d reported as not caught" % (reported, len(HARNESS_SELF_TESTS)))
+    if reported != len(HARNESS_SELF_TESTS) or self_caught:
+        print("FAIL: the mutation harness counted a mutant that crashed its block as caught")
+        code = 1
+    else:
+        total += reported
     caught, problems = run_mutants(luau)
     for line in problems:
         print(line)

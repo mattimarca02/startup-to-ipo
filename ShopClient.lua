@@ -1064,9 +1064,10 @@ local function showRung(parts, row, hero, width)
 	elseif isHero then
 		setButton(button, hero.button, COLORS[hero.color], hero.action == "buy")
 	end
-	-- A locked rung offers no Buy: only the hero does (and only with the Cash there)
+	-- A locked rung offers no Buy: only the hero does (and only with the Cash there); a button is only ever placed
+	-- where its row's layout has one
 	button.Visible = row.state ~= "locked"
-	if button.Visible then
+	if button.Visible and R.button then
 		place(button, R.button)
 	end
 end
