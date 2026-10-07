@@ -43,7 +43,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
 - [x] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
 - [x] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
-- [ ] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
+- [x] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
 - [ ] 4.10 Item 9, the two mutants that also raised a runtime error
 - [ ] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
 - [ ] 4.12 Release the claims (rows kept, set to free)
@@ -189,6 +189,16 @@ Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" l
 **docs/STUDIO_SYNC_SHOP.md:** the limit per phone and top bar in the checklist (step 13) for TutorialConfig's authors (40 at 568 x 320; 47 to 52 on the other landscape phones under a top bar, 94 to 104 on two lines without one; 56 on two lines at 320 x 568); the sentence "It never moves while you scroll it yourself otherwise" was wrong (the page jumped back to the hero on every message line and more, item 2) and now says when the page moves by itself. **Recorded there:** the strip hides while a status message shows (the same slot, 3.5 s), and the help card covers it (ZIndex 5 over the strip's 3); both differ from docs/TUTORIAL_PROPOSAL.md, which keeps the strip up whenever the shop is open during steps 1 and 4.
 
 **Tests:** "strip limit" (pure): a sentence of exactly the limit fits the strip on every phone and top bar, 14 more characters do not (the limit is 3 to 13 under what fits), stripFits flags one character over and accepts the limit, the limit is 40 at 568 x 320 under every bar and is the smallest of all, characters not bytes. "strip limit warning": a banner at the limit is not flagged, one over is flagged once in Studio and never on a live server. **Mutants (6):** the letter estimate too narrow and too wide, stripFits letting one over through, a two-line strip counted as one line, a one-line strip counted as two, a long TutorialBanner never flagged.
+
+### Item 8: daily_test's "Locked" check (confirmed, nothing edited)
+
+**Checked:** true. Since 2.3 the check "ShopClient: Buy is only offered for the next upgrade when the Cash is there (the server decides anyway)" (tools/daily_test.py:4498) only looks for `button.Visible = row.state ~= "locked"` and the Owned button: nothing in it tests "when the Cash is there" any more. Shown on a scratch copy of the branch with each mutant applied: daily_test passes both (exit 0, no FAIL).
+
+**Who covers it:** shop_ux_test's mutants 34 and 35 in the review's numbering (0-based indexes of `MUTANTS`; numbers 35 and 36 in the list below), run here:
+- "Buy shown when the Cash is short" (ShopLayout.ladder offers Buy whatever the Cash): caught by its named check "the hero's button (Get it free, Buy $X, or Need $X more when the Cash is short)", and 37 checks fail in all, among them "Buy shows only with the Cash there (or free); else a gray Need $X more" (the real ShopClient in the fake place), "only a free or affordable hero offers a buy", "Need more sends nothing" and "a soft pulse ... none on Need more".
+- "Need more sends the buy anyway" (ShopClient sends BuyUpgrade on a short hero): caught by its named check "Need more sends nothing" (4 checks fail).
+
+So the rule "Buy only when the Cash is there" is held by shop_ux_test, and the server still refuses a buy without the Cash (TycoonCore.checkUpgradePurchase, daily_test's 20 Office purchase mutants). tools/daily_test.py is not edited (not claimed by this job).
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 
