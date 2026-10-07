@@ -1761,6 +1761,44 @@ do
 	noErrors(label)
 end
 
+-- A message still in the window's line when the shop closes moves to the toast, once (decided by the owner) ---------
+for _, case in ipairs({ { 667, 375, 36, "the X" }, { 320, 568, 36, "the SHOP button" }, { 568, 320, 58, "another window opening" } }) do
+	local label = "message at close " .. case[1] .. "x" .. case[2] .. "/" .. case[3] .. " (" .. case[4] .. ")"
+	local w = startShop({ w = case[1], h = case[2], bar = case[3], cash = 10, income = 1 })
+	openShop(w, label)
+	local g, window = shopGui(w), win(w)
+	local toast, status = kid(g, "Toast"), kid(window, "StatusLine")
+	local text = "Saving works again: your progress is safe."
+	w.notify.OnClientEvent:Fire(text)
+	run(1)
+	check(label .. ": the message shows in the window's line first", prop(status, "Visible", false) and prop(status, "Text") == text and not prop(toast, "Visible", true))
+	if case[4] == "the X" then
+		tap(kid(window, "CloseButton"), label .. ": close")
+	elseif case[4] == "the SHOP button" then
+		tap(shopButtonOf(w), label .. ": close")
+	else
+		w.playerGui:SetAttribute("OpenPanel", "Ipo")
+		run(0)
+	end
+	check(label .. ": closing the shop moves a message still in its line to the toast",
+		not prop(window, "Visible", true) and prop(toast, "Visible", false) and prop(toast, "Text") == text, prop(toast, "Text"))
+	check(label .. ": once: the window's line is cleared (the message is in one place)", not prop(status, "Visible", true) and prop(status, "Text") == "")
+	local tr, laneW = rectOrEmpty(toast), math.min(GUI.w * 0.6, 520)
+	check(label .. ": the moved message keeps the toast's lane (bottom center, 48 px, 16 px up, at most 520 wide)",
+		tr.h == 48 and math.abs(tr.w - laneW) < 0.01 and math.abs(tr.x + tr.w / 2 - GUI.w / 2) < 0.01 and tr.y + tr.h == GUI.h - 16, rectText(tr))
+	run(3.4)
+	check(label .. ": the toast shows it for its own 3.5 s", prop(toast, "Visible", false))
+	run(0.2)
+	check(label .. ": then it is gone, and it never comes back (the line's old timer does nothing)", not prop(toast, "Visible", true) and not prop(status, "Visible", true))
+	run(4)
+	check(label .. ": still gone later", not prop(toast, "Visible", true) and prop(status, "Text") == "")
+	w.playerGui:SetAttribute("OpenPanel", nil)
+	tap(shopButtonOf(w), label .. ": open again")
+	tap(kid(window, "CloseButton"), label .. ": close with no message")
+	check(label .. ": closing with no message in the line shows no toast", not prop(toast, "Visible", true))
+	noErrors(label)
+end
+
 -- The help card: "?" opens a one-screen "How the shop works" card over the pages ----------------------------------
 for _, size in ipairs(SIZES) do
 	for _, bar in ipairs(BARS) do
@@ -2774,6 +2812,12 @@ MUTANTS = [
     ("the rung folds while its buy request runs (the server's attribute came first)", C,
      "\tif bought == nil and officeBusy and office.buying and owned[office.buying] then\n", "\tif false then\n",
      "while the request runs the rung stays the hero"),
+    ("closing the shop drops a message still in its line", C, "\tif wasOpen and not open then\n\t\tstatusToToast()\n\tend\n", "",
+     "closing the shop moves a message still in its line to the toast"),
+    ("another window opening drops the shop's message", C, "\t\twindow.Visible = false\n\t\tstatusToToast()\n", "\t\twindow.Visible = false\n",
+     "closing the shop moves a message still in its line to the toast"),
+    ("the moved message stays in the window's line too", C, "\tstatusToken += 1 -- the line's own timer does nothing more\n\tstatusText = nil\n", "",
+     "once: the window's line is cleared"),
     ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
      "after the Retry the hero shows whole"),
 ]

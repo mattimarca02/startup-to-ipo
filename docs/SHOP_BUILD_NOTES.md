@@ -38,7 +38,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.1 Item 0, base: a plain merge of `origin/world-icons-pass` at `4c052c7` (no rebase, no conflict), the four suites after it: daily_test 1,780 + 20 of 20, shop_ux_test 5,092 + 67 of 67, icon_test 371 + 68 of 68, world_test 353 + 82 of 82 (the `--review` modes of world_test and icon_test fail by design on this branch, only on "no existing file is edited but CONTRIBUTING.md" and "tools/daily_test.py ... is untouched")
 - [x] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
 - [x] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
-- [ ] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
+- [x] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
 - [ ] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
 - [ ] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
 - [ ] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
@@ -134,6 +134,14 @@ The container had no `luau`: the official release `luau-ubuntu.zip` (github.com/
 **What it means for the tutorial strip:** the hero is still fully visible above the strip when the strip is up as the hero becomes the hero (the old check, now with the banner set before the list arrives, on every phone and top bar, 0, 1, 3 and 5 owned). A strip that appears later keeps the player's place: with no upgrade owned the hero is at the page's top and always shows whole; with some owned, on the lowest landscape windows (568 x 320 and 667 x 375 under a 58 px bar) the strip can cover up to 19 px of the hero's bottom until the next buy. TutorialClient (not written yet) should set `TutorialBanner` when its step starts, before the player opens the shop, or accept that.
 
 **Tests:** "office scroll" at 667 x 375 / 36, 320 x 568 / 36 and 568 x 320 / 58: a message line appearing and going away, the TutorialStrip appearing and going away, a tab tap, closing and reopening and the refresh every second never move the page; a new screen size keeps the place, clamped. "office buy reveal" (both orders): the rung never flips to the next one while the request runs, the card says Bought! whole after a buy that started partly scrolled away, the next hero shows whole. "office retry reveal" (568 x 320 / 58, 3 owned): after a Retry the hero shows whole. **Mutants (7):** the hero revealed on every placing again, a tab tap reveals it, opening the shop reveals it, a new screen size never clamps, a buy does not show the card whole, the rung folds while its request runs, a hero change does not reveal (each caught by its named check: see the list below). Mutant 57's target moved with `ladderNow` (same rule: `busy` passed as false).
+
+### Item 3: a message at close (applied)
+
+**Checked:** true. `setOpen(false)` hid the window and left `statusText` set: the message went away with the window and nobody saw it (on the old ShopClient the new check finds no toast, its text still the default `Label`). The same happened when another window opened (the `OpenPanel` handler hides the shop without `setOpen`).
+
+**Fix (ShopClient only), OWNER DEFAULT 4:** `statusToToast()` runs on both ways the shop closes (its X or the SHOP button through `setOpen(false)`, and another window opening): the window's line is cleared (its own timer is cancelled with `statusToken`) and the text goes to `showToast`, in the toast's own lane (bottom center, 16 px up, 48 px, at most 520 wide) for its own 3.5 s. Once: it is in one place at a time; reopening the shop moves a toast that is still up into the line again, as before. No message, no toast.
+
+**Tests:** "message at close" at 667 x 375 / 36 (the X), 320 x 568 / 36 (the SHOP button) and 568 x 320 / 58 (another window opening): the message moves to the toast, the line is cleared, the lane, 3.5 s, then gone for good, no toast when there was no message. **Mutants (3):** closing the shop drops the message, another window opening drops it, the moved message stays in the window's line too.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 

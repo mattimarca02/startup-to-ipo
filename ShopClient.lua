@@ -1429,11 +1429,26 @@ helpBack.Activated:Connect(function()
 	setHelp(false)
 end)
 
+-- A message still in the window's line when the shop closes moves to the pop-up, once (it would go with the window):
+-- the line is cleared, and the pop-up shows it in its own lane for its own 3.5 s (decided by the owner)
+local function statusToToast()
+	if not statusText then return end
+	local text = statusText
+	statusToken += 1 -- the line's own timer does nothing more
+	statusText = nil
+	applyLayout()
+	showToast(text)
+end
+
 -- Only one window is open at a time: each window writes its name into PlayerGui's "OpenPanel"
 -- attribute, and closes itself when another one opens
 local function setOpen(open)
 	setHelp(false) -- the shop opens on its last tab, never on the help card
+	local wasOpen = window.Visible
 	window.Visible = open
+	if wasOpen and not open then
+		statusToToast()
+	end
 	if open then
 		playerGui:SetAttribute("OpenPanel", "Shop")
 	elseif playerGui:GetAttribute("OpenPanel") == "Shop" then
@@ -1455,6 +1470,7 @@ end
 playerGui:GetAttributeChangedSignal("OpenPanel"):Connect(function()
 	if window.Visible and playerGui:GetAttribute("OpenPanel") ~= "Shop" then
 		window.Visible = false
+		statusToToast()
 	end
 end)
 
