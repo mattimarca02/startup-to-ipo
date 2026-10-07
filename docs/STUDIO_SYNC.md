@@ -2,7 +2,7 @@
 
 Written at the end of the plot visuals stages 2-5 work (branch `visuals-garage`). Last code commit: `21976f9` (nothing in a `.lua` file changed after it; only docs). Nothing here touches Roblox: it is the list of what the Mac has to do.
 
-**Addendum (d), 2026-10-05, branch `task-needs-desk`:** customer calls now start when the player owns the Desk. Three scripts changed (`TaskConfig`, `TaskServer`, `TaskClient`); their hashes are in section (d) and in the hash block below.
+**Addendum (e), 2026-10-05, branch `task-needs-desk`:** customer calls now start when the player owns the Desk. Three scripts changed (`TaskConfig`, `TaskServer`, `TaskClient`); their hashes are in section (e) (at the end of this file) and in the hash block below. Section (d) belongs to `customize-pr1`.
 
 ## (a) Scripts that differ from `main`
 
@@ -156,9 +156,13 @@ for stage = 1, #PlotArt.Stages do
 end
 ```
 
-## (d) Addendum: customer calls start when the player owns the Desk
+## What is not in Studio-only any more
 
-Last code commit of this change: `5a07c70` (branch `task-needs-desk`, made from `main` at `e3c9e67`; the commits after it change only docs). Nothing here touches Roblox: it is the list of what the Mac has to do. **No new script is created** (all three exist already, from the task engine PR 1), `TycoonCore` and `ShopClient` are **unchanged**, there is no new remote and no save change.
+Everything above is now written down. What this file cannot capture: anything changed in Studio by hand that nobody wrote down (the `ColorCorrection` values are in (b)). If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").
+
+## (e) Addendum: customer calls start when the player owns the Desk
+
+Last code commit of this change: `7cf891f` (branch `task-needs-desk`, made from `main` at `e3c9e67`; the commits after it change only docs and tests). The first version of this addendum was code commit `5a07c70`; the review fix `7cf891f` changed **`TaskServer` only** (when calls turn on, the missed-call count and the idle clock start again), so if you already pasted the first version, paste `TaskServer` again and nothing else (the hash block says `DIFFERENT` for it otherwise). Nothing here touches Roblox: it is the list of what the Mac has to do. **No new script is created** (all three exist already, from the task engine PR 1), `TycoonCore` and `ShopClient` are **unchanged**, there is no new remote and no save change. This is section (e) because section (d) is the customize PR 1 addendum on branch `customize-pr1` (already in `integration-1`); the two do not overlap.
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
@@ -166,7 +170,15 @@ Last code commit of this change: `5a07c70` (branch `task-needs-desk`, made from 
 | `TaskServer` | ModuleScript, ServerScriptService | changed | `7ee9ad23e89325cd12170a47e7187e787c811401d74a59c62a83cc3b08d4767c` | 34933 |
 | `TaskClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `75ac0721e1d603222c7fa1f2efb31724210a500e7615066826d8d33a1c321807` | 18079 |
 
-The ten scripts of section (a) are still identical to the repo at this commit (their hashes were re-computed and match the table above), so nothing else needs pasting for this change. The Studio MCP cannot create scripts inside services, which does not matter here: it is only a paste into three existing scripts.
+**Which scripts differ, per branch** (hashes re-computed from each branch's files; the first 8 characters of each hash identify it):
+
+| Branch | `TycoonCore` | The other nine scripts of (a) | `TaskConfig`, `TaskServer`, `TaskClient` | New scripts |
+|---|---|---|---|---|
+| `main` | the one in (a) (`77ce9c43`) | the ones in (a) | the task engine PR 1 versions | none |
+| `task-needs-desk` (this section) | the one in (a), unchanged | the ones in (a), unchanged | the three rows above | none |
+| `customize-pr1` and `integration-1` | the one in (d) (`9607262c`), **not** the one in (a) | the ones in (a), unchanged | the task engine PR 1 versions, unchanged | `SectorConfig`, `CompanyConfig`, `CompanyServer` (section (d)) |
+
+So on this branch alone the ten scripts of (a) are identical to the repo and nothing else needs pasting. Once `customize-pr1`'s `TycoonCore` is pasted (an integration build that has both (d) and (e)), `TycoonCore` is the one of section (d) and the hash block in (c) says `DIFFERENT` for its `TycoonCore` line: that is expected, check `TycoonCore` with the block of (d) instead. Section (e) changes none of `TycoonCore`, `SectorConfig`, `CompanyConfig` or `CompanyServer`, so the two sections can be pasted in either order. The Studio MCP cannot create scripts inside services, which does not matter here: it is only a paste into three existing scripts.
 
 ### Steps on the Mac (by hand)
 
@@ -190,7 +202,3 @@ The ten scripts of section (a) are still identical to the repo at this commit (t
 6. **Publish** as usual. This change needs no "Shut down all servers" by itself: the task engine is Studio-only in PR 1 and nothing is saved differently.
 
 Never tested in Studio by whoever wrote this (no Studio, no MCP): the steps above are the first real test.
-
-## What is not in Studio-only any more
-
-Everything above is now written down. What this file cannot capture: anything changed in Studio by hand that nobody wrote down (the `ColorCorrection` values are in (b)). If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").
