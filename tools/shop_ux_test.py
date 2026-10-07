@@ -1232,6 +1232,42 @@ for _, size in ipairs(SIZES) do
 	end
 end
 
+-- The tutorial strip's text limit (TutorialConfig's authors): characters per phone, from the tests' own estimate ------
+do
+	local SAMPLE = "Tap Get it free to buy your first Desk. Each upgrade adds Cash every second, so buy the next one as soon as its bar is full and watch your Income grow."
+	local wrong, loose, flagged
+	for _, size in ipairs(SIZES) do
+		for _, bar in ipairs(BARS) do
+			local key = size[1] .. "x" .. size[2] .. "/" .. bar
+			local limit = ShopLayout.stripMaxChars(size[1], size[2] - bar, bar)
+			local L = ShopLayout.layout(size[1], size[2] - bar, bar, 4, 0)
+			local strip = ShopLayout.layout(size[1], size[2] - bar, bar, 4, L.stripH).bottom
+			local lines = L.short and 1 or 2
+			-- a real sentence of exactly the limit fits the strip by the estimate (16 px bold, greedy word wrap)
+			local text = string.sub(SAMPLE, 1, limit)
+			if measure(text, 16, Enum.Font.GothamBold, strip.w).Y > lines * math.ceil(16 * 1.25) then loose = key .. ": " .. limit .. " characters need more than " .. lines .. " lines" end
+			-- and the limit is not far under what fits: a sentence 14 characters longer no longer fits
+			local longer = string.sub(SAMPLE, 1, limit + 14)
+			if measure(longer, 16, Enum.Font.GothamBold, strip.w).Y <= lines * math.ceil(16 * 1.25) then wrong = key .. ": " .. (limit + 14) .. " characters still fit " .. lines .. " lines" end
+			local ok1, n1 = ShopLayout.stripFits(string.rep("a", limit), size[1], size[2] - bar, bar)
+			local ok2, n2, max2 = ShopLayout.stripFits(string.rep("a", limit + 1), size[1], size[2] - bar, bar)
+			if not ok1 or ok2 or n1 ~= limit or n2 ~= limit + 1 or max2 ~= limit then flagged = key end
+		end
+	end
+	check("strip limit: a sentence as long as stripMaxChars fits the strip on every phone and top bar (the tests' text estimate)", loose == nil, loose)
+	check("strip limit: the limit is close to what fits (14 more characters do not)", wrong == nil, wrong)
+	check("strip limit: stripFits flags a text one character over the limit and accepts one at the limit", flagged == nil, flagged)
+	check("strip limit: the smallest landscape phone (568 x 320, 382 px strip) gives about 40 characters, STRIP_TEXT_LIMIT, at every top bar",
+		ShopLayout.STRIP_TEXT_LIMIT == 40 and ShopLayout.stripMaxChars(568, 320, 0) == 40 and ShopLayout.stripMaxChars(568, 284, 36) == 40
+			and ShopLayout.stripMaxChars(568, 262, 58) == 40 and ShopLayout.layout(568, 262, 58, 4, 32).bottom.w == 382, ShopLayout.STRIP_TEXT_LIMIT)
+	local smallest = math.huge
+	for _, size in ipairs(SIZES) do
+		for _, bar in ipairs(BARS) do smallest = math.min(smallest, ShopLayout.stripMaxChars(size[1], size[2] - bar, bar)) end
+	end
+	check("strip limit: STRIP_TEXT_LIMIT is the smallest of every phone's limit (one text fits them all)", smallest == ShopLayout.STRIP_TEXT_LIMIT, smallest)
+	check("strip limit: stripFits counts characters, not bytes (an accented letter is one)", select(2, ShopLayout.stripFits("Café", 568, 320, 0)) == 4)
+end
+
 -- The reference phones of docs/SHOP_UX_PROPOSAL.md 3.10 (a 36 px top bar)
 do
 	local L = ShopLayout.layout(667, 339, 36, 4, 0)
@@ -1779,6 +1815,32 @@ for _, size in ipairs(SIZES) do
 		w.playerGui:SetAttribute("TutorialBanner", nil)
 		noErrors(label)
 	end
+end
+
+-- A TutorialBanner longer than STRIP_TEXT_LIMIT is flagged in Studio's Output, once (never on a live server) ---------
+for _, studio in ipairs({ true, false }) do
+	local label = "strip limit warning (" .. (studio and "Studio" or "live") .. ")"
+	local w = startShop({ w = 667, h = 375, bar = 36, studio = studio })
+	local function warned()
+		local n = 0
+		for _, line in ipairs(LOG.warned) do
+			if string.find(line, "TutorialBanner is", 1, true) then n += 1 end
+		end
+		return n
+	end
+	w.playerGui:SetAttribute("TutorialBanner", string.rep("a", ShopLayout.STRIP_TEXT_LIMIT))
+	run(0)
+	check(label .. ": a banner at the limit is not flagged", warned() == 0)
+	local long = string.rep("b", ShopLayout.STRIP_TEXT_LIMIT + 1)
+	w.playerGui:SetAttribute("TutorialBanner", long)
+	run(0)
+	check(label .. ": a banner one character over the limit is flagged in Studio's Output (never live)", warned() == (studio and 1 or 0), warned())
+	w.playerGui:SetAttribute("TutorialBanner", nil)
+	run(0)
+	w.playerGui:SetAttribute("TutorialBanner", long)
+	run(0)
+	check(label .. ": the same text is flagged once", warned() == (studio and 1 or 0), warned())
+	noErrors(label)
 end
 
 -- The status line: messages while the shop is open go into the window, the toast only while it is closed ----------
@@ -3080,6 +3142,18 @@ MUTANTS = [
      "the tab row scrolls sideways to the Debug tab"),
     ("ShopClient never passes the tab labels", C, "\tlocal L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0, tabLabelW)", "\tlocal L = ShopLayout.layout(size.X, size.Y, inset, #tabNames, 0)",
      "every tab's label fits its tab on one line at 16 px"),
+    ("the strip's letter estimate too narrow (a longer limit)", L, "ShopLayout.CHAR_W = 16 * 0.56 * 1.06", "ShopLayout.CHAR_W = 16 * 0.45 * 1.06",
+     "a sentence as long as stripMaxChars fits the strip"),
+    ("the strip's letter estimate too wide (a limit far under what fits)", L, "ShopLayout.CHAR_W = 16 * 0.56 * 1.06", "ShopLayout.CHAR_W = 16 * 0.75 * 1.06",
+     "the limit is close to what fits"),
+    ("stripFits lets one character over through", L, "\treturn count <= limit, count, limit\n", "\treturn count <= limit + 1, count, limit\n",
+     "stripFits flags a text one character over the limit"),
+    ("the two-line strip counted as one line", L, "\treturn L.short and perLine or 2 * perLine\n", "\treturn perLine\n",
+     "the limit is close to what fits"),
+    ("a one-line strip counted as two lines", L, "\treturn L.short and perLine or 2 * perLine\n", "\treturn 2 * perLine\n",
+     "a sentence as long as stripMaxChars fits the strip"),
+    ("a long TutorialBanner never flagged", C, "\tif count > ShopLayout.STRIP_TEXT_LIMIT then\n", "\tif false then\n",
+     "a banner one character over the limit is flagged"),
     ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
      "after the Retry the hero shows whole"),
 ]

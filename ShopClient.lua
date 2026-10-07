@@ -561,6 +561,20 @@ local function tutorialBanner()
 	return nil
 end
 
+-- In Studio, a TutorialBanner text longer than the strip shows on the smallest landscape phone is flagged once in the
+-- Output (ShopLayout.STRIP_TEXT_LIMIT, about 40 characters: TutorialConfig's texts must stay under it)
+local flaggedBanner
+local function flagLongBanner()
+	local text = tutorialBanner()
+	if not (text and RunService:IsStudio()) or text == flaggedBanner then return end
+	local count = utf8.len(text) or #text
+	if count > ShopLayout.STRIP_TEXT_LIMIT then
+		flaggedBanner = text
+		warn(string.format("ShopClient: TutorialBanner is %d characters, the tutorial strip shows about %d on the smallest phone: %s",
+			count, ShopLayout.STRIP_TEXT_LIMIT, text))
+	end
+end
+
 local function guiInset()
 	local ok, topLeft = pcall(function()
 		return GuiService:GetGuiInset()
@@ -1538,7 +1552,11 @@ showTab("Office")
 refreshAll()
 applyLayout()
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
-playerGui:GetAttributeChangedSignal("TutorialBanner"):Connect(applyLayout)
+playerGui:GetAttributeChangedSignal("TutorialBanner"):Connect(function()
+	flagLongBanner()
+	applyLayout()
+end)
+flagLongBanner()
 
 -- Keeping it up to date -------------------------------------------------
 

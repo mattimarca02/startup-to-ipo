@@ -16,6 +16,8 @@
 --   ShopLayout.officeRow(cardW, kind), ShopLayout.hero(cardW)  -> a rung's pieces (owned, locked, summary, banner, hero)
 --   ShopLayout.stack(heights, gap), ShopLayout.revealScroll(y, h, view, total)  -> the Office page, top to bottom
 --   ShopLayout.bestValue(products, forSale)  -> the Cash pack with the most minutes of Income per Robux (BEST VALUE)
+-- The tutorial's strip (TutorialBanner texts, for TutorialConfig's authors):
+--   ShopLayout.stripMaxChars(guiW, guiH, topBar), ShopLayout.stripFits(text, guiW, guiH, topBar), STRIP_TEXT_LIMIT
 
 local ShopLayout = {}
 
@@ -47,6 +49,7 @@ ShopLayout.HERO_NARROW = 202 -- and on a narrow one (portrait): the bar, the tim
 ShopLayout.ROW_WIDE = 64 -- an owned or locked rung, the summary row and the "Office complete" banner
 ShopLayout.ROW_NARROW = 72 -- on a narrow page: room for a second line
 ShopLayout.OFFICE_GAP = 6 -- between the Office page's rows
+ShopLayout.CHAR_W = 16 * 0.56 * 1.06 -- an average letter of a 16 px bold text (Gotham), the estimate the tests use (9.5 px)
 
 local function finite(value, default)
 	value = tonumber(value)
@@ -432,6 +435,30 @@ function ShopLayout.revealScroll(y, h, view, total)
 	y, h, view, total = finite(y, 0), finite(h, 0), finite(view, 0), finite(total, 0)
 	local want = math.min(math.max(0, y + h - view), y)
 	return math.clamp(want, 0, math.max(0, total - view))
+end
+
+-- The tutorial's strip ----------------------------------------------------------------------------------------
+
+-- How many characters of a TutorialBanner text the strip shows on a GUI of guiW x guiH (topBar as in layout): one line
+-- on a short window, two on a taller one, from the strip's width and an average letter (CHAR_W, the tests' estimate).
+-- An estimate for ordinary sentences: a text of long capitalised words is wider than its count says.
+function ShopLayout.stripMaxChars(guiW, guiH, topBar)
+	local L = ShopLayout.layout(guiW, guiH, topBar, 4, 0)
+	local strip = ShopLayout.layout(guiW, guiH, topBar, 4, L.stripH).bottom
+	local perLine = math.max(0, math.floor((strip and strip.w or 0) / ShopLayout.CHAR_W))
+	return L.short and perLine or 2 * perLine
+end
+
+-- The limit for TutorialConfig's texts: the smallest landscape phone, 568 x 320 (its one-line strip, 382 px: 40
+-- characters; the top bar does not change the strip's width). Decided by the owner.
+ShopLayout.STRIP_TEXT_LIMIT = ShopLayout.stripMaxChars(568, 320, 0)
+
+-- Whether a TutorialBanner text fits the strip on this GUI: fits, its characters, the limit here
+function ShopLayout.stripFits(text, guiW, guiH, topBar)
+	text = tostring(text or "")
+	local count = utf8.len(text) or #text
+	local limit = ShopLayout.stripMaxChars(guiW, guiH, topBar)
+	return count <= limit, count, limit
 end
 
 -- The help card ------------------------------------------------------------------------------------------------

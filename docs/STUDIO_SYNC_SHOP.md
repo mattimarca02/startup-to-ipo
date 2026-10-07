@@ -8,8 +8,8 @@ Branch `shop-build` (from `world-icons-pass` at `6bc827c`): PR **S1** and **S2**
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `ShopLayout` | ModuleScript, ReplicatedStorage | new | `d778376716c4f6744f1f9f84ceea52cd774b7dbe5c756f4e53f2872f5fdffdbd` | 22445 |
-| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `40cd2715575dae8d6766ff2f4dc97757a0b77691220033c80f846039341c479e` | 58519 |
+| `ShopLayout` | ModuleScript, ReplicatedStorage | new | `132fe52b1e3178dbd6337171e4564d55cda36c82fd9cdada563a970f11a89116` | 24127 |
+| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `858e657d17b3154efb405490ff02b029f8e68af3e26421e8364c73700b988094` | 59252 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as it is.
 
@@ -92,8 +92,8 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	ShopLayout = { "d778376716c4f6744f1f9f84ceea52cd774b7dbe5c756f4e53f2872f5fdffdbd", 22445, "ReplicatedStorage" },
-	ShopClient = { "40cd2715575dae8d6766ff2f4dc97757a0b77691220033c80f846039341c479e", 58519, "StarterPlayerScripts" },
+	ShopLayout = { "132fe52b1e3178dbd6337171e4564d55cda36c82fd9cdada563a970f11a89116", 24127, "ReplicatedStorage" },
+	ShopClient = { "858e657d17b3154efb405490ff02b029f8e68af3e26421e8364c73700b988094", 59252, "StarterPlayerScripts" },
 }
 for name, want in pairs(WANT) do
 	local folder = folderOf(want[3])
@@ -126,7 +126,19 @@ end
 10. **Messages:** with the shop open, Debug > **Give: Pile of Cash**. The message shows in a line at the window's bottom for 3.5 s (the pages get shorter meanwhile), never as a pop-up over the window.
 11. **Test > Device:** a phone at **320 x 568** (portrait) and one at **667 x 375** (landscape). Nothing is cut off, the hero card and its button are fully visible, and the X and "?" are easy to hit. Then go back to the desktop view.
 12. **Debug > Paid random items: restricted on/off:** Luck Boost disappears from the Boosts tab; tap it again and it comes back (it shows "Coming soon" while `EggsEnabled` is off).
-13. **The tutorial strip (optional):** while playing, switch the command bar to the client (**Test > Client / Server** toggle) and run `game.Players.LocalPlayer.PlayerGui:SetAttribute("TutorialBanner", "Tap Get it free to buy the Desk.")`. A gold line appears at the window's bottom and the pages get shorter; the hero card stays fully visible. `SetAttribute("TutorialBanner", nil)` removes it.
+13. **The tutorial strip (optional):** while playing, switch the command bar to the client (**Test > Client / Server** toggle) and run `game.Players.LocalPlayer.PlayerGui:SetAttribute("TutorialBanner", "Tap Get it free to buy the Desk.")`. A gold line appears at the window's bottom and the pages get shorter; the Office page does not move (a hero that becomes the hero while the strip is up always shows whole above it). `SetAttribute("TutorialBanner", nil)` removes it. A text longer than 40 characters prints a warning in the Output (Studio only): `ShopClient: TutorialBanner is N characters, ...`.
+
+    **Text limit for TutorialConfig's authors** (`ShopLayout.stripMaxChars`, an average 16 px bold letter of the tests' estimate; the real font is a little narrower). **Every TutorialBanner text must stay within 40 characters** (`ShopLayout.STRIP_TEXT_LIMIT`, the smallest landscape phone; decided by the owner). Per phone and Roblox top bar:
+
+    | Phone | Top bar 0 | Top bar 36 | Top bar 58 |
+    |---|---|---|---|
+    | 568 x 320 (smallest landscape) | 40 (1 line, 382 px) | 40 (1 line) | 40 (1 line) |
+    | 640 x 360 | 94 (2 lines, 448 px) | 47 (1 line) | 47 (1 line) |
+    | 667 x 375 | 98 (2 lines, 473 px) | 49 (1 line) | 49 (1 line) |
+    | 844 x 390 | 104 (2 lines, 500 px) | 52 (1 line) | 52 (1 line) |
+    | 320 x 568 (portrait) | 56 (2 lines, 274 px) | 56 (2 lines) | 56 (2 lines) |
+
+    It is an estimate for ordinary sentences: a text of long capitalised words is wider than its count says (check it at 568 x 320). The strip is one line on a window lower than 330 px, two lines otherwise. While a status message shows (3.5 s) the strip is hidden (the message takes the same slot), and the help card ("?") covers it (ZIndex 5 over the strip's 3). Both differ from docs/TUTORIAL_PROPOSAL.md, which keeps the strip up whenever the shop is open during steps 1 and 4.
 
 The Retry button only appears when the server never answers "Upgrades" (5 tries, 2 s apart); Studio always answers, so it is tested in `tools/shop_ux_test.py` only.
 
@@ -136,8 +148,8 @@ The Retry button only appears when the server never answers "Upgrades" (5 tries,
 - **The drawn check mark and padlock** (UI shapes, no image): do they read at 20 px?
 - **The animations:** the pop (0.1 s up and back), the "+$X/s" float (0.8 s), the bar's shake, the pulse every 4 s. Too much, too little?
 - **Colors:** the light red of a refusal on a card, the gold banner and badge, the dark gold strip, the gray skeleton rungs, the dimmed locked rungs.
-- **568 x 320 under a 58 px top bar, with the tutorial strip:** the hero card fits with one pixel to spare; the summary row is then scrolled out of view above it.
-- **Scrolling:** a new hero scrolls into view by itself after a buy; the Office page also brings the hero back when a message line appears. It never moves while you scroll it yourself otherwise.
+- **568 x 320 under a 58 px top bar, with the tutorial strip:** the hero card fits with one pixel to spare when the strip was up as it became the hero; the summary row is then scrolled out of view above it. A strip that appears later keeps your place and can cover up to 19 px of the hero's bottom until the next buy.
+- **Scrolling:** the Office page scrolls by itself only after a buy (the card shows "Bought!" whole) and when a new upgrade becomes the hero (the list arriving, also after Retry, and the fold after a buy); after the sixth it goes back to its top. A message line appearing or going away, the tutorial strip, a tab, closing and reopening the shop and turning the phone never move it: a page that got shorter only stops at its new end.
 
 ## (g) Roll back
 
