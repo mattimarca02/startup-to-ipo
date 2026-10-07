@@ -39,7 +39,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
 - [x] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
 - [x] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
-- [ ] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
+- [x] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
 - [ ] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
 - [ ] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
 - [ ] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
@@ -142,6 +142,27 @@ The container had no `luau`: the official release `luau-ubuntu.zip` (github.com/
 **Fix (ShopClient only), OWNER DEFAULT 4:** `statusToToast()` runs on both ways the shop closes (its X or the SHOP button through `setOpen(false)`, and another window opening): the window's line is cleared (its own timer is cancelled with `statusToken`) and the text goes to `showToast`, in the toast's own lane (bottom center, 16 px up, 48 px, at most 520 wide) for its own 3.5 s. Once: it is in one place at a time; reopening the shop moves a toast that is still up into the line again, as before. No message, no toast.
 
 **Tests:** "message at close" at 667 x 375 / 36 (the X), 320 x 568 / 36 (the SHOP button) and 568 x 320 / 58 (another window opening): the message moves to the toast, the line is cleared, the lane, 3.5 s, then gone for good, no toast when there was no message. **Mutants (3):** closing the shop drops the message, another window opening drops it, the moved message stays in the window's line too.
+
+### Item 4: the toast overflow (applied)
+
+**Checked:** true. At 320 x 568 the toast is 192 px wide (0.6 of the GUI), its text is TextScaled with a 16 px minimum, so a long message cannot shrink and wraps past its 48 px lane, which holds 2 lines. Measured with the tests' text estimate (Gotham, a little wider than the real font): SAVE_TROUBLE_TEXT 99 characters = 6 lines (the review: 5), the Extra Employee Slots "slow to confirm" message 114 characters = 6 lines, the Luck Boost grant for a restricted player 83 characters = 4 lines; even at 667 x 375 (400 px) the two longest need 3 lines. On the old ShopClient the new checks fail at both sizes and every top bar.
+
+**Fix (ShopClient only), OWNER DEFAULT 3:** `clampLines(text, font, width, 2)` cuts a 16 px text to at most 2 lines at the toast's width (0.6 of the GUI, at most 520): the text itself when it fits, else its longest start that fits followed by "..." (at a whole word when it can; trailing spaces and punctuation dropped), measured with `TextService:GetTextSize` (the same `textHeight` as every other box). `showToast` keeps the whole text (`toastText`) and shows the cut one; a toast that moves into the window's status line moves whole (the status line has up to 3 lines and truncates there); a new screen size cuts it again. The lane is unchanged: bottom center, 16 px up, 48 px, at most 520 wide (TaskClient's tray and daily_test's pop-up lane checks model it; daily_test still passes, 1,780 checks). TextScaled stays (16 to 22 px), so a short message keeps its bigger text. If `GetTextSize` failed, nothing is cut (the old behaviour).
+
+**Tests:** `toast_texts()` builds every text the toast can be given from the sources (56): ShopServer's six `notify` calls with every pass and product name and effect from ShopConfig (the shortest Cash amount and $999,999,999,999), PoachServer's Poach Shield line, TycoonCore's SAVE_TROUBLE_TEXT and SAVE_BACK_TEXT, the client's two own texts, and the Office refusals (TycoonCore and ShopServer: they show in the hero card, never the toast, but get the same test). A static check fails when ShopServer gets a `notify` call, or `ShopServer.notify` a caller, the list does not know. At 320 x 568 and 667 x 375 under every top bar: "every server text fits the toast's 2 lines at 16 px in its 48 px lane", "a text that fits is shown whole; a longer one is its start and ends with ...", the lane, "a new screen size cuts the toast again for its new width", "opening the shop shows the whole message in the window's line, never the cut one". `python3 tools/shop_ux_test.py --toast-report` prints every text with its lines at both sizes. **Mutants (6):** the toast never cut, cut to 3 lines, no "...", a short text cut anyway, the window's line gets the cut toast, not cut again on a new width.
+
+**Texts to shorten at the next server change** (OWNER DEFAULT 3: not edited now; lines at 16 px, the tests' estimate, at 320 x 568 / 667 x 375; the toast shows 2):
+
+| File:line | Text | Characters | Lines |
+|---|---|---|---|
+| ShopServer.lua:332 | "Roblox is slow to confirm <pass>. It will unlock by itself when Roblox answers (or when you rejoin)." | 97 (VIP) to 114 (Extra Employee Slots) | 5-6 / 3 |
+| TycoonCore.lua:458 | SAVE_TROUBLE_TEXT "Saving is having trouble right now. Keep playing: your progress is saved as soon as it works again." | 99 | 6 / 3 |
+| ShopServer.lua:547 (sent at :580) | "Luck Boost: +15 min of Luck Boost, kept for later (your hires follow a fixed order)" (a restricted player) | 83 | 4 / 2 |
+| ShopServer.lua:337 | "Confirming <pass> with Roblox..." for Extra Employee Slots, Auto-Hatch, Headhunter, Shareholder | 36 to 46 | 3 / 1 |
+| ShopServer.lua:692 and :840 | "The VIP Lounge is for VIP pass holders only." | 44 | 3 / 1 |
+| ShopClient.lua:717 (the client's own) | "Couldn't open the purchase. Please try again." | 45 | 3 / 1 |
+
+Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" lines, every Cash pack up to $999,999,999,999, the refusals). At 320 x 568 a cut message reads, for example, "Saving is having trouble right now..." or "Roblox is slow to confirm Extra..."; the whole text shows in the window's line if the shop opens while the toast is up. The client's own text is in this branch's file, but its wording is the owner's: listed, not changed.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 

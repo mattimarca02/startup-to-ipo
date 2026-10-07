@@ -1761,6 +1761,60 @@ do
 	noErrors(label)
 end
 
+-- The toast: every text the server can send it, cut to its 2 lines with ... (the window's line keeps the whole) -------
+local TOAST_TEXTS = __TOAST_TEXTS__
+local TOAST_REPORT = __TOAST_REPORT__
+for _, size in ipairs({ { 320, 568 }, { 667, 375 } }) do
+	for _, bar in ipairs(BARS) do
+		local label = "toast " .. size[1] .. "x" .. size[2] .. "/" .. bar
+		local w = startShop({ w = size[1], h = size[2], bar = bar, cash = 10, income = 1 })
+		local toast = kid(shopGui(w), "Toast")
+		local font = prop(toast, "Font", Enum.Font.GothamBold)
+		local width = math.min(GUI.w * 0.6, 520)
+		local lineH = math.ceil(16 * 1.25)
+		local tall, whole, cut, longest
+		for _, item in ipairs(TOAST_TEXTS) do
+			w.notify.OnClientEvent:Fire(item.text)
+			run(0)
+			local face = prop(toast, "Text", "")
+			local h = measure(face, 16, font, width).Y
+			if not (prop(toast, "Visible", false) and h <= 2 * lineH and h <= rectOrEmpty(toast).h) then
+				tall = item.where .. " (" .. #item.text .. " characters, " .. h .. " px): " .. face
+			end
+			local lines = measure(item.text, 16, font, width).Y / lineH
+			if lines <= 2 then
+				if face ~= item.text then whole = item.where .. ": " .. face end
+			else
+				local head = string.match(face, "^(.-)%.%.%.$")
+				if not head or head == "" or string.sub(item.text, 1, #head) ~= head then cut = item.where .. ": " .. face end
+				if not longest or #item.text > #longest then longest = item.text end
+			end
+			if TOAST_REPORT and bar == 0 then
+				print_real(string.format("TOAST %s %dx%d %d lines %d chars: %s", item.where, size[1], size[2], lines, #item.text, item.text))
+			end
+		end
+		check(label .. ": every server text fits the toast's 2 lines at 16 px in its 48 px lane", tall == nil, tall)
+		check(label .. ": a text that fits is shown whole; a longer one is its start and ends with ...", whole == nil and cut == nil, whole or cut)
+		local tr = rectOrEmpty(toast)
+		check(label .. ": the toast keeps its 48 px lane (bottom center, 16 px up, at most 520 wide)",
+			tr.h == 48 and math.abs(tr.w - width) < 0.01 and tr.y + tr.h == GUI.h - 16 and math.abs(tr.x + tr.w / 2 - GUI.w / 2) < 0.01, rectText(tr))
+		if longest then
+			w.notify.OnClientEvent:Fire(longest)
+			run(0)
+			if size[1] == 667 then
+				w.resize(320, 568, bar)
+				local face = prop(toast, "Text", "")
+				check(label .. ": a new screen size cuts the toast again for its new width",
+					measure(face, 16, font, math.min(GUI.w * 0.6, 520)).Y <= 2 * lineH and string.sub(face, -3) == "...", face)
+			end
+			openShop(w, label)
+			check(label .. ": opening the shop shows the whole message in the window's line, never the cut one",
+				prop(kid(win(w), "StatusLine"), "Text") == longest, prop(kid(win(w), "StatusLine"), "Text"))
+		end
+		noErrors(label)
+	end
+end
+
 -- A message still in the window's line when the shop closes moves to the toast, once (decided by the owner) ---------
 for _, case in ipairs({ { 667, 375, 36, "the X" }, { 320, 568, 36, "the SHOP button" }, { 568, 320, 58, "another window opening" } }) do
 	local label = "message at close " .. case[1] .. "x" .. case[2] .. "/" .. case[3] .. " (" .. case[4] .. ")"
@@ -2525,6 +2579,94 @@ def hud_buttons(client=None):
     return found
 
 
+def lua_quote(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def toast_texts():
+    """Every text the shop's toast can be given, built from the sources: what ShopServer.lua and TycoonCore.lua send
+    through ShopNotify (with ShopConfig's names and effects, and the shortest and a very long Cash amount), the client's
+    own, and the Office refusals (they show in the hero card, never the toast, but get the same test). Returns
+    (rows, problems): rows are (where, text), problems the ShopNotify calls this list does not know (a named check)."""
+    server, core, poach, cfg = read("ShopServer.lua"), read("TycoonCore.lua"), read("PoachServer.lua"), read("ShopConfig.lua")
+    client = read(CLIENT)
+    problems = []
+
+    def at(name, text, fragment):
+        i = text.find(fragment)
+        if i < 0:
+            problems.append("%s no longer has %s" % (name, fragment))
+            return name + ":?"
+        return "%s:%d" % (name, text.count("\n", 0, i) + 1)
+
+    passes = cfg[cfg.index("ShopConfig.Passes = {"):cfg.index("ShopConfig.Products = {")]
+    products = cfg[cfg.index("ShopConfig.Products = {"):]
+    pass_names = re.findall(r'^\t\tname = "([^"]+)",', passes, re.M)
+    rows = []
+    for fragment, make in (('notify(player, pass.name .. " unlocked!")', lambda n: n + " unlocked!"),
+                           ('notify(player, "Roblox is slow to confirm " .. pass.name .. ". It will unlock by itself when Roblox answers (or when you rejoin).")',
+                            lambda n: "Roblox is slow to confirm " + n + ". It will unlock by itself when Roblox answers (or when you rejoin)."),
+                           ('notify(player, "Confirming " .. pass.name .. " with Roblox...")', lambda n: "Confirming " + n + " with Roblox...")):
+        where = at("ShopServer.lua", server, fragment)
+        rows += [(where, make(n)) for n in pass_names]
+    where = at("ShopServer.lua", server, 'notify(player, product.name .. ": " .. gained)')
+    money = lambda n: "$" + "{:,}".format(n)
+    for key, name, effect in re.findall(r'key = "(\w+)",.*?name = "([^"]+)",.*?effect = \{([^}]*)\}', products, re.S):
+        number = lambda field: int(re.search(field + r" = (\d+)", effect).group(1))
+        if "incomeMinutes" in effect:
+            at("ShopServer.lua", server, 'table.insert(gained, "+" .. ShopConfig.formatCash(amount))')
+            rows += [(where, name + ": +" + money(number("minCash"))), (where, name + ": +" + money(999999999999))]
+        if "luckMinutes" in effect:
+            at("ShopServer.lua", server, '"+" .. effect.luckMinutes .. " min of Luck Boost, kept for later (your hires follow a fixed order)"')
+            at("ShopServer.lua", server, '"+" .. effect.luckMinutes .. " min of Luck Boost"')
+            rows += [(where, "%s: +%d min of Luck Boost" % (name, number("luckMinutes"))),
+                     (where, "%s: +%d min of Luck Boost, kept for later (your hires follow a fixed order)" % (name, number("luckMinutes")))]
+        if "instantHatches" in effect:
+            at("ShopServer.lua", server, '"+" .. effect.instantHatches .. " Instant Hatch"')
+            rows.append((where, "%s: +%d Instant Hatch" % (name, number("instantHatches"))))
+        if "shieldMinutes" in effect:
+            at("PoachServer.lua", poach, '"+" .. effect.shieldMinutes .. " min of Poach Shield"')
+            rows.append((where, "%s: +%d min of Poach Shield" % (name, number("shieldMinutes"))))
+    vip = 'notify(player, "The VIP Lounge is for VIP pass holders only.")'
+    rows.append((at("ShopServer.lua", server, vip), "The VIP Lounge is for VIP pass holders only."))
+    for const in ("SAVE_TROUBLE_TEXT", "SAVE_BACK_TEXT"):
+        m = re.search(r'^local %s = "([^"]*)"' % const, core, re.M)
+        if not m:
+            problems.append("TycoonCore.lua no longer has " + const)
+            continue
+        rows.append(("TycoonCore.lua:%d" % (core.count("\n", 0, m.start()) + 1), m.group(1)))
+        at("TycoonCore.lua", core, "ShopServer.notify(player, %s)" % const)
+    for text in ("Couldn't open the purchase. Please try again.", "Couldn't buy that. Please try again."):
+        rows.append((at(CLIENT, client, '"%s"' % text), text))
+    upgrade_names = [r[0] for r in re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+)', core)]
+    costs = dict(re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+)', core))
+    for fragment, texts in (('"Still loading, try again in a moment"', ["Still loading, try again in a moment"]),
+                            ('"Unknown upgrade"', ["Unknown upgrade"]), ('"Too fast"', ["Too fast"]),
+                            ('upg.name .. " is already yours"', [n + " is already yours" for n in upgrade_names]),
+                            ('"Buy " .. earlier.name .. " first"', ["Buy " + n + " first" for n in upgrade_names]),
+                            ('"You need $" .. upg.cost .. " for " .. upg.name', ["You need $" + costs[n] + " for " + n for n in upgrade_names])):
+        where = at("TycoonCore.lua", core, fragment)
+        rows += [(where, x) for x in texts]
+    for text in ("Bad request", "Unknown action"):
+        rows.append((at("ShopServer.lua", server, '"%s"' % text), text))
+    # every ShopNotify call is one of the above
+    known = server.count('notify(player, pass.name .. " unlocked!")') + server.count('notify(player, "Roblox is slow to confirm ')
+    known += server.count('notify(player, "Confirming ') + server.count('notify(player, product.name .. ": " .. gained)') + server.count(vip)
+    calls = len(re.findall(r"^\s*notify\(player,", code_only(server), re.M))
+    calls -= len(re.findall(r"^function ShopServer\.notify\(player, text\)\n\tnotify\(player, text\)\nend", server, re.M))
+    if calls != known:
+        problems.append("ShopServer.lua has %d notify(player, ...) calls, the toast tests know %d" % (calls, known))
+    outside = sorted(set(re.findall(r"(?<!function )ShopServer\.notify\(player, (\w+)\)", "".join(code_only(read(f)) for f in sorted(os.listdir(ROOT)) if f.endswith(".lua")))))
+    if outside != ["SAVE_BACK_TEXT", "SAVE_TROUBLE_TEXT"]:
+        problems.append("ShopServer.notify is called with %r" % outside)
+    return rows, problems
+
+
+def toast_lua():
+    rows, _ = toast_texts()
+    return "{ " + ", ".join("{ where = %s, text = %s }" % (lua_quote(w), lua_quote(x)) for w, x in rows) + " }"
+
+
 def hud_lua():
     """The other scripts' four HUD buttons as a Luau list (the SHOP button is checked on the real instance)."""
     rows = sorted((b["slot"], name, b["gui"], b["order"]) for name, b in hud_buttons().items() if name != "ShopButton")
@@ -2563,7 +2705,9 @@ def program(layout=None, client=None):
     world = (WORLD.replace("__UPGRADES__", upgrades_lua())
              .replace("__CLIENT__", long_string(client if client is not None else read(CLIENT)))
              .replace("__MODULES__", modules))
-    tests = "".join(sectionize(block) for block in (LAYOUT_TESTS, LADDER_TESTS, CLIENT_TESTS.replace("__HUD__", hud_lua()), OFFICE_TESTS))
+    client_tests = (CLIENT_TESTS.replace("__HUD__", hud_lua()).replace("__TOAST_TEXTS__", toast_lua())
+                    .replace("__TOAST_REPORT__", "true" if "--toast-report" in sys.argv else "false"))
+    tests = "".join(sectionize(block) for block in (LAYOUT_TESTS, LADDER_TESTS, client_tests, OFFICE_TESTS))
     return PRELUDE + world + tests + 'print_real(string.format("%d passed, %d failed", passed, failed))\n'
 
 
@@ -2665,6 +2809,9 @@ def static_checks(layout=None, client=None, out=None):
     toast = re.search(r'local toast = make\("TextLabel", \{.*?Parent = (\w+),', cli, re.S)
     check("layers: the shop's toast is in ShopGui, with the window (shown only while the window is closed)",
           toast is not None and guis.get("ShopGui", {}).get("var") == toast.group(1) and guis["ShopGui"]["file"] == CLIENT)
+    _, toast_problems = toast_texts()
+    check("toast: every ShopNotify text of ShopServer.lua and TycoonCore.lua (and the refusals) is in the toast tests",
+          not toast_problems, toast_problems[:2])
     check("layers: the shop's ScreenGuis keep Roblox's top bar outside them (IgnoreGuiInset off, the same GUI space as the HUD)",
           not guis.get("ShopGui", {"inset": True})["inset"] and not guis[huds["ShopButton"]["gui"]]["inset"])
     return passed, failed
@@ -2818,6 +2965,17 @@ MUTANTS = [
      "closing the shop moves a message still in its line to the toast"),
     ("the moved message stays in the window's line too", C, "\tstatusToken += 1 -- the line's own timer does nothing more\n\tstatusText = nil\n", "",
      "once: the window's line is cleared"),
+    ("the toast never cut (a long text overflows its lane)", C, "\treturn clampLines(toastText, toast.Font,", "\treturn toastText or clampLines(toastText, toast.Font,",
+     "every server text fits the toast's 2 lines"),
+    ("the toast cut to 3 lines", C, "local TOAST_LINES = 2", "local TOAST_LINES = 3", "every server text fits the toast's 2 lines"),
+    ("a cut toast without its ...", C, ('return (string.gsub(head, "[%s%.,;:]+$", "")) .. "..."', 'local short = (string.gsub(string.sub(text, 1, space - 1), "[%s%.,;:]+$", "")) .. "..."'),
+     ('return (string.gsub(head, "[%s%.,;:]+$", ""))', 'local short = (string.gsub(string.sub(text, 1, space - 1), "[%s%.,;:]+$", ""))'),
+     "a longer one is its start and ends with ..."),
+    ("a short text cut anyway", C, "\tif width <= 0 or fits(text) then\n", "\tif width <= 0 then\n", "a text that fits is shown whole"),
+    ("the window's line gets the cut toast", C, "showStatus(toastText) -- the whole message", "showStatus(toast.Text) -- the whole message",
+     "opening the shop shows the whole message in the window's line"),
+    ("the toast not cut again on a new width", C, "\tif toast.Visible then\n\t\ttoast.Text = toastFace() -- cut again for the new width\n\tend\n", "",
+     "a new screen size cuts the toast again for its new width"),
     ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
      "after the Retry the hero shows whole"),
 ]

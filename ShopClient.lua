@@ -198,6 +198,52 @@ local toast = make("TextLabel", {
 round(toast, 12)
 fitText(toast, 22)
 make("UISizeConstraint", { MaxSize = Vector2.new(ShopLayout.TOAST_MAX_W, 48), Parent = toast })
+local toastText = "" -- the toast's whole message: its label shows at most TOAST_LINES lines of it
+local TOAST_LINES = 2 -- what its 48 px lane holds at 16 px (other pop-ups and the call tray use the lanes above)
+
+-- A 16 px text cut to at most maxLines lines at this width: the text itself when it fits, else its longest start
+-- (at a word when it can) followed by "...". The whole text stays for the window's status line.
+local function clampLines(text, font, width, maxLines)
+	local lineH = textHeight("Ag", font, 10000)
+	local function fits(s)
+		return textHeight(s, font, width) <= maxLines * lineH
+	end
+	if width <= 0 or fits(text) then
+		return text
+	end
+	local starts = {}
+	for position in utf8.codes(text) do
+		table.insert(starts, position)
+	end
+	local function cut(k) -- the first k characters, without trailing spaces or punctuation, and "..."
+		local head = k < #starts and string.sub(text, 1, starts[k + 1] - 1) or text
+		return (string.gsub(head, "[%s%.,;:]+$", "")) .. "..."
+	end
+	local low, high = 0, #starts -- the longest start that fits, by halving (cut(0) is only "...")
+	while low < high do
+		local mid = math.ceil((low + high) / 2)
+		if fits(cut(mid)) then
+			low = mid
+		else
+			high = mid - 1
+		end
+	end
+	local k = low
+	local inWord = k > 0 and k < #starts and not string.find(string.sub(text, starts[k + 1], starts[k + 1]), "%s")
+	local space = inWord and string.find(string.sub(text, 1, starts[k + 1] - 1), "%s[^%s]*$")
+	if space and space > 1 then -- the cut is inside a word: end at the word before it
+		local short = (string.gsub(string.sub(text, 1, space - 1), "[%s%.,;:]+$", "")) .. "..."
+		if fits(short) then
+			return short
+		end
+	end
+	return cut(k)
+end
+
+-- The toast's text for its width now (0.6 of the screen, at most TOAST_MAX_W)
+local function toastFace()
+	return clampLines(toastText, toast.Font, math.min(gui.AbsoluteSize.X * 0.6, ShopLayout.TOAST_MAX_W), TOAST_LINES)
+end
 
 -- The window: every piece is placed by applyLayout from ShopLayout.layout
 local window = make("Frame", {
@@ -585,6 +631,9 @@ local function applyLayout()
 	for _, hook in ipairs(layoutHooks) do
 		hook()
 	end
+	if toast.Visible then
+		toast.Text = toastFace() -- cut again for the new width
+	end
 end
 
 -- Behaviour -------------------------------------------------------------
@@ -602,7 +651,8 @@ local toastToken = 0
 local function showToast(text)
 	toastToken += 1
 	local myToken = toastToken
-	toast.Text = text
+	toastText = text
+	toast.Text = toastFace()
 	toast.Visible = true
 	task.delay(3.5, function()
 		if toastToken == myToken then
@@ -1461,7 +1511,7 @@ local function setOpen(open)
 			-- a message that is still up moves into the window (the pop-up would cover it)
 			toastToken += 1
 			toast.Visible = false
-			showStatus(toast.Text)
+			showStatus(toastText) -- the whole message (the toast may show it cut)
 		end
 		refreshAll()
 	end
