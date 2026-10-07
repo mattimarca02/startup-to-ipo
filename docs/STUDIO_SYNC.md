@@ -150,6 +150,52 @@ for stage = 1, #PlotArt.Stages do
 end
 ```
 
+## (d) Addendum: customize PR 1 (branch `customize-pr1`, the `pokedex` save section)
+
+Nothing here touches Roblox: it is the list of what the Mac has to do. **Three new scripts and one changed one.** Every other script is identical to `main`. The `TycoonCore` row here **replaces** the `TycoonCore` row in (a) (that one is the visuals-garage version, already on `main`). **Third review fix (branch `customize-pr1-fix-c`): only `CompanyConfig` changed again** (it tidies `card.owned` and the placed-item lists on load; its hash and size below are new; `SectorConfig`, `CompanyServer` and `TycoonCore` are byte for byte the ones below, so if you already pasted the second-fix version, paste only `CompanyConfig` again, and the hash block says `DIFFERENT` for it otherwise). The rest of this paragraph is how the second review fix (branch `customize-pr1-fix-b`, pushed to `customize-pr1`) differed from the first: since the first review fix `CompanyConfig` changed (`card.owned` keeps the keys outside its list) and `TycoonCore` changed by comments only (the `SAVEFN` and `COMMITIPO` markers the tests read); `CompanyServer` and `SectorConfig` are the same as before. The steps are the same (same scripts, same order, nothing new to create), but if you already pasted the previous version, paste `CompanyConfig` and `TycoonCore` again (the hash block says `DIFFERENT` for them otherwise); only docs and tests changed besides those two.
+
+| Script | Studio type and place | State | sha256 | Bytes |
+|---|---|---|---|---|
+| `SectorConfig` | ModuleScript, **ReplicatedStorage** | **new** | `60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b` | 3194 |
+| `CompanyConfig` | ModuleScript, **ReplicatedStorage** | **new** | `bc8745926f2a0c89eaab7881211ffe0618f3171c42947527db69cfb550f1ff7c` | 41284 |
+| `CompanyServer` | ModuleScript, **ServerScriptService** | **new** | `826dfba8fac00bee190fd62265024be1c1e4c43d41f4c84d5cf462e20a500a10` | 8268 |
+| `TycoonCore` | Script, ServerScriptService | changed | `9607262c64d762cc15644a8ab3d85821cfaba2654879a9018210e1237679def2` | 36399 |
+
+The Studio MCP cannot create scripts inside services, so the three new ones are made **by hand** (names are exact, capital letters included).
+
+### Steps on the Mac (in this order)
+
+1. **Pull.** In a terminal in the project folder: `git fetch`, `git checkout customize-pr1`, `git pull`. Check `git log --oneline -1` shows the newest commit of this branch.
+2. **Create the three ModuleScripts first.** In Studio's Explorer: hover **ReplicatedStorage**, click **+**, choose **ModuleScript**, press F2 and name it exactly `SectorConfig`. Do the same for `CompanyConfig` in **ReplicatedStorage**, and then for `CompanyServer` in **ServerScriptService**.
+3. **Paste the sources, in this order:** `SectorConfig.lua` into `SectorConfig`, then `CompanyConfig.lua` into `CompanyConfig`, then `CompanyServer.lua` into `CompanyServer` (open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste). `CompanyConfig` waits for `SectorConfig` and `IpoConfig`, and `CompanyServer` waits for `CompanyConfig`, all with no time limit: so a missing one hangs the server script.
+4. **Only then paste `TycoonCore.lua`** into the existing `TycoonCore` Script (ServerScriptService). `TycoonCore` requires `CompanyServer` the same way.
+5. **Verify the hashes.** Open the **command bar** (View > Command Bar), paste the first part of the block in (c) step 3 above (the `K` table and the `sha256` function, down to the closing `end` of `sha256`), then paste the block below after it and press Enter. Every line must say `OK`.
+6. **Playtest (F5)**, read the Output: no red errors; no "Could not set up", no warnings from `pokedex`. Join, leave and rejoin. Check that nothing looks or plays differently. The Output must **not** say "Keeping a part of ... save this version doesn't know: pokedex" (it is a known section now).
+7. Before merging `customize-pr1` (not before pasting): run the DataStore test block of docs/CUSTOMIZE_PR1_NOTES.md in the command bar (it uses a throwaway store and removes its keys) and read its result table; it settles whether `SetAsync` really refuses mixed and holed tables. It was never run in Studio. The Studio steps above are otherwise unchanged by the third fix.
+8. Before Publish: **View > Drafts**, commit every draft. Publish with **Shut down all servers** (docs/PUBLISH_RULES.md 2d), never Migrate.
+
+```lua
+local SSS = game:GetService("ServerScriptService")
+local RS = game:GetService("ReplicatedStorage")
+local WANT = {
+	SectorConfig = { RS, "60629dc4d4368652a4235ba2b6ccb5499836361110c6e7331f7ae46730a0ee6b", 3194 },
+	CompanyConfig = { RS, "bc8745926f2a0c89eaab7881211ffe0618f3171c42947527db69cfb550f1ff7c", 41284 },
+	CompanyServer = { SSS, "826dfba8fac00bee190fd62265024be1c1e4c43d41f4c84d5cf462e20a500a10", 8268 },
+	TycoonCore = { SSS, "9607262c64d762cc15644a8ab3d85821cfaba2654879a9018210e1237679def2", 36399 },
+}
+for name, want in pairs(WANT) do
+	local script = want[1]:FindFirstChild(name)
+	if not script then
+		print(name, "MISSING (create it)")
+	else
+		local source = script.Source
+		local same = sha256(source) == want[2] and #source == want[3]
+		local withNewline = sha256(source .. "\n") == want[2] and #source + 1 == want[3]
+		print(name, (same or withNewline) and "OK" or "DIFFERENT", #source, "bytes")
+	end
+end
+```
+
 ## What is not in Studio-only any more
 
 Everything above is now written down. What this file cannot capture: anything changed in Studio by hand that nobody wrote down (the `ColorCorrection` values are in (b)). If something in the place looks different from the repo, the repo's scripts win (CONTRIBUTING.md, "Keeping Studio and the repo in sync").

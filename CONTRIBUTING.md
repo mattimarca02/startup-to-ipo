@@ -128,3 +128,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
+| docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md | (repo only) | free | | |
+| docs/GAMEPLAY_NOTES.md | (repo only) | free | | |
+| docs/SOUND_PLAN.md | (repo only) | free | | |
+| tools/first_hour_model.py | (repo only) | free | | |
+| docs/SIMS_RESULTS.md | (repo only) | free | | |
+| CompanyServer | ServerScriptService | free | | |
+| CompanyConfig | ReplicatedStorage | free | | |
+| SectorConfig | ReplicatedStorage | free | | |
+| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
