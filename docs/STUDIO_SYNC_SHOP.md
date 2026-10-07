@@ -1,8 +1,8 @@
 # Studio sync: the shop, S1 and S2
 
-Branch `shop-build` (from `world-icons-pass` at `6bc827c`): PR **S1** and **S2** of docs/SHOP_UX_PROPOSAL.md (section 5). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. The SHA-256 and sizes below are the files as they are on the branch (`tools/shop_ux_test.py` fails if this table or the hash block stops matching them).
+Branch `shop-build` (from `world-icons-pass` at `6bc827c`, merged with its tip `4c052c7`; the review fixes of 2026-10-07 are in, see (h)): PR **S1** and **S2** of docs/SHOP_UX_PROPOSAL.md (section 5). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. The SHA-256 and sizes below are the files as they are on the branch (`tools/shop_ux_test.py` fails if this table or the hash block stops matching them).
 
-**What changes in the game:** only the shop window. One new ModuleScript, `ShopLayout` (the window's sizes and the Office ladder, as pure functions), and one changed LocalScript, `ShopClient`. No server script, no config, no remote, no save change. The item icons are still emoji (S3 replaces them later).
+**What changes in the game:** only the shop window. One new ModuleScript, `ShopLayout` (the window's sizes and the Office ladder, as pure functions), and one changed LocalScript, `ShopClient`. No server script, no config, no remote, no save change. The item icons are still emoji (S3 replaces them later). `ShopClient` now makes two ScreenGuis by itself when the game runs (nothing to create in Studio): `ShopHudGui` (DisplayOrder -1) for the SHOP button, with the other HUD buttons, and `ShopGui` (DisplayOrder 5) for the shop window and its pop-up, above every HUD button, like the Poach and IPO windows.
 
 ## (a) Files to copy
 
@@ -114,7 +114,7 @@ end
 
 ## (e) Playtest checklist (F5, then Test > Device)
 
-1. **Start (F5).** The Output shows no red error that names `ShopClient` or `ShopLayout`. The SHOP button is where it was.
+1. **Start (F5).** The Output shows no red error that names `ShopClient` or `ShopLayout`. The SHOP button is where it was (in the Explorer, under PlayerGui > `ShopHudGui`).
 2. **Open the shop.** It opens on the Office tab. On a wide window (landscape, and the desktop) the tabs are a column on the left, 112 px wide; on a phone held upright they are a row under the title. Top right: a "?" and the red X.
 3. **Each tab:** tap Office, Passes, Boosts, Cash and (Studio only) Debug. The tapped tab turns green. No text is tiny: long descriptions make a card taller instead of shrinking. The Vault of Cash (Cash tab) has a gold **BEST VALUE** badge.
 4. **Buy the Desk.** If your save already owns upgrades, the top row says "N of 6 bought" and the hero card is the next one. To see the Desk as the hero again: Debug > **Jump to IPO-ready**, open the IPO window and **Go Public** (an IPO resets the upgrades), then Debug > **Reset IPO progress**. The Desk's button says **Get it free**. Tap it: "..." then **Bought!**, the icon pops and **+$1/s** floats up; a moment later the Desk folds into "1 of 6 bought" and the Coffee Machine becomes the hero card.
@@ -123,8 +123,12 @@ end
 7. **The summary row:** tap "2 of 6 bought": the owned upgrades show with a green check and "Owned"; tap again to fold them.
 8. **All six:** Debug > **Give $1,000,000**, then buy the rest. After the sixth, a gold **Office complete** banner at the top says "Your next step: the IPO window" (no button).
 9. **"?":** a "How the shop works" card with three lines covers the pages. **Back** closes it; so does a tab, or "?" again.
-10. **Messages:** with the shop open, Debug > **Give: Pile of Cash**. The message shows in a line at the window's bottom for 3.5 s (the pages get shorter meanwhile), never as a pop-up over the window.
+10. **Messages:** with the shop open, Debug > **Give: Pile of Cash**. The message shows in a line at the window's bottom for 3.5 s (the pages get shorter meanwhile), never as a pop-up over the window, and the Office page does not jump when the line appears or goes away (scroll the Office page down first to see it). Give it again and close the shop with the X at once: the message moves to the pop-up at the bottom for 3.5 s.
 11. **Test > Device:** a phone at **320 x 568** (portrait) and one at **667 x 375** (landscape). Nothing is cut off, the hero card and its button are fully visible, and the X and "?" are easy to hit. Then go back to the desktop view.
+    - **667 x 375, the left edge of the Office tab:** open the shop and tap the Office tab at its far left (x 37-74 is where EGGS sits, x 82-146 the SHOP button). The shop stays open on the Office tab: the Recruiting window does not open and the shop does not close (the window draws above the HUD buttons now). At **844 x 390** do the same over the middle of the Office tab (TEAM is under it).
+    - **A long pop-up at 320 x 568:** Debug > **Paid random items: restricted on/off** (restricted on), then Debug > **Give: Luck Boost** and close the shop with the X at once. The pop-up at the bottom shows two lines that end with "..." ("Luck Boost: +15 min of Luck Boost, kept..."), inside its own box; open the shop while it is up and the window's line shows the whole text. Switch restricted off again.
+    - **The portrait tab row with the Debug tab (Studio, 320 x 568):** five tabs do not fit the row, so it scrolls sideways: Office, Passes and Boosts are 64 px, Cash 45, Debug 54, and Debug shows only partly until you drag the row to the left. No label is cut. (A live game has four tabs, 64 px each, and never scrolls.)
+    - **568 x 320:** the hero card says "+$15/s" (Server Rack), "+$40/s", "+$120/s" instead of "... every second", on one line above the bar.
 12. **Debug > Paid random items: restricted on/off:** Luck Boost disappears from the Boosts tab; tap it again and it comes back (it shows "Coming soon" while `EggsEnabled` is off).
 13. **The tutorial strip (optional):** while playing, switch the command bar to the client (**Test > Client / Server** toggle) and run `game.Players.LocalPlayer.PlayerGui:SetAttribute("TutorialBanner", "Tap Get it free to buy the Desk.")`. A gold line appears at the window's bottom and the pages get shorter; the Office page does not move (a hero that becomes the hero while the strip is up always shows whole above it). `SetAttribute("TutorialBanner", nil)` removes it. A text longer than 40 characters prints a warning in the Output (Studio only): `ShopClient: TutorialBanner is N characters, ...`.
 
@@ -144,7 +148,7 @@ The Retry button only appears when the server never answers "Upgrades" (5 tries,
 
 ## (f) What to look at in Studio (only your eyes can judge these)
 
-- **Text that may not fit.** The tests estimate Gotham's widths (about 0.56 em a letter); the real font decides. Look at: the tab labels (five in Studio at 320 x 568, about 51 px each), "Need $1,234 more" on the hero's button (two lines are fine), "Unlocks after Coffee Machine" and two-line names on a portrait phone, "Startup Shop" in the 168 px portrait title, the BEST VALUE badge, the help card's three lines (one screen at 667 x 375 and 320 x 568).
+- **Text that may not fit.** The tests estimate Gotham's widths (about 0.56 em a letter); the real font decides. Look at: the tab labels (four 64 px tabs at 320 x 568; in Studio the five scroll), the pop-up's two lines and their "..." at 320 x 568, "Need $1,234 more" on the hero's button (two lines are fine), "Unlocks after Coffee Machine" and two-line names on a portrait phone, "Startup Shop" in the 168 px portrait title, the BEST VALUE badge, the help card's three lines (one screen at 667 x 375 and 320 x 568).
 - **The drawn check mark and padlock** (UI shapes, no image): do they read at 20 px?
 - **The animations:** the pop (0.1 s up and back), the "+$X/s" float (0.8 s), the bar's shake, the pulse every 4 s. Too much, too little?
 - **Colors:** the light red of a refusal on a card, the gold banner and badge, the dark gold strip, the gray skeleton rungs, the dimmed locked rungs.
@@ -153,4 +157,18 @@ The Retry button only appears when the server never answers "Upgrades" (5 tries,
 
 ## (g) Roll back
 
-A version from before this branch keeps working: the old `ShopClient` does not require `ShopLayout`, which then sits unused in ReplicatedStorage. To undo in Studio only, paste `main`'s `ShopClient.lua` back (`git show main:ShopClient.lua`); `ShopLayout` can stay.
+A version from before this branch keeps working: the old `ShopClient` does not require `ShopLayout`, which then sits unused in ReplicatedStorage. To undo in Studio only, paste `main`'s `ShopClient.lua` back (`git show main:ShopClient.lua`); `ShopLayout` can stay. (`ShopHudGui` is made by the new script while the game runs: there is nothing of it to remove.)
+
+## (h) What changed since the first version of this page (`372e998`)
+
+If you pasted the first version already, paste both files again (the hashes in (a) changed) and redo (e) 10, 11 and 13. In the game:
+
+1. **The shop window draws above the HUD buttons.** `ShopGui` has DisplayOrder 5 (the Poach, IPO and Daily windows' layer); the SHOP button moved to its own `ShopHudGui` (-1, with POACH and IPO). Before, EGGS (667 x 375) and TEAM (844 x 390) could draw over the Office tab, and a tap there could open the Recruiting window and close the shop.
+2. **The Office page no longer jumps back to the next upgrade** when a message line appears or goes away, the tutorial strip changes, a tab is tapped, the shop reopens or the phone turns. It scrolls by itself only after a buy and when a new upgrade becomes the next one; a page that got shorter only stops at its new end. Right after a buy the card no longer flips to the next upgrade for a moment and back.
+3. **A message still showing when you close the shop** (or another window opens) moves to the pop-up at the bottom instead of disappearing.
+4. **The pop-up holds at most two lines** and ends with "..." when the text is longer (at 320 x 568 several server texts need 3 to 6 lines; they get shorter at the next server change). The whole text still shows in the window's line.
+5. **At 568 x 320 the next upgrade says "+$40/s"** where "+$40 every second" does not fit on one line.
+6. **Portrait tabs make room for their labels:** with Studio's five tabs at 320 x 568 the row scrolls sideways (the live four are unchanged).
+7. **The tutorial strip's text limit:** 40 characters for TutorialConfig's texts (the table in (e) 13); Studio warns in the Output about a longer TutorialBanner.
+
+Nothing else changed: no server script, no config, no remote, no save.

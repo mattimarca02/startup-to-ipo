@@ -45,7 +45,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
 - [x] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
 - [x] 4.10 Item 9, the two mutants that also raised a runtime error
-- [ ] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
+- [x] 4.11 Item 10, docs/STUDIO_SYNC_SHOP.md (hashes, sizes, checklist, what changed) and these notes' results
 - [ ] 4.12 Release the claims (rows kept, set to free)
 
 **OWNER DEFAULTS** (given with the review; applied as they are):
@@ -160,7 +160,7 @@ The container had no `luau`: the official release `luau-ubuntu.zip` (github.com/
 | ShopServer.lua:547 (sent at :580) | "Luck Boost: +15 min of Luck Boost, kept for later (your hires follow a fixed order)" (a restricted player) | 83 | 4 / 2 |
 | ShopServer.lua:337 | "Confirming <pass> with Roblox..." for Extra Employee Slots, Auto-Hatch, Headhunter, Shareholder | 36 to 46 | 3 / 1 |
 | ShopServer.lua:692 and :840 | "The VIP Lounge is for VIP pass holders only." | 44 | 3 / 1 |
-| ShopClient.lua:717 (the client's own) | "Couldn't open the purchase. Please try again." | 45 | 3 / 1 |
+| ShopClient.lua:733 (the client's own) | "Couldn't open the purchase. Please try again." | 45 | 3 / 1 |
 
 Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" lines, every Cash pack up to $999,999,999,999, the refusals). At 320 x 568 a cut message reads, for example, "Saving is having trouble right now..." or "Roblox is slow to confirm Extra..."; the whole text shows in the window's line if the shop opens while the toast is up. The client's own text is in this branch's file, but its wording is the owner's: listed, not changed.
 
@@ -176,7 +176,7 @@ Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" l
 
 **Checked:** true. With Studio's five tabs a 320 x 568 portrait row gave each tab 51 px; "Passes" and "Boosts" need 60 px, "Office" 60 and "Debug" 50 at 16 px bold (the tests' estimate; the review measured 57-58), so three labels could not fit. Even the labels' own widths (and 2 px each side) add up to more than the row (307 of 274 px), so sharing the full width cannot work at 320 px: the row has to scroll.
 
-**Fix:** `ShopLayout.layout(..., tabLabelW)` takes the tab labels' widths (ShopClient measures them once with `textWidth`, 16 px bold). In portrait: the tabs share the row evenly when every label fits (the live game's four tabs: 64 px each at 320 x 568, unchanged); else each tab is its label plus `TAB_TEXT_PAD` (2 px) on each side and an even part of what is left; when even that is wider than the row, the row scrolls sideways (44 px targets kept) and gets `TAB_SCROLLBAR` (4 px) under its tabs for the scroll bar, the pages starting 4 px lower. At 320 x 568 in Studio: Office, Passes and Boosts 64 px, Cash 45, Debug 54; the Debug tab shows 33 of its 54 px until the row is swiped. The landscape rail (112 px tabs) does not change. Without `tabLabelW` the layout is the old one, so every old layout check still holds.
+**Fix:** `ShopLayout.layout(..., tabLabelW)` takes the tab labels' widths (ShopClient measures them once with `textWidth`, 16 px bold). In portrait: the tabs share the row evenly when every label fits (the live game's four tabs: 64 px each at 320 x 568, unchanged); else each tab is its label plus `TAB_TEXT_PAD` (2 px) on each side and an even part of what is left; when even that is wider than the row, the row scrolls sideways (44 px targets kept) and gets `TAB_SCROLLBAR` (4 px) under its tabs for the scroll bar, the pages starting 4 px lower. At 320 x 568 in Studio: Office, Passes and Boosts 64 px, Cash 45, Debug 54; the Debug tab shows 21 of its 54 px until the row is swiped. The landscape rail (112 px tabs) does not change. Without `tabLabelW` the layout is the old one, so every old layout check still holds.
 
 **Tests:** "tab labels" at every phone and top bar, 4 and 5 tabs (pure): every tab as wide as its label (and 44 x 44), no overlap, the canvas reaches the last tab and scrolls exactly when it is longer than the bar, the live four share the row evenly and never scroll, a scrolling row has room for its bar and the pages start under it, Studio's five scroll at 320 px. In the fake place at every phone, live and Studio: "every tab's label fits its tab on one line at 16 px" on every tab page, and in Studio at 320 px "the tab row scrolls sideways to the Debug tab (shown whole, a scroll bar)", then the Debug tab is tapped. **Mutants (5):** the portrait tabs ignore their labels, a too-long row squeezed to even tabs, no room for the bar, the bar never shown, ShopClient never passing the labels.
 
@@ -208,6 +208,10 @@ So the rule "Buy only when the Cash is there" is held by shop_ux_test, and the s
 
 **The guards (so the named checks fail cleanly):** ShopLayout.ladder now sets the rows that are not owned after `nextIndex` is known (the hero's row is "next", every other one "locked") and drops a `nextIndex` with no upgrade behind it: its rows and its hero always agree, whatever goes wrong inside it. ShopClient's `showRung` places a button only where its row's layout has one. Neither changes anything for a valid list (ipairs never gives an index without an upgrade); both only keep a broken state from crashing.
 
+### Item 10: docs/STUDIO_SYNC_SHOP.md and these notes (applied)
+
+The hashes and sizes (in the table, the hash block and "Results after the review fixes" below) were computed by running the SHA-256 code of docs/STUDIO_SYNC.md's hash block in `luau` on the real files, and agree with Python's `hashlib`. The playtest checklist (e) gained, under step 11: open the shop at 667 x 375 and tap the left edge of the Office tab (and the middle at 844 x 390); a long pop-up at 320 x 568 (Luck Boost given to a restricted player, the shop closed at once); the portrait tab row with the Debug tab in Studio; the short "+$40/s" at 568 x 320. Step 10 now checks that the Office page does not jump and that a message moves to the pop-up on close; step 13 has the text limit table. New section (h): what changed in the game since the page's first version, and that a first paste must be redone. (f) and (g) follow the fixes (the tab labels, the scrolling sentence, `ShopHudGui` on a roll back).
+
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 
 1. **The rail starts at the window's top, beside the header** (3.10 drew it under a full-width header, title 488 px). Under the header, 5 tabs (Studio's Debug) did not fit at the reference 667 x 375 with a 58 px top bar, nor 4 tabs at 568 x 320 with 58 px. Now the title is right of the rail (367 px at 667 x 375 / 36), and the pages are the proposal's (x 120 to the right edge, y 50 to the bottom: 473 x 241, the proposal's 474 x 242 rounded down, like the window, 613 x 311 instead of 614 x 312). The rail never scrolls with the live game's 4 tabs; with Studio's 5 it scrolls only at 568 x 320 under a 58 px bar.
@@ -234,7 +238,9 @@ So the rule "Buy only when the Cash is there" is held by shop_ux_test, and the s
 5. The help card's three lines are mine (ShopClient.lua `HELP_LINES`): change the wording?
 6. The tab rail starts at the window's top, the title right of it (367 px at 667 x 375). All right?
 7. CLAUDE.md does not list `ShopLayout` yet (it was not claimed). Add a line in a later docs PR?
-8. A long pop-up (only while the shop is closed) may be cut on a narrow phone: it keeps its 48 px lane, which TaskClient's tray tests rely on. Grow it (a lane change, TaskClient's tests), or keep the server's long messages shorter?
+8. A long pop-up (only while the shop is closed) may be cut on a narrow phone: it keeps its 48 px lane, which TaskClient's tray tests rely on. Grow it (a lane change, TaskClient's tests), or keep the server's long messages shorter? **Answered by OWNER DEFAULT 3:** 2 lines with "...", the server texts shortened at the next server change (item 4 lists them).
+10. (Review fixes) The SHOP button now lives in its own ScreenGui `ShopHudGui` (DisplayOrder -1), not in `ShopGui`, so it never draws over another window (item 1). Anything that looked for `ShopGui.ShopButton` by path must look for `ShopButton` by name in PlayerGui (nothing in the repo does; the tutorial proposal finds HUD buttons by name). All right?
+11. (Review fixes) A tutorial strip that appears after the hero was placed keeps the player's place (OWNER DEFAULT 5), so on the lowest landscape windows it can cover up to 19 px of the hero's bottom until the next buy. Should TutorialClient set its banner before the shop opens (no code change), or should a TutorialBanner change count as a hero change?
 9. The proposal's two open questions (section 7: the cap of 8 ViewportFrames, "where it stands") are untouched: they belong to S3.
 
 ## Judgment calls
@@ -258,6 +264,10 @@ Nothing was blocked. Every precondition held, no file this job needed was claime
 3. **The rail is a ScrollingFrame:** on a touch screen a tap that starts a small drag may scroll instead of pressing a tab. It only scrolls at all with Studio's 5 tabs on the lowest phone (ScrollBarThickness 0 otherwise).
 4. **Rotated frames (the check mark) and UIStroke (the padlock's shackle)** are drawn shapes whose look the fake cannot judge.
 5. **The pages shrink while a message shows** (3.5 s): a card may move under the player's thumb for that time. Nothing covers a button.
+6. (Review fixes) **Pop-ups of layer 0 under the shop:** a Recruiting or Onboarding pop-up that appears while the shop is open is now drawn under the shop window (before: an undefined order), the same as under the Poach, IPO and Daily windows. A pop-up of another layer-5 script still ties with the shop window, as it did with those windows.
+7. (Review fixes) **The toast's two lines** are cut with the client's measure (`TextService:GetTextSize` at 16 px); TextScaled may then draw a short text bigger (up to 22 px) or a cut one at 16. If Roblox wraps a little differently from GetTextSize, a cut text could still touch its box's edge; the box itself never grows.
+8. (Review fixes) **The sideways tab row in Studio at 320 x 568** shows only 21 of the Debug tab's 54 px until the row is dragged; on a touch screen a drag that starts on a tab may scroll instead of tapping (as for the rail, risk 3).
+9. (Review fixes) **The race in the old mutation harness:** the 67 of 67 recorded for S1 and S2 was measured with the harness that redirected `sys.stdout` from 4 threads (item 1); with the fixed harness and the strict rule (item 9) all 67 still pass (65 at once, the two of item 9 after their guards).
 
 ## What was not tested (no Studio, no device)
 
@@ -269,6 +279,7 @@ Nothing was blocked. Every precondition held, no file this job needed was claime
 - Roblox's purchase prompts and the server's answers (both faked: the prompts are recorded, the Office server mirrors TycoonCore.buyUpgrade's order, Cash and messages).
 - The Debug tab's server actions (ShopDebug is answered by a fake), and the strip with a real TutorialClient (it does not exist yet).
 - Only the owner's eyes can judge: whether the shop now feels less plain, the hero card's weight on the page, whether "Need $X more" and the shake read as "not yet", whether the portrait cards are too tall now that their text stays at 16 px.
+- (Review fixes) Roblox's real layering of ScreenGuis with equal or different DisplayOrder and a real tap on the Office tab over EGGS or TEAM (the tests model the rectangles and the DisplayOrders, not Roblox's input routing); the order in which the server's `Upgrade<i>` attribute and the BuyUpgrade answer really arrive (both orders are tested); the toast's real wrapping and its "..." at 16 to 22 px; the sideways tab row's drag on a touch screen; the Studio warning for a long TutorialBanner in the real Output; the hash block from docs/STUDIO_SYNC.md was run in the `luau` command-line tool, not in Studio's command bar.
 
 ## Results (final)
 
@@ -283,9 +294,22 @@ Nothing was blocked. Every precondition held, no file this job needed was claime
 
 **Files:** `ShopLayout.lua` 21,113 bytes, `ShopClient.lua` 53,889 bytes (SHA-256 in docs/STUDIO_SYNC_SHOP.md, checked by `tools/shop_ux_test.py`).
 
-## Mutation runs (67), and the named check that catches each
+## Results after the review fixes (phase 4)
 
-`python3 tools/shop_ux_test.py --list-mutants` prints the same list from the code. The 32 S1 runs break ShopLayout's layout or ShopClient's window; the 35 S2 runs break the Office ladder.
+| Suite | Before (`372e998`) | After the merge of `world-icons-pass` (`4286a0f`) | After the review fixes |
+|---|---|---|---|
+| `tools/daily_test.py` | 1,780 pass, 20 of 20 | 1,780 pass, 20 of 20 | 1,780 pass, 20 of 20 (not edited) |
+| `tools/shop_ux_test.py` | 5,092 pass, 67 of 67 | 5,092 pass, 67 of 67 | 6,300 pass (6,241 in the fake place, 42 source, 8 hash block, 7 sync table, 2 harness self-tests), 101 of 101 mutation runs, each caught by its named check in a block with no uncaught error |
+| `tools/icon_test.py` | 199 pass, 51 of 51 | 371 pass, 68 of 68 | 371 pass, 68 of 68 |
+| `tools/world_test.py` | 298 pass, 65 of 65 | 353 pass, 82 of 82 | 353 pass, 82 of 82 |
+
+The `--review` modes of world_test and icon_test still fail on this branch by design (2 checks: ShopClient, README and daily_test are edited by S1 and S2).
+
+**Files:** `ShopLayout.lua` 24,458 bytes, SHA-256 `73c4ddd5279025fbd32f2a19029af8d621c84816ffbb51c010ac701e8ed24fdf`; `ShopClient.lua` 59,330 bytes, SHA-256 `ff29fe44e9f7b79a1da40aead7190bb4c7c95ee14bede4998323fe7ed9af883a`. Computed by the SHA-256 code of docs/STUDIO_SYNC.md's hash block run in `luau` on the real files, and the same with Python's `hashlib`; docs/STUDIO_SYNC_SHOP.md's table and hash block have them (checked by `tools/shop_ux_test.py`), and its (h) says what changed in the game since its first version.
+
+## Mutation runs (101), and the named check that catches each
+
+`python3 tools/shop_ux_test.py --list-mutants` prints the same list from the code. The 32 S1 runs break ShopLayout's layout or ShopClient's window; the 35 S2 runs break the Office ladder; the 34 review-fix runs (68 to 101) break what the review fixes added. Since item 9 a run counts only when its named check fails in a block of checks with no uncaught error. Mutant 57's target moved with `ladderNow` in item 2 (same rule: the busy state passed as false).
 
 1. the header 34 px tall (S1): `layout 667x375/0 (4 tabs, none): header items are 44 px tall, "?" and X 44 x 44`
 2. a 34 px tab (S1): `layout 667x375/0 (4 tabs, none): every tab is at least 44 x 44`
@@ -354,3 +378,37 @@ Nothing was blocked. Every precondition held, no file this job needed was claime
 65. the reveal scrolls past the hero's top (S2): `revealScroll: never past the hero's top, never past the canvas`
 66. BEST VALUE on a Coming soon item (S2): `BEST VALUE is never on a Coming soon item (the Vault not on sale: the Bag)`
 67. BEST VALUE on the worst pack (S2): `BEST VALUE is the Vault (180 minutes for R$ 299 beat 45 for 99 and 10 for 29)`
+68. ShopGui back at DisplayOrder 0 (EGGS and TEAM over the tab rail) (ShopClient): `667x375/0 live Office: no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab`
+69. the SHOP button back in the window's ScreenGui (ShopClient): `667x375/0 live Office: no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab`
+70. the SHOP button's ScreenGui on the windows' layer (5) (ShopClient): `667x375/0 live Office: no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab`
+71. ShopGui under the other windows' layer (3) (ShopClient): `layers: the shop window is on the windows' layer, with the Poach, IPO and Daily windows (DisplayOrder 5)`
+72. the hero revealed on every placing again (a message line moves the page) (ShopClient): `office scroll 667x375/36: a message line appearing never moves the Office page (the player's place is kept, clamped)`
+73. a tab tap reveals the hero again (ShopClient): `office scroll 568x320/58: a tab tap never moves the Office page`
+74. opening the shop reveals the hero again (ShopClient): `office scroll 568x320/58: closing and opening the shop, and the refresh every second, never move it`
+75. a new screen size never clamps the scroll (ShopClient): `office scroll 667x375/36: a new screen size keeps the player's place, clamped to the new canvas`
+76. a buy does not show the card whole (ShopClient): `office buy reveal (attribute first): after the buy the card says Bought! whole (the page scrolled just enough)`
+77. the rung folds while its buy request runs (the server's attribute came first) (ShopClient): `office buy reveal (attribute first): while the request runs the rung stays the hero (never the next one for a moment, then back)`
+78. closing the shop drops a message still in its line (ShopClient): `message at close 667x375/36 (the X): closing the shop moves a message still in its line to the toast`
+79. another window opening drops the shop's message (ShopClient): `message at close 568x320/58 (another window opening): closing the shop moves a message still in its line to the toast`
+80. the moved message stays in the window's line too (ShopClient): `message at close 667x375/36 (the X): once: the window's line is cleared (the message is in one place)`
+81. the toast never cut (a long text overflows its lane) (ShopClient): `toast 320x568/0: every server text fits the toast's 2 lines at 16 px in its 48 px lane`
+82. the toast cut to 3 lines (ShopClient): `toast 320x568/0: every server text fits the toast's 2 lines at 16 px in its 48 px lane`
+83. a cut toast without its ... (ShopClient): `toast 320x568/0: a text that fits is shown whole; a longer one is its start and ends with ...`
+84. a short text cut anyway (ShopClient): `toast 320x568/0: a text that fits is shown whole; a longer one is its start and ends with ...`
+85. the window's line gets the cut toast (ShopClient): `toast 320x568/0: opening the shop shows the whole message in the window's line, never the cut one`
+86. the toast not cut again on a new width (ShopClient): `toast 667x375/0: a new screen size cuts the toast again for its new width`
+87. the hero's info always the long form (it wraps onto the bar at 568x320) (ShopClient): `office hero lines 568x320/0: every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)`
+88. the hero's info always the short form (ShopClient): `office hero lines 667x375/0: what it earns is +$X every second where that fits, +$X/s only where it does not`
+89. the short form as long as the long one (ShopLayout): `office hero lines 568x320/0: every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)`
+90. the portrait tabs ignore their labels (Passes in 51 px) (ShopLayout): `320x568/0 Studio Office: every tab's label fits its tab on one line at 16 px`
+91. a portrait row too long for the bar squeezed to even tabs (ShopLayout): `tab labels 320x568/0 (5 tabs): every tab is as wide as its label at 16 px (and 44 x 44 or more)`
+92. a portrait row that scrolls has no room for its bar (ShopLayout): `tab labels 320x568/0 (5 tabs): a row that scrolls has room for its bar under the tabs, and the pages start under it`
+93. the tab row never shows its scroll bar (ShopClient): `320x568/0 Studio: the tab row scrolls sideways to the Debug tab (shown whole, a scroll bar)`
+94. ShopClient never passes the tab labels (ShopClient): `320x568/0 Studio Office: every tab's label fits its tab on one line at 16 px`
+95. the strip's letter estimate too narrow (a longer limit) (ShopLayout): `strip limit: a sentence as long as stripMaxChars fits the strip on every phone and top bar (the tests' text estimate)`
+96. the strip's letter estimate too wide (a limit far under what fits) (ShopLayout): `strip limit: the limit is close to what fits (14 more characters do not)`
+97. stripFits lets one character over through (ShopLayout): `strip limit: stripFits flags a text one character over the limit and accepts one at the limit`
+98. the two-line strip counted as one line (ShopLayout): `strip limit: the limit is close to what fits (14 more characters do not)`
+99. a one-line strip counted as two lines (ShopLayout): `strip limit: a sentence as long as stripMaxChars fits the strip on every phone and top bar (the tests' text estimate)`
+100. a long TutorialBanner never flagged (ShopClient): `strip limit warning (Studio): a banner one character over the limit is flagged in Studio's Output (never live)`
+101. a hero change does not reveal the new hero (ShopClient): `office retry reveal: after the Retry the hero shows whole (the page scrolled to it)`
