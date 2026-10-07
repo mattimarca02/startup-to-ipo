@@ -137,3 +137,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
+| tools/hud_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
