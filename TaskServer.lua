@@ -8,6 +8,16 @@
 -- starts no loop, registers no Debug button and never creates a call. It still loads and saves the
 -- "tasks" section as it was, so a player's data is never lost. PR 2 (the economy core) turns it on.
 --
+-- Calls start when the player OWNS THE DESK (the first upgrade), or after the first IPO (an IPO resets the
+-- upgrades, and calls must not stop in the middle of a run): TaskConfig.isUnlocked, fed with data.owned, the
+-- one thing read from the player's data besides the tasks section. Until then no call is scheduled, none
+-- arrives, no quiet mode starts and the state says `on = false`. When the condition turns true the first
+-- arrival is scheduled with the NORMAL gap (the same range as any other arrival): an instant call the moment
+-- the Desk is bought would ring before the player has looked around. A call that is already waiting is never
+-- removed by this: it ends only by being answered, skipped or running out. When calls turn on, the count of calls
+-- that ran out in a row starts at 0 and the idle clock starts then, so nothing from before the unlock can start
+-- quiet mode (OWNER DEFAULT).
+--
 -- Everything is decided here, from the server clock (os.clock for durations, os.time for the day):
 -- when a call arrives, whether an answer came in time, and the reward. The client sends only
 -- "answer call N" (TaskRemotes.TaskAction) and never a time, a reward or an amount. A call that is
@@ -20,7 +30,8 @@
 --                                TaskConfig.Pause.perTask seconds each)
 --   TaskAction("Sync")        -> the current state, once, when the screen starts
 --   TaskAction("Layout", Vector3) -> Studio only, display only: the client's TaskGui size and top bar (Debug > Task stats)
---   TaskState (server to client) -> "state" { quiet, chain, mult, tasks = { { id, kind, left, limit } } },
+--   TaskState (server to client) -> "state" { on, quiet, chain, mult, tasks = { { id, kind, left, limit } } },
+--                                   on = calls are on (the Desk is owned or an IPO was done): the screen shows nothing before that,
 --                                   "handled" count: "Team handled N calls"
 --
 -- Other systems ask:
@@ -98,6 +109,7 @@ local function newRun(now)
 		rungOverride = nil, -- Studio Debug "Set rung" (not saved)
 		lastWarnAt = -math.huge,
 		logAt = now + TaskConfig.LogSeconds,
+		on = nil, -- calls on (the Desk is owned or an IPO was done), as of the last tick: a change sends a new "state"
 		changed = false, -- the client needs a new "state"
 		stats = newStats(),
 	}
@@ -124,6 +136,20 @@ end
 
 local function levelOf(data)
 	return TaskConfig.level(rungOf(data), ipoCountOf(data))
+end
+
+-- Is this task on for the player? (the Desk is owned, or an IPO was done: see the header)
+local function rowOn(data, row)
+	return TaskConfig.isUnlocked(row, rungOf(data), ipoCountOf(data), data.owned)
+end
+
+local function callsOn(data)
+	for _, row in ipairs(TaskConfig.Rows) do
+		if rowOn(data, row) then
+			return true
+		end
+	end
+	return false
 end
 
 local function hiresOf(data)
@@ -173,7 +199,7 @@ end
 
 -- The client's view ------------------------------------------------------------------
 
-local function snapshot(run, now)
+local function snapshot(data, run, now)
 	local list = {}
 	for _, id in ipairs(run.order) do
 		local call = run.open[id]
@@ -181,6 +207,7 @@ local function snapshot(run, now)
 	end
 	local row = TaskConfig.Rows[1]
 	return {
+		on = callsOn(data), -- false until the Desk is owned (or an IPO is done): the screen shows nothing about calls
 		quiet = run.quiet,
 		paused = run.paused, -- so the client can see when the server's freeze and its own window disagree
 		chain = run.chain,
@@ -195,10 +222,10 @@ local function send(player, kind, payload)
 	end
 end
 
-local function flush(player, run, now)
+local function flush(player, data, run, now)
 	if run.changed then
 		run.changed = false
-		send(player, "state", snapshot(run, now))
+		send(player, "state", snapshot(data, run, now))
 	end
 end
 
@@ -524,7 +551,7 @@ local function onAction(player, action, arg)
 		if run.quiet and not IpoServer.isBusy(data) then
 			leaveQuiet(data, run, now)
 			local row = TaskConfig.Rows[1]
-			if row and TaskConfig.isUnlocked(row, rungOf(data), ipoCountOf(data)) then
+			if row and rowOn(data, row) then
 				openTask(data, run, row, now)
 			end
 		end
@@ -561,7 +588,7 @@ local function onAction(player, action, arg)
 		return false, "Unknown action"
 	end
 
-	flush(player, run, now)
+	flush(player, data, run, now)
 	return ok, message, info
 end
 
@@ -635,16 +662,42 @@ function TaskServer.step(player, now)
 		end
 	end
 
-	if not run.quiet and not run.paused
+	-- Calls start with the Desk (or after the first IPO). Until then: the arrival timer is forgotten (so the
+	-- first call after the unlock waits a normal gap, never an old timer), the idle clock is held (so quiet
+	-- mode counts from the unlock, not from the start of the session) and the client is told `on = false`.
+	-- When calls turn from off to on, the count of calls that ran out in a row starts at 0 and the idle clock starts
+	-- there, even after a long step (OWNER DEFAULT): calls that ran out while calls were off (only the Studio Debug
+	-- buttons can ring one then) never start quiet mode the moment the Desk is bought.
+	-- Nothing here touches a call that is already waiting.
+	local on = false
+	for _, row in ipairs(TaskConfig.Rows) do
+		if rowOn(data, row) then
+			on = true
+		else
+			run.nextAt[row.key] = nil
+		end
+	end
+	if not on then
+		run.lastActionAt = now
+	end
+	if run.on ~= on then
+		if on and run.on == false then
+			run.misses = 0
+			run.lastActionAt = now
+		end
+		run.on = on
+		run.changed = true
+	end
+
+	if on and not run.quiet and not run.paused
 		and (run.misses >= TaskConfig.Quiet.misses or now - run.lastActionAt > TaskConfig.Quiet.idleSeconds) then
 		run.quiet = true
 		run.changed = true
 	end
 
 	if not run.quiet and not IpoServer.isBusy(data) then
-		local rung, ipoCount = rungOf(data), ipoCountOf(data)
 		for _, row in ipairs(TaskConfig.Rows) do
-			if TaskConfig.isUnlocked(row, rung, ipoCount) then
+			if rowOn(data, row) then
 				local at = run.nextAt[row.key]
 				if at == nil then
 					scheduleNext(data, run, row, now)
@@ -661,7 +714,7 @@ function TaskServer.step(player, now)
 		run.handled = 0
 		run.handledAt = now
 	end
-	flush(player, run, now)
+	flush(player, data, run, now)
 
 	if now >= run.logAt then
 		run.logAt = now + TaskConfig.LogSeconds
@@ -854,7 +907,7 @@ local function addDebugActions()
 		if not row or not openTask(data, run, row, now) then
 			return "The queue is full"
 		end
-		flush(player, run, now)
+		flush(player, data, run, now)
 		return "A call is waiting"
 	end)
 end

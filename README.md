@@ -29,7 +29,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the garage's funding sign |
 | `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
 | `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
-| `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings, grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
+| `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings (not before the player owns the Desk, or has done an IPO), grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
 | `CompanyServer.lua` | ServerScriptService | ModuleScript | The company and its Pokedex (customize PR 1, invisible): the `pokedex` save section on join and save, and the Studio-only office requests Place, Store and Sync. Never touches Cash or the valuation |
 | `PlotVisuals.lua` | ServerScriptService | ModuleScript | Builds each player's plot room and the upgrade props from `PlotArt` (looks only), and checks a room against the reserved gameplay zones, part and light budgets |
 | `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, built from Parts on the same 60 x 60 plot), the hire desks, the six upgrade props |
@@ -39,16 +39,17 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `IpoConfig.lua` | ReplicatedStorage | ModuleScript | IPO rules: stage thresholds, multiplier and Shares formulas, cooldown, IPO shop perks |
 | `OnboardingConfig.lua` | ReplicatedStorage | ModuleScript | First-minute settings: the free egg, the goals, when the arrow and tracker end, an on/off switch |
 | `DailyConfig.lua` | ReplicatedStorage | ModuleScript | Daily calendar: the 7 rewards, grace days, Cash caps, reset hour (UTC), texts, an on/off switch |
-| `TaskConfig.lua` | ReplicatedStorage | ModuleScript | Task rules: one row per task (gap, time limit, reward, team share), rungs, reward budget, the `Enabled` and `StudioOnly` switches |
+| `TaskConfig.lua` | ReplicatedStorage | ModuleScript | Task rules: one row per task (gap, time limit, reward, team share, when it starts: the Desk), rungs, reward budget, the `Enabled` and `StudioOnly` switches |
 | `SectorConfig.lua` | ReplicatedStorage | ModuleScript | The four sector keys (only Software can be picked), the picker switch (off), company names, Hall of Fame goals |
 | `CompanyConfig.lua` | ReplicatedStorage | ModuleScript | The Pokedex format and its loader (bad values, unknown fields kept, version, run check), the placement rules and limits, the `Placement` switch (Studio only). Create `SectorConfig` first |
-| `ShopClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | SHOP button, shop window, pop-up messages, Debug tab |
+| `ShopLayout.lua` | ReplicatedStorage | ModuleScript | The shop window's sizes and the Office ladder, as pure functions: the tab rail in landscape, 44 px tap targets, no text under 16 px, what each upgrade rung shows, BEST VALUE. `ShopClient` applies them; `tools/shop_ux_test.py` checks them |
+| `ShopClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | SHOP button, shop window (sizes from `ShopLayout`; the Office ladder: owned upgrades folded, the next one with a progress bar), pop-up messages, Debug tab |
 | `EmployeeClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | EGGS and TEAM buttons, Recruiting window, hatch reveal, employees walking |
 | `PoachClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | POACH button, Poach window, negotiation mini-screen, "you're being poached" alerts, Counter-Offer card |
 | `IpoClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | IPO button, valuation bar, IPO window (Go Public with a two-step confirm, Shares Shop, Leaderboard) |
 | `OnboardingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | New players only: the glowing arrow and the goal tracker card under the valuation bar |
 | `DailyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Gift chip next to the valuation bar, Daily Rewards window (7-day calendar, Claim button) |
-| `TaskClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | The phone tray: up to 3 waiting calls with an Answer button each, "Tap to resume". Does nothing outside Studio in PR 1 |
+| `TaskClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | The phone tray: up to 3 waiting calls with an Answer button each, "Tap to resume". Shows nothing until the Desk is owned (or after the first IPO). Does nothing outside Studio in PR 1 |
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 
 Other files:
@@ -59,6 +60,7 @@ Other files:
 | `icons/` | Pass icons that `sync_monetization` uploads |
 | `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |
 | `tools/daily_test.py` | Logic tests (daily calendar, saves, shop, eggs, IPO, the task engine and its tray layout, the Pokedex rules and CompanyServer, source checks on the money paths, and mutation runs that prove the tests can fail): runs the real server code with a fake Roblox. Needs the free `luau` tool (instructions inside) |
+| `tools/shop_ux_test.py` | Shop window tests: runs the real `ShopLayout` and `ShopClient` in a fake Roblox at five phone sizes and three top bars (the layout, the names the tutorial uses, the Office ladder, what the shop sends, the odds words), plus mutation runs. Needs the free `luau` tool |
 | `docs/PLOT_VISUALS.md` | The five plot rooms, the rules every room keeps and how to add one |
 | `docs/STUDIO_SYNC.md` | What exists only in Studio (script hashes, Lighting and Baseplate settings) and the Mac steps to sync it |
 | `CONTRIBUTING.md` | How we work together, plus the **Ownership** table (who is editing which script) |

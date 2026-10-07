@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
@@ -28,6 +29,20 @@ local HUD_SLOT = 4 -- EGGS 0, SHOP 1, TEAM 2, POACH 3, IPO 4
 local CONFIRM_SECONDS = 15 -- the confirm screen closes itself after this long
 -- DailyClient's gift chip sits right of the valuation bar: on narrow screens the bar leaves room for it
 local CHIP_ROOM = DailyConfig and DailyConfig.Enabled and (DailyConfig.ChipSize + DailyConfig.ChipGap) or 0
+-- The bar's text rows are 10 px in from each side. Nothing on the bar is under 14 px.
+local BAR_PADDING = 20
+local MONEY_SIZES = { 16, 14 } -- top row (Cash and Income): the biggest size that fits, never under 14
+local INFO_SIZE = 14 -- bottom row (stage and valuation)
+local MONEY_INTERVAL = 0.25 -- seconds: the top row redraws at most 4 times a second, however fast the values change
+local MONEY_CAP = 999e12 -- above this the bar shows $999T, so the text stays short
+-- While the server loads a returning player's save, leaderstats already exist with Cash and Income at 0: the saved
+-- Cash, the income and the offline earnings are written only after the DataStore read (and a 7 s re-read of a fresh
+-- save). So the top row stays empty until the server says it has finished. The signal is the Upgrade1 attribute
+-- (TycoonCore refreshSign -> publishUpgrades): it is set for every player (true or false), after the saved Cash, the
+-- income and the offline earnings are written, right before the server's data.ready. It is never set before.
+local LOADED_ATTRIBUTE = "Upgrade1"
+-- If that attribute never comes (the server script failed), the row shows the real values after this many seconds
+local MONEY_WAIT = 30
 
 local COLORS = {
 	panel = Color3.fromRGB(28, 30, 38),
@@ -180,9 +195,10 @@ round(ipoButton, 18)
 fitText(ipoButton, 22)
 local buttonStroke = make("UIStroke", { Thickness = 3, Transparency = 0.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = ipoButton })
 
--- Valuation bar: stage, progress to the next stage, multiplier and Shares. Top-left, right of
--- the button column on big screens; next to the HUD row on short phone screens (or under it
--- if the screen is narrow). It always leaves CHIP_ROOM on its right for the daily gift chip.
+-- Valuation bar, three rows: Cash and Income on top, progress to the next stage in the middle, the stage
+-- and the valuation below. Top-left, right of the button column on big screens; next to the HUD row on
+-- short phone screens (or under it if the screen is narrow). It always leaves CHIP_ROOM on its right for
+-- the daily gift chip.
 local hudBar = make("TextButton", {
 	Name = "ValuationBar",
 	Size = UDim2.fromOffset(250, 64),
@@ -194,17 +210,19 @@ local hudBar = make("TextButton", {
 })
 round(hudBar, 12)
 make("UIStroke", { Thickness = 2, Color = COLORS.gold, Transparency = 0.4, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = hudBar })
-local hudStage = make("TextLabel", {
-	Position = UDim2.fromOffset(10, 4),
-	Size = UDim2.new(1, -20, 0, 20),
+-- Top row: Cash and Income, filled in by drawMoney (empty until the server's leaderstats are there)
+local hudMoney = make("TextLabel", {
+	Position = UDim2.fromOffset(10, 2),
+	Size = UDim2.new(1, -BAR_PADDING, 0, 22),
 	BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold,
 	Text = "",
-	TextColor3 = COLORS.gold,
+	TextColor3 = COLORS.text,
+	TextSize = MONEY_SIZES[1],
+	TextTruncate = Enum.TextTruncate.AtEnd,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = hudBar,
 })
-fitText(hudStage, 16)
 local hudTrack = make("Frame", {
 	Position = UDim2.fromOffset(10, 26),
 	Size = UDim2.new(1, -20, 0, 12),
@@ -218,17 +236,19 @@ local hudFill = make("Frame", {
 	Parent = hudTrack,
 })
 round(hudFill, 6)
+-- Bottom row: the stage and the valuation
 local hudInfo = make("TextLabel", {
 	Position = UDim2.fromOffset(10, 40),
-	Size = UDim2.new(1, -20, 0, 20),
+	Size = UDim2.new(1, -BAR_PADDING, 0, 20),
 	BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold,
 	Text = "",
-	TextColor3 = COLORS.subtext,
+	TextColor3 = COLORS.gold,
+	TextSize = INFO_SIZE,
+	TextTruncate = Enum.TextTruncate.AtEnd,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Parent = hudBar,
 })
-fitText(hudInfo, 15)
 
 local function placeHud()
 	if isShort() then
@@ -819,17 +839,241 @@ end
 
 -- HUD -------------------------------------------------------------------
 
+-- Text on the bar must fit its row at 14 px or more, so each row has a list of texts, fullest first, and
+-- the bar shows the first one that fits. TextService measures the real font, so it holds on every screen.
+local function textWidth(text, size)
+	local ok, bounds = pcall(function()
+		return TextService:GetTextSize(text, size, Enum.Font.GothamBold, Vector2.new(10000, size * 2))
+	end)
+	return ok and bounds.X or #text * size * 0.6 -- not measurable: every byte counts as a wide letter
+end
+
+local function pickText(texts, sizes, room)
+	for _, text in ipairs(texts) do
+		for _, size in ipairs(sizes) do
+			if textWidth(text, size) <= room then
+				return text, size
+			end
+		end
+	end
+	return texts[#texts], sizes[#sizes] -- nothing fits: the shortest text, cut off with "..." by the label
+end
+
+local function barRoom()
+	return hudBar.Size.X.Offset - BAR_PADDING
+end
+
+-- Top row: Cash and Income, from the server's leaderstats ------------------------------------------
+
+-- A number that is safe to show: nil if it is missing or not a number, otherwise whole, 0 or more, and capped
+local function moneyValue(value)
+	if type(value) ~= "number" or value ~= value then
+		return nil
+	end
+	return math.clamp(math.floor(value), 0, MONEY_CAP)
+end
+
+-- IpoConfig.formatShort with one fix: it turns 999,950 to 999,999 into "$1000K" (and the same in M and B). The bar
+-- shows "$1M" there. (IpoConfig is not changed.)
+local function shortAmount(amount)
+	local text = IpoConfig.formatShort(amount)
+	local promoted = { K = "M", M = "B", B = "T" }
+	local unit = text:match("^%$1000([KMB])$")
+	if unit then
+		return "$1" .. promoted[unit]
+	end
+	return text
+end
+
+-- 1234567 -> "$1M" (whole numbers only: the shortest form, 1000 and up). Rounds to the nearest, like the other
+-- forms: 99,999 is "$100K" in all of them; 999,500 and up is "$1M", never "$1000K".
+local function wholeShort(amount)
+	local units = { { 1e3, "K" }, { 1e6, "M" }, { 1e9, "B" }, { 1e12, "T" } }
+	for i = #units, 1, -1 do
+		local unit = units[i]
+		if amount >= unit[1] then
+			local whole = math.floor(amount / unit[1] + 0.5)
+			if whole >= 1000 and units[i + 1] then
+				return "$1" .. units[i + 1][2]
+			end
+			return string.format("$%d%s", whole, unit[2])
+		end
+	end
+	return "$" .. amount
+end
+
+-- One amount in one of three forms. 1: "$4,630" or "$110K" (Cash from $100K, Income from $10K); 2: short
+-- from $1,000 ("$4.6K"); 3: whole numbers only ("$4K")
+local function moneyText(amount, tier, fullBelow)
+	if tier == 1 and amount < fullBelow then
+		return ShopConfig.formatCash(amount)
+	elseif tier == 2 and amount < 1000 then
+		return ShopConfig.formatCash(amount)
+	elseif tier == 3 then
+		return wholeShort(amount)
+	end
+	return shortAmount(amount)
+end
+
+-- "$4,630 · +$18/s", then shorter forms of it. Only the part that exists (Cash, Income) is shown.
+local function moneyTexts(cash, income)
+	local texts = {}
+	for tier = 1, 3 do
+		local parts = {}
+		if cash then
+			table.insert(parts, moneyText(cash, tier, 100000))
+		end
+		if income then
+			table.insert(parts, "+" .. moneyText(income, tier, 10000) .. (tier < 3 and "/s" or ""))
+		end
+		table.insert(texts, table.concat(parts, tier < 3 and " · " or " "))
+	end
+	return texts
+end
+
+local function readMoney()
+	local stats = player:FindFirstChild("leaderstats")
+	local function read(name)
+		local value = stats and stats:FindFirstChild(name)
+		return moneyValue(value and value:IsA("ValueBase") and value.Value)
+	end
+	return read("Cash"), read("Income")
+end
+
+local moneyLastDraw = -math.huge
+local moneyPending = false
+local moneyConnections = {}
+local moneyShown = false -- false while the save loads: the top row stays empty
+local moneyStats = nil -- the leaderstats folder the loading rule was started for
+local moneyWait = nil -- the pending MONEY_WAIT delay (a task), nil when there is none
+
+local function drawMoney()
+	moneyLastDraw = os.clock()
+	if not moneyShown then
+		hudMoney.Text = "" -- the save is still loading: the top row stays empty
+		return
+	end
+	local cash, income = readMoney()
+	if cash == nil and income == nil then
+		hudMoney.Text = "" -- no leaderstats (yet): the top row stays empty
+		return
+	end
+	hudMoney.Text, hudMoney.TextSize = pickText(moneyTexts(cash, income), MONEY_SIZES, barRoom())
+end
+
+-- Redraw now, or once the minimum interval is over (the latest values are read then)
+local function requestMoney()
+	if moneyPending then
+		return
+	end
+	local wait = moneyLastDraw + MONEY_INTERVAL - os.clock()
+	if wait <= 0 then
+		drawMoney()
+	else
+		moneyPending = true
+		task.delay(wait, function()
+			moneyPending = false
+			drawMoney()
+		end)
+	end
+end
+
+local function cancelMoneyWait()
+	if moneyWait then
+		task.cancel(moneyWait)
+		moneyWait = nil
+	end
+end
+
+-- The row goes from empty to the real values (once per leaderstats), and the pending delay is cancelled
+local function showMoney()
+	cancelMoneyWait()
+	if not moneyShown then
+		moneyShown = true
+		drawMoney()
+	end
+end
+
+-- The loading rule starts again when the bar finds a different leaderstats (late, or a replacement), not on a
+-- Changed event and not when Cash or Income come or go inside the same folder. An IPO resets Cash to 0 after the
+-- row is shown: that shows $0 at once, the rule is not involved.
+local function restartMoneyRule(stats)
+	if stats == moneyStats then
+		return
+	end
+	moneyStats = stats
+	moneyShown = false
+	cancelMoneyWait()
+	if not stats then
+		return
+	end
+	if player:GetAttribute(LOADED_ATTRIBUTE) ~= nil then
+		moneyShown = true -- bindMoney draws it
+	else
+		moneyWait = task.delay(MONEY_WAIT, function()
+			moneyWait = nil
+			showMoney()
+		end)
+	end
+end
+
+-- Listens to leaderstats.Cash and .Income. Called again when leaderstats or one of them comes or goes.
+local function bindMoney()
+	for _, connection in ipairs(moneyConnections) do
+		connection:Disconnect()
+	end
+	table.clear(moneyConnections)
+	local stats = player:FindFirstChild("leaderstats")
+	restartMoneyRule(stats)
+	if stats then
+		table.insert(moneyConnections, stats.ChildAdded:Connect(bindMoney))
+		table.insert(moneyConnections, stats.ChildRemoved:Connect(bindMoney))
+		for _, name in ipairs({ "Cash", "Income" }) do
+			local value = stats:FindFirstChild(name)
+			if value and value:IsA("ValueBase") then
+				table.insert(moneyConnections, value.Changed:Connect(requestMoney))
+			end
+		end
+	end
+	requestMoney()
+end
+
+-- Bottom row: the stage and the valuation -------------------------------------------------------------
+
+-- "🏚️ Garage → Seed · $9.3K / $492K · x1.5 · 📜 3", then shorter forms of it. The multiplier and the Shares
+-- are only there when they are not x1 and 0 (the IPO window has them).
+local function infoTexts(info)
+	local now = shortAmount(moneyValue(valuation()) or 0)
+	if info.ready then
+		return { "🔔 IPO-ready! Tap to go public", "🔔 IPO-ready! · " .. now, "🔔 IPO-ready!", "🔔 IPO!" }
+	end
+	local progress = string.format("%s / %s", now, shortAmount(moneyValue(info.to) or 0))
+	local stage, nextStage = info.stage, IpoConfig.Stages[info.index + 1]
+	local texts = {}
+	local extras = {}
+	local multiplier = IpoConfig.multiplier(ipoCount())
+	if multiplier ~= 1 then
+		table.insert(extras, IpoConfig.formatMultiplier(multiplier))
+	end
+	if attr("IpoShares") ~= 0 then
+		table.insert(extras, string.format("📜 %d", attr("IpoShares")))
+	end
+	local full = string.format("%s %s → %s · %s", stage.icon, stage.name, nextStage.name, progress)
+	if #extras > 0 then
+		table.insert(texts, full .. " · " .. table.concat(extras, " · "))
+	end
+	table.insert(texts, full)
+	table.insert(texts, string.format("%s %s · %s", stage.icon, stage.name, progress))
+	table.insert(texts, string.format("%s %s", stage.icon, progress))
+	table.insert(texts, progress)
+	return texts
+end
+
 local pulse -- the IPO button glows while you can go public
 local function refreshHud()
 	local info = stageInfo()
-	if info.ready then
-		hudStage.Text = "🔔 IPO-ready! Tap to go public"
-	else
-		hudStage.Text = string.format("%s %s → %s", info.stage.icon, info.stage.name, IpoConfig.Stages[info.index + 1].name)
-	end
 	hudFill.Size = UDim2.fromScale(info.progress, 1)
-	hudInfo.Text = string.format("%s / %s · %s · 📜 %d", IpoConfig.formatShort(valuation()),
-		IpoConfig.formatShort(info.to), IpoConfig.formatMultiplier(IpoConfig.multiplier(ipoCount())), attr("IpoShares"))
+	hudInfo.Text = pickText(infoTexts(info), { INFO_SIZE }, barRoom())
 	ipoButton.Text = info.ready and "🔔\nIPO!" or "📈\nIPO"
 	if info.ready and not pulse then
 		pulse = TweenService:Create(buttonStroke, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -943,7 +1187,11 @@ end)
 showTab("IPO")
 applyLayout()
 window:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
-gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeHud)
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	placeHud()
+	refreshHud() -- the bar may have a new width: its rows fit again
+	requestMoney()
+end)
 refreshAll()
 
 -- Keeping it up to date -------------------------------------------------
@@ -968,6 +1216,24 @@ Players.PlayerAdded:Connect(function(other)
 end)
 Players.PlayerRemoving:Connect(function()
 	task.defer(refreshAll)
+end)
+
+-- Cash and Income on the bar: listens to leaderstats, no loop
+bindMoney()
+player:GetAttributeChangedSignal(LOADED_ATTRIBUTE):Connect(function()
+	if moneyStats and player:GetAttribute(LOADED_ATTRIBUTE) ~= nil then
+		showMoney()
+	end
+end)
+player.ChildAdded:Connect(function(child)
+	if child.Name == "leaderstats" then
+		bindMoney()
+	end
+end)
+player.ChildRemoved:Connect(function(child)
+	if child.Name == "leaderstats" then
+		bindMoney()
+	end
 end)
 
 -- Cooldown countdown

@@ -6,6 +6,14 @@
 -- when a call arrives, whether an answer came in time, and the reward. The client only asks
 -- "answer call N". One row below = one kind of task.
 --
+-- WHEN CALLS START: not before the player OWNS THE DESK (the first upgrade: the phone rings on the desk).
+-- A row's `unlock` says it: { rung = the ladder position it starts at, owns = the upgrade the player must own }.
+-- After the first IPO every task stays on without it, because an IPO resets the upgrades (the Desk costs 0
+-- but is gone until it is bought again) and calls must not stop in the middle of a run. So a row is on when
+-- (IPOs >= 1) or (rung reached and the upgrade owned): TaskConfig.isUnlocked, used by TaskServer and the tests.
+-- Employees still take routine calls for the player as designed (teamPays, auto), once calls are on.
+-- Before that no call is scheduled or arrives, and the screen shows nothing about calls.
+--
 -- PR 1 runs ONLY in Studio (isActive: Enabled and (StudioOnly is off or this is Studio), like ShopConfig.DebugInStudio): outside
 -- Studio the engine builds no remotes, starts no loop and shows nothing. The reason: task Cash
 -- must not count 100% toward the IPO valuation before the economy core (PR 2: addEarnings(kind),
@@ -45,7 +53,8 @@ end
 --   cooldown    -> seconds between two answers to this kind (0 = none)
 --   skip        -> true when the player may skip it for free
 --   routine     -> true: the team may take it. Exceptions (pitch, events, crisis) never are.
---   unlock      -> the rung where it starts (after the first IPO every task is on)
+--   unlock      -> { rung, owns }: the rung where it starts and the upgrade (a name in TycoonCore's UPGRADES)
+--                  the player must own. After the first IPO every task is on, with or without the upgrade.
 TaskConfig.Rows = {
 	{
 		key = "Call", name = "Customer call", icon = "📞",
@@ -54,7 +63,7 @@ TaskConfig.Rows = {
 		reward = { seconds = 7, chain = { step = 0.1, max = 2 } },
 		miss = 0, auto = 0.20, teamPays = 0.5, demand = 0.08, cooldown = 0,
 		skip = true, routine = true,
-		unlock = { rung = 0 },
+		unlock = { rung = 0, owns = "Desk" }, -- the first upgrade (cost 0): calls start when it is bought
 	},
 }
 
@@ -199,9 +208,18 @@ function TaskConfig.budgetFor(rung)
 	return TaskConfig.Budget[math.clamp(math.floor(rung) + 1, 1, #TaskConfig.Budget)]
 end
 
--- A task is on from its rung, and every task is on after the first IPO
-function TaskConfig.isUnlocked(row, rung, ipoCount)
-	return ipoCount >= 1 or rung >= row.unlock.rung
+-- A task is on from its rung once the player owns the upgrade it needs, and every task is on after the
+-- first IPO (the IPO resets the upgrades, see the header). `owned` is the player's set of upgrade names,
+-- { [name] = true } (data.owned); without it a row that needs an upgrade is off.
+function TaskConfig.isUnlocked(row, rung, ipoCount, owned)
+	if ipoCount >= 1 then
+		return true
+	end
+	if rung < row.unlock.rung then
+		return false
+	end
+	local needs = row.unlock.owns
+	return needs == nil or (owned ~= nil and owned[needs] == true)
 end
 
 -- Rung of a funding stage key (nil for a stage this table doesn't know)
@@ -261,6 +279,9 @@ do
 		end
 		if typeof(row.unlock) ~= "table" or not number(row.unlock.rung, 0) then
 			warn("TaskConfig: " .. name .. " needs unlock = { rung = number }")
+		end
+		if typeof(row.unlock) == "table" and row.unlock.owns ~= nil and typeof(row.unlock.owns) ~= "string" then
+			warn("TaskConfig: " .. name .. " unlock.owns must be an upgrade name (text)")
 		end
 	end
 	if #TaskConfig.Rows == 0 then
