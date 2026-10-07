@@ -1448,14 +1448,15 @@ local function startShop(opts)
 	run(opts.wait or 0.3) -- the Office list arrives (0.05 s of latency)
 	return w
 end
+-- The SHOP button: in its own HUD ScreenGui (ShopHudGui), under every window
+local function shopButtonOf(w) return w.playerGui:FindFirstChild("ShopButton", true) end
 local function openShop(w, label)
-	local g = shopGui(w)
-	if not (g and g:FindFirstChild("ShopButton")) then
+	if not (shopGui(w) and shopButtonOf(w)) then
 		check(label .. ": the SHOP button exists", false)
 		return
 	end
 	if not prop(win(w), "Visible", false) then
-		tap(g.ShopButton, label .. ": open the shop")
+		tap(shopButtonOf(w), label .. ": open the shop")
 	end
 end
 local function noErrors(label)
@@ -1493,6 +1494,34 @@ local function cardsOf(w)
 	return list
 end
 
+-- The five HUD buttons. The other scripts' four come from their sources (tools/shop_ux_test.py reads the slot, the
+-- ScreenGui and its DisplayOrder) and are placed with the shared HUD layout (a 64 px row at the top on a GUI under 460
+-- px tall, else a 76 px column centered on the left); the SHOP button is the real one, in its real ScreenGui.
+local HUD_OTHERS = __HUD__
+local function hudRect(slot)
+	if GUI.h < 460 then
+		return { x = 10 + slot * 72, y = 6, w = 64, h = 64 }
+	end
+	return { x = 12, y = GUI.h / 2 + (slot - 2) * 86 - 38, w = 76, h = 76 }
+end
+local function screenGuiOf(inst)
+	local node = inst
+	while node and rawget(node, "_class") ~= "ScreenGui" do node = rawget(node, "_parent") end
+	return node
+end
+local function hudButtons(w)
+	local list = {}
+	for _, hud in ipairs(HUD_OTHERS) do
+		table.insert(list, { name = hud.name, gui = hud.gui, order = hud.order, rect = hudRect(hud.slot) })
+	end
+	local button = shopButtonOf(w)
+	local sg = screenGuiOf(button)
+	if button and sg then
+		table.insert(list, { name = "ShopButton", gui = sg.Name, order = sg == shopGui(w) and math.huge or sg.DisplayOrder, rect = rectOf(button) })
+	end
+	return list
+end
+
 -- What every screen must give, whatever is open (label: the phone and the case)
 local function screenChecks(w, label)
 	local g, window = shopGui(w), win(w)
@@ -1513,9 +1542,11 @@ local function screenChecks(w, label)
 		end
 	end
 	check(label .. ": no text box with a minimum under 16 px", small == nil, small)
-	-- every tap target at least 44 x 44
+	-- every tap target at least 44 x 44 (the window's and the SHOP button)
 	local tiny
-	for _, d in ipairs(g:GetDescendants()) do
+	local targets = g:GetDescendants()
+	table.insert(targets, shopButtonOf(w))
+	for _, d in ipairs(targets) do
 		if BUTTONCLASS[d.ClassName] and shown(d) then
 			local r = rectOf(d)
 			if r.w < 44 or r.h < 44 then tiny = d:GetFullName() .. " " .. rectText(r) end
@@ -1577,6 +1608,23 @@ local function screenChecks(w, label)
 		end
 	end
 	check(label .. ": nothing covers a Buy button (header, tabs, strip, status line, help card, toast)", covered == nil, covered)
+	-- the HUD buttons (EGGS, SHOP, TEAM, POACH, IPO): one that may draw above the window (its ScreenGui's DisplayOrder at
+	-- or above ShopGui's: a tie is undefined) must never cover a tab or any part of the window
+	local onTab, onWindow = {}, {}
+	for _, hud in ipairs(hudButtons(w)) do
+		if hud.order >= g.DisplayOrder then
+			local who = hud.name .. " (" .. hud.gui .. ", DisplayOrder " .. (hud.order == math.huge and "the same ScreenGui" or hud.order) .. ")"
+			for i = 1, (w.studio and 5 or 4) do
+				local t = window:FindFirstChild("Tab" .. TAB_NAMES[i], true)
+				if t and shown(t) and overlaps(visibleRect(t), hud.rect) then
+					table.insert(onTab, who .. " over Tab" .. TAB_NAMES[i] .. " at " .. rectText(intersect(visibleRect(t), hud.rect)))
+				end
+			end
+			if overlaps(wr, hud.rect) then table.insert(onWindow, who .. " at " .. rectText(hud.rect)) end
+		end
+	end
+	check(label .. ": no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab", #onTab == 0, table.concat(onTab, "; "))
+	check(label .. ": the shop window draws above every HUD button it overlaps (DisplayOrder)", #onWindow == 0, table.concat(onWindow, "; "))
 	check(label .. ": no toast while the shop is open", not prop(kid(g, "Toast"), "Visible", false))
 end
 
@@ -1589,6 +1637,8 @@ for _, size in ipairs(SIZES) do
 			openShop(w, label)
 			run(1.2)
 			noErrors(label)
+			check(label .. ": the SHOP button is where the shared HUD layout puts it (the model of the other HUD buttons)", sameRect(shopButtonOf(w), hudRect(1)),
+				rectText(rectOrEmpty(shopButtonOf(w))))
 			local window = win(w) or newInst("Frame") -- a missing window fails the checks below, never crashes them
 			-- the names the tutorial finds under ShopGui.Window
 			local missing = {}
@@ -1760,7 +1810,7 @@ for _, size in ipairs(SIZES) do
 			not prop(card, "Visible", true) and prop(pagesFrame, "Visible", false) and prop(find(window, "CashPage"), "Visible", false))
 		tap(help, label .. ": ? then close")
 		tap(kid(window, "CloseButton"), label .. ": close with the help open")
-		tap(kid(shopGui(w), "ShopButton"), label .. ": reopen")
+		tap(shopButtonOf(w), label .. ": reopen")
 		check(label .. ": the shop reopens on its tab, never on the help card", not prop(card, "Visible", true) and prop(pagesFrame, "Visible", false))
 		noErrors(label)
 	end
@@ -2284,6 +2334,59 @@ def upgrades_lua():
 MODULES = ("ShopConfig", "CreatureConfig", "IpoConfig", "TaskConfig")
 
 
+def screen_guis(client=None):
+    """Every ScreenGui the client scripts make: name -> {file, var, order (DisplayOrder, 0 when unset), inset}.
+    client replaces ShopClient.lua's text."""
+    found = {}
+    for name in sorted(os.listdir(ROOT)):
+        if not name.endswith("Client.lua"):
+            continue
+        text = code_only(client if (name == CLIENT and client is not None) else read(name))
+        for var, body in re.findall(r'local (\w+) = make\("ScreenGui", \{(.*?)\n\}\)', text, re.S):
+            gui = re.search(r'Name = "(\w+)"', body)
+            order = re.search(r"DisplayOrder = (-?\d+)", body)
+            found[gui.group(1) if gui else var] = {"file": name, "var": var, "order": int(order.group(1)) if order else 0,
+                                                   "inset": "IgnoreGuiInset = true" in body}
+    return found
+
+
+def hud_buttons(client=None):
+    """The five HUD buttons: name -> {slot, gui (the ScreenGui's name), order}, read from the four client scripts. Each must
+    still use the shared HUD layout (64 px row under 460 px, 76 px column), or the shop's HUD checks must be redone."""
+    guis = screen_guis(client)
+    by_var = {(g["file"], g["var"]): name for name, g in guis.items()}
+    texts = {f: code_only(client if (f == CLIENT and client is not None) else read(f))
+             for f in ("EmployeeClient.lua", "ShopClient.lua", "PoachClient.lua", "IpoClient.lua")}
+    found = {}
+
+    def parent_of(f, pattern):
+        m = re.search(pattern + r'.*?Parent = (\w+),', texts[f], re.S)
+        return by_var.get((f, m.group(1))) if m else None
+
+    employee_gui = parent_of("EmployeeClient.lua", r"local function hudButton\(")
+    for name, slot in re.findall(r'hudButton\("(\w+Button)", "[^"]*", (\d)\)', texts["EmployeeClient.lua"]):
+        found[name] = {"slot": int(slot), "gui": employee_gui}
+    found["ShopButton"] = {"slot": 1 if "placeHudButton(shopButton, 1)" in texts["ShopClient.lua"] else None,
+                           "gui": parent_of("ShopClient.lua", r"local shopButton = make\(\"TextButton\", \{")}
+    for f, var, name in (("PoachClient.lua", "poachButton", "PoachButton"), ("IpoClient.lua", "ipoButton", "IpoButton")):
+        slot = re.search(r"local HUD_SLOT = (\d)", texts[f])
+        found[name] = {"slot": int(slot.group(1)) if slot else None, "gui": parent_of(f, r"local %s = make\(\"TextButton\", \{" % var)}
+    shared = all(("10 + slot * 72, 6" in s or "10 + HUD_SLOT * 72, 6" in s) and ("(slot - 2) * 86" in s or "(HUD_SLOT - 2) * 86" in s)
+                 and "AbsoluteSize.Y < 460" in s for s in texts.values())
+    slots = sorted(b["slot"] for b in found.values() if b["slot"] is not None)
+    if not shared or slots != [0, 1, 2, 3, 4] or any(b["gui"] is None for b in found.values()):
+        raise SystemExit("shop_ux_test: the HUD buttons changed (%r): the shop's HUD layer checks must be checked again" % found)
+    for b in found.values():
+        b["order"] = guis[b["gui"]]["order"]
+    return found
+
+
+def hud_lua():
+    """The other scripts' four HUD buttons as a Luau list (the SHOP button is checked on the real instance)."""
+    rows = sorted((b["slot"], name, b["gui"], b["order"]) for name, b in hud_buttons().items() if name != "ShopButton")
+    return "{ " + ", ".join('{ name = "%s", slot = %d, gui = "%s", order = %d }' % (n, s, g, o) for s, n, g, o in rows) + " }"
+
+
 def sectionize(text):
     """Wraps every top-level block of checks (a `do` or `for` block at column 0) in section(name, function() ... end),
     named after the comment line above it. Helpers (local functions and values at column 0) stay outside."""
@@ -2316,7 +2419,7 @@ def program(layout=None, client=None):
     world = (WORLD.replace("__UPGRADES__", upgrades_lua())
              .replace("__CLIENT__", long_string(client if client is not None else read(CLIENT)))
              .replace("__MODULES__", modules))
-    tests = "".join(sectionize(block) for block in (LAYOUT_TESTS, LADDER_TESTS, CLIENT_TESTS, OFFICE_TESTS))
+    tests = "".join(sectionize(block) for block in (LAYOUT_TESTS, LADDER_TESTS, CLIENT_TESTS.replace("__HUD__", hud_lua()), OFFICE_TESTS))
     return PRELUDE + world + tests + 'print_real(string.format("%d passed, %d failed", passed, failed))\n'
 
 
@@ -2355,8 +2458,10 @@ end
 """
 
 
-def static_checks(layout=None, client=None):
-    """Checks on the source text of ShopLayout.lua and ShopClient.lua (layout and client replace the files' text)."""
+def static_checks(layout=None, client=None, out=None):
+    """Checks on the source text of ShopLayout.lua and ShopClient.lua (layout and client replace the files' text).
+    A FAIL line is printed, or added to the list out (the mutation runs: several run at once, in threads, so they never
+    redirect sys.stdout)."""
     layout = layout if layout is not None else read(LAYOUT)
     client = client if client is not None else read(CLIENT)
     passed, failed = 0, 0
@@ -2367,7 +2472,11 @@ def static_checks(layout=None, client=None):
             passed += 1
         else:
             failed += 1
-            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+            line = "FAIL: " + name + (" -- " + str(extra) if extra else "")
+            if out is None:
+                print(line)
+            else:
+                out.append(line)
 
     lay, cli = code_only(layout), code_only(client)
     check("ShopLayout.lua is pure: no GetService, require, Instance, game, workspace, task or remote",
@@ -2391,6 +2500,29 @@ def static_checks(layout=None, client=None):
     check("ShopClient.lua: the HUD button and its slot stay (EmployeeClient, PoachClient, IpoClient and the icon tests use them)",
           'Name = "ShopButton"' in cli and "placeHudButton(shopButton, 1)" in cli and "buy = Color3.fromRGB(0, 200, 90)" in cli)
     check("ShopClient.lua: it requires ShopLayout from ReplicatedStorage", 'require(ReplicatedStorage:WaitForChild("ShopLayout"))' in cli)
+
+    # The layers (ScreenGui DisplayOrder) of every client script: the call tray under the HUD, the HUD under every
+    # window, the shop window with the Poach, IPO and Daily windows, the hatch reveal and the poach result above all
+    guis = screen_guis(client)
+    huds = hud_buttons(client)
+    order = lambda name: guis[name]["order"] if name in guis else None
+    hud_orders = [b["order"] for b in huds.values()]
+    shop = order("ShopGui")
+    check("layers: the shop window (ShopGui) draws above every HUD button's ScreenGui (DisplayOrder)",
+          shop is not None and all(o < shop for o in hud_orders), {n: (b["gui"], b["order"]) for n, b in huds.items()})
+    check("layers: the shop window is on the windows' layer, with the Poach, IPO and Daily windows (DisplayOrder 5)",
+          shop == order("PoachWindowGui") == order("IpoWindowGui") == order("DailyWindowGui") == 5, shop)
+    check("layers: the SHOP button sits with the HUD (its own ScreenGui, under every window, like POACH and IPO)",
+          huds["ShopButton"]["gui"] != "ShopGui" and huds["ShopButton"]["order"] == order("PoachGui") == order("IpoGui") == -1, huds["ShopButton"])
+    check("layers: the call tray (TaskGui) draws under every HUD button and under the shop's toast (it never hides a pop-up)",
+          order("TaskGui") is not None and all(order("TaskGui") < o for o in hud_orders) and shop is not None and order("TaskGui") < shop)
+    check("layers: the hatch reveal and the poach result still draw above the shop window",
+          shop is not None and order("HatchRevealGui") > shop and order("PoachResultGui") > shop)
+    toast = re.search(r'local toast = make\("TextLabel", \{.*?Parent = (\w+),', cli, re.S)
+    check("layers: the shop's toast is in ShopGui, with the window (shown only while the window is closed)",
+          toast is not None and guis.get("ShopGui", {}).get("var") == toast.group(1) and guis["ShopGui"]["file"] == CLIENT)
+    check("layers: the shop's ScreenGuis keep Roblox's top bar outside them (IgnoreGuiInset off, the same GUI space as the HUD)",
+          not guis.get("ShopGui", {"inset": True})["inset"] and not guis[huds["ShopButton"]["gui"]]["inset"])
     return passed, failed
 
 
@@ -2512,6 +2644,15 @@ MUTANTS = [
     ("BEST VALUE on a Coming soon item", L, "if minutes > 0 and price > 0 and forSale(product) then", "if minutes > 0 and price > 0 then",
      "never on a Coming soon item"),
     ("BEST VALUE on the worst pack", L, "if bestRate == nil or rate > bestRate then", "if bestRate == nil or rate < bestRate then", "BEST VALUE is the Vault"),
+    # Review fixes (shop-fix)
+    ("ShopGui back at DisplayOrder 0 (EGGS and TEAM over the tab rail)", C, "\tDisplayOrder = 5,\n", "",
+     "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab"),
+    ("the SHOP button back in the window's ScreenGui", C, "\tParent = hudGui,\n})\nround(shopButton, 18)", "\tParent = gui,\n})\nround(shopButton, 18)",
+     "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab"),
+    ("the SHOP button's ScreenGui on the windows' layer (5)", C, "\tDisplayOrder = -1,\n", "\tDisplayOrder = 5,\n",
+     "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab"),
+    ("ShopGui under the other windows' layer (3)", C, "\tDisplayOrder = 5,\n", "\tDisplayOrder = 3,\n",
+     "layers: the shop window is on the windows' layer, with the Poach, IPO and Daily windows"),
 ]
 
 
@@ -2525,12 +2666,9 @@ def run_mutants(luau):
         changed[filename] = apply_mutation(texts[filename], old, new, filename)
         result = run_luau(luau, program(layout=changed[LAYOUT], client=changed[CLIENT]))
         finished = re.search(r"^\d+ passed, \d+ failed$", result.stdout, re.M) is not None
-        import io
-        import contextlib
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            static_checks(layout=changed[LAYOUT], client=changed[CLIENT])
-        lines = [line for line in (result.stdout + "\n" + buffer.getvalue()).split("\n") if line.startswith("FAIL: ")]
+        static = []
+        static_checks(layout=changed[LAYOUT], client=changed[CLIENT], out=static)
+        lines = [line for line in result.stdout.split("\n") + static if line.startswith("FAIL: ")]
         named = [line for line in lines if expected in line]
         if finished and named:
             if "--list-mutants" in sys.argv:

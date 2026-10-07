@@ -124,10 +124,21 @@ end
 
 -- Screen ----------------------------------------------------------------
 
+-- Two layers, like PoachClient and IpoClient: the SHOP button sits with the HUD under every window (DisplayOrder -1),
+-- while the shop window and its pop-up sit above every HUD button (DisplayOrder 5), so EGGS or TEAM never draws over
+-- a tab (in landscape the HUD row and the tab rail share the top-left corner)
+local hudGui = make("ScreenGui", {
+	Name = "ShopHudGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = -1,
+	Parent = player:WaitForChild("PlayerGui"),
+})
 local gui = make("ScreenGui", {
 	Name = "ShopGui",
 	ResetOnSpawn = false, -- keep the shop as it was when your character respawns
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 5,
 	Parent = player:WaitForChild("PlayerGui"),
 })
 local playerGui = gui.Parent
@@ -142,7 +153,7 @@ local shopButton = make("TextButton", {
 	Font = Enum.Font.GothamBold,
 	Text = "🛒\nSHOP",
 	TextColor3 = COLORS.text,
-	Parent = gui,
+	Parent = hudGui,
 })
 round(shopButton, 18)
 fitText(shopButton, 22)
@@ -154,7 +165,7 @@ make("UIStroke", { Thickness = 3, Transparency = 0.5, ApplyStrokeMode = Enum.App
 -- column would sit under the joystick.
 local function placeHudButton(button, slot)
 	local function place()
-		if gui.AbsoluteSize.Y < 460 then
+		if hudGui.AbsoluteSize.Y < 460 then
 			button.AnchorPoint = Vector2.new(0, 0)
 			button.Size = UDim2.fromOffset(64, 64)
 			button.Position = UDim2.fromOffset(10 + slot * 72, 6)
@@ -165,7 +176,7 @@ local function placeHudButton(button, slot)
 		end
 	end
 	place()
-	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+	hudGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 end
 placeHudButton(shopButton, 1)
 

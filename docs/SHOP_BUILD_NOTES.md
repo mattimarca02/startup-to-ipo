@@ -36,7 +36,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 
 - [x] 4.0 Claim the five files in `CONTRIBUTING.md` (rows only: ShopClient, ShopLayout, tools/shop_ux_test.py, docs/STUDIO_SYNC_SHOP.md, these notes; free on this branch and on `customize-pr1`, `task-needs-desk`, `hud-cash`, `world-icons-pass`, `integration-1`), then this checklist
 - [x] 4.1 Item 0, base: a plain merge of `origin/world-icons-pass` at `4c052c7` (no rebase, no conflict), the four suites after it: daily_test 1,780 + 20 of 20, shop_ux_test 5,092 + 67 of 67, icon_test 371 + 68 of 68, world_test 353 + 82 of 82 (the `--review` modes of world_test and icon_test fail by design on this branch, only on "no existing file is edited but CONTRIBUTING.md" and "tools/daily_test.py ... is untouched")
-- [ ] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
+- [x] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
 - [ ] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
 - [ ] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
 - [ ] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
@@ -89,6 +89,39 @@ The container had no `luau`: the official release `luau-ubuntu.zip` (github.com/
 - **ShopClient's Office tab:** the owned rungs fold into one summary row ("3 of 6 bought", "+$8/s"; a tap shows them with a drawn check and "Owned", another folds them); the next upgrade is the hero card (72 px icon box, "+$2 every second", the bar, "$12 / $25", "about 13 s", the button); the others are dimmed with a drawn padlock and "Unlocks after <the one before>", and no button. Buy states: "Get it free", "Buy $25" (a soft pulse every 4 s), "Need $13 more" (a tap shakes the bar and says "about 13 s at your Income", nothing is sent), "..." while the request runs. On success the icon pops, "+$2/s" floats up and the card says "Bought!" for 0.8 s before it folds and the next one becomes the hero (it scrolls into view). A refusal (or a failed call) shows in the card, in light red, for 3 s. Three gray skeleton rungs while "Upgrades" is asked; after the 5 tries the old sentence and a Retry button (the same 5 tries); a gold "Office complete" banner with "Your next step: the IPO window" at the top once all six are bought. Never a confirmation. Still only "Upgrades" and "BuyUpgrade", index.
 - **BEST VALUE:** a gold badge on the Cash pack with the most minutes of Income per Robux among the ones on sale (today the Vault), computed from ShopConfig on every refresh.
 - **`tools/daily_test.py`:** the one edit (its own commit, "daily_test: Locked check follows the new ladder"): the check "Buy is only offered for the next upgrade when the Cash is there" now looks for `button.Visible = row.state ~= "locked"` instead of `setButton(button, "Locked", COLORS.disabled, false)`. Nothing else there changed.
+
+## Review fixes (phase 4): each item checked first, then applied or rejected
+
+### Item 1: the HUD overlap (applied)
+
+**Checked:** true. In landscape the HUD buttons are a 64 px row at the top-left (y 6-70) and the tab rail starts at the window's top-left, and `ShopGui` and `RecruitingGui` (EGGS and TEAM) both had DisplayOrder 0, so which one draws on top was undefined. Measured by the new check on the old ShopClient: at 667 x 375 (no top bar) EGGS covers TabOffice at x 37-74, y 25-69 (37 of its 112 px); at 844 x 390 TEAM covers it at x 154-218 (64 of 112 px), the review's numbers. The SHOP button itself (in the same ScreenGui as the window) also sat on TabOffice (x 82-146).
+
+**Fix (ShopClient only):** the same two layers as PoachClient and IpoClient. `ShopGui` (the window and its toast) now has DisplayOrder **5**, the windows' layer (PoachWindowGui, IpoWindowGui, DailyWindowGui); the SHOP button moved to its own ScreenGui `ShopHudGui` with DisplayOrder **-1**, the HUD's layer (PoachGui, IpoGui). Giving the whole ShopGui 5 instead would have tied the SHOP button with the Poach, IPO and Daily windows (it could draw over them; before, it was always under them). `ShopGui.Window` and every Name the tutorial needs are unchanged; the button keeps its name `ShopButton`, its slot and its code (the tutorial finds HUD buttons by name, anywhere in PlayerGui).
+
+**Every ScreenGui (read from the client scripts by `tools/shop_ux_test.py`, `screen_guis()`):**
+
+| ScreenGui | Script | Holds | Before | After |
+|---|---|---|---|---|
+| TaskGui | TaskClient | the call tray | -2 | -2 |
+| DailyGui | DailyClient | the daily gift chip | -1 | -1 |
+| IpoGui | IpoClient | the IPO button, the valuation bar | -1 | -1 |
+| PoachGui | PoachClient | the POACH button | -1 | -1 |
+| ShopHudGui | ShopClient | the SHOP button | (new; the button was in ShopGui at 0) | **-1** |
+| RecruitingGui | EmployeeClient | EGGS, TEAM, the Recruiting window, its messages | 0 | 0 |
+| OnboardingGui | OnboardingClient | the goal tracker, its pop-up | 0 | 0 |
+| ShopGui | ShopClient | the shop window, the shop's toast (and the SHOP button before) | 0 | **5** |
+| DailyWindowGui | DailyClient | the Daily window, its pop-up | 5 | 5 |
+| IpoWindowGui | IpoClient | the IPO window, its messages | 5 | 5 |
+| PoachWindowGui | PoachClient | the Poach window, the top banners, its messages | 5 | 5 |
+| TaskFrontGui | TaskClient | the tray's own message | 5 | 5 |
+| HatchRevealGui | EmployeeClient | the hatch reveal (IgnoreGuiInset) | 50 | 50 |
+| PoachResultGui | PoachClient | the poach result (IgnoreGuiInset) | 51 | 51 |
+
+**Still layered right:** the call tray (-2) stays under every HUD button and every pop-up, the shop's toast included (it hides while a window is open anyway); the shop's toast keeps its lane (bottom center, -16, 48 px) and now sits on the pop-ups' layer (5) like the IPO, Poach, Daily and tray messages; one window at a time (`OpenPanel`) is unchanged; the hatch reveal and the poach result still draw above the shop. **What changes:** a Recruiting or Onboarding pop-up (layer 0) that appears while the shop is open is now drawn under the shop window instead of an undefined order, the same as it already was under the Poach, IPO and Daily windows; a message from another window's layer 5 ties with the shop window, as it already tied with those windows.
+
+**Tests:** `screen_guis()` and `hud_buttons()` read every client's ScreenGuis and the five HUD buttons (slot, ScreenGui, DisplayOrder; the run stops if a HUD button stops using the shared layout). At every phone, top bar, tab and in Studio and live, two new checks: "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab" and "the shop window draws above every HUD button it overlaps (DisplayOrder)" (a tie, or the same ScreenGui, counts as "may draw above"); "the SHOP button is where the shared HUD layout puts it" proves the model on the real button. Seven static "layers:" checks hold the table above (the tray under the HUD, the HUD under the shop window, the shop window on the windows' layer 5, the SHOP button on the HUD's layer, the reveal and the poach result above, the toast in ShopGui, IgnoreGuiInset off). On the old ShopClient the new checks fail 558 times (every landscape phone); now 0. **Mutants (4):** ShopGui back at DisplayOrder 0, the SHOP button back in the window's ScreenGui, the SHOP button's ScreenGui at 5 (each caught by "no HUD button that may draw above the shop ... covers a tab"), ShopGui at 3 (caught by "layers: the shop window is on the windows' layer").
+
+**A harness bug found on the way (fixed in the same commit):** the mutation runs (4 threads) captured `static_checks`' FAIL lines with `contextlib.redirect_stdout`, which swaps the process-wide `sys.stdout`; two threads doing it at once can leave `sys.stdout` pointing at another thread's buffer. With the new layer checks (they read every client script, so `static_checks` takes longer) it happened on both of the first two full runs: the run ended with exit code 0 but without its "Shop mutations" and summary lines, and a mutant's static FAIL lines could be counted for another mutant. `static_checks` now returns its FAIL lines in a list (`out=`) in the mutation runs and never redirects `sys.stdout`.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 
