@@ -2208,6 +2208,58 @@ do
 		check("desk: a call that waits when the Desk is bought is kept", openCount(p) == 1 and lastState(p).on == true)
 	end
 
+	-- Missed calls never carry over (OWNER DEFAULT): when calls turn on, the count of calls that ran out in a row starts at 0 and the idle
+	-- clock starts at the unlock. Only the Studio Debug buttons ("spawn a call", "IpoReset") can ring a call before the Desk, so this
+	-- is reachable only in Studio, but it must not start quiet mode ("Tap to resume") the moment the Desk is bought.
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		spawnCall(p); spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5)
+		local run = p.data.tasks.run
+		check("desk: ... the calls that ran out while calls were off are counted by the engine (the test starts from three misses)", stats(p).missed == 3 and run.misses == 3 and run.quiet == false, run.misses)
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		check("desk: missed calls from before the Desk do not start quiet mode when it is bought (the miss counter starts at 0)",
+			run.misses == 0 and run.quiet == false and lastState(p).quiet == false and lastState(p).on == true, run.misses)
+		local waited = waitForArrival(p, 80)
+		check("desk: ... and the first call comes after a normal gap, with no 'Tap to resume' in between",
+			waited ~= nil and waited + 1 >= 20 - 1e-9 and waited + 1 <= 21.01 and run.quiet == false and lastState(p).quiet == false, waited)
+	end
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5) -- two ran out while calls were off
+		local id = spawnCall(p) -- and one is waiting when the Desk is bought
+		buyDesk(p)
+		tick(p, 1, 0.5)
+		local run = p.data.tasks.run
+		check("desk: when calls turn on the miss counter is reset and the call that is waiting is kept (open, counting down)",
+			run.misses == 0 and openCount(p) == 1 and #waiting(p) == 1 and waiting(p)[1].id == id and waiting(p)[1].left > 0, run.misses)
+		local ok, _, info = answer(p, id)
+		check("desk: ... and that call can still be answered and pays", ok == true and info ~= nil and info.cash == 70 and stats(p).answered == 1)
+	end
+	do
+		local p, d = newPlayer(nil) -- the Desk is owned: calls are on all the time
+		noArrivals(p)
+		spawnCall(p); spawnCall(p)
+		tick(p, 10, 0.5)
+		local run = p.data.tasks.run
+		check("desk: with calls on, two calls that ran out stay counted (the counter is reset when calls turn on, not on every tick)", run.misses == 2 and run.quiet == false, run.misses)
+		spawnCall(p)
+		tick(p, 10, 0.5)
+		check("desk: ... and the third in a row still starts quiet mode", run.quiet == true and lastState(p).quiet == true, run.misses)
+	end
+	do
+		local p, d = newPlayer(nil, { owned = {} })
+		tick(p, 10, 0.5)
+		buyDesk(p)
+		advance(200) -- one late tick: nothing ran in between (a server hiccup)
+		TaskServer.step(p, CLOCK)
+		local run = p.data.tasks.run
+		check("desk: when calls turn on after a long step the idle clock starts at the unlock (no quiet mode)",
+			run.quiet == false and lastState(p).quiet == false and lastState(p).on == true and run.lastActionAt == CLOCK, run.lastActionAt)
+	end
+
 	-- the team still takes routine calls for the player, once calls are on
 	do
 		RANDOM = 0.1 -- 0.1 < 1 - 0.8^3: the team takes the call
@@ -4886,8 +4938,9 @@ TASK_MUTANTS = [
     ("quiet mode can start before the Desk", "TaskServer.lua",
      "\tif on and not run.quiet and not run.paused", "\tif not run.quiet and not run.paused",
      "engine", "desk: three calls that run out after the Desk is gone"),
-    ("the idle clock is not held before the Desk", "TaskServer.lua",
-     "\tif not on then\n\t\trun.lastActionAt = now\n\tend\n", "",
+    ("the idle clock is not held before the Desk and not started when it is bought", "TaskServer.lua",
+     "\tif not on then\n\t\trun.lastActionAt = now\n\tend\n\tif run.on ~= on then\n\t\tif on and run.on == false then\n\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n",
+     "\tif run.on ~= on then\n\t\tif on and run.on == false then\n\t\t\trun.misses = 0\n",
      "engine", "desk: buying the Desk after 5 minutes does not start quiet mode"),
     ("an old arrival timer is kept while calls are off", "TaskServer.lua",
      "\t\t\trun.nextAt[row.key] = nil\n\t\tend\n\tend\n\tif not on then", "\t\tend\n\tend\n\tif not on then",
@@ -4910,6 +4963,27 @@ TASK_MUTANTS = [
     ("the team's call pays nothing", "TaskServer.lua",
      "pay(player, data, run, row.reward.seconds * row.teamPays)", "pay(player, data, run, 0)",
      "engine", "desk: once the Desk is bought the team takes calls for the player"),
+    ("the miss counter is not reset when calls turn on", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.lastActionAt = now\n",
+     "engine", "desk: missed calls from before the Desk do not start quiet mode when it is bought"),
+    ("the miss counter is reset on every tick, calls on or off", "TaskServer.lua",
+     "\tif run.on ~= on then\n\t\tif on and run.on == false then\n", "\trun.misses = 0\n\tif run.on ~= on then\n\t\tif on and run.on == false then\n",
+     "engine", "desk: ... the calls that ran out while calls were off are counted by the engine"),
+    ("the reset removes a waiting call", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n\t\t\tfor _, id in ipairs(table.clone(run.order)) do closeTask(run, id) end\n",
+     "engine", "desk: when calls turn on the miss counter is reset and the call that is waiting is kept"),
+    ("the miss counter is also reset while calls stay on", "TaskServer.lua",
+     "\tif on and not run.quiet and not run.paused\n", "\tif on then run.misses = 0 end\n\tif on and not run.quiet and not run.paused\n",
+     "engine", "desk: with calls on, two calls that ran out stay counted"),
+    ("the idle clock is not started when calls turn on", "TaskServer.lua",
+     "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.misses = 0\n",
+     "engine", "desk: when calls turn on after a long step the idle clock starts at the unlock"),
+    ("the miss counter is reset when calls turn off instead of on", "TaskServer.lua",
+     "\t\tif on and run.on == false then\n", "\t\tif not on and run.on == true then\n",
+     "engine", "desk: missed calls from before the Desk do not start quiet mode when it is bought"),
+    ("the miss counter is also reset at the first tick (a join)", "TaskServer.lua",
+     "\t\tif on and run.on == false then\n", "\t\tif on and run.on ~= true then\n",
+     "engine", "3 expired calls in a row start quiet mode"),
     ("the client shows the tray early", "TaskClient.lua",
      "\treturn not windowOpen and (callsOn or waitingCount > 0)", "\treturn not windowOpen",
      "tray", "shown: before the Desk nothing about calls is shown"),

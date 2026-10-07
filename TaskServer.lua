@@ -14,7 +14,9 @@
 -- arrives, no quiet mode starts and the state says `on = false`. When the condition turns true the first
 -- arrival is scheduled with the NORMAL gap (the same range as any other arrival): an instant call the moment
 -- the Desk is bought would ring before the player has looked around. A call that is already waiting is never
--- removed by this: it ends only by being answered, skipped or running out.
+-- removed by this: it ends only by being answered, skipped or running out. When calls turn on, the count of calls
+-- that ran out in a row starts at 0 and the idle clock starts then, so nothing from before the unlock can start
+-- quiet mode (OWNER DEFAULT).
 --
 -- Everything is decided here, from the server clock (os.clock for durations, os.time for the day):
 -- when a call arrives, whether an answer came in time, and the reward. The client sends only
@@ -663,6 +665,9 @@ function TaskServer.step(player, now)
 	-- Calls start with the Desk (or after the first IPO). Until then: the arrival timer is forgotten (so the
 	-- first call after the unlock waits a normal gap, never an old timer), the idle clock is held (so quiet
 	-- mode counts from the unlock, not from the start of the session) and the client is told `on = false`.
+	-- When calls turn from off to on, the count of calls that ran out in a row starts at 0 and the idle clock starts
+	-- there, even after a long step (OWNER DEFAULT): calls that ran out while calls were off (only the Studio Debug
+	-- buttons can ring one then) never start quiet mode the moment the Desk is bought.
 	-- Nothing here touches a call that is already waiting.
 	local on = false
 	for _, row in ipairs(TaskConfig.Rows) do
@@ -676,6 +681,10 @@ function TaskServer.step(player, now)
 		run.lastActionAt = now
 	end
 	if run.on ~= on then
+		if on and run.on == false then
+			run.misses = 0
+			run.lastActionAt = now
+		end
 		run.on = on
 		run.changed = true
 	end

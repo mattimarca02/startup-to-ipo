@@ -185,6 +185,7 @@ The ten scripts of section (a) are still identical to the repo at this commit (t
    - Debug > "Jump to IPO-ready", Go Public: the upgrades reset (the Desk is gone) but **calls keep coming** and the tray stays.
    - Leave and rejoin with the Desk: calls come back after a normal gap.
    - Debug > "Task: spawn a call" still works before the Desk (it is a Studio tool); that call shows and can be answered.
+   - Before the Desk, spawn three calls with that button and let them run out (about 10 s), then buy the Desk: **no "Tap to resume"** (the missed-call count starts at 0 when calls turn on; OWNER DEFAULT).
    - Phone layout (Test > Device): the tray did not move; only when it is visible changed.
 6. **Publish** as usual. This change needs no "Shut down all servers" by itself: the task engine is Studio-only in PR 1 and nothing is saved differently.
 
