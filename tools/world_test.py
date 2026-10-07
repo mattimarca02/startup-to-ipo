@@ -4,6 +4,9 @@
 Run:   python3 tools/world_test.py
        python3 tools/world_test.py --integration   (also both suites on a scratch copy with the patch applied)
        python3 tools/world_test.py --review        (also the review checks against the merge-base with main)
+       python3 tools/world_test.py --strict-patch  (at merge time, with --review: the integration patch must apply
+           exactly, and its preamble and the TycoonCore row of docs/STUDIO_SYNC_WORLD.md must be what --regen-patch
+           writes; without it, an offset, fuzz or a stale preamble is only a NOTE)
        python3 tools/world_test.py --regen-patch [label]   (rewrites docs/world_pass_integration.patch and the
            TycoonCore row of docs/STUDIO_SYNC_WORLD.md for this worktree's TycoonCore.lua, at merge time)
 
@@ -1119,43 +1122,62 @@ local function checkBlock()
 __CHECK__
 end
 local StarterGui = SERVICES.StarterGui
-local icons = newInstance("Folder")
-icons.Name = "PREVIEW_ICONS"
-icons.Parent = StarterGui
-local shopGui = newInstance("Folder")
-shopGui.Name = "ShopGui"
-shopGui.Parent = StarterGui
+local function folderAt(name, parent)
+	local f = newInstance("Folder")
+	f.Name = name
+	f.Parent = parent
+	return f
+end
+local function contains(text, piece)
+	return string.find(text, piece, 1, true) ~= nil
+end
+local icons = folderAt("PREVIEW_ICONS", StarterGui)
+local lightTest = folderAt("LightTest", icons)
+local shopGui = folderAt("ShopGui", StarterGui)
 local holder = newInstance("Model")
 holder.Name = "Props"
 holder.Parent = workspace
-local nested = newInstance("Folder")
-nested.Name = "PREVIEW_OLD"
-nested.Parent = holder
-local inner = newInstance("Folder")
-inner.Name = "PREVIEW_INNER"
-inner.Parent = workspace:FindFirstChild("PREVIEW_WORLD")
+local nested = folderAt("PREVIEW_OLD", holder)             -- an unknown PREVIEW_ object, deep down
+local stray = folderAt("PREVIEW_X", workspace)             -- unrelated, at the top: must survive the cleanup
+local misplaced = folderAt("PREVIEW_WORLD", holder)        -- a known name in the wrong place: unknown
+local oldLight = folderAt("PREVIEW_LIGHT", StarterGui)     -- what an older light test left: unknown
+local inner = folderAt("PREVIEW_INNER", workspace:FindFirstChild("PREVIEW_WORLD")) -- inside a known one: goes with it
+local twin = folderAt("PREVIEW_STAGES", workspace)         -- two with a known name at the right place: both go
 local okC, errC, said = runBlock(checkBlock)
-check("check block: with previews there it prints FAIL and every name (PREVIEW_WORLD, PREVIEW_STAGES, PREVIEW_ICONS, a nested one)", okC
-	and string.sub(said, 1, 5) == "FAIL " and string.find(said, "PREVIEW_WORLD", 1, true) and string.find(said, "PREVIEW_STAGES", 1, true)
-	and string.find(said, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(said, "Props.PREVIEW_OLD", 1, true), errC or said)
-check("check block: it changes nothing", workspace:FindFirstChild("PREVIEW_WORLD") ~= nil and StarterGui:FindFirstChild("PREVIEW_ICONS") ~= nil)
+check("check block: with previews there it prints FAIL and every PREVIEW_ object, known and unknown", okC and string.sub(said, 1, 5) == "FAIL "
+	and contains(said, "Workspace.PREVIEW_WORLD (known") and contains(said, "Workspace.PREVIEW_STAGES (known") and contains(said, "StarterGui.PREVIEW_ICONS (known")
+	and contains(said, "Workspace.PREVIEW_WORLD.PREVIEW_INNER (known") and contains(said, "Workspace.Props.PREVIEW_OLD (unknown")
+	and contains(said, "Workspace.PREVIEW_X (unknown") and contains(said, "Workspace.Props.PREVIEW_WORLD (unknown")
+	and contains(said, "StarterGui.PREVIEW_LIGHT (unknown") and contains(said, "FAIL 9 PREVIEW_"), errC or said)
+check("check block: it changes nothing", workspace:FindFirstChild("PREVIEW_WORLD") ~= nil and icons.Parent == StarterGui and stray.Parent == workspace
+	and nested.Parent == holder and twin.Parent == workspace)
 local okR, errR, cleaned = runBlock(cleanupBlock)
-local leftover = {}
-for _, place in ipairs({ workspace, StarterGui }) do
-	for _, d in ipairs(place:GetDescendants()) do if string.sub(d.Name, 1, 8) == "PREVIEW_" then table.insert(leftover, d.Name) end end
-end
-check("cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which", okR and #leftover == 0
-	and string.find(cleaned, "Removed: ", 1, true) and string.find(cleaned, "Workspace.PREVIEW_WORLD", 1, true) and string.find(cleaned, "Workspace.PREVIEW_STAGES", 1, true)
-	and string.find(cleaned, "StarterGui.PREVIEW_ICONS", 1, true) and string.find(cleaned, "Workspace.Props.PREVIEW_OLD", 1, true)
-	and not string.find(cleaned, "PREVIEW_INNER", 1, true), errR or (cleaned .. " | left " .. table.concat(leftover, ",")))
-check("cleanup block: it prints OK once nothing is left", string.find(cleaned, "\nOK no PREVIEW_ object is left in Workspace or StarterGui", 1, true) ~= nil, cleaned)
+local removedLine = ""
+for _, line in ipairs(string.split(cleaned, "\n")) do if string.sub(line, 1, 9) == "Removed: " then removedLine = line end end
+local removedCount = #string.split(string.sub(removedLine, 10), ", ")
+check("cleanup block: it removes exactly the three known previews (Workspace.PREVIEW_STAGES, Workspace.PREVIEW_WORLD, StarterGui.PREVIEW_ICONS) and says which",
+	okR and workspace:FindFirstChild("PREVIEW_WORLD") == nil and workspace:FindFirstChild("PREVIEW_STAGES") == nil and StarterGui:FindFirstChild("PREVIEW_ICONS") == nil
+	and twin.Parent == nil and not lightTest:IsDescendantOf(StarterGui) and not inner:IsDescendantOf(workspace)
+	and contains(removedLine, "Workspace.PREVIEW_WORLD") and contains(removedLine, "Workspace.PREVIEW_STAGES") and contains(removedLine, "StarterGui.PREVIEW_ICONS")
+	and removedCount == 4 and not contains(removedLine, "PREVIEW_INNER") and not contains(removedLine, "Props"), errR or (removedLine .. " | " .. cleaned))
+check("cleanup block: an unrelated PREVIEW_X, a PREVIEW_WORLD in the wrong place, a nested PREVIEW_OLD and an old PREVIEW_LIGHT all survive",
+	stray.Parent == workspace and misplaced.Parent == holder and nested.Parent == holder and oldLight.Parent == StarterGui, cleaned)
+check("cleanup block: each unknown PREVIEW_ object is reported: unknown PREVIEW_ object: <path>, delete it by hand",
+	contains(cleaned, "unknown PREVIEW_ object: Workspace.PREVIEW_X, delete it by hand") and contains(cleaned, "unknown PREVIEW_ object: Workspace.Props.PREVIEW_OLD, delete it by hand")
+	and contains(cleaned, "unknown PREVIEW_ object: Workspace.Props.PREVIEW_WORLD, delete it by hand") and contains(cleaned, "unknown PREVIEW_ object: StarterGui.PREVIEW_LIGHT, delete it by hand"), cleaned)
+check("cleanup block: with unknown PREVIEW_ objects left it ends with FAIL, not OK", contains(cleaned, "\nFAIL 4 unknown PREVIEW_ object(s) left, not deleted: ")
+	and not contains(cleaned, "\nOK "), cleaned)
 check("cleanup block: everything else stays (Baseplate, SpawnLocation, Terrain, StarterGui.ShopGui, Workspace.Props)",
 	baseplate.Parent == workspace and spawnPad.Parent == workspace and terrain.Parent == workspace and shopGui.Parent == StarterGui and holder.Parent == workspace)
+local _, _, between = runBlock(checkBlock)
+check("check block: after the cleanup it lists only the unknown ones", contains(between, "FAIL 4 PREVIEW_") and contains(between, "Workspace.PREVIEW_X (unknown")
+	and not contains(between, "(known"), between)
+for _, gone in ipairs({ stray, misplaced, nested, oldLight }) do gone:Destroy() end -- deleted by hand
 local _, _, after = runBlock(checkBlock)
-check("check block: after the cleanup it prints OK", after == "OK no PREVIEW_ object in Workspace or StarterGui", after)
+check("check block: once they are deleted by hand it prints OK", after == "OK no PREVIEW_ object in Workspace or StarterGui", after)
 local okAgain, _, again = runBlock(cleanupBlock)
-check("cleanup block: run again, it says nothing was there and OK", okAgain and string.find(again, "Removed: nothing (no preview was there)", 1, true) ~= nil
-	and string.find(again, "OK no PREVIEW_ object is left", 1, true) ~= nil, again)
+check("cleanup block: run again, it says nothing was there and OK", okAgain and contains(again, "Removed: nothing (no preview was there)")
+	and contains(again, "OK no PREVIEW_ object is left") and not contains(again, "unknown"), again)
 print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
@@ -1273,31 +1295,41 @@ def sync_table_checks():
     return passed, failed
 
 
-def unpatched_tycoon(text):
+def unpatched_tycoon(text, hunks=None):
     """TycoonCore.lua without the two blocks the integration patch adds (for a file where the patch is merged)."""
-    for block in patch_hunks():
+    for block in (hunks if hunks is not None else patch_hunks()):
         text = text.replace(block + "\n", "", 1)
     return text
 
 
-def apply_patch(text):
-    """text with docs/world_pass_integration.patch applied in a scratch folder: exactly, or with fuzz (git apply -C1:
-    one line of context must match, like patch's default fuzz of 2 on 3 lines). None if it does not apply or git is
-    missing."""
+def apply_patch_how(text, patch=None):
+    """(text with the integration patch applied in a scratch folder, how it applied). how: "exact" (every hunk at
+    the line its header names), "offset" (git found a hunk some lines away), "fuzz" (only with less context: git
+    apply -C1, one line of context must match, like patch's default fuzz of 2 on 3 lines). (None, None) if it does
+    not apply or git is missing. patch: the patch's text (default: docs/world_pass_integration.patch)."""
     with tempfile.TemporaryDirectory() as tmp:
         target = os.path.join(tmp, "TycoonCore.lua")
+        patch_path = os.path.join(tmp, "integration.patch")
+        with open(patch_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(patch if patch is not None else read("docs/world_pass_integration.patch"))
         for extra in ([], ["-C1"]):
             with open(target, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
             try:
-                applied = subprocess.run(["git", "apply"] + extra + [os.path.join(ROOT, "docs", "world_pass_integration.patch")],
-                                         cwd=tmp, capture_output=True, text=True)
+                applied = subprocess.run(["git", "apply", "-v"] + extra + [patch_path], cwd=tmp, capture_output=True, text=True)
             except OSError:
-                return None
+                return None, None
             if applied.returncode == 0:
+                said = applied.stdout + applied.stderr
+                how = "fuzz" if extra or "Context reduced" in said else ("offset" if re.search(r"\(offset -?\d+ lines?\)", said) else "exact")
                 with open(target, encoding="utf-8") as f:
-                    return f.read()
-    return None
+                    return f.read(), how
+    return None, None
+
+
+def apply_patch(text):
+    """text with docs/world_pass_integration.patch applied (exactly, with an offset or with fuzz), or None."""
+    return apply_patch_how(text)[0]
 
 
 def integration_state():
@@ -1484,6 +1516,51 @@ def regen_command():
     return 0
 
 
+STRICT = "integration patch (--strict-patch): it applies exactly, and its preamble and the TycoonCore row of STUDIO_SYNC_WORLD.md are what --regen-patch writes -- " + STALE
+
+
+def strict_problems(current, patch, doc):
+    """Why --strict-patch fails for this TycoonCore.lua (current, merged or not), patch and STUDIO_SYNC_WORLD.md
+    (doc): the patch applies only with an offset or fuzz, or its Made for / Result lines, the patched file's
+    SHA-256 and size, the preamble's line numbers, the hunk headers or the doc's TycoonCore row are not what
+    --regen-patch would write. Empty = all exact."""
+    problems = []
+    hunks = patch_hunks_of(patch)
+    base = unpatched_tycoon(current, hunks) if any(m in current for m in PATCH_MARKERS) else current
+    applied, how = apply_patch_how(base, patch)
+    if applied is None:
+        problems.append("it does not apply")
+    elif how != "exact":
+        problems.append("it applies only with %s (git apply)" % ("an offset" if how == "offset" else "fuzz"))
+    made, result = patch_made_for(patch), patch_result(patch)
+    label = made[2] if made else "?"
+    try:
+        again, again_patched = regen_patch(base, label, hunks)
+    except ValueError as e:
+        return problems + [str(e)]
+    want_made, want_result = sha(base), sha(again_patched)
+    if made is None or made[:2] != want_made:
+        problems.append("Made for: says %s, %s bytes; this TycoonCore.lua is %s, %d bytes" % (made and made[0][:12], made and made[1], want_made[0][:12], want_made[1]))
+    if result is None or result != want_result:
+        problems.append("Result: says %s, %s bytes; regeneration gives %s, %d bytes" % (result and result[0][:12], result and result[1], want_result[0][:12], want_result[1]))
+    if applied is not None and sha(applied) != result:
+        problems.append("the patched file is %s, %d bytes, not the Result line's" % (sha(applied)[0][:12], sha(applied)[1]))
+    old_lines, new_lines = PREAMBLE_LINES.search(patch), PREAMBLE_LINES.search(again)
+    if not (old_lines and new_lines and old_lines.groups() == new_lines.groups()):
+        problems.append("the preamble's line numbers are %s; regeneration gives %s" % (old_lines and old_lines.groups(), new_lines and new_lines.groups()))
+    headers = [l for l in patch.split("\n") if l.startswith("@@")]
+    want_headers = [l for l in again.split("\n") if l.startswith("@@")]
+    if headers != want_headers:
+        problems.append("the hunk headers are %s; regeneration gives %s" % ([h.split(" @@")[0] for h in headers], [h.split(" @@")[0] for h in want_headers]))
+    row = SYNC_ROW.search(doc)
+    if row is None or row.group(0) != sync_row(label, *want_result):
+        problems.append("the TycoonCore row of the STUDIO_SYNC doc is not the one --regen-patch writes (%s)" % (row and row.group(0)[-90:]))
+    if not problems and again != patch:
+        problems.append("the patch is not byte for byte what --regen-patch writes (from byte %d)" % next(
+            (i for i, (a, b) in enumerate(zip(again, patch)) if a != b), min(len(again), len(patch))))
+    return problems
+
+
 PREAMBLE_LINES = re.compile(r"E1  after line (\d+) .*lines (\d+)-(\d+)\).*\n.*\n  E2  between line (\d+) .* and line (\d+) .*\n"
                             r".*PLOT_SPACING \(line (\d+)\), MAX_PLOTS \(line (\d+)\) and\n\s+plotCenter \(lines (\d+)-(\d+)\)")
 
@@ -1548,7 +1625,7 @@ def regen_checks():
         cur_patch, cur_patched = regen_patch(base, "test")
     except ValueError as e:
         cur_patch, cur_patched = None, None
-        check("regen: this worktree's TycoonCore.lua can be regenerated", False, e)
+        check("regen: this worktree's TycoonCore.lua can be regenerated -- " + STALE + " by hand (an anchor changed)", False, e)
     if cur_patch is not None:
         check("regen: the regenerated Made for and Result lines are the hashes of this TycoonCore.lua and of it patched",
               patch_made_for(cur_patch)[:2] == sha(base)[:2] and patch_result(cur_patch) == sha(cur_patched)[:2])
@@ -1567,7 +1644,10 @@ def regen_checks():
         check("regen: the regenerated patch applies exactly to this TycoonCore.lua and gives the same file as the committed patch",
               exact and applied == cur_patched and block_order(cur_patched) == [] and (committed is None or committed == cur_patched))
     lines = base.split("\n")
-    pc = next(i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded("))
+    pc = next((i for i, l in enumerate(lines) if l.startswith("local function onPlayerAdded(")), None)
+    check("regen: this worktree's TycoonCore.lua has local function onPlayerAdded( -- " + STALE + " by hand", pc is not None)
+    if pc is None:
+        return passed, failed
     moved = "\n".join(["-- added line %d" % k for k in range(5)] + lines[:pc] + ["-- moved %d" % k for k in range(3)] + lines[pc:])
     try:
         new_patch, new_patched = regen_patch(moved, "test")
@@ -1634,13 +1714,22 @@ def integration_source(patched):
     return PRELUDE + text
 
 
-def block_order(text):
-    """Problems with where the two blocks sit in a patched TycoonCore (empty = both in place, in order)."""
+# The lines of TycoonCore.lua the two blocks are placed by (block_order): if one is missing, the patch needs regenerating
+LANDMARKS = ("PlotVisuals, PlotArt = nil, nil", "local UPGRADES = {", "local function plotCenter(", "local function onPlayerAdded(",
+             "Players.PlayerAdded:Connect(onPlayerAdded)", "WorldVisuals.build(")
+
+
+def block_order(text, hunks=None):
+    """Problems with where the two blocks sit in a patched TycoonCore (empty = both in place, in order). Never raises:
+    a missing marker or landmark line is a problem like any other. hunks: the blocks (default: the patch's)."""
     problems = []
-    try:
-        e1, e2 = text.index(PATCH_MARKERS[0]), text.index(PATCH_MARKERS[1])
-    except ValueError:
-        return ["a marker line is missing: %s" % [m for m in PATCH_MARKERS if m not in text]]
+    missing = [m for m in PATCH_MARKERS if m not in text]
+    if missing:
+        return ["a marker line is missing: %s" % missing]
+    gone = [m for m in LANDMARKS if m not in text]
+    if gone:
+        return ["a line the blocks are placed by is missing from TycoonCore.lua: %s" % gone]
+    e1, e2 = text.index(PATCH_MARKERS[0]), text.index(PATCH_MARKERS[1])
     if not (text.index("PlotVisuals, PlotArt = nil, nil") < e1 < text.index("local UPGRADES = {")):
         problems.append("the require block is not between the plot visuals block and UPGRADES")
     if not (text.index("local function plotCenter(") < text.index("local function onPlayerAdded(") < e2
@@ -1648,11 +1737,17 @@ def block_order(text):
         problems.append("the build block is not after onPlayerAdded and before Players.PlayerAdded:Connect")
     if not (text.index("WorldVisuals.build(") > e2 and text.count(PATCH_MARKERS[0]) == 1 and text.count(PATCH_MARKERS[1]) == 1):
         problems.append("a block is there twice, or the build call is outside its block")
+    hunks = hunks if hunks is not None else patch_hunks()
+    if len(hunks) == 2 and E1_ANCHOR + hunks[0] + "\n" not in text:
+        problems.append("the require block is not right after the plot visuals block")
+    if len(hunks) == 2 and "\nend\n" + hunks[1] + "\n" + E2_ANCHOR[1:] not in text:
+        problems.append("the build block is not right between the end of onPlayerAdded and Players.PlayerAdded:Connect")
     return problems
 
 
 def patch_checks(how, patched):
-    """Source checks on the patch itself and on the patched TycoonCore (applied in memory, or merged)."""
+    """Source checks on the patch itself and on the patched TycoonCore (applied in memory, or merged), and the
+    --strict-patch check (without the flag, what it would find is a NOTE)."""
     passed, failed = 0, 0
 
     def check(name, cond, extra=None):
@@ -1672,7 +1767,7 @@ def patch_checks(how, patched):
         check("integration patch: merged: TycoonCore.lua holds both blocks exactly as the patch adds them -- " + STALE, missing == [], missing)
     if patched is not None:
         order = block_order(patched)
-        check("integration patch: both marker lines are in TycoonCore, once each, in the right places and order", order == [], order[:1])
+        check("integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE, order == [], order[:1])
     patch = read("docs/world_pass_integration.patch")
     files = re.findall(r"^\+\+\+ b/(\S+)", patch, re.M)
     check("integration patch: it changes TycoonCore.lua and nothing else", files == ["TycoonCore.lua"], files)
@@ -1692,6 +1787,66 @@ def patch_checks(how, patched):
         check("integration patch: the patched TycoonCore still builds the world before players are set up",
               patched.index("WorldVisuals.build(") < patched.index("Players.PlayerAdded:Connect(onPlayerAdded)") and patched.index("local function plotCenter(") < patched.index("WorldVisuals.build("))
         check("integration patch: the patched TycoonCore has no Touched handler (tools/daily_test.py's rule)", "Touched" not in patched)
+    if how in ("applied", "merged"):
+        problems = strict_problems(read("TycoonCore.lua"), patch, read("docs/STUDIO_SYNC_WORLD.md"))
+        if "--strict-patch" in sys.argv:
+            check(STRICT, problems == [], problems[:3])
+        elif problems:
+            print("NOTE: the integration patch is not exact for this TycoonCore.lua (fine until merge time; --strict-patch fails here; "
+                  "regenerate it with --regen-patch on the branch that claims TycoonCore): " + "; ".join(problems[:3]))
+    return passed, failed
+
+
+def guarded(what, fn, *args):
+    """Runs one step of the patch checks. If it raises (a TycoonCore.lua the step cannot read), the error is the named
+    check "patch needs regenerating", never a crash: returns (0, 1) for (passed, failed) then."""
+    try:
+        return fn(*args)
+    except Exception as e:  # noqa: BLE001 -- every error of a step is reported by name
+        print("FAIL: integration patch: the %s ran to the end -- %s (%s: %s)" % (what, STALE, type(e).__name__, e))
+        return 0, 1
+
+
+def run_blocks(luau, patched):
+    result = run_luau(luau, integration_source(patched))
+    print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
+    m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+    if not m:
+        print("FAIL: integration patch: the blocks in the fake ran to the end -- " + STALE)
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 1)
+
+
+def patch_section(luau, top=False):
+    """Everything about the integration patch: how it applies, its two blocks run in the fake, its source checks and
+    the regeneration procedure. Every failure is a named FAIL line; nothing in it can stop the test with an error.
+    Returns (passed, failed)."""
+    passed = failed = 0
+    try:
+        how, patched = integration_state()
+    except Exception as e:  # noqa: BLE001
+        print("FAIL: integration patch: the patch state ran to the end -- %s (%s: %s)" % (STALE, type(e).__name__, e))
+        return 0, 1
+    if how == "nogit":
+        print("note: git is not installed, so the integration patch could not be applied and its blocks are not run")
+    elif patched is None:
+        print("note: the integration patch does not apply to this TycoonCore.lua, so its blocks are not run (" + STALE + ")")
+    else:
+        got = guarded("blocks in the fake", run_blocks, luau, patched)
+        passed, failed = passed + got[0], failed + got[1]
+    got = guarded("patch source checks", patch_checks, how, patched)
+    print("Integration patch source checks: %d passed, %d failed" % got)
+    passed, failed = passed + got[0], failed + got[1]
+    got = guarded("regeneration checks", regen_checks)
+    print("Integration patch regeneration (--regen-patch): %d passed, %d failed" % got)
+    passed, failed = passed + got[0], failed + got[1]
+    if top:
+        got = guarded("--strict-patch scenarios", mode_checks, luau)
+        print("Integration patch, the default run and --strict-patch on 6 scenarios: %d passed, %d failed" % got)
+        passed, failed = passed + got[0], failed + got[1]
+    if "--integration" in sys.argv and patched is not None:
+        print("Integration: both test suites on a scratch copy with the patch applied:")
+        if not integration_suites(luau):
+            failed += 1
     return passed, failed
 
 
@@ -1892,14 +2047,34 @@ MUTANTS_C = [
      "hash block: a script with one newline added at the end prints OK"),
     ("the hash block refuses a newline Studio dropped", D, 'matches(source) or matches(source .. "\\n") or', "matches(source) or",
      "hash block: a script whose last newline Studio dropped prints OK"),
-    ("the cleanup block only looks at the top level", D, "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
-     "for _, place in ipairs(places) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif string.sub(d.Name, 1, 8) == \"PREVIEW_\" and",
-     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
-    ("the cleanup block destroys what is already gone and lists it twice", D, ' and d:IsDescendantOf(place) then', " then",
-     "cleanup block: it removes every PREVIEW_ object in Workspace and StarterGui and says which"),
-    ("the check block forgets StarterGui", D, 'for _, place in ipairs({ workspace, game:GetService("StarterGui") }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
-     'for _, place in ipairs({ workspace }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(left, d:GetFullName())\n\t\tend\n\tend\nend\nprint(#left == 0 and "OK no PREVIEW_ object in',
-     "check block: with previews there it prints FAIL and every name"),
+    ("the cleanup block deletes every PREVIEW_ object at the top level", D,
+     '\t\tif known(d) then\n\t\t\ttable.insert(removed, d:GetFullName())', '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(removed, d:GetFullName())',
+     "cleanup block: an unrelated PREVIEW_X"),
+    ("the cleanup block looks for the three names at any depth", D,
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif known(d) then',
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD" or d.Name == "PREVIEW_ICONS" then',
+     "cleanup block: an unrelated PREVIEW_X"),
+    ("the cleanup block forgets PREVIEW_STAGES", D,
+     '\treturn (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))\n\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS")\nend\nlocal removed',
+     '\treturn (d.Parent == workspace and d.Name == "PREVIEW_WORLD")\n\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS")\nend\nlocal removed',
+     "cleanup block: it removes exactly the three known previews"),
+    ("the cleanup block reports nothing unknown", D, '\t\t\tprint("unknown PREVIEW_ object: " .. d:GetFullName() .. ", delete it by hand")\n', "",
+     "cleanup block: each unknown PREVIEW_ object is reported"),
+    ("the cleanup block's report only looks at the top level", D,
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(unknown,',
+     'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetChildren()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(unknown,',
+     "cleanup block: each unknown PREVIEW_ object is reported"),
+    ("the cleanup block says OK with unknown objects left", D, 'print(#unknown == 0 and "OK no PREVIEW_ object is left', 'print(true and "OK no PREVIEW_ object is left',
+     "cleanup block: with unknown PREVIEW_ objects left it ends with FAIL"),
+    ("the check block forgets StarterGui", D, 'for _, place in ipairs({ workspace, StarterGui }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     'for _, place in ipairs({ workspace }) do\n\tfor _, d in ipairs(place:GetDescendants()) do\n\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
+    ("the check block lists only the unknown ones", D, '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" then\n\t\t\ttable.insert(found,',
+     '\t\tif string.sub(d.Name, 1, 8) == "PREVIEW_" and not known(d) then\n\t\t\ttable.insert(found,',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
+    ("the check block calls a known name anywhere known", D, '\t\tif (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))\n\t\t\tor (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS") then',
+     '\t\tif d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD" or d.Name == "PREVIEW_ICONS" then',
+     "check block: with previews there it prints FAIL and every PREVIEW_ object"),
 ]
 
 
@@ -1920,10 +2095,232 @@ MUTANTS_D = [
 ]
 
 
+# Group E: TycoonCore.lua changes the patch must notice (review 2, item 1). TycoonCore.lua is changed in a scratch
+# copy (with the patch, the doc, this file and the two world modules); patch_section() there must run to the end and
+# fail the named check, which says "patch needs regenerating". Never a crash.
+TC = "TycoonCore.lua"
+HOOK = "Players.PlayerAdded:Connect(onPlayerAdded)\n"
+MUTANTS_E = [
+    ("the plot visuals block's last line changed", TC, "\tPlotVisuals, PlotArt = nil, nil\nend\n", "\tPlotArt, PlotVisuals = nil, nil\nend\n",
+     "integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE),
+    ("E1's anchor line removed", TC, "\tPlotVisuals, PlotArt = nil, nil\nend\n", "end\n",
+     "integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE),
+    # stale with the patch not merged; with it merged, the build block is no longer right before the hook
+    ("the PlayerAdded hook moved below the PlayerRemoving handler", TC, HOOK + "-- Players already in the server",
+     "-- Players already in the server", ("integration patch: it applies to this worktree's TycoonCore.lua",
+                                          "integration patch: both marker lines are in TycoonCore, once each, in the right places and order -- " + STALE)),
+]
+
+
+def tycoon_mutation(text, old, new):
+    """apply_mutation for group E; the hook mutant also puts the removed hook back further down."""
+    changed = apply_mutation(text, old, new, TC)
+    if old.startswith(HOOK):
+        anchor = "Players.PlayerRemoving:Connect(function(player)"
+        changed = apply_mutation(changed, anchor, HOOK + "\n" + anchor, TC)
+    return changed
+
+
+def scratch_copy(tmp, files):
+    """Copies the files patch_section() reads into tmp; files: { name: text or None (copied as it is) }."""
+    for name in ("TycoonCore.lua", "WorldArt.lua", "WorldVisuals.lua", "docs/world_pass_integration.patch", "docs/STUDIO_SYNC_WORLD.md", T):
+        target = os.path.join(tmp, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        if files.get(name) is None:
+            shutil.copy(os.path.join(ROOT, name), target)
+        else:
+            with open(target, "w", encoding="utf-8", newline="\n") as f:
+                f.write(files[name])
+
+
+def run_patch_section(luau, tmp, args=()):
+    """patch_section() of the world_test.py in tmp, in its own process: (finished, its stdout)."""
+    code = ("import sys; sys.argv = ['x'] + %r; sys.path.insert(0, 'tools'); import world_test; print('skip: %%s' %% world_test.patch_mutants_skip()); "
+            "print(world_test.patch_section(%r))" % (list(args), luau))
+    ran = subprocess.run([sys.executable, "-c", code], cwd=tmp, capture_output=True, text=True)
+    finished = ran.returncode == 0 and re.search(r"^\(\d+, \d+\)$", ran.stdout, re.M) is not None
+    return finished, ran.stdout + ("" if finished else ran.stderr)
+
+
+# Group F: --strict-patch, the default run's NOTE and the skip of groups D and E (review 2, item 2). This file is
+# changed in a scratch copy; its mode_checks() must run to the end and fail the named check.
+MUTANTS_F = [
+    ("an offset counts as exact", T, 'else ("offset" if re.search(', 'else ("exact" if re.search(', "patch modes: offset, --strict-patch: the FAIL says why"),
+    ("fuzz counts as exact", T, 'how = "fuzz" if extra or "Context reduced" in said else', 'how = "exact" if extra or "Context reduced" in said else',
+     "patch modes: fuzz, --strict-patch: the FAIL says why"),
+    ("--strict-patch only prints the NOTE", T, '        if "--strict-patch" in sys.argv:\n            check(STRICT', '        if False:\n            check(STRICT',
+     "patch modes: offset, --strict-patch: it fails the named check"),
+    ("the default run fails on an offset", T, '        if "--strict-patch" in sys.argv:\n            check(STRICT', '        if True:\n            check(STRICT',
+     "patch modes: offset, default: no check fails"),
+    ("the default run says nothing about an offset", T, '        elif problems:\n            print("NOTE: the integration patch', '        elif False:\n            print("NOTE: the integration patch',
+     "patch modes: offset, default: it passes with a NOTE"),
+    ("the STUDIO_SYNC row is not compared", T, "    if row is None or row.group(0) != sync_row(label, *want_result):", "    if False:",
+     "patch modes: row, --strict-patch: it fails the named check"),
+    ("the Made for line is not compared", T, "    if made is None or made[:2] != want_made:", "    if False:",
+     "patch modes: hashes, --strict-patch: the FAIL says why"),
+    ("groups D and E run on a stale patch", T, '    if how == "stale":\n        return "the integration patch does not apply', '    if False:\n        return "the integration patch does not apply',
+     "patch modes: stale, default: groups D and E are skipped"),
+]
+
+
+def run_mode_mutants(luau, mutants, group):
+    """Group F: each mutant of this file runs mode_checks() in a scratch copy; caught only by its named FAIL line."""
+    from concurrent.futures import ThreadPoolExecutor
+    own = read(T)
+
+    def one(mutant):
+        label, _, old, new, expected = mutant
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch_copy(tmp, {T: apply_mutation(own, old, new, T)})
+            code = "import sys; sys.argv = ['x']; sys.path.insert(0, 'tools'); import world_test; print(world_test.mode_checks(%r))" % luau
+            ran = subprocess.run([sys.executable, "-c", code], cwd=tmp, capture_output=True, text=True)
+        finished = ran.returncode == 0 and re.search(r"^\(\d+, \d+\)$", ran.stdout, re.M) is not None
+        named = any(line.startswith("FAIL: " + expected) for line in ran.stdout.split("\n"))
+        if finished and named:
+            return None
+        why = ("it crashed: " + (ran.stderr.strip().split("\n")[-1] if ran.stderr.strip() else "no summary")) if not finished else "the check '%s' did not fail" % expected
+        return "FAIL: mutation %s, %s: not caught by its named check (%s)" % (group, label, why)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        problems = [o for o in pool.map(one, mutants) if o]
+    return len(mutants) - len(problems), problems
+
+
+def patch_mutants_skip():
+    """Why groups D and E cannot run on this TycoonCore.lua (a note), or None. Both need the committed patch to apply
+    (or to be merged): on a stale patch the checks they must trip are not run, so they would be reported as not
+    caught next to the real failure ("patch needs regenerating", above)."""
+    how = integration_state()[0]
+    if how == "stale":
+        return "the integration patch does not apply to this TycoonCore.lua (" + STALE + ", see the FAIL above)"
+    if how == "nogit":
+        return "git is not installed"
+    return None
+
+
+def mode_scenarios():
+    """The --strict-patch scenarios, made from this worktree's TycoonCore.lua (without the patch) and a patch
+    regenerated for it: { name: (TycoonCore.lua, patch, STUDIO_SYNC_WORLD.md) }."""
+    current = read(TC)
+    base = unpatched_tycoon(current) if any(m in current for m in PATCH_MARKERS) else current
+    patch, patched = regen_patch(base, "test")
+    doc = SYNC_ROW.sub(lambda _: sync_row("test", *sha(patched)), read(D), count=1)
+    h1, h2 = (int(n) for n in re.findall(r"^@@ -(\d+),", patch, re.M))
+    lines = base.split("\n")
+
+    def changed(index):
+        out = list(lines)
+        out[index] += " -- changed"
+        return "\n".join(out)
+    other_row = SYNC_ROW.sub(lambda _: sync_row("other", *sha(patched)), doc, count=1)
+    return {
+        "exact": (base, patch, doc),
+        "offset": ("-- a line added at the top\n" + base, patch, doc),
+        "fuzz": (changed(h2 - 1), patch, doc),          # hunk 2's outermost context line: git apply -C1 drops it
+        "hashes": (changed(0), patch, doc),              # line 1, far from both hunks: it applies exactly, the hashes are stale
+        "row": (base, patch, other_row),                 # the doc's TycoonCore row names another base
+        "stale": (changed(h1 - 1 + 3), patch, doc),      # hunk 1's innermost context line: it does not apply at all
+    }
+
+
+# What each scenario must give: (run with --strict-patch, the FAIL that must print or None, the text in it or in
+# the NOTE, whether a NOTE must print, whether groups D and E are skipped)
+MODE_EXPECT = [
+    ("exact", False, None, None, False, False),
+    ("exact", True, None, None, False, False),
+    ("offset", False, None, "an offset", True, False),
+    ("offset", True, STRICT, "an offset", False, False),
+    ("fuzz", False, None, "fuzz", True, False),
+    ("fuzz", True, STRICT, "fuzz", False, False),
+    ("hashes", False, None, "Made for", True, False),
+    ("hashes", True, STRICT, "Made for", False, False),
+    ("row", False, "regen: STUDIO_SYNC_WORLD.md's TycoonCore row", None, True, False),
+    ("row", True, STRICT, "STUDIO_SYNC doc", False, False),
+    ("stale", False, "integration patch: it applies to this worktree's TycoonCore.lua", None, False, True),
+    ("stale", True, "integration patch: it applies to this worktree's TycoonCore.lua", None, False, True),
+]
+
+
+def mode_checks(luau):
+    """--strict-patch and the default run, tested: each scenario's TycoonCore.lua, patch and doc in a scratch copy,
+    patch_section() run without and with --strict-patch. Returns (passed, failed)."""
+    from concurrent.futures import ThreadPoolExecutor
+    passed, failed = 0, 0
+
+    def check(name, cond, extra=None):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+
+    try:
+        scenarios = mode_scenarios()
+    except ValueError as e:
+        print("note: this TycoonCore.lua cannot be regenerated (%s), so the --strict-patch scenarios are not run" % e)
+        return passed, failed
+
+    def one(case):
+        name, strict = case[0], case[1]
+        tycoon, patch, doc = scenarios[name]
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch_copy(tmp, {TC: tycoon, "docs/world_pass_integration.patch": patch, D: doc})
+            return run_patch_section(luau, tmp, ["--strict-patch"] if strict else [])
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        outcomes = list(pool.map(one, MODE_EXPECT))
+    for (name, strict, fail, text, note, skipped), (finished, out) in zip(MODE_EXPECT, outcomes):
+        mode = "--strict-patch" if strict else "default"
+        lines = out.split("\n")
+        fails = [l for l in lines if l.startswith("FAIL: ")]
+        notes = [l for l in lines if l.startswith("NOTE: the integration patch")]
+        where = "patch modes: %s, %s:" % (name, mode)
+        check(where + " it runs to the end", finished, lines[-3:])
+        if fail is None:
+            check(where + " no check fails", fails == [], fails[:2])
+        else:
+            hit = [l for l in fails if l.startswith("FAIL: " + fail)]
+            check(where + " it fails the named check", hit != [], fails[:2])
+            if text:
+                check(where + " the FAIL says why (%s)" % text, any(text in l for l in hit), hit[:1])
+        if note and text and fail is None:
+            check(where + " it passes with a NOTE that says why (%s)" % text, any(text in l for l in notes), notes[:1] or fails[:1])
+        elif not note:
+            check(where + " no NOTE", notes == [], notes[:1])
+        check(where + (" groups D and E are skipped, saying so" if skipped else " groups D and E run"),
+              any(l.startswith("skip: ") and (l != "skip: None") == skipped for l in lines))
+    return passed, failed
+
+
+def run_tycoon_mutants(luau, mutants, group):
+    """Group E: each changed TycoonCore.lua runs patch_section() in a scratch copy; caught only by its named FAIL line
+    (expected: one name, or a tuple of names when the state decides which check sees it)."""
+    skip = patch_mutants_skip()
+    if skip:
+        print("note: group %s is not run: %s" % (group, skip))
+        return 0, []
+    problems = []
+    for label, _, old, new, expected in mutants:
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch_copy(tmp, {TC: tycoon_mutation(read(TC), old, new)})
+            finished, out = run_patch_section(luau, tmp)
+        names = expected if isinstance(expected, tuple) else (expected,)
+        named = any(line.startswith("FAIL: " + name) for line in out.split("\n") for name in names)
+        if not (finished and named):
+            why = ("it crashed: " + out.strip().split("\n")[-1]) if not finished else "the check '%s' did not fail" % "' or '".join(names)
+            problems.append("FAIL: mutation %s, %s: not caught by its named check (%s)" % (group, label, why))
+    return len(mutants) - len(problems), problems
+
+
 def run_regen_mutants(mutants, group):
     """Group D: each mutant of this file runs regen_checks() in a scratch copy; caught only by its named FAIL line."""
     own = read(T)
     problems = []
+    skip = patch_mutants_skip()
+    if skip:
+        print("note: group %s is not run: %s" % (group, skip))
+        return 0, []
     current = read("TycoonCore.lua")
     try:
         regen_patch(unpatched_tycoon(current) if any(m in current for m in PATCH_MARKERS) else current, "test")
@@ -2026,40 +2423,25 @@ def main():
         if review_failed:
             code = 1
     if os.path.exists(os.path.join(ROOT, "docs", "world_pass_integration.patch")):
-        how, patched = integration_state()
-        if how == "nogit":
-            print("note: git is not installed, so the integration patch could not be applied and its blocks are not run")
-        elif patched is None:
-            print("note: the integration patch does not apply to this TycoonCore.lua, so its blocks are not run (" + STALE + ")")
-        else:
-            result = run_luau(luau, integration_source(patched))
-            print("Integration patch blocks run in the fake: " + (result.stdout.strip() or result.stderr.strip()))
-            m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
-            if not m or m.group(2) != "0":
-                code = 1
-            total += int(m.group(1)) if m else 0
-        patch_passed, patch_failed = patch_checks(how, patched)
-        print("Integration patch source checks: %d passed, %d failed" % (patch_passed, patch_failed))
+        patch_passed, patch_failed = patch_section(luau, top=True)
         total += patch_passed
         if patch_failed:
             code = 1
-        regen_passed, regen_failed = regen_checks()
-        print("Integration patch regeneration (--regen-patch): %d passed, %d failed" % (regen_passed, regen_failed))
-        total += regen_passed
-        if regen_failed:
-            code = 1
-        if "--integration" in sys.argv and patched is not None:
-            print("Integration: both test suites on a scratch copy with the patch applied:")
-            if not integration_suites(luau):
-                code = 1
     runs = caught = 0
-    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D)):
-        got, problems = run_regen_mutants(mutants, group) if group == "D" else run_mutants(luau, mutants, group)
+    for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D), ("E", MUTANTS_E), ("F", MUTANTS_F)):
+        if group == "D":
+            got, problems = run_regen_mutants(mutants, group)
+        elif group == "E":
+            got, problems = run_tycoon_mutants(luau, mutants, group)
+        elif group == "F":
+            got, problems = run_mode_mutants(luau, mutants, group)
+        else:
+            got, problems = run_mutants(luau, mutants, group)
         for line in problems:
             print(line)
         if problems:
             code = 1
-        if group == "D" and got == 0 and not problems:
+        if group in ("D", "E") and got == 0 and not problems:
             continue  # not run (the note says why)
         runs += len(mutants)
         caught += got

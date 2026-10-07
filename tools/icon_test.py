@@ -80,10 +80,26 @@ end
 local function warn() end
 local SPAWNS, CLOCK = 0, 0
 local PENDING = {}
+-- Signals and task.defer: Roblox runs deferred work at the next resumption point; here resume() is that point.
+-- SIGNAL_DEFERRED (Roblox's SignalBehavior): false = a handler runs when its event fires, true = it is queued and runs
+-- at resume() (by then the instance may be destroyed; a disconnected handler's queued call is dropped, a Destroying
+-- one still runs).
+SIGNAL_DEFERRED = false
+local QUEUE = {}
+local DEFERS = 0
+local function resume()
+	local steps = 0
+	while #QUEUE > 0 do
+		steps += 1
+		if steps > 100000 then error("resume: deferred work never ends") end
+		table.remove(QUEUE, 1)()
+	end
+end
 local task = {
 	spawn = function(f, ...) SPAWNS += 1; table.insert(PENDING, f) end,
 	wait = function() CLOCK += 0.05 end,
 	delay = function() SPAWNS += 1 end,
+	defer = function(f) DEFERS += 1; table.insert(QUEUE, f) end,
 }
 local os = { clock = function() CLOCK += 0.01; return CLOCK end, time = function() return 0 end }
 
@@ -222,15 +238,34 @@ local Mt = {}
 -- Like Roblox: a destroyed instance's Parent is locked (setting it throws), and (stricter than Roblox, a bug here
 -- either way) nothing may be parented into a destroyed instance. Destroy twice is harmless. Destroying fires for the
 -- instance and then for each of its descendants.
-local function signal()
+local function signal(always)
 	local handlers = {}
-	return {
-		_handlers = handlers,
-		Connect = function(_, fn)
-			table.insert(handlers, fn)
-			return { Disconnect = function() for i, h in ipairs(handlers) do if h == fn then table.remove(handlers, i) break end end end }
-		end,
-	}
+	local sig = { _handlers = handlers }
+	function sig.Connect(_, fn)
+		local entry = { fn = fn, connected = true }
+		table.insert(handlers, entry)
+		return { Disconnect = function()
+			entry.connected = false
+			for i, h in ipairs(handlers) do if h == entry then table.remove(handlers, i) break end end
+		end }
+	end
+	function sig._fire(_, ...)
+		for _, entry in ipairs(table.clone(handlers)) do
+			if SIGNAL_DEFERRED then
+				local args = table.pack(...)
+				table.insert(QUEUE, function() if entry.connected or always then entry.fn(table.unpack(args, 1, args.n)) end end)
+			else
+				entry.fn(...)
+			end
+		end
+	end
+	function sig._clear() for _, entry in ipairs(handlers) do entry.connected = false end table.clear(handlers) end
+	return sig
+end
+local function fireAncestry(node, child, parent)
+	local sig = rawget(node, "_ancestry")
+	if sig then sig:_fire(child, parent) end
+	for _, c in ipairs(node._children) do fireAncestry(c, child, parent) end
 end
 local VIEWS_ALIVE = 0 -- ViewportFrames created and not destroyed
 DESCENDANT_EVENTS = true -- false: Destroying fires only on the instance destroyed itself (the worst case)
@@ -238,7 +273,12 @@ Mt.__index = function(t, k)
 	if k == "Parent" then return rawget(t, "_parent") end
 	if k == "Destroying" then
 		local sig = rawget(t, "_destroying")
-		if not sig then sig = signal(); rawset(t, "_destroying", sig) end
+		if not sig then sig = signal(true); rawset(t, "_destroying", sig) end
+		return sig
+	end
+	if k == "AncestryChanged" then
+		local sig = rawget(t, "_ancestry")
+		if not sig then sig = signal(); rawset(t, "_ancestry", sig) end
 		return sig
 	end
 	local props = rawget(t, "_props")
@@ -255,11 +295,13 @@ Mt.__newindex = function(t, k, v)
 			error("cannot parent " .. tostring(t.Name) .. " into the destroyed instance " .. tostring(v.Name))
 		end
 		local old = rawget(t, "_parent")
+		if old == v then return end -- the same parent: no change, no event (like Roblox)
 		if old then
 			for i, c in ipairs(old._children) do if c == t then table.remove(old._children, i) break end end
 		end
 		rawset(t, "_parent", v)
 		if v then table.insert(v._children, t) end
+		fireAncestry(t, t, v)
 		return
 	end
 	local props = rawget(t, "_props")
@@ -268,7 +310,10 @@ Mt.__newindex = function(t, k, v)
 		local m = math.min(s.X, s.Y, s.Z)
 		props.Size = vec(m, m, m)
 	end
+	local changed = props[k] ~= v
 	props[k] = v
+	local sigs = rawget(t, "_propsigs")
+	if changed and sigs and sigs[k] then sigs[k]:_fire() end
 end
 local INSTANCES = 0
 local function newInstance(class)
@@ -296,12 +341,27 @@ function Methods.GetAttribute(t, k) return t._attrs[k] end
 local function destroy(t, fire)
 	if rawget(t, "destroyed") then return end
 	local sig = rawget(t, "_destroying")
-	if sig and fire then for _, fn in ipairs(table.clone(sig._handlers)) do fn() end end
+	if sig and fire then sig:_fire() end
 	if rawget(t, "destroyed") then return end
-	t.Parent = nil
+	local old = rawget(t, "_parent")
+	if old then
+		for i, c in ipairs(old._children) do if c == t then table.remove(old._children, i) break end end
+		rawset(t, "_parent", nil)
+		local anc = rawget(t, "_ancestry")
+		if anc and fire then anc:_fire(t, nil) end
+	end
 	rawset(t, "destroyed", true)
 	if t.ClassName == "ViewportFrame" then VIEWS_ALIVE -= 1 end
 	for _, c in ipairs(table.clone(t._children)) do destroy(c, DESCENDANT_EVENTS) end
+	-- Destroy disconnects every connection (a Destroying call already queued still runs)
+	for _, name in ipairs({ "_destroying", "_ancestry" }) do local s = rawget(t, name) if s then s._clear() end end
+	for _, s in pairs(rawget(t, "_propsigs") or {}) do s._clear() end
+end
+function Methods.GetPropertyChangedSignal(t, prop)
+	local sigs = rawget(t, "_propsigs")
+	if not sigs then sigs = {}; rawset(t, "_propsigs", sigs) end
+	if not sigs[prop] then sigs[prop] = signal() end
+	return sigs[prop]
 end
 function Methods.Destroy(t) destroy(t, true) end
 function Methods.GetFullName(t) local p = t.Parent return (p and p.ClassName ~= "DataModel" and (p:GetFullName() .. ".") or "") .. t.Name end
@@ -361,7 +421,13 @@ end)()
 local function loadVisuals()
 __ICONVISUALS__
 end
-local IconVisuals = loadVisuals()
+NOW = 0 -- the tests' clock for IconVisuals.now (seconds)
+local function fresh()
+	local v = loadVisuals()
+	v.now = function() return NOW end
+	return v
+end
+local IconVisuals = fresh()
 local CreatureConfig = (function()
 __CREATURECONFIG__
 end)()
@@ -587,6 +653,14 @@ section("pure", function()
 	check("plan: icons already live are kept as they are", #p.make == 0 and #p.drop == 0 and #p.wait == 0)
 	p = IconVisuals.plan({ [7] = 3, [4] = 3 }, { 9 }, 2)
 	check("plan: a tie in age drops the lowest key first (always the same result)", p.drop[1] == 4)
+	p = IconVisuals.plan({ [1] = 5, [2] = 9 }, { 3 }, 2, { [1] = true, [2] = true }, { [3] = true })
+	check("plan: a hero takes a list icon kept for another window when nothing is free (the one seen longest ago)", #p.make == 1 and p.make[1] == 3 and p.drop[1] == 1)
+	p = IconVisuals.plan({ [1] = 5, [2] = 9, [3] = 9 }, { 4, 2, 3 }, 3, { [1] = true, [2] = true, [3] = true }, { [1] = true, [4] = true })
+	check("plan: a hero takes the last list icon asked for, never a hero (the hero kept for another window stays)", #p.make == 1 and p.drop[1] == 3, p.drop[1])
+	p = IconVisuals.plan({ [1] = 5 }, { 2 }, 1, { [1] = true }, { [1] = true })
+	check("plan: a list icon never takes a hero's ViewportFrame on a screen (it waits)", #p.make == 0 and #p.drop == 0 and p.wait[1] == 2)
+	p = IconVisuals.plan({ [1] = 5 }, { 2 }, 1, { [1] = true }, { [1] = true, [2] = true })
+	check("plan: a hero never takes another hero's ViewportFrame (it waits)", #p.make == 0 and #p.drop == 0 and p.wait[1] == 2)
 	check("spin: 0 degrees before the tap, 360 at the end, half way in the middle, never past", IconVisuals.spinAngle(0, 1.2) == 0 and IconVisuals.spinAngle(1.2, 1.2) == 360
 		and math.abs(IconVisuals.spinAngle(0.6, 1.2) - 180) < 1e-9 and IconVisuals.spinAngle(5, 1.2) == 360 and IconVisuals.spinAngle(-1, 1.2) == 0
 		and IconVisuals.spinAngle(0 / 0, 1.2) == 0 and IconVisuals.spinAngle(0.5, 0) == 0)
@@ -598,7 +672,8 @@ section("pure", function()
 	check("shapeBox: an outlined rect grows by the outline on every side", b[1] == 6 and b[2] == 34 and b[3] == 6 and b[4] == 24)
 end)
 
--- 6. Lazy creation and the cap while a list scrolls (a fresh IconVisuals: its one registry starts empty) ------------------
+-- 6. The cap, the lazy cache, promotion and hero priority: every scenario in four signal modes ---------------------------
+-- Each scenario gets a fresh IconVisuals (its one registry starts empty) and the test's clock (NOW, in seconds).
 -- A window: a ScreenGui with a list of cards, each card holding its icon slot (the shop's layout)
 local function newWindow()
 	local gui = newInstance("ScreenGui")
@@ -628,10 +703,28 @@ local function isFallback(icon)
 	return icon ~= nil and icon:GetAttribute("Fallback") == true and shapes >= 2 and icon:FindFirstChild("Plate") ~= nil
 		and icon:FindFirstChildWhichIsA("ViewportFrame") == nil and icon:FindFirstChild("View") == nil
 end
+local function has3D(slot)
+	local icon = slot.frame:FindFirstChild("Icon")
+	return icon ~= nil and icon:FindFirstChild("View") ~= nil
+end
+local function count3D(slots) local n = 0 for _, s in ipairs(slots) do if has3D(s) then n += 1 end end return n end
 local function keysOf(t) local n = 0 for _ in pairs(t) do n += 1 end return n end
+local THREE_D = {}
+for _, key in ipairs(EXPECT.Creatures) do table.insert(THREE_D, { "Creatures", key }) end
+for _, key in ipairs(EXPECT.Office) do table.insert(THREE_D, { "Office", key }) end
+local function fill(list, from, count)
+	local out = {}
+	for i = from, from + count - 1 do local k = THREE_D[(i - 1) % #THREE_D + 1]; table.insert(out, newCard(list, k[1], k[2])) end
+	return out
+end
+local function window(slots, from, count)
+	local out = {}
+	for i = from, math.min(#slots, from + count - 1) do table.insert(out, slots[i]) end
+	return out
+end
 
-section("lazy", function()
-	local IconVisuals = loadVisuals()
+local function lazyScenarios(check, frame)
+	local IconVisuals = fresh()
 	local base = VIEWS_ALIVE
 	local cache = IconVisuals.newCache(IconArt, DEPS)
 	local _, list = newWindow()
@@ -640,20 +733,16 @@ section("lazy", function()
 		for _, key in ipairs(EXPECT[group]) do table.insert(slots, newCard(list, group, key)) end
 	end
 	check("lazy: a list of 38 cards builds nothing before it is shown", cache.built == 0 and #slots == 38)
-	local function window(from, count)
-		local out = {}
-		for i = from, math.min(#slots, from + count - 1) do table.insert(out, slots[i]) end
-		return out
-	end
-	IconVisuals.show(cache, window(1, 4))
+	IconVisuals.show(cache, window(slots, 1, 4))
 	check("lazy: 4 cards on screen build 4 icons", cache.built == 4)
 	local worst, missing = 0, nil
 	SPAWNS = 0
 	local function scroll(steps)
 		for _, from in ipairs(steps) do
-			IconVisuals.show(cache, window(from, 4))
+			IconVisuals.show(cache, window(slots, from, 4))
+			frame()
 			worst = math.max(worst, IconVisuals.stats().live, VIEWS_ALIVE - base)
-			for _, slot in ipairs(window(from, 4)) do
+			for _, slot in ipairs(window(slots, from, 4)) do
 				if iconsIn(slot.frame) ~= 1 then missing = missing or (slot.group .. "/" .. slot.key) end
 			end
 		end
@@ -661,12 +750,13 @@ section("lazy", function()
 	local steps = {}
 	for from = 1, #slots - 3 do table.insert(steps, from) end
 	scroll(steps) -- one card at a time, top to bottom
+	NOW += 5 -- a moment later
 	local built, made = cache.built, IconVisuals.stats().made
-	IconVisuals.show(cache, window(#slots - 3, 4))
+	IconVisuals.show(cache, window(slots, #slots - 3, 4))
 	check("lazy: showing the same cards again builds nothing", cache.built == built and IconVisuals.stats().made == made, cache.built - built)
-	IconVisuals.show(cache, window(22, 4)) -- four shop cards (drawn icons) seen long ago
+	IconVisuals.show(cache, window(slots, 22, 4)) -- four shop cards (drawn icons) seen long ago
 	check("lazy: drawn icons that left the screen are reused when they come back (not built again)", cache.built == built, cache.built - built)
-	IconVisuals.show(cache, window(1, 4))
+	IconVisuals.show(cache, window(slots, 1, 4))
 	check("lazy: back at the top, the 3D icons whose ViewportFrame was taken get one again (4 ViewportFrames, no new icon)",
 		cache.built == built and IconVisuals.stats().made - made == 4, (cache.built - built) .. "/" .. (IconVisuals.stats().made - made))
 	scroll({ 35, 1, 30, 5, 26, 9, 22, 13, 18, 17, 35, 2, 33, 4, 1, 35 }) -- then a fast scroll: jumps of 4 to 34 cards, back and forth
@@ -674,24 +764,23 @@ section("lazy", function()
 	check("lazy: every card on screen shows exactly one icon (3D, drawn, or the drawn fallback), never an empty slot", missing == nil, missing)
 	check("lazy: scrolling starts no animation", SPAWNS == 0)
 	-- Ten 3D cards on screen at once (more than the cap): 8 get their ViewportFrame, 2 show their drawn fallback
-	local IV = loadVisuals()
+	local IV = fresh()
 	local before = VIEWS_ALIVE
 	local _, list2 = newWindow()
 	local big = {}
 	for i, key in ipairs(EXPECT.Creatures) do if i <= 10 then table.insert(big, newCard(list2, "Creatures", key)) end end
-	local fresh = IV.newCache(IconArt, DEPS)
-	local count = IV.show(fresh, big)
+	local cfull = IV.newCache(IconArt, DEPS)
+	local count = IV.show(cfull, big)
 	local flat, empty = 0, 0
 	for _, slot in ipairs(big) do
-		local icon = slot.frame:FindFirstChild("Icon")
-		if isFallback(icon) then flat += 1 end
+		if isFallback(slot.frame:FindFirstChild("Icon")) then flat += 1 end
 		if iconsIn(slot.frame) ~= 1 then empty += 1 end
 	end
 	check("cap full: ten 3D cards on screen: 8 get a ViewportFrame, 2 show their drawn fallback", count == 8 and VIEWS_ALIVE - before == 8 and flat == 2,
 		count .. "/" .. (VIEWS_ALIVE - before) .. "/" .. flat)
 	check("cap full: the fallback is drawn (outlined shapes on its plate, no ViewportFrame) and no slot is empty", flat == 2 and empty == 0, empty)
 	local wasFlat = big[10].frame:FindFirstChild("Icon")
-	IV.show(fresh, { big[9], big[10] })
+	IV.show(cfull, { big[9], big[10] })
 	local ten = big[10].frame:FindFirstChild("Icon")
 	check("lazy: once room is free, a fallback on screen gets its ViewportFrame and loses its drawing",
 		ten == wasFlat and ten:FindFirstChild("View") ~= nil and ten:FindFirstChild("Flat") == nil and ten:GetAttribute("Fallback") == false)
@@ -705,7 +794,7 @@ section("lazy", function()
 	IV.show(tw, twins)
 	check("lazy: a slot that changes item changes icon", iconsIn(twins[1].frame) == 1 and twins[1].frame:FindFirstChild("Icon"):GetAttribute("Key") == "SalesShark")
 	-- Switching slot types: a drawn icon becomes a 3D one and back; the old icon goes each time
-	local IS = loadVisuals()
+	local IS = fresh()
 	local sbase = VIEWS_ALIVE
 	local _, list4 = newWindow()
 	local sw = { newCard(list4, "Shop", "VIP") }
@@ -713,27 +802,74 @@ section("lazy", function()
 	IS.show(sc, sw)
 	sw[1].group, sw[1].key = "Office", "Desk"
 	IS.show(sc, sw)
+	frame()
 	local only = sw[1].frame:FindFirstChild("Icon")
 	check("switching slot types: a drawn icon replaced by a 3D one leaves one icon, the 3D one", iconsIn(sw[1].frame) == 1 and only:FindFirstChild("View") ~= nil
 		and only:FindFirstChild("Art") == nil, iconsIn(sw[1].frame))
 	sw[1].group, sw[1].key = "Shop", "VIP"
 	IS.show(sc, sw)
+	frame()
 	check("switching slot types: a 3D slot that now shows a drawn icon frees its ViewportFrame", iconsIn(sw[1].frame) == 1 and IS.stats().live == 0
 		and IS.stats().icons == 0 and VIEWS_ALIVE - sbase == 0, IS.stats().live .. "/" .. (VIEWS_ALIVE - sbase))
-end)
+	-- A slot whose card was taken out of the list (not destroyed) gets nothing put in it until it is back in the tree
+	local IO = fresh()
+	local _, list5 = newWindow()
+	local outCard = newCard(list5, "Office", "Desk")
+	outCard.card.Parent = nil
+	local oc = IO.newCache(IconArt, DEPS)
+	IO.show(oc, { outCard })
+	local wasEmpty = iconsIn(outCard.frame) == 0
+	outCard.card.Parent = list5
+	IO.show(oc, { outCard })
+	check("ancestry: a slot out of every GUI tree gets no icon; back in the list, it gets one", wasEmpty and iconsIn(outCard.frame) == 1)
+end
 
--- 6b. One cap for the whole client: several windows, direct builds, hidden and destroyed cards ---------------------------
-section("registry", function()
-	local threeD = {}
-	for _, key in ipairs(EXPECT.Creatures) do table.insert(threeD, { "Creatures", key }) end
-	for _, key in ipairs(EXPECT.Office) do table.insert(threeD, { "Office", key }) end
-	local function fill(list, from, count)
-		local out = {}
-		for i = from, from + count - 1 do local k = threeD[(i - 1) % #threeD + 1]; table.insert(out, newCard(list, k[1], k[2])) end
-		return out
+-- Fast scroll: 38 3D cards (the 18 3D keys, twice and more), ten on screen at once (more than the cap), with the clock
+-- stopped (all within one second), then a second later
+local function fastScroll(check, frame)
+	local IF = fresh()
+	local fbase = VIEWS_ALIVE
+	local fc = IF.newCache(IconArt, DEPS)
+	local _, flist = newWindow()
+	local cards = fill(flist, 1, 38)
+	local views = {} -- slot -> { [ViewportFrame] = true } seen while the clock stands still
+	local worst, empty = 0, 0
+	local function step(from)
+		local shown = window(cards, from, 10)
+		IF.show(fc, shown)
+		frame()
+		worst = math.max(worst, IF.stats().live, VIEWS_ALIVE - fbase)
+		for _, slot in ipairs(shown) do
+			if iconsIn(slot.frame) ~= 1 then empty += 1 end
+			local icon = slot.frame:FindFirstChild("Icon")
+			local view = icon and icon:FindFirstChild("View")
+			if view then
+				views[slot] = views[slot] or {}
+				views[slot][view] = true
+			end
+		end
 	end
+	local jumps = { 1, 29, 1, 20, 3, 25, 1, 29, 10, 1, 29, 2, 28, 1, 15, 29, 1 }
+	for _, from in ipairs(jumps) do step(from) end
+	local rebuilt = 0
+	for _, seen in pairs(views) do if keysOf(seen) > 1 then rebuilt += 1 end end
+	local st = IF.stats()
+	check("fast scroll: within one second no slot's 3D icon is destroyed and rebuilt (" .. tostring(st.made) .. " ViewportFrames built for 38 cards)",
+		rebuilt == 0 and st.made <= 38, rebuilt .. " slots rebuilt, " .. st.made .. " built")
+	check("fast scroll: each 3D key's fallback recipe is worked out once (" .. tostring(st.recipes) .. " recipes for " .. tostring(st.flats) .. " drawings), never per card",
+		st.recipes <= 18 and st.flats > st.recipes, st.recipes .. "/" .. st.flats)
+	check("fast scroll: never more than 8 ViewportFrames and never an empty slot", worst <= 8 and empty == 0, worst .. "/" .. empty)
+	local recipes = st.recipes
+	for _, from in ipairs(jumps) do step(from) end
+	check("fast scroll: scrolling again works out no recipe again", IF.stats().recipes == recipes, IF.stats().recipes - recipes)
+	NOW += 2 -- a second later the waiting cards get their 3D back
+	IF.show(fc, window(cards, 1, 8))
+	check("fast scroll: a second later, the 8 cards on screen all get their ViewportFrame back", count3D(window(cards, 1, 8)) == 8, count3D(window(cards, 1, 8)))
+end
+
+local function registryScenarios(check, frame, mode)
 	-- Three windows, three caches, four 3D cards each, all on screen
-	local IV = loadVisuals()
+	local IV = fresh()
 	local base = VIEWS_ALIVE
 	local guis, caches, lists, sets = {}, {}, {}, {}
 	local worst, empty = 0, 0
@@ -742,31 +878,52 @@ section("registry", function()
 		caches[w] = IV.newCache(IconArt, DEPS)
 		sets[w] = fill(lists[w], (w - 1) * 4 + 1, 4)
 		IV.show(caches[w], sets[w])
+		frame()
 		worst = math.max(worst, IV.stats().live, VIEWS_ALIVE - base)
 	end
 	for w = 1, 3 do for _, slot in ipairs(sets[w]) do if iconsIn(slot.frame) ~= 1 then empty += 1 end end end
-	check("three caches at once stay at 8 ViewportFrames (one registry), the rest show their fallback", worst == 8 and empty == 0, worst .. "/" .. empty)
-	-- Direct builds count: the hero card of a fourth window gets the fallback while the 8 are on screen
+	check("three caches at once stay at 8 ViewportFrames (one registry), the rest show their fallback", worst == 8 and empty == 0 and count3D(sets[3]) == 0,
+		worst .. "/" .. empty)
+	-- Direct builds count, and a hero wins: with 8 list icons on screen, the hero takes one (still 8)
 	local heroGui, heroList = newWindow()
 	local heroSlot = newCard(heroList, "Office", "Desk", 72)
 	local hero = IV.build(heroSlot.frame, IconArt, "Office", "Desk", 72, DEPS)
-	check("direct build counted: with 8 on screen, a hero card built directly shows its fallback (still 8)", isFallback(hero) and IV.stats().live == 8
-		and VIEWS_ALIVE - base == 8, IV.stats().live)
-	-- Hidden window frees its slots: hide window 1, the hero gets a ViewportFrame back
+	check("direct build counted: with 8 on screen, a hero card built directly takes a list icon's ViewportFrame (still 8; that card shows its fallback)",
+		hero:FindFirstChild("View") ~= nil and IV.stats().live == 8 and VIEWS_ALIVE - base == 8 and count3D(sets[1]) + count3D(sets[2]) == 7,
+		IV.stats().live .. "/" .. (count3D(sets[1]) + count3D(sets[2])))
+	-- Hidden window frees its slots: hide window 1, the next call gives its ViewportFrames to window 3's waiting cards
+	NOW += 2
 	lists[1].Visible = false
 	IV.show(caches[2], sets[2])
-	check("hidden window frees its slots: hiding window 1 lets the hero card take a ViewportFrame", hero:FindFirstChild("View") ~= nil and IV.stats().live <= 8, IV.stats().live)
+	check("hidden window frees its slots: hiding window 1 gives its ViewportFrames to window 3's waiting cards", count3D(sets[3]) == 3 and IV.stats().live <= 8,
+		count3D(sets[3]) .. "/" .. IV.stats().live)
+	NOW += 2
 	lists[1].Visible = true
 	guis[3].Enabled = false
 	heroGui.Enabled = false
 	IV.show(caches[1], sets[1])
-	local got = 0
-	for _, slot in ipairs(sets[1]) do if slot.frame:FindFirstChild("Icon"):FindFirstChild("View") then got += 1 end end
-	check("a disabled ScreenGui counts as hidden: window 1 back on screen takes the disabled window's ViewportFrames", got == 4 and IV.stats().live <= 8, got)
-	-- Hero card plus list: a visible hero keeps its ViewportFrame while a list asks for ten
+	check("a disabled ScreenGui counts as hidden: window 1 back on screen takes the disabled windows' ViewportFrames", count3D(sets[1]) == 4 and IV.stats().live <= 8,
+		count3D(sets[1]))
 	guis[3].Enabled = true
 	heroGui.Enabled = true
-	local IH = loadVisuals()
+	-- Three windows one after another: each opened, shown, then hidden before the next
+	local IA = fresh()
+	local abase, aworst, asets = VIEWS_ALIVE, 0, {}
+	for w = 1, 3 do
+		local _, l = newWindow()
+		local c = IA.newCache(IconArt, DEPS)
+		asets[w] = fill(l, (w - 1) * 6 + 1, 6)
+		NOW += 2
+		IA.show(c, asets[w])
+		frame()
+		aworst = math.max(aworst, IA.stats().live, VIEWS_ALIVE - abase)
+		asets[w].ok = count3D(asets[w]) == 6
+		l.Visible = false
+		frame()
+	end
+	check("three windows one after another: each gets all 6 of its 3D icons, never more than 8", asets[1].ok and asets[2].ok and asets[3].ok and aworst <= 8, aworst)
+	-- Hero card plus list: a visible hero keeps its ViewportFrame while a list asks for ten
+	local IH = fresh()
 	local hbase = VIEWS_ALIVE
 	local hg, hl = newWindow()
 	local hs = newCard(hl, "Office", "Server Rack", 72)
@@ -774,20 +931,47 @@ section("registry", function()
 	local lc = IH.newCache(IconArt, DEPS)
 	local ten = fill(hl, 1, 10)
 	IH.show(lc, ten)
-	local listViews, listFlat = 0, 0
-	for _, slot in ipairs(ten) do
-		local icon = slot.frame:FindFirstChild("Icon")
-		if icon:FindFirstChild("View") then listViews += 1 elseif isFallback(icon) then listFlat += 1 end
+	frame()
+	local listFlat = 0
+	for _, slot in ipairs(ten) do if isFallback(slot.frame:FindFirstChild("Icon")) then listFlat += 1 end end
+	check("hero card plus list: the hero keeps its 3D, the list gets 7, 3 show their fallback (8 in all)", h:FindFirstChild("View") ~= nil and count3D(ten) == 7
+		and listFlat == 3 and VIEWS_ALIVE - hbase == 8, count3D(ten) .. "/" .. listFlat .. "/" .. (VIEWS_ALIVE - hbase))
+	local kept = true
+	for _ = 1, 5 do
+		NOW += 2
+		IH.show(lc, ten)
+		frame()
+		if h:FindFirstChild("View") == nil then kept = false end
 	end
-	check("hero card plus list: the hero keeps its 3D, the list gets 7, 3 show their fallback (8 in all)", h:FindFirstChild("View") ~= nil and listViews == 7
-		and listFlat == 3 and VIEWS_ALIVE - hbase == 8, listViews .. "/" .. listFlat .. "/" .. (VIEWS_ALIVE - hbase))
+	check("hero priority: the hero on screen never loses its ViewportFrame to the list (5 more shows, a second apart)", kept and count3D(ten) == 7)
 	-- A destroyed icon no longer counts against the cap
 	h:Destroy()
 	check("a destroyed icon no longer counts: destroying the hero frees its ViewportFrame at once", IH.stats().live == 7 and VIEWS_ALIVE - hbase == 7, IH.stats().live)
 	local h2 = IH.build(hs.frame, IconArt, "Office", "Laptop", 72, DEPS)
+	frame()
 	check("a destroyed icon no longer counts: the next direct build gets the freed ViewportFrame", h2:FindFirstChild("View") ~= nil and IH.stats().live == 8)
+	-- Hero priority the other way round: the list fills the cap first, then the hero comes
+	local IP = fresh()
+	local pbase = VIEWS_ALIVE
+	local pg, pl = newWindow()
+	local pc = IP.newCache(IconArt, DEPS)
+	local plist = fill(pl, 1, 10)
+	IP.show(pc, plist)
+	frame()
+	local ps = newCard(pl, "Office", "Coffee Machine", 72)
+	local ph = IP.build(ps.frame, IconArt, "Office", "Coffee Machine", 72, DEPS)
+	frame()
+	check("hero priority: a hero built while a list fills the cap takes a list icon's ViewportFrame (the list keeps 7, still 8)",
+		ph:FindFirstChild("View") ~= nil and count3D(plist) == 7 and IP.stats().live == 8 and VIEWS_ALIVE - pbase == 8, count3D(plist) .. "/" .. IP.stats().live)
+	check("hero priority: the list card that gave it up shows its drawn fallback (no empty slot)", (function()
+		for _, slot in ipairs(plist) do
+			local icon = slot.frame:FindFirstChild("Icon")
+			if iconsIn(slot.frame) ~= 1 or not (has3D(slot) or isFallback(icon)) then return false end
+		end
+		return true
+	end)())
 	-- Close and reopen, 20 rounds: each round a new window and new cards, then the window is destroyed
-	local IR = loadVisuals()
+	local IR = fresh()
 	local rbase = VIEWS_ALIVE
 	local rc = IR.newCache(IconArt, DEPS)
 	local rworst = 0
@@ -795,16 +979,22 @@ section("registry", function()
 		local g, l = newWindow()
 		local cards = fill(l, round, 6)
 		table.insert(cards, newCard(l, "Shop", "VIP"))
+		NOW += 0.25
 		IR.show(rc, cards)
-		rworst = math.max(rworst, IR.stats().live)
-		local hero2 = IR.build(cards[1].frame, IconArt, "Office", "Desk", 72, DEPS)
+		frame()
+		rworst = math.max(rworst, IR.stats().live, VIEWS_ALIVE - rbase)
+		IR.build(cards[1].frame, IconArt, "Office", "Desk", 72, DEPS)
+		frame()
 		g:Destroy()
+		if round % 2 == 0 then frame() end
 	end
+	frame()
+	IR.show(rc, {}) -- the next call sweeps what no event reported
 	check("close and reopen 20 rounds: no leak (no ViewportFrame, registered icon, slot or id left; never more than 8)",
 		IR.stats().live == 0 and IR.stats().icons == 0 and VIEWS_ALIVE - rbase == 0 and keysOf(rc.slots) == 0 and keysOf(rc.ids) == 0 and rworst <= 8,
 		IR.stats().live .. "/" .. IR.stats().icons .. "/" .. (VIEWS_ALIVE - rbase) .. "/" .. keysOf(rc.slots) .. "/" .. keysOf(rc.ids))
 	-- Close (hide) and reopen 20 rounds with the same window: nothing is built twice, never more than 8
-	local IW = loadVisuals()
+	local IW = fresh()
 	local wc = IW.newCache(IconArt, DEPS)
 	local wg, wl = newWindow()
 	local wcards = fill(wl, 1, 6)
@@ -813,13 +1003,15 @@ section("registry", function()
 	for round = 1, 20 do
 		wl.Visible = false
 		IW.show(wc, {})
+		frame()
 		wl.Visible = true
 		IW.show(wc, wcards)
+		frame()
 		wworst = math.max(wworst, IW.stats().live)
 	end
 	check("close and reopen 20 rounds (hidden, same cards): no icon built twice, never more than 8", wc.built == wbuilt and wworst <= 8 and wworst == 6, wworst)
 	-- Destroyed parent: a card destroyed between two shows, a destroyed frame passed in, a direct build into one
-	local ID = loadVisuals()
+	local ID = fresh()
 	local dc = ID.newCache(IconArt, DEPS)
 	local dg, dl = newWindow()
 	local dcards = fill(dl, 1, 4)
@@ -830,28 +1022,159 @@ section("registry", function()
 	local ok1, e1 = pcall(ID.show, dc, { dcards[1], dcards[3], dcards[4] })
 	local ok2, e2 = pcall(ID.show, dc, dcards)
 	local ok3, e3 = pcall(ID.build, dcards[2].frame, IconArt, "Office", "Desk", 56, DEPS)
-	check("destroyed parent: show() and build() never set Parent on a destroyed instance (no error)", ok1 and ok2 and ok3, tostring(e1 or e2 or e3))
+	local ok4, e4 = pcall(frame)
+	check("destroyed parent: show() and build() never set Parent on a destroyed instance (no error)", ok1 and ok2 and ok3 and ok4, tostring(e1 or e2 or e3 or e4))
 	check("destroyed parent: a direct build into a destroyed card builds nothing", ok3 and e3 == nil)
 	check("destroyed parent: the destroyed cards' icons are forgotten (3 slots, 3 ViewportFrames)", keysOf(dc.slots) == 3 and ID.stats().live == 3,
 		keysOf(dc.slots) .. "/" .. ID.stats().live)
 	-- The same when Roblox would not fire Destroying for the descendants (the cache's own check is the backstop)
 	DESCENDANT_EVENTS = false
-	local IB = loadVisuals()
+	local IB = fresh()
 	local bc = IB.newCache(IconArt, DEPS)
 	local bg, bl = newWindow()
 	local bcards = fill(bl, 1, 3)
 	IB.show(bc, bcards)
 	bcards[2].card:Destroy()
-	local ok4, e4 = pcall(IB.show, bc, { bcards[1], bcards[3] })
-	local ok5, e5 = pcall(IB.show, bc, { bcards[1] })
-	DESCENDANT_EVENTS = true
-	check("destroyed card without descendant events: show() never touches the destroyed icon and frees its ViewportFrame", ok4 and ok5 and IB.stats().live == 2
-		and keysOf(bc.slots) == 2, tostring(e4 or e5) .. " " .. IB.stats().live)
-	-- The fake itself behaves like Roblox here
+	local ok5, e5 = pcall(IB.show, bc, { bcards[1], bcards[3] })
+	local ok6, e6 = pcall(IB.show, bc, { bcards[1] })
+	DESCENDANT_EVENTS = mode.descendants
+	check("destroyed card without descendant events: show() never touches the destroyed icon and frees its ViewportFrame", ok5 and ok6 and IB.stats().live == 2
+		and keysOf(bc.slots) == 2, tostring(e5 or e6) .. " " .. IB.stats().live)
+	-- Sweep: a whole window destroyed, its events not run yet (or never): the next call drops its records, the cap is free
+	local IX = fresh()
+	local xbase = VIEWS_ALIVE
+	local xg, xl = newWindow()
+	local xc = IX.newCache(IconArt, DEPS)
+	local xcards = fill(xl, 1, 6)
+	IX.show(xc, xcards)
+	local xs = newCard(xl, "Office", "Desk", 72)
+	IX.build(xs.frame, IconArt, "Office", "Desk", 72, DEPS)
+	xg:Destroy() -- no frame(): in deferred mode no handler has run yet
+	local swept = IX.stats()
+	local yg, yl = newWindow()
+	local yc = IX.newCache(IconArt, DEPS)
+	local ycards = fill(yl, 7, 8)
+	IX.show(yc, ycards)
+	check("sweep: a destroyed window's icons leave the registry at the next call, events or not (cap free again: the next window gets all 8)",
+		swept.icons == 0 and swept.live == 0 and count3D(ycards) == 8 and VIEWS_ALIVE - xbase == 8,
+		swept.icons .. "/" .. swept.live .. "/" .. count3D(ycards) .. "/" .. (VIEWS_ALIVE - xbase))
+	IX.show(xc, {})
+	check("sweep: the destroyed window's cache forgets its slots at its next call", keysOf(xc.slots) == 0, keysOf(xc.slots))
+end
+
+-- Promotion: a ViewportFrame that frees up goes to a waiting icon on a screen without another show() or build()
+local function promotionScenarios(check, frame)
+	local function setup()
+		local IV = fresh()
+		local ga, la = newWindow()
+		local ca = IV.newCache(IconArt, DEPS)
+		local a = fill(la, 1, 8)
+		IV.show(ca, a)
+		local gb, lb = newWindow()
+		local cb = IV.newCache(IconArt, DEPS)
+		local b = fill(lb, 9, 2)
+		IV.show(cb, b)
+		frame()
+		return IV, ga, la, a, gb, lb, b
+	end
+	local IV, ga, la, a, gb, lb, b = setup()
+	local waited = count3D(b) == 0
+	NOW += 2
+	la.Visible = false
+	frame()
+	check("promotion: a hidden window's ViewportFrames go to the waiting cards on their own (no show or build call)", waited and count3D(b) == 2 and IV.stats().live <= 8,
+		count3D(b) .. "/" .. IV.stats().live)
+	IV, ga, la, a, gb, lb, b = setup()
+	NOW += 2
+	ga.Enabled = false
+	frame()
+	check("promotion: a disabled ScreenGui's ViewportFrames go to the waiting cards on their own", count3D(b) == 2 and IV.stats().live <= 8, count3D(b))
+	IV, ga, la, a, gb, lb, b = setup()
+	local base = VIEWS_ALIVE
+	a[1].card:Destroy()
+	a[2].card:Destroy()
+	frame()
+	check("promotion: two destroyed cards' ViewportFrames go to the two waiting cards on their own", count3D(b) == 2 and IV.stats().live == 8, count3D(b) .. "/" .. IV.stats().live)
+	-- A direct icon (a hero) taken out of its card and put back: never a bare plate, its 3D back on its own
+	local IH = fresh()
+	local hg, hl = newWindow()
+	local hs = newCard(hl, "Office", "Whiteboard", 72)
+	local h = IH.build(hs.frame, IconArt, "Office", "Whiteboard", 72, DEPS)
+	local hc = IH.newCache(IconArt, DEPS)
+	local list = fill(hl, 1, 9)
+	IH.show(hc, list)
+	frame()
+	local before = count3D(list)
+	h.Parent = nil
+	frame()
+	local outFlat = isFallback(h)
+	local gave = count3D(list) == before + 1
+	h.Parent = hs.frame
+	local backFlat = isFallback(h)
+	frame()
+	check("direct icon out and back: out of the tree it gives its ViewportFrame to a waiting card and shows its drawn fallback (never a bare plate)",
+		outFlat and gave, tostring(outFlat) .. "/" .. tostring(gave))
+	check("direct icon out and back: put back, it shows its drawing at once, then its 3D back on its own (a hero: no wait)",
+		backFlat and h:FindFirstChild("View") ~= nil and IH.stats().live == 8, tostring(backFlat) .. "/" .. tostring(h:FindFirstChild("View") ~= nil))
+	-- A destroyed hero's ViewportFrame goes to a waiting card on its own
+	local was = count3D(list)
+	h:Destroy()
+	frame()
+	check("promotion: a destroyed hero's ViewportFrame goes to a waiting card on its own", count3D(list) == was + 1 and IH.stats().live == 8, count3D(list) - was)
+	-- Heroes first: 9 heroes (one waits), then a list (waits too); one hero destroyed: the waiting hero gets it
+	local IQ = fresh()
+	local qg, ql = newWindow()
+	local heroes = {}
+	for i = 1, 9 do
+		local k = THREE_D[i]
+		local slot = newCard(ql, k[1], k[2], 72)
+		heroes[i] = IQ.build(slot.frame, IconArt, k[1], k[2], 72, DEPS)
+	end
+	local qc = IQ.newCache(IconArt, DEPS)
+	local qlist = fill(ql, 10, 3)
+	NOW += 2
+	IQ.show(qc, qlist)
+	frame()
+	local ninth = heroes[9]:FindFirstChild("View") == nil and count3D(qlist) == 0
+	heroes[1]:Destroy()
+	frame()
+	check("promotion: a freed ViewportFrame goes to a waiting hero before waiting list cards", ninth and heroes[9]:FindFirstChild("View") ~= nil and count3D(qlist) == 0,
+		tostring(ninth) .. "/" .. count3D(qlist))
+	check("hero priority: a hero never takes another hero's ViewportFrame (the 9th waited)", ninth)
+end
+
+local MODES = {
+	{ name = "immediate", deferred = false, descendants = true },
+	{ name = "deferred", deferred = true, descendants = true },
+	{ name = "immediate, no descendant events", deferred = false, descendants = false },
+	{ name = "deferred, no descendant events", deferred = true, descendants = false },
+}
+for _, mode in ipairs(MODES) do
+	SIGNAL_DEFERRED, DESCENDANT_EVENTS = mode.deferred, mode.descendants
+	table.clear(QUEUE)
+	local function mcheck(name, cond, extra) check(name .. " [" .. mode.name .. "]", cond, extra) end
+	local function frame() resume() end
+	section("lazy [" .. mode.name .. "]", function() lazyScenarios(mcheck, frame) end)
+	section("fast scroll [" .. mode.name .. "]", function() fastScroll(mcheck, frame) end)
+	section("registry [" .. mode.name .. "]", function() registryScenarios(mcheck, frame, mode) end)
+	section("promotion [" .. mode.name .. "]", function() promotionScenarios(mcheck, frame) end)
+	resume()
+end
+SIGNAL_DEFERRED, DESCENDANT_EVENTS = false, true
+section("fake", function()
 	local a, b = newInstance("Frame"), newInstance("Frame")
 	a:Destroy()
 	check("fake: setting Parent on a destroyed instance throws, parenting into one throws, Destroy twice is harmless",
 		not pcall(function() a.Parent = b end) and not pcall(function() b.Parent = a end) and pcall(function() a:Destroy() end))
+	SIGNAL_DEFERRED = true
+	local c = newInstance("Frame")
+	local ran = false
+	c.Destroying:Connect(function() ran = true end)
+	c:Destroy()
+	local late = not ran
+	resume()
+	SIGNAL_DEFERRED = false
+	check("fake: in deferred mode a Destroying handler runs later, at the resumption point", late and ran)
 end)
 
 -- 7. Taps ----------------------------------------------------------------------------------------------------------------
@@ -1080,20 +1403,33 @@ table.clear(PRINTED)
 local lightOk, lightErr = pcall(function()
 __LIGHTTEST__
 end)
-local lgui = StarterGui:FindFirstChild("PREVIEW_LIGHT")
-local lview = lgui and lgui:FindFirstChild("Slot") and lgui:FindFirstChild("Slot"):FindFirstChild("View")
+local lgui = StarterGui:FindFirstChild("PREVIEW_ICONS")
+local lslot = lgui and lgui:FindFirstChild("LightTest")
+local lview = lslot and lslot:FindFirstChild("View")
 local inCamera = lview and lview.CurrentCamera.CFrame:VectorToObjectSpace(lview.LightDirection)
 local s3 = 1 / math.sqrt(3)
-check("light test: the block builds StarterGui.PREVIEW_LIGHT, one cube in a ViewportFrame, and prints OK", lightOk and lview ~= nil and has("OK light test built")
-	and #lview:FindFirstChild("Model"):GetChildren() == 1, lightErr)
+check("light test: the block adds LightTest to StarterGui.PREVIEW_ICONS (the sheet stays), one cube in a ViewportFrame, and prints OK", lightOk and lview ~= nil
+	and has("OK light test built") and lgui:FindFirstChild("Sheet") ~= nil and #lview:FindFirstChild("Model"):GetChildren() == 1, lightErr)
 check("light test: the cube is lit like the icons (toward the picture's right, down and away: (1, -1, -1) in the camera's frame)", inCamera ~= nil
 	and math.abs(inCamera.X - s3) < 1e-6 and math.abs(inCamera.Y + s3) < 1e-6 and math.abs(inCamera.Z + s3) < 1e-6, inCamera and (inCamera.X .. " " .. inCamera.Y .. " " .. inCamera.Z))
 pcall(function()
 __LIGHTTEST__
 end)
 local lights = 0
-for _, c in ipairs(StarterGui:GetChildren()) do if c.Name == "PREVIEW_LIGHT" then lights += 1 end end
-check("light test: running it again replaces the old one", lights == 1)
+for _, c in ipairs(lgui:GetChildren()) do if c.Name == "LightTest" then lights += 1 end end
+check("light test: running it again replaces the old one (one LightTest)", lights == 1)
+lgui:Destroy()
+table.clear(PRINTED)
+local aloneOk, aloneErr = pcall(function()
+__LIGHTTEST__
+end)
+local alone = StarterGui:FindFirstChild("PREVIEW_ICONS")
+check("light test: without the icon sheet it makes StarterGui.PREVIEW_ICONS itself, turned on, with LightTest in it", aloneOk and alone ~= nil and alone.Enabled ~= false
+	and alone:FindFirstChild("LightTest") ~= nil and alone:FindFirstChild("LightTest"):FindFirstChild("View") ~= nil, aloneErr)
+local previews = {}
+for _, c in ipairs(StarterGui:GetDescendants()) do if string.sub(c.Name, 1, 8) == "PREVIEW_" then table.insert(previews, c.Name) end end
+check("light test: it makes no PREVIEW_ object but StarterGui.PREVIEW_ICONS (one of the three the cleanup block removes)",
+	#previews == 1 and previews[1] == "PREVIEW_ICONS", table.concat(previews, ","))
 local saved = {}
 for _, c in ipairs(RS:GetChildren()) do if c.Name == "IconArt" or c.Name == "IconVisuals" then table.insert(saved, c); c.Parent = nil end end
 local missingOk, missingErr = runPreview()
@@ -1210,6 +1546,7 @@ def static_checks():
     check("IconArt.lua is pure data: no Instance.new, GetService, require or game", not any(w in art for w in ("Instance.new", "GetService", "require(", "game", "workspace")))
     check("IconVisuals.lua asks for no service and requires nothing (art and creature modules are passed in)", "GetService" not in vis and "require(" not in vis)
     check("IconVisuals.lua starts an animation in one place only (tap)", vis.count("task.spawn(") == 1 and "task.delay" not in vis)
+    check("IconVisuals.lua defers one thing only (the promotion pass, at the next resumption point)", vis.count("task.defer(") == 1)
     check("IconVisuals.lua makes a ViewportFrame in one place (buildModel), called only by the registry (setView) and buildUncapped",
           vis.count('"ViewportFrame"') == 1 and vis.count("IconVisuals.buildModel(") - vis.count("function IconVisuals.buildModel(") == 2
           and re.search(r"local function setView\(record, on\)[\s\S]*?IconVisuals\.buildModel\(", vis) is not None)
@@ -1297,9 +1634,10 @@ MUTANTS_A = [
     ("the coverage check never misses an icon", V, 'problem(group .. " " .. tostring(key) .. " has no icon")', "",
      "negative coverage: a shop item without a recipe"),
     # The one cap for the whole client (review item 2)
-    ("a cap per window: other windows' ViewportFrames are not counted", V, "\t\telseif record.view then\n\t\t\tliveUsed[record.serial] = record.used",
-     "\t\telseif record.view and table.find(wanted, record) then\n\t\t\tliveUsed[record.serial] = record.used", "three caches at once stay at 8"),
-    ("direct builds skip the cap", V, "\t\tallocate(art, { record })", "\t\tsetView(record, true)", "direct build counted"),
+    ("a cap per window: other windows' ViewportFrames are not counted", V, "\t\tif record.view then\n\t\t\tliveUsed[record.serial] = record.used",
+     "\t\tif record.view and table.find(wanted, record) then\n\t\t\tliveUsed[record.serial] = record.used", "three caches at once stay at 8"),
+    ("direct builds skip the cap", V, "\t\tallocate(art, { register(root, art, recipe, size, deps, false) })", "\t\tsetView(register(root, art, recipe, size, deps, false), true)",
+     "direct build counted"),
     ("the plan lets one more in (9)", V, "if count < cap then", "if count <= cap then", "lazy: fast scroll of 38: never more than 8"),
     ("a forgotten slot keeps its id", V, "\t\tcache.ids[entry.frame] = nil\n", "", "close and reopen 20 rounds"),
     ("a destroyed icon still counts", V, "\t\tif record.view then\n\t\t\trecord.view = nil\n\t\t\tregistry.live -= 1",
@@ -1308,23 +1646,64 @@ MUTANTS_A = [
      "switching slot types: a drawn icon replaced by a 3D one"),
     ("a 3D slot switching to drawn keeps its ViewportFrame", V, "\t\t\t\tdropSlot(cache, id)\n\t\t\t\tcache.ids[frame] = id",
      "\t\t\t\tentry.root.Parent = nil\n\t\t\t\tcache.ids[frame] = id", "switching slot types: a 3D slot that now shows a drawn icon"),
-    ("no check for an icon destroyed with its card", V, "or (entry.root.Parent == nil and not entry.detached) then", "or false then",
-     "destroyed card without descendant events"),
+    ("no test of the locked Parent (a destroyed card is only known by its events)", V, "\tif pcall(function()\n\t\tinst.Parent = nil\n\tend) then\n\t\treturn false\n\tend",
+     "\tdo\n\t\treturn false\n\tend", "a destroyed icon no longer counts: destroying the hero frees its ViewportFrame at once"),
     ("a direct build into a destroyed card", V, "if not recipe or (parent ~= nil and gone(parent)) then", "if not recipe then",
      "destroyed parent: show() and build() never set Parent on a destroyed instance"),
-    ("no drawn fallback: a waiting slot shows its plate only", V, "\troot:SetAttribute(\"Fallback\", true)\n\tbuildFlat(root, art, recipe, size, deps)\n",
-     "\troot:SetAttribute(\"Fallback\", true)\n", "cap full: the fallback is drawn"),
-    ("the fallback draws a 3D model after all", V, "\tlocal shapes = IconVisuals.flatShapes(art, recipe, deps)\n",
-     "\tIconVisuals.buildModel(root, art, recipe, size, deps)\n\tlocal shapes = IconVisuals.flatShapes(art, recipe, deps)\n", "cap full: ten 3D cards on screen"),
+    ("no drawn fallback: a waiting slot shows its plate only", V,
+     "\t\tif not record.view and not record.dead and not gone(record.root) and not record.root:FindFirstChild(\"Flat\") then",
+     "\t\tif false then", "cap full: the fallback is drawn"),
+    ("the fallback draws a 3D model after all", V, "\tlocal shapes = flatFor(art, recipe, deps)\n",
+     "\tIconVisuals.buildModel(root, art, recipe, size, deps)\n\tlocal shapes = flatFor(art, recipe, deps)\n", "cap full: ten 3D cards on screen"),
     ("a hidden window keeps its ViewportFrames", V, "if node:IsA(\"GuiObject\") and node.Visible == false then", "if false then",
      "hidden window frees its slots"),
     ("a disabled ScreenGui counts as shown", V, "return node.Enabled ~= false", "return true", "a disabled ScreenGui counts as hidden"),
     ("icons on a screen can be taken", V, "\t\t\t\tkeep[record.serial] = true -- on a screen", "\t\t\t\tlocal _ = true -- on a screen",
-     "hero card plus list: the hero keeps its 3D"),
-    ("fallbacks on a screen never get their ViewportFrame back", V, "\tfor _, record in ipairs(others) do\n\t\tbyKey[record.serial] = record\n\t\ttable.insert(keys, record.serial)\n\tend\n",
+     "three caches at once stay at 8"),
+    ("fallbacks on a screen never get their ViewportFrame back", V, "\tfor _, record in ipairs(others) do\n\t\ttable.insert(order, record)\n\tend\n",
      "", "hidden window frees its slots"),
     ("icons that left the screen are dropped and rebuilt every time", V, "\t\t\tentry.root.Parent = nil -- off screen: out of the game tree (a ViewportFrame there draws nothing)\n\t\t\tentry.detached = true\n",
      "\t\t\tentry.root.Parent = nil -- off screen: out of the game tree (a ViewportFrame there draws nothing)\n", "lazy: drawn icons that left the screen are reused"),
+    # Second review, item 4: promotion, hero priority, the fallback recipe and the rebuild guard, a direct icon taken
+    # out and put back, and event timing (deferred signals, no events for descendants)
+    ("no promotion: nothing happens when a ViewportFrame frees up", V, "\tif registry.pending or registry.art == nil then\n\t\treturn", "\tif true then\n\t\treturn",
+     "promotion: a hidden window's ViewportFrames go to the waiting cards on their own"),
+    ("a hidden or disabled ancestor is not watched", V, "\t\tif property then\n\t\t\ttable.insert(connections, n:GetPropertyChangedSignal(property):Connect(schedule))",
+     "\t\tif false then\n\t\t\ttable.insert(connections, n:GetPropertyChangedSignal(property):Connect(schedule))",
+     "promotion: a hidden window's ViewportFrames go to the waiting cards on their own"),
+    ("only the slot itself is watched, not the way up to the ScreenGui", V, "\t\ttable.insert(nodes, node)\n\t\tif node:IsA(\"LayerCollector\") then",
+     "\t\ttable.insert(nodes, node)\n\t\tif true then", "promotion: a hidden window's ViewportFrames go to the waiting cards on their own"),
+    ("a destroyed card above the icon is not watched", V, "\t\ttable.insert(connections, n.Destroying:Connect(schedule))\n", "",
+     "promotion: two destroyed cards' ViewportFrames go to the two waiting cards on their own"),
+    ("waiting icons on a screen are left out of a promotion pass", V, "\t\tif not record.view and not asked[record] and shown(root) then",
+     "\t\tif not record.view and not asked[record] and shown(root) and next(wanted) ~= nil then", "promotion: a hidden window's ViewportFrames go to the waiting cards"),
+    ("a hero waits like a list icon", V, "\t\t\telseif heroes and heroes[key] and #takeable > 0 then", "\t\t\telseif false then",
+     "hero priority: a hero built while a list fills the cap takes a list icon's ViewportFrame"),
+    ("a list icon can take a hero's ViewportFrame", V, "\t\tif not wantedSet[key] and not (keep and keep[key]) then\n\t\t\ttable.insert(spare",
+     "\t\tif not wantedSet[key] and not (keep and keep[key] and not (heroes and heroes[key])) then\n\t\t\ttable.insert(spare",
+     "hero priority: the hero on screen never loses its ViewportFrame to the list"),
+    ("a hero takes another hero's ViewportFrame", V, "\t\telseif not (heroes and heroes[key]) then\n\t\t\ttable.insert(takeable", "\t\telse\n\t\t\ttable.insert(takeable",
+     "hero priority: a hero never takes another hero's ViewportFrame"),
+    ("heroes not first in a pass", V, "\t\tif a.hero ~= b.hero then\n\t\t\treturn a.hero\n\t\tend\n", "",
+     "promotion: a freed ViewportFrame goes to a waiting hero before waiting list cards"),
+    ("a hero takes the first list icon instead of the last", V, "\t\t\treturn position[a.key] > position[b.key]", "\t\t\treturn position[a.key] < position[b.key]",
+     "plan: a hero takes the last list icon asked for"),
+    ("no rebuild guard: an icon rebuilt as soon as it is dropped", V,
+     "\t\tlocal waiting = record.droppedAt ~= nil and now - record.droppedAt < IconVisuals.REBUILD_SECONDS", "\t\tlocal waiting = false",
+     "fast scroll: within one second no slot's 3D icon is destroyed and rebuilt"),
+    ("heroes wait out the rebuild guard too", V, "\t\tif record.view or record.hero or not waiting then", "\t\tif record.view or not waiting then",
+     "direct icon out and back: put back, it shows its drawing at once, then its 3D back on its own"),
+    ("the fallback recipe worked out per card", V, "\tlocal shapes = flatRecipes[recipe]\n", "\tlocal shapes = nil\n",
+     "fast scroll: each 3D key's fallback recipe is worked out once"),
+    ("a direct icon out of the tree left as a bare plate", V, "\t\tif not root:FindFirstChild(\"Flat\") then\n\t\t\tbuildFlat(root, record.art",
+     "\t\tif root.Parent ~= nil and not root:FindFirstChild(\"Flat\") then\n\t\t\tbuildFlat(root, record.art",
+     "direct icon out and back: out of the tree it gives its ViewportFrame to a waiting card and shows its drawn fallback"),
+    ("no sweep: only events remove a destroyed icon's record", V, "\t\tif record.dead or gone(root) then\n\t\t\tforget(record)\n\t\tend\n\tend\nend",
+     "\t\tif record.dead then\n\t\t\tforget(record)\n\t\tend\n\tend\nend", "sweep: a destroyed window's icons leave the registry at the next call"),
+    ("no ancestry check: an icon is put into a slot outside every GUI tree", V, "\t\tif recipe and not gone(frame) and attached(frame) then",
+     "\t\tif recipe and not gone(frame) then", "ancestry: a slot out of every GUI tree gets no icon"),
+    ("only one promotion pass ever runs", V, "\t\tregistry.pending = false\n\t\tregistry.promotions += 1", "\t\tregistry.promotions += 1",
+     "direct icon out and back: put back, it shows its drawing at once, then its 3D back on its own"),
 ]
 # Group B: IconArt.lua. The data breaks the style sheet or a rule, or stops matching the game (the named check must fail).
 MUTANTS_B = [

@@ -10,8 +10,8 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 |---|---|---|---|---|
 | `WorldArt` | ModuleScript, ServerScriptService | new | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 |
 | `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
-| `IconArt` | ModuleScript, ReplicatedStorage | new | `9fa113c553f3e9ea17c857c62aca75be48a86ee833426b1c5a0ca2eddbda099d` | 30355 |
-| `IconVisuals` | ModuleScript, ReplicatedStorage | new | `fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98` | 48178 |
+| `IconArt` | ModuleScript, ReplicatedStorage | new | `83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915` | 30741 |
+| `IconVisuals` | ModuleScript, ReplicatedStorage | new | `f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4` | 55083 |
 | `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at e3c9e67) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
@@ -37,9 +37,9 @@ Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnab
    The icon modules sit next to `CreatureConfig`, `CreatureModels` and `ShopConfig`, which the icons read. No other script changes.
 3. **Check the hashes:** paste block (d) into **View > Command Bar**, press Enter. Every line must say `OK`.
 4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
-5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the light test block (one lit cube) and the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
+5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the light test block (one lit cube, on top of the icon sheet) and the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
 6. **Before any playtest:** paste the **cleanup block** (e), press Enter, then the **check block** (e): it must print `OK`.
-7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch. The patch's hash and line numbers are valid for `main` at `e3c9e67` only (its "Made for:" line). If `main`'s `TycoonCore.lua` changed since, first regenerate them on that branch: `python3 tools/world_test.py --regen-patch` (it rewrites the patch and the TycoonCore row in (a), and prints the new hash), then `python3 tools/world_test.py --integration`. Then `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
+7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch. The patch's hash and line numbers are valid for `main` at `e3c9e67` only (its "Made for:" line). If `main`'s `TycoonCore.lua` changed since, first regenerate them on that branch: `python3 tools/world_test.py --regen-patch` (it rewrites the patch and the TycoonCore row in (a), and prints the new hash). Then, at merge time, run `python3 tools/world_test.py --integration --review --strict-patch`: it must pass. `--strict-patch` fails ("patch needs regenerating") if the patch applies only with an offset or fuzz, or if its Made for / Result lines, its line numbers, its hunk headers or the TycoonCore row in (a) are not what `--regen-patch` writes; without the flag the same findings are only a `NOTE`. Then `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
 8. **Before publishing:** paste the check block (e) again: it must print `OK` (if it prints `FAIL`, run the cleanup block). Then **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
 
 ## (d) Hash check (command bar)
@@ -91,8 +91,8 @@ end
 local WANT = {
 	WorldArt = { "972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9", 13042, "ServerScriptService" },
 	WorldVisuals = { "81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343", 48782, "ServerScriptService" },
-	IconArt = { "9fa113c553f3e9ea17c857c62aca75be48a86ee833426b1c5a0ca2eddbda099d", 30355, "ReplicatedStorage" },
-	IconVisuals = { "fbed4f0d1562528702d3608ea71fdbba4bdcf50622a71e71457cd6fede105a98", 48178, "ReplicatedStorage" },
+	IconArt = { "83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915", 30741, "ReplicatedStorage" },
+	IconVisuals = { "f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4", 55083, "ReplicatedStorage" },
 }
 for name, want in pairs(WANT) do
 	local script = game:GetService(want[3]):FindFirstChild(name)
@@ -294,36 +294,42 @@ print(string.format("PREVIEW_ICONS: %d icons (%d 3D, %d drawn). The game keeps a
 
 ## The light test (command bar)
 
-Roblox's `ViewportFrame.LightDirection` was not checked in Studio: the icons assume it is the way the light travels (IconArt `Style.lightDirection = { 1, -1, -1 }` in the camera's frame: toward the right, down and away, so lit from the picture's top-left). This block shows one white cube lit exactly the way every 3D icon is, at 240 px, as `StarterGui.PREVIEW_LIGHT` (the cleanup block removes it). It needs `IconArt` and `IconVisuals` in ReplicatedStorage.
+Roblox's `ViewportFrame.LightDirection` was not checked in Studio: the icons assume it is the way the light travels (IconArt `Style.lightDirection = { 1, -1, -1 }` in the camera's frame: toward the right, down and away, so lit from the picture's top-left). This block shows one white cube lit exactly the way every 3D icon is, at 240 px, as the frame `LightTest` on top of the icon sheet in `StarterGui.PREVIEW_ICONS` (it makes that ScreenGui if the icon preview did not, and turns it on). So it adds no preview object of its own: the cleanup block removes it with the sheet. To see the whole sheet again, delete `PREVIEW_ICONS.LightTest` or run the icon preview again. It needs `IconArt` and `IconVisuals` in ReplicatedStorage.
 
 ```lua
--- Light test: builds StarterGui.PREVIEW_LIGHT, one white cube lit like every 3D icon. Remove it with the cleanup block.
+-- Light test: adds LightTest, one white cube lit like every 3D icon, to StarterGui.PREVIEW_ICONS (made if missing).
+-- The cleanup block removes it with the icon sheet.
 local RS = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local artModule, visualsModule = RS:FindFirstChild("IconArt"), RS:FindFirstChild("IconVisuals")
 assert(artModule and visualsModule, "First create the ModuleScripts IconArt and IconVisuals in ReplicatedStorage")
 local IconArt = require(artModule:Clone())
 local IconVisuals = require(visualsModule:Clone())
-local old = StarterGui:FindFirstChild("PREVIEW_LIGHT")
+local gui = StarterGui:FindFirstChild("PREVIEW_ICONS")
+if not gui then
+	gui = Instance.new("ScreenGui")
+	gui.Name = "PREVIEW_ICONS"
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 50
+	gui.Parent = StarterGui
+end
+gui.Enabled = true
+local old = gui:FindFirstChild("LightTest")
 if old then
 	old:Destroy()
 end
 local art = table.clone(IconArt)
 art.Models = { LightCube = { { name = "Cube", shape = "Block", size = { 2, 2, 2 }, offset = { 0, 1, 0 }, color = "white", material = "SmoothPlastic" } } }
-local gui = Instance.new("ScreenGui")
-gui.Name = "PREVIEW_LIGHT"
-gui.ResetOnSpawn = false
-gui.DisplayOrder = 60
 local slot = Instance.new("Frame")
-slot.Name = "Slot"
+slot.Name = "LightTest"
 slot.Position = UDim2.fromOffset(24, 24)
 slot.Size = UDim2.fromOffset(240, 240)
 slot.BackgroundColor3 = Color3.fromRGB(28, 30, 38)
-slot.Parent = gui
+slot.ZIndex = 10 -- above the icon sheet
 local view = IconVisuals.buildModel(slot, art, { kind = "model", model = "LightCube", view = { yaw = -28, pitch = 22 } }, 240)
-gui.Parent = StarterGui
+slot.Parent = gui
 print(view and "OK light test built" or "PROBLEM light test not built",
-	"PREVIEW_LIGHT: a white cube seen like the Office props. Lit from the top-left: its top face brightest, its right-hand face the darkest.")
+	"PREVIEW_ICONS.LightTest: a white cube seen like the Office props. Lit from the top-left: its top face brightest, its right-hand face the darkest.")
 ```
 
 **What to look at:** the top face is the brightest and the left-hand face is brighter than the right-hand one. If the right-hand face is the brighter one (lit from the bottom-right), `LightDirection` works the other way: write `lightDirection = { -1, 1, 1 }` in IconArt's `Style`, paste IconArt again and rerun this block and the icon preview (and tell the next Claude session: `tools/icon_test.py` pins the current value).
@@ -333,57 +339,74 @@ print(view and "OK light test built" or "PROBLEM light test not built",
 | Object | Made by | Why it must go |
 |---|---|---|
 | `Workspace.PREVIEW_WORLD` | the world preview block | it lies where the wired-in world would be built (two copies on top of each other flicker), and it is not part of the game |
-| `StarterGui.PREVIEW_ICONS` | the icon preview block | everything in StarterGui is copied onto every player's screen |
-| `StarterGui.PREVIEW_LIGHT` | the light test block | the same |
+| `StarterGui.PREVIEW_ICONS` | the icon preview block and the light test block (its `LightTest` frame) | everything in StarterGui is copied onto every player's screen |
 | `Workspace.PREVIEW_STAGES` | the plot visuals' preview (docs/STUDIO_SYNC.md) | still on the ROADMAP's before-publish list (item m), if it is there |
 
 **Before a playtest:** the cleanup block, then the check block (it must print `OK`).
 **Before publishing:** the check block (it must print `OK`; if it prints `FAIL`, the cleanup block, then the check block again).
 
-No game object is named `PREVIEW_...`: only these Studio previews are.
+No game object is named `PREVIEW_...`: only these Studio previews are. The cleanup block removes exactly these three, by their exact name and place (directly in `Workspace` or `StarterGui`), and nothing else. Any other object whose name starts with `PREVIEW_` (anywhere in `Workspace` or `StarterGui`, or one of the three names somewhere else) is only reported: look at it and delete it by hand if it is an old preview. An older light test left `StarterGui.PREVIEW_LIGHT`: delete that one by hand.
 
 ### The cleanup block (command bar)
 
-It destroys every object whose name starts with `PREVIEW_` in `Workspace` and `StarterGui` (the three above, and any other), then prints what it removed and whether anything is left.
+It destroys `Workspace.PREVIEW_STAGES`, `Workspace.PREVIEW_WORLD` and `StarterGui.PREVIEW_ICONS` (everything inside them goes with them), prints what it removed, prints `unknown PREVIEW_ object: <path>, delete it by hand` for every other `PREVIEW_` object it finds (it never deletes one), and ends with `OK` or `FAIL`.
 
 ```lua
--- Cleanup: destroys every PREVIEW_ object in Workspace and StarterGui, then prints what it removed and what is left
-local places = { workspace, game:GetService("StarterGui") }
-local removed, left = {}, {}
-for _, place in ipairs(places) do
-	for _, d in ipairs(place:GetDescendants()) do
-		if string.sub(d.Name, 1, 8) == "PREVIEW_" and d:IsDescendantOf(place) then
+-- Cleanup: destroys the three Studio previews (Workspace.PREVIEW_STAGES, Workspace.PREVIEW_WORLD, StarterGui.PREVIEW_ICONS)
+-- and nothing else. Every other PREVIEW_ object is only reported, never deleted: delete it by hand.
+local StarterGui = game:GetService("StarterGui")
+local function known(d)
+	return (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))
+		or (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS")
+end
+local removed, unknown = {}, {}
+for _, place in ipairs({ workspace, StarterGui }) do
+	for _, d in ipairs(place:GetChildren()) do
+		if known(d) then
 			table.insert(removed, d:GetFullName())
 			d:Destroy()
 		end
 	end
 end
-for _, place in ipairs(places) do
+for _, place in ipairs({ workspace, StarterGui }) do
 	for _, d in ipairs(place:GetDescendants()) do
 		if string.sub(d.Name, 1, 8) == "PREVIEW_" then
-			table.insert(left, d:GetFullName())
+			table.insert(unknown, d:GetFullName())
+			print("unknown PREVIEW_ object: " .. d:GetFullName() .. ", delete it by hand")
 		end
 	end
 end
 print("Removed: " .. (#removed > 0 and table.concat(removed, ", ") or "nothing (no preview was there)"))
-print(#left == 0 and "OK no PREVIEW_ object is left in Workspace or StarterGui" or ("FAIL still there: " .. table.concat(left, ", ")))
+print(#unknown == 0 and "OK no PREVIEW_ object is left in Workspace or StarterGui"
+	or ("FAIL " .. #unknown .. " unknown PREVIEW_ object(s) left, not deleted: " .. table.concat(unknown, ", ")))
 ```
 
 ### The check block (command bar)
 
-It changes nothing: `OK`, or `FAIL` and the name of every `PREVIEW_` object still in `Workspace` or `StarterGui`.
+It changes nothing: `OK`, or `FAIL` and every `PREVIEW_` object in `Workspace` or `StarterGui`, each marked `known` (one of the three, or inside one: the cleanup block removes it) or `unknown` (delete it by hand).
 
 ```lua
--- Check: OK, or FAIL and the name of every PREVIEW_ object still in Workspace or StarterGui. Changes nothing.
-local left = {}
-for _, place in ipairs({ workspace, game:GetService("StarterGui") }) do
+-- Check: OK, or FAIL and every PREVIEW_ object in Workspace or StarterGui, known or unknown. Changes nothing.
+local StarterGui = game:GetService("StarterGui")
+local function known(d) -- one of the three previews, or inside one (the cleanup block removes it with it)
+	while d ~= nil and d ~= workspace and d ~= StarterGui do
+		if (d.Parent == workspace and (d.Name == "PREVIEW_STAGES" or d.Name == "PREVIEW_WORLD"))
+			or (d.Parent == StarterGui and d.Name == "PREVIEW_ICONS") then
+			return true
+		end
+		d = d.Parent
+	end
+	return false
+end
+local found = {}
+for _, place in ipairs({ workspace, StarterGui }) do
 	for _, d in ipairs(place:GetDescendants()) do
 		if string.sub(d.Name, 1, 8) == "PREVIEW_" then
-			table.insert(left, d:GetFullName())
+			table.insert(found, d:GetFullName() .. (known(d) and " (known: the cleanup block removes it)" or " (unknown: delete it by hand)"))
 		end
 	end
 end
-print(#left == 0 and "OK no PREVIEW_ object in Workspace or StarterGui" or ("FAIL " .. #left .. " PREVIEW_ object(s) still there: " .. table.concat(left, ", ")))
+print(#found == 0 and "OK no PREVIEW_ object in Workspace or StarterGui" or ("FAIL " .. #found .. " PREVIEW_ object(s) still there: " .. table.concat(found, ", ")))
 ```
 
 ## (f) What to look at in Studio (only your eyes can judge these)

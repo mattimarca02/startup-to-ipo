@@ -19,6 +19,8 @@
 -- 3D icons: the Office upgrades are PlotArt's prop parts (copied here because PlotArt lives on the server where the
 -- screens can't read it; tools/icon_test.py fails if a copy differs from PlotArt), the creatures are CreatureModels'
 -- own models. A ViewportFrame draws neither text nor particles, so the props' board texts and coffee steam are left out.
+-- At most Style.viewportCap 3D icons at once on the whole client; the others show their drawn fallback (their parts
+-- from the front as shapes) until one frees up. A hero (a direct build) always wins over list icons (IconVisuals).
 --
 -- A UI shape: S(kind, name, x, y, w, h, color [, extra])
 --   kind   "rect" (rounded), "circle" (w = h), "pill", "diamond" (a square turned 45 degrees), "ring" (a circle's line),
@@ -44,7 +46,8 @@ IconArt.Style = {
 	sizes = { card = 56, hero = 72 }, -- px at phone size
 	-- At most this many 3D icons (ViewportFrames) exist at once on the whole client: every window, list and direct
 	-- IconVisuals.build together (IconVisuals' one registry enforces it; past it an icon shows its drawn fallback).
-	-- A reasoned guess, not measured on a phone (docs/WORLD_ICONS_NOTES.md)
+	-- A direct build (the hero card, the details sheet) wins over list icons; a ViewportFrame that frees up goes to a
+	-- waiting icon on a screen on its own. A reasoned guess, not measured on a phone (docs/WORLD_ICONS_NOTES.md)
 	viewportCap = 8,
 	maxParts = 30, -- parts in one 3D icon
 	maxShapes = 16, -- shapes in one UI icon (without its plate and outline copies)

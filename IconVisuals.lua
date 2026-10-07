@@ -11,12 +11,14 @@
 --       keeps them for later
 --   The cap: ONE registry for the whole client. Every 3D icon, from any cache or a direct build(), in every window,
 --       is in it: at most art.Style.viewportCap ViewportFrames exist at once. Past it an icon shows its drawn fallback
---       (its parts from the front as UI shapes), never an empty slot. IconVisuals.stats() says how many exist.
+--       (its parts from the front as UI shapes), never an empty slot. A direct build (a hero) wins over list icons; a
+--       ViewportFrame that frees up goes to a waiting icon on its own (task.defer); IconVisuals.stats() says how many
+--       exist. Details where the registry starts.
 --   IconVisuals.buildUncapped(...)  the Studio preview and the tests only: every 3D icon, outside the cap
 --   IconVisuals.tap(icon)                                   -> the one animation: a spin (3D) or a pop (UI)
 -- Pure functions (numbers in, numbers out):
 --   pixels(art, role), outlinePx(art, size), shapeBox(art, shape), frame(box, view, fov, padding),
---   plan(liveUsed, wanted, cap, keep), flatShapes(art, recipe, deps), spinAngle(t, seconds), popScale(t, seconds)
+--   plan(liveUsed, wanted, cap, keep, heroes), flatShapes(art, recipe, deps), spinAngle(t, seconds), popScale(t, seconds)
 -- Checks (tools/icon_test.py and the Studio preview run them):
 --   IconVisuals.validate(art)                     -> problems in the data (empty = fine)
 --   IconVisuals.checks(art, icons, expect)        -> { { name = ..., problems = { ... } }, ... }, one per named check
@@ -158,22 +160,40 @@ end
 
 -- Which 3D icons to build and which to drop. liveUsed: { [key] = when it was last on screen } for the ViewportFrames
 -- that exist (on the whole client); wanted: the keys on screen now, most important first; keep (optional): keys that
--- must not be dropped (on a screen in another window). Never more than `cap` exist: an icon that left the screen is
--- dropped (least recently seen first, then the lowest key) to make room; when no live icon can be dropped, the rest
--- wait (their slot shows the drawn fallback). Returns { make = {...}, drop = {...}, wait = {...} }.
-function IconVisuals.plan(liveUsed, wanted, cap, keep)
-	local wantedSet, count = {}, 0
-	for _, key in ipairs(wanted) do
+-- must not be dropped for a list icon (on a screen in another window); heroes (optional): the keys of heroes (direct
+-- builds). Never more than `cap` exist: an icon that left the screen is dropped (least recently seen first, then the
+-- lowest key) to make room. When none can be dropped, a wanted hero takes the ViewportFrame of a list icon (not a
+-- hero): one only kept for another window first (least recently seen), then the last of `wanted`; anything else
+-- waits (its slot shows the drawn fallback). A hero is never taken for a list icon. Returns { make = {...},
+-- drop = {...}, wait = {...} }.
+function IconVisuals.plan(liveUsed, wanted, cap, keep, heroes)
+	local wantedSet, position, count = {}, {}, 0
+	for i, key in ipairs(wanted) do
 		wantedSet[key] = true
+		position[key] = position[key] or i
 	end
-	local spare = {}
+	local spare, takeable = {}, {}
 	for key, used in pairs(liveUsed) do
 		count += 1
 		if not wantedSet[key] and not (keep and keep[key]) then
 			table.insert(spare, { key = key, used = used })
+		elseif not (heroes and heroes[key]) then
+			table.insert(takeable, { key = key, used = used, wanted = wantedSet[key] == true })
 		end
 	end
 	table.sort(spare, function(a, b)
+		if a.used ~= b.used then
+			return a.used < b.used
+		end
+		return a.key < b.key
+	end)
+	table.sort(takeable, function(a, b)
+		if a.wanted ~= b.wanted then
+			return not a.wanted
+		end
+		if a.wanted then
+			return position[a.key] > position[b.key]
+		end
 		if a.used ~= b.used then
 			return a.used < b.used
 		end
@@ -188,6 +208,10 @@ function IconVisuals.plan(liveUsed, wanted, cap, keep)
 				table.insert(out.make, key)
 			elseif #spare > 0 then
 				table.insert(out.drop, table.remove(spare, 1).key)
+				made[key] = true
+				table.insert(out.make, key)
+			elseif heroes and heroes[key] and #takeable > 0 then
+				table.insert(out.drop, table.remove(takeable, 1).key)
 				made[key] = true
 				table.insert(out.make, key)
 			else
@@ -388,7 +412,8 @@ end
 
 -- The drawn fallback of a 3D icon: its parts seen from the front, as outlined, shaded UI shapes on the grid (back parts
 -- first). A slot shows it while the cap leaves no ViewportFrame for it, so a card is never empty. It costs no
--- ViewportFrame: a creature's model is built only to read its parts, then destroyed.
+-- ViewportFrame: a creature's model is built only to read its parts, then destroyed. The registry works it out once
+-- per icon key and keeps it (flatFor), so a scrolling list never builds a model again for its fallback.
 function IconVisuals.flatShapes(art, recipe, deps)
 	local boxes = {}
 	if recipe.kind == "creature" then
@@ -459,18 +484,6 @@ function IconVisuals.flatShapes(art, recipe, deps)
 	return shapes
 end
 
-local function buildFlat(root, art, recipe, size, deps)
-	local layer = make("Frame", { Name = "Flat", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = root })
-	local shapes = IconVisuals.flatShapes(art, recipe, deps)
-	for i, shape in ipairs(shapes) do
-		drawShape(layer, art, shape, size, art.Style.outline, 3 + i)
-	end
-	for i, shape in ipairs(shapes) do
-		drawShape(layer, art, shape, size, 0, 4 + #shapes + i)
-	end
-	return layer
-end
-
 -- An icon's Frame "Icon" with its plate, unparented; a UI recipe gets its drawing, a 3D one nothing yet (the caller
 -- adds its ViewportFrame or its drawn fallback)
 local function newRoot(art, group, key, recipe, size)
@@ -492,18 +505,57 @@ end
 -- The cap: ONE registry for the whole client ---------------------------------------------------------------------
 -- Every 3D icon on this client is in it, whether a cache (IconVisuals.show) or a direct IconVisuals.build made it, in
 -- every window together: at most art.Style.viewportCap ViewportFrames exist at once. A 3D icon without one shows its
--- drawn fallback (never an empty slot) and gets its ViewportFrame back when room frees up and it is on screen.
--- Room is made by taking the ViewportFrame of a 3D icon that is not on screen now (least recently seen first):
--- one in a hidden window or card, one off screen in a list, or a direct one taken out of the game tree. A destroyed
--- icon (or one whose card was destroyed) leaves the registry at once and never counts again.
-local registry = { icons = {}, live = 0, clock = 0, serial = 0, made = 0 }
-local dead = setmetatable({}, { __mode = "k" }) -- instances seen being destroyed (their Destroying event)
+-- drawn fallback (never an empty slot or a bare plate).
+--   Room is taken from a 3D icon that is not on a screen now (least recently seen first): one in a hidden window or
+--     card, one off screen in a list, or a direct one taken out of the game tree. An icon on a screen keeps its
+--     ViewportFrame, with one exception: a hero (a direct build: the biggest card, the details sheet) always wins over
+--     list icons. When nothing else is free, a list icon on a screen gives its ViewportFrame to the hero and shows its
+--     drawn fallback; a hero on a screen never loses its ViewportFrame to a list icon, so it can't be starved.
+--   Promotion: when a ViewportFrame frees up on its own (an icon or its card destroyed, a window hidden or disabled, a
+--     direct icon taken out), a waiting icon on a screen gets it at the next resumption point (task.defer), without
+--     another show() or build(). An icon that comes back on a screen (a window shown again) gets its ViewportFrame at
+--     the next show() or build().
+--   No rebuild loop: an icon whose ViewportFrame was taken keeps its drawing for REBUILD_SECONDS before it gets one
+--     again (heroes never wait); the drawing's recipe is worked out once per icon key, never per card.
+--   Event timing: nothing here depends on when (or whether) Destroying or AncestryChanged handlers run (Roblox's
+--     SignalBehavior Deferred, or a destroyed card whose descendants get no event). A record is marked destroyed before
+--     the module destroys its instance, nothing is put into a slot that is not in a GUI tree, and every call first
+--     sweeps the records of destroyed icons (a destroyed instance's Parent is locked: that test needs no event).
+IconVisuals.REBUILD_SECONDS = 1
+IconVisuals.now = os.clock -- the clock of that wait (the tests put their own)
+local registry = { icons = {}, live = 0, clock = 0, serial = 0, made = 0, recipes = 0, flats = 0, promotions = 0, pending = false, art = nil }
+local dead = setmetatable({}, { __mode = "k" }) -- instances destroyed: by this module, or seen in their Destroying event
+local flatRecipes = setmetatable({}, { __mode = "k" }) -- recipe -> its drawn fallback's shapes (once per icon key)
+local allocate -- the allocation pass, below
 
+-- Destroyed: this module destroyed it, its Destroying event said so, or its Parent is locked. Roblox locks the Parent
+-- of a destroyed instance (setting it, even to nil, throws), and a live one out of the tree takes Parent = nil as a
+-- no-op: the one test that holds whatever the event timing.
 local function gone(inst)
-	return inst == nil or dead[inst] == true
+	if inst == nil or dead[inst] then
+		return true
+	end
+	if inst.Parent ~= nil then
+		return false
+	end
+	if pcall(function()
+		inst.Parent = nil
+	end) then
+		return false
+	end
+	dead[inst] = true
+	return true
 end
 
--- Calls fn once when inst is destroyed (Destroying also fires for the descendants of a destroyed card)
+-- Destroys an instance this module made, marked first (so no handler timing matters)
+local function destroy(inst)
+	if not gone(inst) then
+		dead[inst] = true
+		inst:Destroy()
+	end
+end
+
+-- Calls fn once when inst is destroyed (Destroying, if it ever comes: every call also sweeps without it)
 local function watch(inst, fn)
 	local ok, signal = pcall(function()
 		return inst.Destroying
@@ -514,6 +566,19 @@ local function watch(inst, fn)
 			fn()
 		end)
 	end
+end
+
+-- One promotion pass at the next resumption point, however many ViewportFrames freed at once
+local function schedule()
+	if registry.pending or registry.art == nil then
+		return
+	end
+	registry.pending = true
+	task.defer(function()
+		registry.pending = false
+		registry.promotions += 1
+		allocate(registry.art, {})
+	end)
 end
 
 -- On a screen now: under an enabled ScreenGui, every GuiObject on the way visible. Out of the game tree = not shown.
@@ -535,34 +600,123 @@ local function shown(inst)
 end
 IconVisuals.shown = shown
 
+-- In a GUI tree (under a ScreenGui or another LayerCollector), shown or not: an icon is only ever put into such a slot
+local function attached(inst)
+	local node = inst
+	while node ~= nil do
+		if dead[node] then
+			return false
+		end
+		if node:IsA("LayerCollector") then
+			return true
+		end
+		node = node.Parent
+	end
+	return false
+end
+
+-- A live 3D icon watches the way up to its ScreenGui: a node destroyed, hidden or disabled may free its ViewportFrame
+local function unwatchChain(record)
+	for _, connection in ipairs(record.chain or {}) do
+		connection:Disconnect()
+	end
+	record.chain, record.chainOf = nil, nil
+end
+local function watchChain(record)
+	local nodes, node = {}, record.root.Parent
+	while node ~= nil do
+		table.insert(nodes, node)
+		if node:IsA("LayerCollector") then
+			break
+		end
+		node = node.Parent
+	end
+	local same = record.chainOf ~= nil and #record.chainOf == #nodes
+	for i = 1, #nodes do
+		if same and record.chainOf[i] ~= nodes[i] then
+			same = false
+		end
+	end
+	if same then
+		return
+	end
+	unwatchChain(record)
+	local connections = {}
+	for _, n in ipairs(nodes) do
+		table.insert(connections, n.Destroying:Connect(schedule))
+		local property = n:IsA("LayerCollector") and "Enabled" or (n:IsA("GuiObject") and "Visible")
+		if property then
+			table.insert(connections, n:GetPropertyChangedSignal(property):Connect(schedule))
+		end
+	end
+	record.chain, record.chainOf = connections, nodes
+end
+
 local function forget(record)
+	record.dead = true
+	unwatchChain(record)
 	if registry.icons[record.root] == record then
 		registry.icons[record.root] = nil
 		if record.view then
 			record.view = nil
 			registry.live -= 1
+			schedule() -- a ViewportFrame is free: a waiting icon on a screen gets it
 		end
 	end
 end
 
--- A 3D icon in the registry (no ViewportFrame yet: it starts with its drawn fallback). inCache: a cache owns it (it
--- takes the icon out of the tree itself); otherwise it was a direct build()
+-- The records of destroyed icons go, whatever their events did
+local function sweep()
+	for root, record in pairs(registry.icons) do
+		if record.dead or gone(root) then
+			forget(record)
+		end
+	end
+end
+
+-- The drawn fallback's shapes for a recipe: worked out once per icon key (a creature's model is built only then)
+local function flatFor(art, recipe, deps)
+	local shapes = flatRecipes[recipe]
+	if not shapes then
+		shapes = IconVisuals.flatShapes(art, recipe, deps)
+		flatRecipes[recipe] = shapes
+		registry.recipes += 1
+	end
+	return shapes
+end
+
+local function buildFlat(root, art, recipe, size, deps)
+	registry.flats += 1
+	local layer = make("Frame", { Name = "Flat", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 3, Parent = root })
+	local shapes = flatFor(art, recipe, deps)
+	for i, shape in ipairs(shapes) do
+		drawShape(layer, art, shape, size, art.Style.outline, 3 + i)
+	end
+	for i, shape in ipairs(shapes) do
+		drawShape(layer, art, shape, size, 0, 4 + #shapes + i)
+	end
+	return layer
+end
+
+-- A 3D icon in the registry, with no ViewportFrame and no drawing yet (the allocation pass gives it one or the other).
+-- inCache: a cache owns it; otherwise it was a direct build(), a hero
 local function register(root, art, recipe, size, deps, inCache)
 	registry.serial += 1
-	local record = { root = root, art = art, recipe = recipe, size = size, deps = deps, serial = registry.serial, used = registry.clock, inCache = inCache }
+	local record = { root = root, art = art, recipe = recipe, size = size, deps = deps, serial = registry.serial, used = registry.clock,
+		inCache = inCache, hero = not inCache }
 	registry.icons[root] = record
 	root:SetAttribute("Fallback", true)
-	buildFlat(root, art, recipe, size, deps)
 	watch(root, function()
 		forget(record)
 	end)
+	root.AncestryChanged:Connect(schedule) -- taken out or put back: room may have freed, or it may get its ViewportFrame
 	return record
 end
 
 -- Gives a record its ViewportFrame (on) or takes it away for the drawn fallback (off). The root is never re-parented.
 local function setView(record, on)
 	local root = record.root
-	if gone(root) then
+	if record.dead or gone(root) then
 		forget(record)
 		return
 	end
@@ -571,7 +725,7 @@ local function setView(record, on)
 		if view then
 			local flat = root:FindFirstChild("Flat")
 			if flat then
-				flat:Destroy()
+				destroy(flat)
 			end
 			record.view = view
 			registry.live += 1
@@ -582,37 +736,43 @@ local function setView(record, on)
 		local view = record.view
 		record.view = nil
 		registry.live -= 1
-		view:Destroy()
+		record.droppedAt = IconVisuals.now()
+		unwatchChain(record)
+		destroy(view)
 		root:SetAttribute("Fallback", true)
-		-- A direct icon out of the tree may be in a destroyed card: draw its fallback once it is on a screen again
-		if root.Parent == nil and not record.inCache then
-			record.flatLater = true
-		elseif not root:FindFirstChild("Flat") then
+		-- its drawing at once, in or out of the tree (it is alive: checked above), so it is never a bare plate
+		if not root:FindFirstChild("Flat") then
 			buildFlat(root, record.art, record.recipe, record.size, record.deps)
 		end
 	end
 end
 
--- Gives a ViewportFrame to `wanted` (records, most important first), then to every other 3D icon on a screen that
--- shows its fallback (most recently seen first), taking it from icons that are not on a screen when the cap is reached
-local function allocate(art, wanted)
+-- The allocation pass. wanted: records asked for now (most important first). Then every other 3D icon on a screen
+-- that shows its fallback (most recently seen first). Heroes go first; a record whose ViewportFrame was taken less
+-- than REBUILD_SECONDS ago waits (not a hero). Every icon of the pass without a ViewportFrame shows its drawing.
+function allocate(art, wanted)
+	registry.art = art
+	sweep()
 	local cap = art.Style.viewportCap
-	local liveUsed, keep, byKey, keys, asked = {}, {}, {}, {}, {}
+	local now = IconVisuals.now()
+	local liveUsed, keep, heroes, byKey, asked, order = {}, {}, {}, {}, {}, {}
 	for root, record in pairs(registry.icons) do
-		if gone(root) then
-			forget(record)
-		elseif record.view then
+		if record.view then
 			liveUsed[record.serial] = record.used
 			byKey[record.serial] = record
 			if shown(root) then
-				keep[record.serial] = true -- on a screen in another window or card: never taken
+				keep[record.serial] = true -- on a screen in another window or card: never taken by a list icon
 			end
+		end
+		if record.hero then
+			heroes[record.serial] = true
 		end
 	end
 	for _, record in ipairs(wanted) do
-		byKey[record.serial] = record
-		asked[record] = true
-		table.insert(keys, record.serial)
+		if not record.dead and not asked[record] then
+			asked[record] = true
+			table.insert(order, record)
+		end
 	end
 	local others = {}
 	for root, record in pairs(registry.icons) do
@@ -627,54 +787,72 @@ local function allocate(art, wanted)
 		return a.serial < b.serial
 	end)
 	for _, record in ipairs(others) do
-		byKey[record.serial] = record
-		table.insert(keys, record.serial)
+		table.insert(order, record)
 	end
-	local todo = IconVisuals.plan(liveUsed, keys, cap, keep)
+	local rank = {}
+	for i, record in ipairs(order) do
+		rank[record] = i
+	end
+	table.sort(order, function(a, b)
+		if a.hero ~= b.hero then
+			return a.hero
+		end
+		return rank[a] < rank[b]
+	end)
+	local keys = {}
+	for _, record in ipairs(order) do
+		byKey[record.serial] = record
+		local waiting = record.droppedAt ~= nil and now - record.droppedAt < IconVisuals.REBUILD_SECONDS
+		if record.view or record.hero or not waiting then
+			table.insert(keys, record.serial)
+		end
+	end
+	local todo = IconVisuals.plan(liveUsed, keys, cap, keep, heroes)
 	for _, key in ipairs(todo.drop) do
 		setView(byKey[key], false)
 	end
 	for _, key in ipairs(todo.make) do
 		setView(byKey[key], true)
 	end
-	for _, key in ipairs(todo.wait) do
-		local record = byKey[key]
-		if record.flatLater and not record.view and not gone(record.root) and shown(record.root) then
-			record.flatLater = nil
+	for _, record in ipairs(order) do
+		if not record.view and not record.dead and not gone(record.root) and not record.root:FindFirstChild("Flat") then
 			buildFlat(record.root, record.art, record.recipe, record.size, record.deps)
+		end
+	end
+	for _, record in pairs(registry.icons) do
+		if record.view then
+			watchChain(record)
 		end
 	end
 end
 
 -- How the registry stands: { live = ViewportFrames that exist, icons = 3D icons registered, made = ViewportFrames built
--- since the start }
+-- since the start, recipes = fallback recipes worked out, flats = fallback drawings built, promotions = passes run on
+-- their own }
 function IconVisuals.stats()
+	sweep()
 	local icons = 0
-	for root, record in pairs(registry.icons) do
-		if gone(root) then
-			forget(record)
-		else
-			icons += 1
-		end
+	for _ in pairs(registry.icons) do
+		icons += 1
 	end
-	return { live = registry.live, icons = icons, made = registry.made }
+	return { live = registry.live, icons = icons, made = registry.made, recipes = registry.recipes, flats = registry.flats, promotions = registry.promotions }
 end
 
 -- One icon, in a Frame named Icon that fills its parent (a card's icon slot). size = the slot's pixels (56 or 72 at
 -- phone size): it only sets the line widths, everything else scales with the slot. A 3D icon goes through the
--- registry (the cap): it gets a ViewportFrame if there is room, or its drawn fallback until there is.
+-- registry (the cap) as a hero: it gets a ViewportFrame if there is room (or takes one from a list icon), or its drawn
+-- fallback until there is.
 function IconVisuals.build(parent, art, group, key, size, deps)
 	local recipe = art[group] and art[group][key]
 	if not recipe or (parent ~= nil and gone(parent)) then -- never build into a destroyed card
 		return nil
 	end
 	local root = newRoot(art, group, key, recipe, size)
+	root.Parent = parent
 	if recipe.kind ~= "ui" then
 		registry.clock += 1
-		local record = register(root, art, recipe, size, deps)
-		allocate(art, { record })
+		allocate(art, { register(root, art, recipe, size, deps, false) })
 	end
-	root.Parent = parent
 	return root
 end
 
@@ -700,7 +878,7 @@ function IconVisuals.newCache(art, deps)
 	return { art = art, deps = deps, serial = 0, ids = setmetatable({}, { __mode = "k" }), slots = {}, built = 0 }
 end
 
--- Forgets a slot (its card was destroyed, or it shows something else now) and destroys its icon
+-- Forgets a slot (its card was destroyed, or it shows something else now) and destroys its icon (marked first)
 local function dropSlot(cache, id)
 	local entry = cache.slots[id]
 	if not entry then
@@ -710,20 +888,17 @@ local function dropSlot(cache, id)
 	if entry.frame and cache.ids[entry.frame] == id then
 		cache.ids[entry.frame] = nil
 	end
-	local record = registry.icons[entry.root]
-	if record then
-		forget(record)
+	if entry.record then
+		forget(entry.record)
 	end
-	if not gone(entry.root) then
-		entry.root:Destroy()
-	end
+	destroy(entry.root)
 end
 
 -- slots: the card slots on screen now, most important first: { frame = <the slot Frame>, group = "Office", key = "Desk",
--- size = 56 }. Builds only what these need, puts each icon in its slot, keeps icons that left the screen (out of the
--- game tree) for later, and never lets the client have more than the cap of 3D icons: past it a slot shows its drawn
--- fallback until a ViewportFrame can be taken from an icon that is not on screen. A slot whose Frame was destroyed is
--- forgotten. Returns the number of ViewportFrames on the whole client.
+-- size = 56 }. Builds only what these need, puts each icon in its slot (only a slot in a GUI tree), keeps icons that
+-- left the screen (out of the game tree) for later, and never lets the client have more than the cap of 3D icons:
+-- past it a slot shows its drawn fallback until a ViewportFrame can be taken from an icon that is not on screen. A
+-- slot whose Frame was destroyed is forgotten. Returns the number of ViewportFrames on the whole client.
 function IconVisuals.show(cache, slots)
 	registry.clock += 1
 	local art = cache.art
@@ -737,7 +912,7 @@ function IconVisuals.show(cache, slots)
 	for _, slot in ipairs(slots) do
 		local frame = slot.frame
 		local recipe = art[slot.group] and art[slot.group][slot.key]
-		if not gone(frame) and recipe then
+		if recipe and not gone(frame) and attached(frame) then
 			local id = cache.ids[frame]
 			if not id then
 				cache.serial += 1

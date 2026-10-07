@@ -35,7 +35,7 @@ Each item is one commit, pushed right after (`git push -u origin shop-build`), a
 An independent review of `shop-build` at `372e998` found no confirmed blocker and ten items. Each was checked first; the section "Review fixes" below says applied or rejected, with the evidence. One commit per item.
 
 - [x] 4.0 Claim the five files in `CONTRIBUTING.md` (rows only: ShopClient, ShopLayout, tools/shop_ux_test.py, docs/STUDIO_SYNC_SHOP.md, these notes; free on this branch and on `customize-pr1`, `task-needs-desk`, `hud-cash`, `world-icons-pass`, `integration-1`), then this checklist
-- [ ] 4.1 Item 0, base: a plain merge of `origin/world-icons-pass` (no rebase), the four suites after it
+- [x] 4.1 Item 0, base: a plain merge of `origin/world-icons-pass` at `4c052c7` (no rebase, no conflict), the four suites after it: daily_test 1,780 + 20 of 20, shop_ux_test 5,092 + 67 of 67, icon_test 371 + 68 of 68, world_test 353 + 82 of 82 (the `--review` modes of world_test and icon_test fail by design on this branch, only on "no existing file is edited but CONTRIBUTING.md" and "tools/daily_test.py ... is untouched")
 - [ ] 4.2 Item 1, HUD overlap: the shop window draws above the HUD buttons (DisplayOrder); shop_ux_test models the HUD buttons
 - [ ] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
 - [ ] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
