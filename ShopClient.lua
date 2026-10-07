@@ -1021,7 +1021,8 @@ local function showRung(parts, row, hero, width)
 	parts.progress.Visible = isHero
 	local message = parts.statusText
 	if isHero then
-		parts.info.Text = hero.info
+		-- "+$40 every second", or "+$40/s" where that does not fit its box on one line at 16 px (the 140 px box at 568 x 320)
+		parts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort
 		place(parts.bar, R.bar)
 		parts.fill.Size = UDim2.fromScale(hero.fill, 1)
 		parts.progress.Text = hero.progress

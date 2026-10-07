@@ -40,7 +40,7 @@ An independent review of `shop-build` at `372e998` found no confirmed blocker an
 - [x] 4.3 Item 2, scroll jump: the Office jumps to the hero only after a buy, a hero change or a Retry; a resize keeps the player's place
 - [x] 4.4 Item 3, message at close: a status message still showing moves to the toast when the shop closes
 - [x] 4.5 Item 4, toast overflow: the toast holds at most 2 lines and ends with an ellipsis, in its 48 px lane; every server text tested
-- [ ] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
+- [x] 4.6 Item 5, the hero's info line at 568 x 320: a shorter "+$40/s" when its box is narrow
 - [ ] 4.7 Item 6, Studio's fifth tab in portrait: the tab labels fit
 - [ ] 4.8 Item 7, the tutorial strip's text limit: `ShopLayout.stripMaxChars`, the limits in docs/STUDIO_SYNC_SHOP.md, the doc's wrong sentence
 - [ ] 4.9 Item 8, daily_test's "Locked" check: which shop_ux_test mutants cover it
@@ -163,6 +163,14 @@ The container had no `luau`: the official release `luau-ubuntu.zip` (github.com/
 | ShopClient.lua:717 (the client's own) | "Couldn't open the purchase. Please try again." | 45 | 3 / 1 |
 
 Everything else fits 2 lines at 320 x 568 (the SAVE_BACK_TEXT, the "unlocked!" lines, every Cash pack up to $999,999,999,999, the refusals). At 320 x 568 a cut message reads, for example, "Saving is having trouble right now..." or "Roblox is slow to confirm Extra..."; the whole text shows in the window's line if the shop opens while the toast is up. The client's own text is in this branch's file, but its wording is the owner's: listed, not changed.
+
+### Item 5: the hero's info line at 568 x 320 (applied)
+
+**Checked:** true, and at every top bar, not only 58: at 568 x 320 the pages are 382 px wide (cards 372), so the landscape hero's info box is 372 - 92 - 120 - 20 = 140 x 20 px whatever the bar. "+$15 every second" and "+$40 every second" measure 148 px and "+$120 every second" 158 px at 16 px (the tests' estimate), so they wrapped onto the bar. A probe of every hero line (name, info, bar text, time) at every phone, top bar and upgrade found nothing else that does not fit.
+
+**Fix:** `ShopLayout.ladder` gives the hero a short form too, `infoShort = "+$40/s"`; ShopClient shows `info` ("+$40 every second") when it fits its box on one line at 16 px (`textWidth`, Roblox's measure) and `infoShort` otherwise. Only 568 x 320 uses the short form (Server Rack, Whiteboard and Neon Logo; "+$1/s" ... "+$5/s" fit the long form there).
+
+**Tests:** "office hero lines" at every phone and top bar, every hero (Desk to Neon Logo): "every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)" and "what it earns is +$X every second where that fits, +$X/s only where it does not"; the ladder's own check of `infoShort`. **Mutants (3):** always the long form, always the short form, a short form as long as the long one.
 
 ## Deviations from docs/SHOP_UX_PROPOSAL.md (and why)
 

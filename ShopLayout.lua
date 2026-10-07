@@ -262,7 +262,8 @@ end
 --   summary = { title = "3 of 6 bought", info = "+$8/s" } (nil while none is owned),
 --   banner = { title = "Office complete", info = ... } (only when complete),
 --   rows[i] = { state = "owned" | "next" | "locked", info, button (nil: no button), color = "owned" | "buy" | "disabled" },
---   hero = { index, name, info, fill, progress, time, button, color, action, hint } for the next upgrade, where action
+--   hero = { index, name, info, infoShort, fill, progress, time, button, color, action, hint } for the next upgrade (info
+--   "+$40 every second", infoShort "+$40/s" for a box too narrow for info on one line), where action
 --   is "buy" (the only state that sends a request), "short" (not enough Cash: nothing is sent) or "wait"
 function ShopLayout.ladder(upgrades, owned, cash, income, money, bought, busy)
 	upgrades = upgrades or {}
@@ -298,7 +299,8 @@ function ShopLayout.ladder(upgrades, owned, cash, income, money, bought, busy)
 	if i then
 		local upg = upgrades[i]
 		local cost = math.max(0, finite(upg.cost, 0))
-		local H = { index = i, name = tostring(upg.name), info = "+" .. money(finite(upg.income, 0)) .. " every second" }
+		local earns = "+" .. money(finite(upg.income, 0))
+		local H = { index = i, name = tostring(upg.name), info = earns .. " every second", infoShort = earns .. "/s" }
 		H.fill = ShopLayout.barFill(cash, cost)
 		H.progress = cost == 0 and "Free" or (money(math.min(cash, cost)) .. " / " .. money(cost))
 		H.time = ShopLayout.timeText(cash, cost, income)

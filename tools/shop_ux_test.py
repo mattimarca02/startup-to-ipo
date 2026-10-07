@@ -1329,6 +1329,7 @@ do
 					local wantTime = (cash < cost and income > 0) and ("about " .. math.ceil((cost - cash) / income) .. " s") or nil
 					check(label .. ": the time is about N s from the Income, none when the Cash is there or the Income is 0", H and H.time == wantTime, H and H.time)
 					check(label .. ": the hero says what it earns every second", H and H.info == "+" .. money(nextUpg.income) .. " every second" and H.index == k + 1)
+					check(label .. ": and has the short form for a narrow box (+$X/s)", H and H.infoShort == "+" .. money(nextUpg.income) .. "/s", H and H.infoShort)
 					check(label .. ": not complete while a rung is left", not S.complete and S.banner == nil)
 				end
 			end
@@ -2358,6 +2359,30 @@ for _, case in ipairs({ { 30, true }, { 10, false } }) do
 	noErrors(label)
 end
 
+-- The hero's lines fit their boxes on one line at 16 px, at every phone and top bar: "+$40 every second" where it
+-- fits, "+$40/s" in a narrow box (568 x 320) ----------------------------------------------------------------------
+for _, size in ipairs(SIZES) do
+	for _, bar in ipairs(BARS) do
+		local label = "office hero lines " .. size[1] .. "x" .. size[2] .. "/" .. bar
+		local over, form
+		for k = 0, #UPGRADES - 1 do
+			local w = startOffice({ w = size[1], h = size[2], bar = bar, owned = k, cash = 1, income = 1 })
+			local hero = heroOf(w)
+			for _, name in ipairs({ "ItemName", "Info", "Progress", "Time" }) do
+				local l = kid(hero, name)
+				if l and l.Visible and l.Text ~= "" and measure(l.Text, 16, l.Font, math.huge).X > rectOf(l).w then
+					over = "Office" .. (k + 1) .. " " .. name .. " '" .. l.Text .. "' " .. measure(l.Text, 16, l.Font, math.huge).X .. " px in " .. rectOf(l).w
+				end
+			end
+			local info, H = kid(hero, "Info"), ladderFor(w).hero
+			local long = measure(H.info, 16, prop(info, "Font", Enum.Font.Gotham), math.huge).X <= rectOrEmpty(info).w
+			if prop(info, "Text") ~= (long and H.info or H.infoShort) then form = "Office" .. (k + 1) .. ": " .. tostring(prop(info, "Text")) end
+		end
+		check(label .. ": every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)", over == nil, over)
+		check(label .. ": what it earns is +$X every second where that fits, +$X/s only where it does not", form == nil, form)
+	end
+end
+
 -- The hero shows whole above the TutorialStrip, on every phone and top bar (the strip was up when it became the hero:
 -- a strip that appears later never moves the page, see "office scroll") ------------------------------------------
 for _, size in ipairs(SIZES) do
@@ -2976,6 +3001,14 @@ MUTANTS = [
      "opening the shop shows the whole message in the window's line"),
     ("the toast not cut again on a new width", C, "\tif toast.Visible then\n\t\ttoast.Text = toastFace() -- cut again for the new width\n\tend\n", "",
      "a new screen size cuts the toast again for its new width"),
+    ("the hero's info always the long form (it wraps onto the bar at 568x320)", C,
+     "\t\tparts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort\n", "\t\tparts.info.Text = hero.info\n",
+     "every line of the hero card fits its box on one line at 16 px"),
+    ("the hero's info always the short form", C,
+     "\t\tparts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort\n", "\t\tparts.info.Text = hero.infoShort\n",
+     "what it earns is +$X every second where that fits"),
+    ("the short form as long as the long one", L, 'infoShort = earns .. "/s" }', 'infoShort = earns .. " every second" }',
+     "every line of the hero card fits its box on one line at 16 px"),
     ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
      "after the Retry the hero shows whole"),
 ]
