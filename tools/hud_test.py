@@ -1533,7 +1533,7 @@ def coupling_checks(core_text, client_text, others):
         hits = [a for p, a in set_attribute_calls(k, b) if sets_upgrade_name(a)]
         if hits:
             elsewhere[fname] = hits
-    add("no other script sets Upgrade1 .. UpgradeN (%d scripts looked at)" % len(others), not elsewhere, "%s. %s" % (elsewhere, REVIEW_HINT))
+    add("no other script sets Upgrade1 .. UpgradeN", not elsewhere, "%d scripts looked at: %s. %s" % (len(others), elsewhere or "none", REVIEW_HINT))
 
     # the order inside the load (onPlayerAdded): saved Cash, income, offline earnings, THEN refreshSign, THEN data.ready
     s, e = function_span(spans, "onPlayerAdded")
@@ -1604,8 +1604,8 @@ def coupling_checks(core_text, client_text, others):
     table = re.search(r"\blocal\s+UPGRADES\s*=\s*\{(.*?)\n\}", keep, re.S)
     count = len(re.findall(r"""\bname\s*=\s*["']""", table.group(1))) if table else 0
     number = re.fullmatch(r"Upgrade(\d+)", attr.group(2)) if attr else None
-    add("IpoClient's LOADED_ATTRIBUTE is one of the attributes publishUpgrades sets (Upgrade1 .. Upgrade%d)" % count,
-        bool(number) and 1 <= int(number.group(1)) <= count, "%s. %s" % (attr.group(2) if attr else None, REVIEW_HINT))
+    add("IpoClient's LOADED_ATTRIBUTE is one of the attributes publishUpgrades sets (Upgrade1 to the last UPGRADES entry)",
+        bool(number) and 1 <= int(number.group(1)) <= count, "%s, TycoonCore sets Upgrade1 .. Upgrade%d. %s" % (attr.group(2) if attr else None, count, REVIEW_HINT))
     wait = re.search(r"\blocal\s+MONEY_WAIT\s*=\s*([\d.]+)", ck)
     money_wait = float(wait.group(1)) if wait else 0
     add("IpoClient's safety delay MONEY_WAIT is at least %d s (OWNER DEFAULT)" % MIN_MONEY_WAIT, money_wait >= MIN_MONEY_WAIT, money_wait)
@@ -1617,8 +1617,9 @@ def coupling_checks(core_text, client_text, others):
     if tries and reread and retry and reread_wait:
         per_read = sum(2 * a for a in range(1, int(tries.group(1))))
         scripted = 2 * per_read + float(reread.group(1))
-        add("IpoClient's MONEY_WAIT (%g s) covers the worst join: %g s of waits TycoonCore adds (two reads x %g s of retries + the %g s re-read wait) + %d s for Roblox" % (
-            money_wait, scripted, per_read, float(reread.group(1)), DATASTORE_ALLOWANCE), scripted + DATASTORE_ALLOWANCE <= money_wait, REVIEW_HINT)
+        add("IpoClient's MONEY_WAIT covers the worst join: the waits TycoonCore adds (two reads' retries + the re-read wait) + %d s for Roblox" % DATASTORE_ALLOWANCE,
+            scripted + DATASTORE_ALLOWANCE <= money_wait,
+            "MONEY_WAIT %g s; waits %g s (two reads x %g s of retries + the %g s re-read wait) + %d s. %s" % (money_wait, scripted, per_read, float(reread.group(1)), DATASTORE_ALLOWANCE, REVIEW_HINT))
     else:
         add("the waits TycoonCore adds to a join can be read (LOAD_TRIES, task.wait(attempt * 2) in load, REREAD_WAIT_SECONDS in onPlayerAdded)", False, REVIEW_HINT)
     return out
@@ -1767,6 +1768,127 @@ end)''', ''),
 ]
 
 
+# --- mutation runs on the coupling: break TycoonCore, IpoServer or IpoClient on purpose; each break must be caught by a
+# NAMED coupling check (never by a crash), and harmless edits (comments, strings, indentation) must stay green ----------
+READY_LINE = "\tdata.ready = true -- the shop waits for this before granting purchases\n"
+REFRESH_THEN_READY = "\trefreshSign(player)\n" + READY_LINE
+BEFORE_SETUP = "\tlocal lastSeen = nil\n\tlocal setupOk, setupError = pcall(function()\n"
+BEFORE_OFFLINE = "\t-- Offline earnings: the startup keeps making money while you're away\n\tif lastSeen then\n"
+AFTER_PLAYERDATA = "\tplayerData[player] = data\n\n\tlocal floor = "
+AFTER_LEADERSTATS = "\tincome.Name = \"Income\"\n\tincome.Parent = leaderstats\n"
+READY_GUARD = "\tif not data.ready then\n\t\treturn nil, \"Still loading, try again in a moment\" -- loading, or an IPO is being saved\n\tend\n"
+BUY_CHECK = "\tlocal i, reason = checkUpgradePurchase(UPGRADES, data, data.cash.Value, id, os.clock())\n"
+CORE, CLIENT_FILE, IPO_SERVER = "TycoonCore.lua", "IpoClient.lua", "IpoServer.lua"
+
+# (name, file, [(old, new), ...]): each old must be in the file exactly once
+COUPLING_MUTATIONS = [
+    ("refreshSign moved before the saved Cash is written", CORE, [(REFRESH_THEN_READY, READY_LINE), (BEFORE_SETUP, "\trefreshSign(player)\n" + BEFORE_SETUP)]),
+    ("refreshSign moved before the offline earnings", CORE, [(REFRESH_THEN_READY, READY_LINE), (BEFORE_OFFLINE, "\trefreshSign(player)\n" + BEFORE_OFFLINE)]),
+    ("refreshSign moved after data.ready", CORE, [(REFRESH_THEN_READY, READY_LINE + "\trefreshSign(player)\n")]),
+    ("a new refreshSign call at player join, before the load", CORE, [(AFTER_PLAYERDATA, "\trefreshSign(player)\n\n\tlocal floor = ")]),
+    ("the Upgrade1 attribute set when leaderstats are created", CORE, [(AFTER_LEADERSTATS, AFTER_LEADERSTATS + "\tplayer:SetAttribute(\"Upgrade1\", false)\n")]),
+    ("the Upgrade attribute built by concatenation at join", CORE, [(AFTER_LEADERSTATS, AFTER_LEADERSTATS + "\tplayer:SetAttribute(\"Upgrade\" .. 1, false)\n")]),
+    ("refreshSign removed from the load path", CORE, [(REFRESH_THEN_READY, READY_LINE)]),
+    ("publishUpgrades called directly before the saved Cash is written", CORE, [(BEFORE_SETUP, "\tpublishUpgrades(player)\n" + BEFORE_SETUP)]),
+    ("publishUpgrades called directly before the offline earnings", CORE, [(BEFORE_OFFLINE, "\tpublishUpgrades(player)\n" + BEFORE_OFFLINE)]),
+    ("publishUpgrades called directly after data.ready", CORE, [(REFRESH_THEN_READY, REFRESH_THEN_READY + "\tpublishUpgrades(player)\n")]),
+    ("data.ready set at the start of the join, before the saved Cash", CORE, [(AFTER_PLAYERDATA, "\tdata.ready = true\n\n\tlocal floor = ")]),
+    ("refreshSign called from the PlayerRemoving handler", CORE, [("\tsaveOnLeave(player)\n\tlocal data = playerData[player]\n", "\tsaveOnLeave(player)\n\trefreshSign(player)\n\tlocal data = playerData[player]\n")]),
+    ("refreshSign called from the income loop", CORE, [("\t\t\t\tsyncRoom(data)\n", "\t\t\t\tsyncRoom(data)\n\t\t\t\trefreshSign(player)\n")]),
+    ("refreshSign handed to a module through core", CORE, [("OnboardingServer.init({\n", "OnboardingServer.init({\n\trefreshSign = refreshSign,\n")]),
+    ("checkUpgradePurchase's data.ready guard removed (a purchase could publish before the load)", CORE, [(READY_GUARD, "")]),
+    ("buyUpgrade calls refreshSign before it asks checkUpgradePurchase", CORE, [(BUY_CHECK, "\trefreshSign(player)\n" + BUY_CHECK)]),
+    ("the server waits 30 s for the second read (longer than the client's delay)", CORE, [("local REREAD_WAIT_SECONDS = 7\n", "local REREAD_WAIT_SECONDS = 30\n")]),
+    ("the server tries the read 5 times instead of 3", CORE, [("local LOAD_TRIES = 3 --", "local LOAD_TRIES = 5 --")]),
+    ("another script sets Upgrade1 (IpoServer.setupPlayer)", IPO_SERVER, [("function IpoServer.setupPlayer(player, data, savedIpo, legacyValuation)\n", "function IpoServer.setupPlayer(player, data, savedIpo, legacyValuation)\n\tplayer:SetAttribute(\"Upgrade1\", false)\n")]),
+    ("IpoServer's onAction no longer refuses while not data.ready", IPO_SERVER, [("if not ipo or not data.ready then", "if not ipo then")]),
+    ("goPublic (the IPO commit) called from a second place in IpoServer", IPO_SERVER, [("\tipo.shares -= cost\n\tipo.perks[perk.key] = level + 1\n", "\tgoPublic(player, ipo.count + 1)\n\tipo.shares -= cost\n\tipo.perks[perk.key] = level + 1\n")]),
+    ("IpoClient waits for a different attribute (IpoCount)", CLIENT_FILE, [('local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "IpoCount"')]),
+    ("IpoClient waits for an Upgrade attribute the server never sets (Upgrade7)", CLIENT_FILE, [('local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "Upgrade7"')]),
+    ("IpoClient's 30 s safety delay changed to 3 s", CLIENT_FILE, [("local MONEY_WAIT = 30", "local MONEY_WAIT = 3")]),
+    ("IpoClient's 30 s safety delay changed to 25 s", CLIENT_FILE, [("local MONEY_WAIT = 30", "local MONEY_WAIT = 25")]),
+]
+
+# Harmless edits: every coupling check must stay green. (name, function from the TycoonCore text to the new text)
+COUPLING_CONTROLS = [
+    ("comments, a block comment and a string that all mention refreshSign, data.ready and Upgrade1, before the Cash write", lambda t: t.replace(
+        BEFORE_SETUP, "\t-- refreshSign(player) data.ready = true cash.Value = 0 player:SetAttribute(\"Upgrade1\", true)\n\t--[[ refreshSign(player)\n\tdata.ready = true ]]\n"
+        "\tlocal note = \"refreshSign(player) end data.ready = true player:SetAttribute('Upgrade1', true)\"\n" + BEFORE_SETUP)),
+    ("two spaces instead of a tab on every line, and an empty line after every line", lambda t: t.replace("\t", "  ").replace("\n", "\n\n")),
+    ("spaces inside the calls: refreshSign (player) and a spaced declaration", lambda t: t.replace("refreshSign(player)", "refreshSign (player)").replace("local function refreshSign(player)", "local function  refreshSign  (player)")),
+]
+
+
+def coupling_mutation_runs(client_text, detail=False):
+    """Run COUPLING_MUTATIONS and COUPLING_CONTROLS. Returns the exit code part (0 or 1)."""
+    code = 0
+    texts = dict(other_scripts())
+    texts[CORE] = read(CORE)
+    texts[CLIENT_FILE] = client_text
+
+    def checks(files):
+        """The coupling checks on a set of files: TycoonCore, IpoClient and the other scripts."""
+        return coupling_checks(files[CORE], files[CLIENT_FILE], {k: v for k, v in files.items() if k not in (CORE, CLIENT_FILE)})
+
+    caught = 0
+    for name, target, pairs in COUPLING_MUTATIONS:
+        mutated = dict(texts)
+        applied = True
+        for old, new in pairs:
+            if mutated[target].count(old) != 1:
+                print("MUTATION NOT APPLIED (%d matches in %s): %s" % (mutated[target].count(old), target, name))
+                applied = False
+                code = 1
+                break
+            mutated[target] = mutated[target].replace(old, new)
+        if not applied:
+            continue
+        try:
+            result = checks(mutated)
+        except Exception as error:  # a crash is never a catch
+            print("MUTATION CRASHED (not a named check): %s: %r" % (name, error))
+            code = 1
+            continue
+        failed = [n for n, ok, x in result if not ok]
+        if not failed:
+            print("MUTATION NOT CAUGHT: " + name)
+            code = 1
+            continue
+        caught += 1
+        print("caught: %s\n        by: %s%s" % (name, failed[0], " (+%d more)" % (len(failed) - 1) if len(failed) > 1 else ""))
+        if detail:
+            for n in failed[1:]:
+                print("            %s" % n)
+    print("Coupling mutations: %d of %d broken rules caught by a named check" % (caught, len(COUPLING_MUTATIONS)))
+    if caught != len(COUPLING_MUTATIONS):
+        code = 1
+    green = 0
+    for name, edit in COUPLING_CONTROLS:
+        edited = dict(texts)
+        edited[CORE] = edit(texts[CORE])
+        if edited[CORE] == texts[CORE]:
+            print("CONTROL NOT APPLIED: " + name)
+            code = 1
+            continue
+        try:
+            result = checks(edited)
+        except Exception as error:
+            print("CONTROL CRASHED: %s: %r" % (name, error))
+            code = 1
+            continue
+        failed = [n for n, ok, x in result if not ok]
+        if failed:
+            print("CONTROL TURNED RED (a harmless edit must not): %s\n        by: %s" % (name, failed[0]))
+            code = 1
+        else:
+            green += 1
+            print("green: " + name)
+    print("Coupling controls: %d of %d harmless edits kept every check green" % (green, len(COUPLING_CONTROLS)))
+    if green != len(COUPLING_CONTROLS):
+        code = 1
+    return code
+
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -1815,6 +1937,8 @@ def main():
                     print("        (only by a test that stopped, not by a rule: look at it)")
         print("HUD bar mutations: %d of %d broken rules caught by a named check" % (caught, len(MUTATIONS)))
         if caught != len(MUTATIONS):
+            code = 1
+        if coupling_mutation_runs(client, "--coupling-detail" in sys.argv):
             code = 1
     return code
 
