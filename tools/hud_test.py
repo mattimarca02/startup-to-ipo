@@ -1346,6 +1346,289 @@ def doc_checks():
     ]
 
 
+# --- coupling to TycoonCore (docs/STUDIO_SYNC_HUD.md, "What this rule depends on") -------------------------------
+# The bar keeps Cash and Income empty until the player attribute LOADED_ATTRIBUTE (Upgrade1) appears. That is only a
+# "the save is loaded" signal because TycoonCore sets it, in refreshSign -> publishUpgrades, after the saved Cash is
+# written, after the income and the offline earnings, and before data.ready. Nothing else ties the two files together,
+# so these checks read the REAL TycoonCore.lua (and the other scripts) as text and fail, with a name, if that changes.
+# They look at the order of source positions inside onPlayerAdded and at a list of the allowed call sites of
+# refreshSign; comments, string contents, whitespace and indentation do not matter.
+REVIEW_HINT = "re-review the HUD loading rule (IpoClient LOADED_ATTRIBUTE, docs/STUDIO_SYNC_HUD.md 'What this rule depends on'), then update tools/hud_test.py"
+# Where TycoonCore may call refreshSign today: the load (onPlayerAdded, right before data.ready), a purchase (buyUpgrade,
+# after checkUpgradePurchase's data.ready guard) and the IPO commit (commitIpo, which only runs from IpoServer's
+# data.ready-guarded onAction). A new call site fails the check "refreshSign is called from exactly ...".
+REFRESH_SIGN_SITES = ["buyUpgrade", "commitIpo", "onPlayerAdded"]
+# MONEY_WAIT must cover the waits the server script adds to a join (a read's retries, the re-read wait, the second read's
+# retries) plus this many seconds for Roblox's own DataStore answers: the owner default's worst case is about 29 s, and
+# TycoonCore's own waits are 19 s today.
+DATASTORE_ALLOWANCE = 10
+MIN_MONEY_WAIT = 30  # OWNER DEFAULT: the client's safety delay stays 30 s
+
+
+def lua_views(text):
+    """(comments blanked, comments and string contents blanked). Both have the length of the text, so a position in one is
+    the same place in the other. Newlines are kept."""
+    def pad(s):
+        return re.sub(r"[^\n]", " ", s)
+
+    keep, blank = [], []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if text.startswith("--", i):
+            m = re.match(r"--\[(=*)\[", text[i:i + 40])
+            if m:
+                close = "]" + m.group(1) + "]"
+                j = text.find(close, i + len(m.group(0)))
+                j = n if j < 0 else j + len(close)
+            else:
+                j = text.find("\n", i)
+                j = n if j < 0 else j
+            keep.append(pad(text[i:j]))
+            blank.append(pad(text[i:j]))
+            i = j
+        elif ch in "\"'":
+            j = i + 1
+            while j < n and text[j] != ch and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+            j = min(j + 1, n)
+            s = text[i:j]
+            keep.append(s)
+            blank.append(s[0] + pad(s[1:-1]) + s[-1] if len(s) >= 2 else s)
+            i = j
+        else:
+            m = re.match(r"\[(=*)\[", text[i:i + 40]) if ch == "[" else None
+            if m:
+                close = "]" + m.group(1) + "]"
+                j = text.find(close, i + len(m.group(0)))
+                j = n if j < 0 else j + len(close)
+                keep.append(text[i:j])
+                blank.append(pad(text[i:j]))
+                i = j
+            else:
+                keep.append(ch)
+                blank.append(ch)
+                i += 1
+    return "".join(keep), "".join(blank)
+
+
+def lua_functions(blank):
+    """([(name or None, start, end)], open blocks left, stray ends) for every `function ... end`. `name` is the declared
+    name (local function x, function a.b, x = function). Blocks are matched by function/if/do/repeat against end/until
+    (while and for open with their `do`); an `if` that is an expression (`x = if a then b else c`) has no `end`."""
+    spans, stack, stray = [], [], 0
+    for m in re.finditer(r"\b(function|if|do|repeat|end|until)\b", blank):
+        word = m.group(1)
+        if word in ("end", "until"):
+            if not stack:
+                stray += 1
+                continue
+            kind, start, name = stack.pop()
+            if kind == "function":
+                spans.append((name, start, m.end()))
+            continue
+        name = None
+        if word == "if":
+            before = blank[:m.start()].rstrip()
+            if re.search(r"(=|\(|,|\{|\+|-|\*|/|%|\^|<|>|~|\.\.)$", before) or re.search(r"\b(return|and|or|not)$", before):
+                continue
+        if word == "function":
+            nm = re.match(r"function\s+([A-Za-z_][\w.:]*)\s*\(", blank[m.start():m.start() + 200])
+            if nm:
+                name = nm.group(1)
+            else:
+                pre = re.search(r"([A-Za-z_][\w.:]*)\s*=\s*$", blank[max(0, m.start() - 200):m.start()])
+                name = pre.group(1) if pre else None
+        stack.append((word, m.start(), name))
+    return spans, len(stack), stray
+
+
+def enclosing_function(spans, pos):
+    """The name of the innermost NAMED function around a position (an anonymous function belongs to the named one it is in)."""
+    best = None
+    for name, start, end in spans:
+        if name and start <= pos < end and (best is None or start > best[1]):
+            best = (name, start)
+    return best[0] if best else None
+
+
+def function_span(spans, name):
+    found = [(s, e) for n, s, e in spans if n == name]
+    return found[0] if found else None
+
+
+def identifier_uses(blank, name):
+    """Positions of the bare identifier `name`, except where it is being declared (`function name(`)."""
+    out = []
+    for m in re.finditer(r"(?<![\w.:])" + re.escape(name) + r"\b", blank):
+        if re.search(r"\bfunction\s+$", blank[max(0, m.start() - 20):m.start()]):
+            continue
+        out.append(m.start())
+    return out
+
+
+def set_attribute_calls(keep, blank):
+    """[(position, first argument as written)] for every :SetAttribute( call."""
+    out = []
+    for m in re.finditer(r"[:.]SetAttribute\s*\(", blank):
+        j, depth = m.end(), 0
+        while j < len(blank):
+            c = blank[j]
+            if c in "([{":
+                depth += 1
+            elif c in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif c == "," and depth == 0:
+                break
+            j += 1
+        out.append((m.start(), keep[m.end():j].strip()))
+    return out
+
+
+def sets_upgrade_name(arg):
+    """True if a SetAttribute's first argument is, or starts as, an Upgrade1 .. UpgradeN name."""
+    return bool(re.fullmatch(r"""(["'])Upgrade\d+\1""", arg) or re.match(r"""(["'])Upgrade\1\s*\.\.""", arg))
+
+
+def coupling_checks(core_text, client_text, others):
+    """(name, passed, extra) for the ties between IpoClient's loading rule and the server scripts. `others` maps a file
+    name to its text for every script but TycoonCore.lua (a stray Upgrade attribute, and the IPO commit's guard)."""
+    out = []
+
+    def add(name, cond, extra=None):
+        out.append(("coupling: " + name, bool(cond), extra))
+
+    keep, blank = lua_views(core_text)
+    spans, open_blocks, stray = lua_functions(blank)
+    need = ["onPlayerAdded", "refreshSign", "publishUpgrades", "buyUpgrade", "checkUpgradePurchase", "commitIpo", "load"]
+    missing = [n for n in need if function_span(spans, n) is None]
+    add("TycoonCore.lua has the functions the loading rule is checked on (%s)" % ", ".join(need), not missing, "missing: %s. %s" % (missing, REVIEW_HINT))
+    add("TycoonCore.lua's function/if/do/end blocks balance (the checks below read them)", open_blocks == 0 and stray == 0, "%d open, %d stray ends" % (open_blocks, stray))
+    if missing:
+        return out
+
+    # who calls refreshSign (and so, through it, publishUpgrades, which sets Upgrade1 .. Upgrade6)
+    uses = identifier_uses(blank, "refreshSign")
+    sites = sorted("%s%s" % (enclosing_function(spans, p) or "(top level)", "" if re.match(r"\s*\(", blank[p + len("refreshSign"):]) else " (not a call)") for p in uses)
+    add("refreshSign is called from exactly the load (onPlayerAdded), a purchase (buyUpgrade) and the IPO commit (commitIpo), once each", sites == REFRESH_SIGN_SITES,
+        "found %s, allowed %s. A new call site: %s" % (sites, REFRESH_SIGN_SITES, REVIEW_HINT))
+    publish_sites = [enclosing_function(spans, p) for p in identifier_uses(blank, "publishUpgrades")]
+    add("publishUpgrades is used once, by refreshSign, and nowhere else", publish_sites == ["refreshSign"], "%s. %s" % (publish_sites, REVIEW_HINT))
+
+    # where Upgrade1 .. Upgrade6 are set
+    calls = [(a, enclosing_function(spans, p)) for p, a in set_attribute_calls(keep, blank)]
+    is_literal = lambda a: re.fullmatch(r"""(["']).*\1""", a) is not None
+    stray_sets = [(a, f) for a, f in calls if f != "publishUpgrades" and (sets_upgrade_name(a) or not is_literal(a))]
+    inside = [a for a, f in calls if f == "publishUpgrades"]
+    ps, pe = function_span(spans, "publishUpgrades")
+    add("TycoonCore.lua sets an Upgrade attribute only inside publishUpgrades (nowhere else, not even at join)", not stray_sets, "%s. %s" % (stray_sets, REVIEW_HINT))
+    add("publishUpgrades sets exactly one attribute, \"Upgrade\" .. i, for every entry of UPGRADES",
+        len(inside) == 1 and re.fullmatch(r"""(["'])Upgrade\1\s*\.\.\s*i""", inside[0]) is not None
+        and re.search(r"\bfor\s+i\s*,\s*\w+\s+in\s+ipairs\(\s*UPGRADES\s*\)\s+do\b", blank[ps:pe]) is not None, "%s. %s" % (inside, REVIEW_HINT))
+    elsewhere = {}
+    for fname, text in sorted(others.items()):
+        k, b = lua_views(text)
+        hits = [a for p, a in set_attribute_calls(k, b) if sets_upgrade_name(a)]
+        if hits:
+            elsewhere[fname] = hits
+    add("no other script sets Upgrade1 .. UpgradeN (%d scripts looked at)" % len(others), not elsewhere, "%s. %s" % (elsewhere, REVIEW_HINT))
+
+    # the order inside the load (onPlayerAdded): saved Cash, income, offline earnings, THEN refreshSign, THEN data.ready
+    s, e = function_span(spans, "onPlayerAdded")
+    body = blank[s:e]
+
+    def first(pattern):
+        m = re.search(pattern, body)
+        return m.start() if m else None
+
+    p_load = first(r"\bload\s*\(\s*player\s*\)")
+    p_cash = first(r"\bcash\.Value\s*=(?!=)")
+    p_income = first(r"\bupdateIncome\s*\(\s*player\s*\)")
+    p_offline = first(r"\bcash\.Value\s*\+=")
+    p_earnings = first(r"\baddEarnings\s*\(")
+    p_ready = first(r"\bdata\.ready\s*=\s*true\b")
+    here = [p - s for p in uses if s <= p < e]
+    p_refresh = here[0] if len(here) == 1 else None
+    found = {"load(player)": p_load, "the saved Cash write (cash.Value = ...)": p_cash, "updateIncome(player)": p_income,
+             "the offline earnings (cash.Value += ...)": p_offline, "addEarnings(player, ...)": p_earnings, "data.ready = true": p_ready,
+             "refreshSign(player) (exactly once)": p_refresh}
+    absent = sorted(k for k, v in found.items() if v is None)
+    add("onPlayerAdded contains load, the saved Cash write, updateIncome, the offline earnings, addEarnings, data.ready = true and one refreshSign", not absent,
+        "not found: %s. %s" % (absent, REVIEW_HINT))
+    if not absent:
+        add("onPlayerAdded: the saved Cash is written after the save is read (load)", p_load < p_cash, REVIEW_HINT)
+        add("onPlayerAdded: refreshSign runs after the saved Cash is written", p_cash < p_refresh, REVIEW_HINT)
+        add("onPlayerAdded: refreshSign runs after the income is worked out (updateIncome)", p_income < p_refresh, REVIEW_HINT)
+        add("onPlayerAdded: refreshSign runs after the offline earnings are added to Cash", p_offline < p_refresh, REVIEW_HINT)
+        add("onPlayerAdded: refreshSign runs after the offline earnings are counted (addEarnings)", p_earnings < p_refresh, REVIEW_HINT)
+        add("onPlayerAdded: refreshSign runs before data.ready is set", p_refresh < p_ready, REVIEW_HINT)
+        add("onPlayerAdded: data.ready is not set before the saved Cash and the offline earnings are written", p_ready > p_cash and p_ready > p_offline, REVIEW_HINT)
+
+    # a purchase: buyUpgrade asks checkUpgradePurchase, returns on a refusal, and only then calls refreshSign
+    bs, be = function_span(spans, "buyUpgrade")
+    buy = blank[bs:be]
+    check, refuse, refresh = (re.search(p, buy) for p in (r"\bcheckUpgradePurchase\s*\(", r"\bif\s+not\s+i\s+then\s+return\b", r"\brefreshSign\s*\("))
+    add("buyUpgrade asks checkUpgradePurchase and returns on a refusal before it calls refreshSign",
+        bool(check and refuse and refresh) and check.start() < refuse.start() < refresh.start(), REVIEW_HINT)
+    cs, ce = function_span(spans, "checkUpgradePurchase")
+    cbody = blank[cs:ce]
+    after_params = cbody[cbody.index(")"):]
+    first_if = re.search(r"\bif\b", after_params)
+    add("checkUpgradePurchase's first test is `if not data.ready then return` (a purchase never publishes before the load is done)",
+        bool(first_if) and re.match(r"if\s+not\s+data\.ready\s+then\s+return\b", after_params[first_if.start():]) is not None, REVIEW_HINT)
+
+    # the IPO commit: only IpoServer's goPublic calls it, only onAction calls goPublic, and onAction refuses while not data.ready
+    ipo = others.get("IpoServer.lua")
+    if ipo is None:
+        add("IpoServer.lua is there (the IPO commit's guard is checked on it)", False, REVIEW_HINT)
+    else:
+        ib = lua_views(ipo)[1]
+        ispans = lua_functions(ib)[0]
+        callers = []
+        for fname, text in sorted(others.items()):
+            tb = lua_views(text)[1]
+            tspans = lua_functions(tb)[0]
+            callers += ["%s:%s" % (fname, enclosing_function(tspans, m.start())) for m in re.finditer(r"\bcommitIpo\s*\(", tb)]
+        add("the IPO commit is called from IpoServer's goPublic and from nowhere else", callers == ["IpoServer.lua:goPublic"], "%s. %s" % (callers, REVIEW_HINT))
+        add("goPublic is used only by onAction", [enclosing_function(ispans, p) for p in identifier_uses(ib, "goPublic")] == ["onAction"], REVIEW_HINT)
+        span = function_span(ispans, "onAction")
+        act = ib[span[0]:span[1]] if span else ""
+        guard, go = re.search(r"\bif\s+not\s+ipo\s+or\s+not\s+data\.ready\s+then\b", act), re.search(r"\bgoPublic\s*\(", act)
+        add("IpoServer's onAction refuses while not data.ready before it reaches goPublic", bool(guard and go) and guard.start() < go.start(), REVIEW_HINT)
+
+    # the client's end of it
+    ck = lua_views(client_text)[0]
+    attr = re.search(r"""\blocal\s+LOADED_ATTRIBUTE\s*=\s*(["'])(\w+)\1""", ck)
+    table = re.search(r"\blocal\s+UPGRADES\s*=\s*\{(.*?)\n\}", keep, re.S)
+    count = len(re.findall(r"""\bname\s*=\s*["']""", table.group(1))) if table else 0
+    number = re.fullmatch(r"Upgrade(\d+)", attr.group(2)) if attr else None
+    add("IpoClient's LOADED_ATTRIBUTE is one of the attributes publishUpgrades sets (Upgrade1 .. Upgrade%d)" % count,
+        bool(number) and 1 <= int(number.group(1)) <= count, "%s. %s" % (attr.group(2) if attr else None, REVIEW_HINT))
+    wait = re.search(r"\blocal\s+MONEY_WAIT\s*=\s*([\d.]+)", ck)
+    money_wait = float(wait.group(1)) if wait else 0
+    add("IpoClient's safety delay MONEY_WAIT is at least %d s (OWNER DEFAULT)" % MIN_MONEY_WAIT, money_wait >= MIN_MONEY_WAIT, money_wait)
+    tries = re.search(r"\blocal\s+LOAD_TRIES\s*=\s*(\d+)", keep)
+    reread = re.search(r"\blocal\s+REREAD_WAIT_SECONDS\s*=\s*([\d.]+)", keep)
+    ls, le = function_span(spans, "load")
+    retry = re.search(r"\btask\.wait\s*\(\s*attempt\s*\*\s*2\s*\)", blank[ls:le])
+    reread_wait = re.search(r"\btask\.wait\s*\(\s*REREAD_WAIT_SECONDS\s*\)", body)
+    if tries and reread and retry and reread_wait:
+        per_read = sum(2 * a for a in range(1, int(tries.group(1))))
+        scripted = 2 * per_read + float(reread.group(1))
+        add("IpoClient's MONEY_WAIT (%g s) covers the worst join: %g s of waits TycoonCore adds (two reads x %g s of retries + the %g s re-read wait) + %d s for Roblox" % (
+            money_wait, scripted, per_read, float(reread.group(1)), DATASTORE_ALLOWANCE), scripted + DATASTORE_ALLOWANCE <= money_wait, REVIEW_HINT)
+    else:
+        add("the waits TycoonCore adds to a join can be read (LOAD_TRIES, task.wait(attempt * 2) in load, REREAD_WAIT_SECONDS in onPlayerAdded)", False, REVIEW_HINT)
+    return out
+
+
+def other_scripts():
+    """{file name: text} for every script in the folder but TycoonCore.lua."""
+    return {name: read(name) for name in sorted(os.listdir(ROOT)) if name.endswith(".lua") and name != "TycoonCore.lua"}
+
+
 def build_program(client_text, goal_count, dump=False):
     ipo_config = read("IpoConfig.lua")
     shop_config = read("ShopConfig.lua")
@@ -1358,8 +1641,9 @@ def build_program(client_text, goal_count, dump=False):
     return prelude + scenarios
 
 
-def run_all(luau, client_text, goal_count, dump=False):
-    """(passed, failed, failure lines, crashed text or None, raw stdout)."""
+def run_all(luau, client_text, goal_count, dump=False, core_text=None, others=None):
+    """(passed, failed, failure lines, crashed text or None, raw stdout). core_text and others are TycoonCore.lua and the
+    other scripts for the coupling checks (default: the files in the folder)."""
     result = run_luau(luau, build_program(client_text, goal_count, dump))
     out = result.stdout.strip().split("\n") if result.stdout.strip() else []
     fails = [line for line in out if line.startswith("FAIL: ")]
@@ -1371,7 +1655,8 @@ def run_all(luau, client_text, goal_count, dump=False):
     if summary:
         m = re.match(r"^(\d+) passed, (\d+) failed$", summary[-1])
         passed, failed = int(m.group(1)), int(m.group(2))
-    static = static_checks(client_text)
+    static = static_checks(client_text) + coupling_checks(read("TycoonCore.lua") if core_text is None else core_text, client_text,
+                                                          other_scripts() if others is None else others)
     for name, ok, extra in static:
         if ok:
             passed += 1
