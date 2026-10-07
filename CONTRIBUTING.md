@@ -128,5 +128,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
 | docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | @mattimarca02 (Claude Code) | hud-fix2 (pushed to hud-cash) | 2026-10-07 |
-| docs/STUDIO_SYNC_HUD.md | (repo only) | @mattimarca02 (Claude Code) | hud-fix2 (pushed to hud-cash) | 2026-10-07 |
+| tools/hud_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
