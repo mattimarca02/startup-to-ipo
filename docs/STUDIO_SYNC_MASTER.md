@@ -2,7 +2,9 @@
 
 The one list for putting **Integration 2** into Studio in one sitting: Integration 1 (design docs, sims, customize PR 1) plus `hud-cash`, `task-needs-desk`, `world-icons-pass` and `shop-build`. It covers every `.lua` file at the repo root. Written on branch `integration-2` at merge commit `8e41718` (the four merges; this file is the only commit after it). Nothing here touches Roblox by itself: it is what the owner does in Studio, by hand. No Studio and no MCP was used to write it.
 
-**How the numbers were made:** each SHA-256 was computed from the real file on the merged tree three ways: the Luau `sha256` of docs/STUDIO_SYNC.md (run in the `luau` tool), `sha256sum` and Python's `hashlib`. All 33 agree. Every file uses `\n` line endings and ends with one newline. The hash block in step 6 was run in `luau` against the real files with a fake `game` (see "What was checked").
+**How the numbers were made:** each SHA-256 was computed from the real file on the merged tree three ways: the Luau `sha256` of docs/STUDIO_SYNC.md (run in the `luau` tool), `sha256sum` and Python's `hashlib`. All 33 agree. Every file uses `\n` line endings and ends with one newline. The hash block in section 6 was run in `luau` against the real files with a fake `game` (see "What was checked").
+
+**The order, in short:** (1) create the scripts that are missing (section 2); (2) paste all 29 PASTE NOW scripts, **in any order** (section 3); (3) commit every draft; (4) run the hash block (section 6) until it prints `ALL OK`; (5) only then playtest. The order of pasting does not matter, because game scripts do not run in Edit mode. What matters is that every one of the 29 exists, with the right source and in the right place, **before the first playtest**. Section 4 says what goes wrong if a playtest starts earlier.
 
 **Status:** 33 scripts. **29 PASTE NOW** (wired in the game: something runs or requires them). **4 PASTE LATER**: `IconArt`, `IconVisuals`, `WorldArt`, `WorldVisuals`. No script requires them yet, so they change nothing in the game:
 
@@ -15,7 +17,7 @@ You may paste the four PASTE LATER modules now if you want the previews (docs/ST
 
 1. **Pull:** `git fetch`, then use `main` once this pull request is merged, or branch `integration-2` before that. Use a folder no other session is working in (for example `git worktree add ~/Developer/studio-sync origin/integration-2`).
 2. **Game Settings > Security > Enable Studio Access to API Services: ON** (CONTRIBUTING.md step 4). Without it saves can't load, and the wipe and read blocks in section 9 can't run.
-3. **Run the hash block (section 6) once before pasting anything.** Its lines tell you what Studio has now. `MISSING` means create the script (section 2). `DIFFERENT` means paste it. `OK` means leave it.
+3. **Optional: run the hash block (section 6) once before pasting anything**, to see what Studio has now. `MISSING` means create the script (section 2). `DIFFERENT` means paste it. `OK` means leave it. This first run only tells you what to do. The run that counts comes after you commit the drafts (section 3).
 
 ## 2. Scripts to create by hand first
 
@@ -34,9 +36,9 @@ The Studio MCP can't create a script inside a service, so create these by hand. 
 
 **PASTE LATER (only when wired, or now for the previews):** `IconArt`, `IconVisuals` (ModuleScript, ReplicatedStorage), `WorldArt`, `WorldVisuals` (ModuleScript, ServerScriptService).
 
-## 3. The list, in paste order
+## 3. The list (paste in any order)
 
-Paste each one the same way: open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste. The order is: ReplicatedStorage configs and modules, then the server modules, then `TycoonCore`, then the client scripts. Inside each group, every module comes before the scripts that wait for it (section 4). Nothing runs in edit mode, so the order only matters if a playtest starts before you finish. Still, follow it: then a playtest started halfway never hangs.
+Paste each one the same way: open the `.lua` file, select all, copy; in Studio double-click the script, select all, paste. **The order does not matter.** Nothing runs in Edit mode, so paste the 29 PASTE NOW scripts in any order, even bottom to top. The table is only sorted so that the hash block's lines come out in a fixed order (ReplicatedStorage, then the server modules, then `TycoonCore`, then the clients). Do **not** start a playtest (F5, F7 or a Studio test) until the hash block says `ALL OK`: section 4 says why.
 
 | # | Name | Class | Parent | sha256 | Bytes | Status | Note |
 |---|---|---|---|---|---|---|---|
@@ -74,11 +76,21 @@ Paste each one the same way: open the `.lua` file, select all, copy; in Studio d
 | 32 | `WorldArt` | ModuleScript | ServerScriptService | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 | **PASTE LATER** | wired by the world patch (TycoonCore) |
 | 33 | `WorldVisuals` | ModuleScript | ServerScriptService | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 | **PASTE LATER** | wired by the world patch (TycoonCore) |
 
-After pasting: **View > Drafts**, commit every draft. An uncommitted draft is not published.
+After pasting all 29: **View > Drafts**, commit every draft. An uncommitted draft is not published. **Commit first, then run the hash block (section 6).** Whether the command bar's `Source` shows a draft that is not committed yet is **unverified** (nobody has checked it in Studio), so a run before the commit may report a script as `DIFFERENT` or as `OK` for the wrong reason. A line you trust comes from a run after the commit.
 
-## 4. Waits with no timeout (why the order matters)
+## 4. Why a half-pasted playtest hangs (background: the order of pasting does not matter)
 
-Each line is a `WaitForChild` with **no time limit** (a `require` of a module that must exist). If the module is missing when the game runs, the waiting script hangs on "Infinite yield possible" for good. If that script is `TycoonCore`, nobody can load a save. Checked in every root `.lua` file (comments skipped): **63 pairs**, and the order in section 3 puts every module before the scripts that wait for it.
+You do not need this section to paste. It explains why section 3 says "no playtest before `ALL OK`". Each line below is a `WaitForChild` with **no time limit** (a `require` of a module that must exist). If the module is missing when the game runs, the waiting script hangs on "Infinite yield possible" for good. If that script is `TycoonCore`, nobody can load a save. Checked in every root `.lua` file (comments skipped): **63 pairs**. In Edit mode none of this runs, so the order in which you paste is free.
+
+**What happens if a module exists but still holds Studio's default template** (a ModuleScript that returns an empty table), when a playtest starts anyway:
+
+- **`CompanyServer`:** `TycoonCore` errors at `CompanyServer.init` (`TycoonCore.lua` ~687: a call of a nil value) **before** it connects `PlayerAdded` (~872). No plot, no save, no load for anyone, and a red error in the Output.
+- **`ShopLayout`:** `ShopClient` errors at about line 200 (`ShopLayout.TOAST_MAX_W` is nil, so `Vector2.new` gets no number). The shop never builds: no shop window. (Not run in Studio; read from the code.)
+- **`PlotArt` / `PlotVisuals`:** every call goes through `pcall` (`looks()`, `TycoonCore.lua` ~166). The game runs with the plain upgrade blocks and no rooms, with a `Plot visuals: ... failed` warning per call. If the two are missing altogether, `TycoonCore` waits 5 s for each and warns `Plot visuals are off`.
+
+The hash block catches every one of these as `DIFFERENT` (a template has a different size and hash), and a script that does not exist as `MISSING`.
+
+The pairs, as background:
 
 - `CompanyConfig` waits for `SectorConfig`, `IpoConfig`
 - `ShopServer` waits for `ShopConfig`
@@ -98,7 +110,7 @@ Each line is a `WaitForChild` with **no time limit** (a `require` of a module th
 - `DailyClient` waits for `DailyConfig`, `CreatureConfig`, `ShopConfig`, `IpoConfig`
 - `TaskClient` waits for `TaskConfig`
 
-The pairs the brief named are in the list: `TycoonCore` waits for `CompanyServer`, `CompanyServer` for `CompanyConfig`, `CompanyConfig` for `SectorConfig` (so all three before `TycoonCore`); `ShopClient` waits for `ShopLayout`; `TaskServer` and `TaskClient` wait for `TaskConfig`, and `TycoonCore` waits for `TaskServer` (so `TaskConfig`, then `TaskServer`, then `TaskClient`).
+The pairs the brief named are in the list: `TycoonCore` waits for `CompanyServer`, `CompanyServer` for `CompanyConfig`, `CompanyConfig` for `SectorConfig`; `ShopClient` waits for `ShopLayout`; `TaskServer` and `TaskClient` wait for `TaskConfig`, and `TycoonCore` waits for `TaskServer`. If all 29 are in place, none of these waits can hang.
 
 **Waits with a time limit (they never hang):** `TycoonCore` waits 5 s for `PlotVisuals` and `PlotArt` inside `pcall` (without them it builds no rooms). `ShopClient` waits 5 s for `TaskConfig` (without it there are no Task Debug rows). `IpoClient` waits 5 s for `DailyConfig`. `DailyConfig` waits 5 s for `CreatureConfig` inside `pcall`. The four PASTE LATER modules and `ShopLayout`, `PlotArt`, `PlotVisuals`, `CreatureModels`, `SectorConfig`, `TaskConfig` and `ChatTags` wait for no other script.
 
@@ -111,9 +123,16 @@ Already written down. Nothing here is new; check them, don't change them:
 - **Enable Studio Access to API Services: ON** (section 1).
 - **Max Players: 6** (a place setting, docs/PUBLISH_RULES.md section 1). Check it after every publish.
 
-## 6. Hash check (command bar): all 33 scripts
+## 6. Hash check (command bar): all 33 scripts (run it after you commit the drafts)
 
-Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints one line per script, in paste order: `OK`, `DIFFERENT` (paste the file again), `MISSING` (create it, section 2) or `WRONG CLASS` (delete it and create it again with the right class). The last line must say `ALL OK: 29 of 29 PASTE NOW scripts match the repo`. The four PASTE LATER lines may say `MISSING (PASTE LATER: not needed yet)`. Studio may drop a script's last newline or add one more, and the block accepts both cases (the same rule as docs/STUDIO_SYNC_SHOP.md (d)).
+Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints one line per script, in the table's order: `OK`, `DIFFERENT` (paste the file again), `MISSING` (create it, section 2) or `WRONG CLASS` (delete it and create it again with the right class). The last line must say `ALL OK: 29 of 29 PASTE NOW scripts match the repo`. The four PASTE LATER lines may say `MISSING (PASTE LATER: not needed yet)`. Studio may drop a script's last newline or add one more, and the block accepts both cases (the same rule as docs/STUDIO_SYNC_SHOP.md (d)).
+
+Run it **after** you commit the drafts (section 3). Whether the command bar's `Source` shows an uncommitted draft is **unverified**.
+
+**Two cases the block does not flag:**
+
+- **A script in the wrong parent** (for example `ShopLayout` in `StarterPlayerScripts`) shows as `MISSING`, because the block only looks in the right parent. **Do not create a second copy.** Drag the script into the right parent, or delete it and create it there.
+- **A duplicate name** (two scripts called `TycoonCore` in the same parent) is **not detected**: the block looks at one of them (`FindFirstChild` returns one) and may print `OK` for it while the other one runs or is the stale copy. Look in the Explorer for double names, and delete the extra one by hand.
 
 ```lua
 local K = {
@@ -157,7 +176,7 @@ local function sha256(msg)
 	return table.concat(out)
 end
 
--- STUDIO_SYNC_MASTER hash check: every script of docs/STUDIO_SYNC_MASTER.md, in paste order. Changes nothing.
+-- STUDIO_SYNC_MASTER hash check: every script of docs/STUDIO_SYNC_MASTER.md, in the table's order. Changes nothing.
 local function folderOf(place)
 	if place == "StarterPlayerScripts" then
 		return game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
@@ -248,7 +267,7 @@ Then paste the **check block** of docs/STUDIO_SYNC_WORLD.md (e): it must print `
 
 ## 8. Before the playtest
 
-- Section 3 is done and the hash block prints `ALL OK`.
+- Sections 2 and 3 are done (all 29 PASTE NOW scripts exist and are pasted, in any order), the drafts are committed, and the hash block (section 6, run after the commit) prints `ALL OK`.
 - Section 7 is done and the check block prints `OK`.
 - The Output window is open (View > Output). Read it the whole time: no red text.
 
@@ -279,21 +298,31 @@ end
 
 **C. Player1: the Cash bar while loading, then no calls before the Desk.**
 1. Cash bar (HUD (d) 1): the top row is empty for a moment, then shows `$0 · +$0/s`. The bottom row shows the Garage stage at `$0 / $1.8K`, or a shorter form. Nothing says `nil`, `nan` or a minus sign.
-2. Stay **2 minutes** without opening the shop: no call, no phone tray, no "Tap to resume" (Desk (e) 5). Shop > Debug > "Task stats" shows `offered` 0. (Opening the shop to read it is fine; just don't buy.)
+2. Stay **2 minutes** without opening the shop: no call, no phone tray, no "Tap to resume" (Desk (e) 5). Then Shop > Debug > "Task stats". The Debug message says `... 0 answered, 0 missed, 0 team ...`: the word `offered` is **not** in it. `offered=0` is only in the long `[TaskStats]` line that the same button prints in the Output window (TaskServer `statsLine`; the server also prints that line by itself every 10 minutes, `TaskConfig.LogSeconds`). (Opening the shop to read it is fine; just don't buy.)
 
-**D. Player2: missed calls before the Desk don't start quiet mode.** Shop > Debug > "Task: spawn a call" three times. The calls show and can be answered (a Studio tool). Let them run out (about 10 s each), then Office > buy the Desk: **no "Tap to resume"** (Desk (e) 5, OWNER DEFAULT). Player2 is done for now.
+**D. Player2: missed calls before the Desk don't start quiet mode.** Shop > Debug > "Task: spawn a call" three times (the queue holds three). **The calls only show after you close the shop**: the tray hides while any window is open, and the server freezes each call's clock meanwhile (at most 30 s per call, `TaskConfig.Pause.perTask`), so **close the shop within 30 s of the last Spawn**. After the close the three calls show and can be answered (a Studio tool); each one runs out about **8 s** later (`limit = 8` in `TaskConfig`'s Call row; there is no hire and no IPO, so no scaling). Let them run out, then open the shop, Office > buy the Desk, and close the shop again: **no "Tap to resume"** (Desk (e) 5, OWNER DEFAULT). Player2 is done for now.
 
-**E. Player1: buy the Desk.** Shop: it opens on the **Office** tab; the tabs are a column on the left on a wide window (shop (e) 1-2). The Desk's button says **Get it free**. Tap it: "..." then **Bought!**, the icon pops, **+$1/s** floats up, and the Desk folds into "1 of 6 bought" (shop (e) 4). The bar's top row becomes `$0 · +$1/s` and counts up about once a second (HUD (d) 2). The **first call rings after a normal gap** (20 to 40 s with no hires at the Garage rung), then the tray works as before (Desk (e) 5).
+**E. Player1: buy the Desk.** Shop: it opens on the **Office** tab; the tabs are a column on the left on a wide window (shop (e) 1-2). The Desk's button says **Get it free**. Tap it: "..." then **Bought!**, the icon pops, **+$1/s** floats up, and the Desk folds into "1 of 6 bought" (shop (e) 4). The bar's top row becomes `$0 · +$1/s` and counts up about once a second (HUD (d) 2). The **first call rings 20 to 40 s after you close the shop, not after the buy**: calls are frozen while any window is open (TaskServer, the paused branch of the step), so the gap only starts counting once the shop is closed. (That is 20 to 40 s with no hires at the Garage rung. If Player1 has Auto-Hatch, the free egg hatches by itself after its 60 s timer and makes one hire, and the gap becomes `U(20, 40) / 1.08`: about **18.5 to 37 s**.) Then the tray works as before (Desk (e) 5).
 
-**F. Player1: the shop and the bar.** Do the shop steps (e) 3 and 5 to 10: each tab, the BEST VALUE badge, the Coffee Machine's bar and "Need $N more", buying the next upgrade, the summary row, Debug > **Give $1,000,000**, all six bought and the **Office complete** banner, the "?" card, the message line. Along the way, the HUD steps (d) 3 and 4: the top row moves about once a second without shaking, and after Give $10,000 and twice $1,000,000 it shows `$10,000 ...`, then `$1M`, then `$2M` (no `e+`). Answer a few calls too, so the save gets a `tasks` section. Also shop (e) 12 (restricted on and off) and, if you like, (e) 13 (the tutorial strip).
+**F. Player1: the shop and the bar.** The Cash bar texts depend on how much Cash Player1 has, and the shop steps spend it, so do them **in this order** (right after E, Cash is a few dollars; nothing in the Debug tab *sets* Cash, it only adds):
+1. Shop (e) 3: each tab, the BEST VALUE badge.
+2. Shop (e) 5 and 6: the next card's bar and "Need $N more" only show while Cash is under its price. The Coffee Machine costs $25 and Cash grows by $1/s, so it says "Need" for only about 25 s after the Desk: if it already says **Buy**, buy it (e) 6 and read the same thing on the Laptop's card instead ($100, Cash about $0, +$3/s: about 33 s). Then shop (e) 7: the summary row. Cash is now small, about $0 to $100.
+3. HUD (d) 3: leave it 30 s; the top row moves about once a second without shaking.
+4. HUD (d) 4, with that small Cash: Debug > **Give $10,000**: the top row shows about `$10,1xx · +$3/s` (10,000 plus the little you had, about $100 after step 3; the full figure shows below $100,000). Then **Give $1,000,000**: `$1M` (it shows `$1M` for any Cash from $1,000,000 up to $1,049,999). Then **Give $1,000,000** again: `$2M`. No `e+`. (If you Give a third time, `$3M`; a Cash of $1,050,000 would read `$1.1M`.)
+5. Shop (e) 6, with the $2M you now have: buy the next upgrades one by one (Laptop, Server Rack, Whiteboard, Neon Logo), then (e) 8: all six bought and the gold **Office complete** banner. (The step's own "Give $1,000,000" is not needed: step 4 gave it.)
+6. Shop (e) 9 (the "?" card) and 10 (the message line); answer a few calls too, so the save gets a `tasks` section. Also shop (e) 12 (restricted on and off) and, if you like, (e) 13 (the tutorial strip).
 
-**G. Player1: employees, then the IPO.** With Sales employees, after you answer one call, "Team handled N calls" still appears (Desk (e) 5). Then Debug > **Valuation +$100,000**: the bar fills and names the next stage. Then **Jump to IPO-ready**: the bottom row says `🔔 IPO-ready! ...` and the IPO button says `IPO!`. Tap the bar: the IPO window opens (HUD (d) 5). **Go Public**: the upgrades reset (the Desk is gone) but **calls keep coming** and the tray stays (Desk (e) 5). Then Debug > **Reset IPO progress**: the Desk is the hero card again with **Get it free** (shop (e) 4). **Buy it again**, so that step I has the Desk.
+Cash is about $2,000,000 at the end of F.
 
-**H. Phones (Test > Device).** At **320 x 568** and **667 x 375**, and once at 568 x 320 and 844 x 390:
+**G. Player1: employees, then the IPO.** With Sales employees, after you answer one call, "Team handled N calls" still appears (Desk (e) 5). Then Debug > **Valuation +$100,000**. The amount is fixed in the button and a valuation is never negative, so this always passes IPO-ready (`IpoConfig.Stages`: $81,000): the bar is full and the bottom row **already says IPO-ready** (the button does not stop at a middle stage). "Names the next stage" (HUD (d) 5) is therefore not testable with it: you saw `Garage → Seed` in C.1 and the stages change by themselves as the valuation grows (Seed $1,800, Series A $6,300, Series B $23,400); there is no Debug button for a middle amount. Then **Jump to IPO-ready** (it also skips the IPO cooldown): the bottom row says `🔔 IPO-ready! ...` and the IPO button says `IPO!`. Tap the bar: the IPO window opens (HUD (d) 5). **Go Public**: the upgrades reset (the Desk is gone) but **calls keep coming** and the tray stays (Desk (e) 5). Then Debug > **Reset IPO progress**: the Desk is the hero card again with **Get it free** (shop (e) 4). **Buy it again**, so that step I has the Desk. An IPO sets Cash back to $0 (`IpoConfig.StartingCash`), so Cash is about $0 again here.
+
+**H. Phones (Test > Device).** First set the state the checks need: after G only the Desk is owned and Cash is about $0. **Debug > Give $10,000**, then buy the **Coffee Machine, Laptop and Server Rack**, so that **4 of 6 are owned (Desk, Coffee Machine, Laptop, Server Rack)** and the **Whiteboard** is the next card. Cash is then about $9,500 and Income `+$23/s`, so the bar's top row reads about `$9,5xx · +$23/s`. Then, at **320 x 568** and **667 x 375**, and once at 568 x 320 and 844 x 390:
 - The Cash bar text fits inside the bar (HUD (d) 6).
 - The windows don't overlap the buttons (HUD (d) 7).
-- The shop: nothing cut off, the left edge of the Office tab at 667 x 375 and the middle at 844 x 390 keep the shop open, the long pop-up at 320 x 568, the portrait tab row with Debug, "+$40/s" at 568 x 320 (shop (e) 11).
+- The shop: nothing cut off, the left edge of the Office tab at 667 x 375 and the middle at 844 x 390 keep the shop open, the long pop-up at 320 x 568, the portrait tab row with Debug, and at 568 x 320 the Whiteboard card says "+$40/s" (the shorter form; shop (e) 11). With 3 owned it would say "+$15/s" (Server Rack), with 5 owned "+$120/s" (Neon Logo); with only the Desk owned the next card is the Coffee Machine, "+$2", which is not the check.
 - The call tray did not move (Desk (e) 5).
+
+**The four sizes may not be in Studio's device list.** Whether the Device emulator has 320 x 568, 667 x 375, 568 x 320 and 844 x 390 as named devices is **unverified**, and so is how to add one. Look in the Device dropdown for an add or custom entry that takes a width and a height. If there is none, take the nearest phone in the list, write down its real size in your notes, and do not mark the missing size as tested.
 
 Then go back to the desktop view.
 
@@ -370,4 +399,13 @@ Still correct on this tree: docs/STUDIO_SYNC.md (a) and (c) for the other eight 
 - **Checked (in the `luau` tool, not in Studio):**
   - The hash block of section 6 ran against the real files of this tree with a fake `game` that serves each file as `Source`. Results: all 33 `OK` and `ALL OK: 29 of 29` (also with every last newline dropped, and with one newline added); a one-character change in `TycoonCore` gives `DIFFERENT` for it alone; `CompanyServer` removed gives `MISSING (create a ModuleScript in ServerScriptService)`; `WorldArt` removed gives `MISSING (PASTE LATER: not needed yet)`; `ShopLayout` as a LocalScript gives `WRONG CLASS`; two extra newlines give `DIFFERENT`.
   - The wipe block (A) and the read block (J) ran against a fake DataStore. The wipe removes only `player_-1` and `player_-2` and reports a refusal as `FAIL`. The read prints `OK` for a good section, `CHECK` for `run` above the count, and `FAIL` for a missing section or a refused read.
+  - **Run again after the review fixes** (blocks extracted from this very file, real files of `main` at `dbf900b`, `luau` command-line tool): the hash block, all 33 `OK` and `ALL OK: 29 of 29`, also with every last newline dropped and with one added; `TycoonCore` with one character changed: `DIFFERENT` for it alone; `CompanyServer` removed: `MISSING (create a ModuleScript in ServerScriptService)`; `WorldArt` removed: `MISSING (PASTE LATER: not needed yet)` and still `ALL OK`; `ShopLayout` as a LocalScript: `WRONG CLASS`; two extra newlines: `DIFFERENT`; `CompanyServer` holding Studio's default template (an empty table): `DIFFERENT`; `ShopLayout` in the wrong parent: `MISSING` (not flagged as a wrong parent); two scripts of the same name: not detectable (the block asks `FindFirstChild` for one). The table's 33 hashes and sizes against `sha256sum` and `wc -c`, and against Python's `hashlib`: 33 of 33 equal, and equal to the hash block's rows. The wipe block against a fake DataStore holding `player_-1`, `player_-2`, `player_-3`, `player_123456` and `other`: it touched only the store `StartupTycoon_v1` and the keys `player_-1` and `player_-2` (`player_-3`, `player_123456` and `other` stayed), reported a refused `RemoveAsync` as `FAIL` and a missing DataStore as `FAIL`. The read block touched only `GetAsync("player_-1")` and `GetAsync("player_-2")`: `OK` for a good section, `CHECK` for `run` 1 against `ipo.count` 0, `FAIL` for a save without `pokedex`, `FAIL` for a refused read, `no save` for an absent key, and the `tasks` line for both a section and none.
 - **Not checked:** anything in Studio. No command-bar run, no playtest, no MCP; the Studio Explorer was never seen, so which scripts already exist there is unknown (hence step 1.3). Whether `RemoveAsync` and `GetAsync` work from the command bar in edit mode was not tested here (docs/CUSTOMIZE_PR1_NOTES.md's block relies on the same).
+- **Counted:** the Ownership table in `CONTRIBUTING.md` has **68 rows** on `main` at `dbf900b` (lines 91 to 158, no duplicate script). That is exactly the union of the rows of `integration-1`, `hud-cash`, `task-needs-desk`, `world-icons-pass` and `shop-build`. With this doc's own claim row it has 69 while this branch is open. A review said 67: that count does not match the files.
+
+## 13. Follow-ups (found while checking this doc; not done here)
+
+Both files belong to other claims and this change was docs-only, so neither was edited:
+
+1. **`README.md`, the file table** has no rows for `WorldArt.lua`, `WorldVisuals.lua`, `IconArt.lua` and `IconVisuals.lua` (the four PASTE LATER modules), nor for `tools/hud_test.py`, `tools/world_test.py` and `tools/icon_test.py`. (It has `tools/economy_sim.py`, `tools/daily_test.py` and `tools/shop_ux_test.py`.) Claim `README.md`, add the rows.
+2. **`docs/STUDIO_SYNC.md` line 238** says to follow "the PR 1 order in docs/PUBLISH_RULES.md 2c". The PR 1 sync order is under **2b** (`docs/PUBLISH_RULES.md` line 50, "Studio sync order for PR 1", inside `## 2b`); 2c is the plot visuals follow-up. Claim `docs/STUDIO_SYNC.md`, change `2c` to `2b`.
