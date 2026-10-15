@@ -961,9 +961,13 @@ end)
 
 local walkers = {} -- model -> { offset, target, nextMove, yaw, phase }
 
+-- They start facing the front of their garage (the server's "Facing", turned with the garage). The wander below is in
+-- world axes: a stroll of up to 3 studs around "Home" (a world position) and a walking yaw from the step itself, so it
+-- is right at any turn.
 local function track(model)
 	if model:IsA("Model") then
-		walkers[model] = { offset = Vector3.zero, target = Vector3.zero, nextMove = 0, yaw = math.pi, phase = math.random() * 10 }
+		local facing = model:GetAttribute("Facing")
+		walkers[model] = { offset = Vector3.zero, target = Vector3.zero, nextMove = 0, yaw = type(facing) == "number" and facing or math.pi, phase = math.random() * 10 }
 	end
 end
 for _, model in ipairs(CollectionService:GetTagged("Employee")) do

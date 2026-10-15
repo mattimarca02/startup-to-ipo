@@ -18,10 +18,14 @@
 --   PlotVisuals.addProp(plot, upgrade, slot, popIn)             -> the prop Model (pops in), or nil
 -- Checks (tools/daily_test.py and the Studio preview run them):
 --   PlotVisuals.validate(art)             -> list of problems in the data (empty = fine)
---   PlotVisuals.check(room, center, art)  -> list of problems in a built room (zones, floating parts, walls, budget)
+--   PlotVisuals.check(room, center, art)  -> list of problems in a built room (zones, floating parts, walls, budget),
+--                                            measured in the garage's frame
 --
 -- Offsets in the art are studs from the plot's floor-top center: the middle of the Floor's top
 -- face (plot center + Layout.floorTop). +X is right, +Z is the front (the signs), -Z the back wall.
+-- They are in the garage's own frame: `center` is the plot center (a Vector3: a garage facing +Z) or the
+-- garage's frame (a CFrame: the center, turned), and the whole room turns with it. newPlot takes the turn
+-- from the Floor's CFrame (TycoonCore builds the Floor in the garage's frame); check measures in that frame.
 
 local PlotVisuals = {}
 
@@ -181,6 +185,9 @@ function PlotVisuals.buildGroup(parent, name, base, specs)
 end
 
 local function floorOrigin(center, art)
+	if typeof(center) == "CFrame" then
+		return center * CFrame.new(0, art.Layout.floorTop, 0) -- a turned garage
+	end
 	return CFrame.new(center.X, center.Y + art.Layout.floorTop, center.Z)
 end
 
@@ -233,7 +240,8 @@ end
 -- One player's plot ---------------------------------------------------------
 
 function PlotVisuals.newPlot(folder, center, art, floor, stage)
-	local plot = { folder = folder, center = center, art = art, floor = floor, room = nil, stage = nil }
+	local frame = floor and CFrame.new(center) * floor.CFrame.Rotation or center -- the garage's turn comes from its Floor
+	local plot = { folder = folder, center = center, frame = frame, art = art, floor = floor, room = nil, stage = nil }
 	PlotVisuals.setStage(plot, stage, false)
 	return plot
 end
@@ -246,7 +254,7 @@ function PlotVisuals.setStage(plot, stage, flash)
 	local art = plot.art
 	local shown = math.clamp(stage, 1, #art.Stages)
 	local old = plot.room
-	local room = PlotVisuals.buildRoom(nil, plot.center, art, shown)
+	local room = PlotVisuals.buildRoom(nil, plot.frame, art, shown)
 	local props = room:FindFirstChild("UpgradeProps")
 	local oldProps = old and old:FindFirstChild("UpgradeProps")
 	if oldProps then
@@ -273,7 +281,7 @@ function PlotVisuals.addProp(plot, upgrade, slot, popIn)
 	if not props then
 		return nil
 	end
-	local model = PlotVisuals.buildProp(props, plot.center, plot.art, upgrade, slot)
+	local model = PlotVisuals.buildProp(props, plot.frame, plot.art, upgrade, slot)
 	if model and popIn then
 		task.spawn(PlotVisuals.popIn, model)
 	end
@@ -305,7 +313,7 @@ end
 -- A quick bright flash over the plot with a burst of sparkles (a new stage, or back to the Garage)
 function PlotVisuals.flash(plot)
 	local fx = plot.art.Flash
-	local part = PlotVisuals.buildPart(plot.folder, floorOrigin(plot.center, plot.art), fx.part)
+	local part = PlotVisuals.buildPart(plot.folder, floorOrigin(plot.frame, plot.art), fx.part)
 	local from = fx.part.transparency
 	for i = 1, fx.steps do
 		task.wait(fx.seconds / fx.steps)
@@ -533,14 +541,15 @@ end
 
 -- Problems in a built room (props inside it included): parts in a reserved zone, props outside
 -- their slot, floating parts, walls too high where the camera looks in, flags, the part and
--- light budgets. center = the plot center the room was built at.
+-- light budgets. center = the plot center (or the garage's frame) the room was built at: every part
+-- is measured in the garage's own frame, so a turned room gets the same checks.
 function PlotVisuals.check(room, center, art)
 	local problems = {}
 	local function problem(text)
 		table.insert(problems, text)
 	end
 	local layout = art.Layout
-	local ox, oy, oz = center.X, center.Y + layout.floorTop, center.Z
+	local origin = floorOrigin(center, art)
 	local half = layout.floorSize[1] / 2
 	local ground = -layout.floorSize[2] -- the Floor's bottom: where the Baseplate's top is
 	local parts, lights = {}, 0
@@ -548,8 +557,7 @@ function PlotVisuals.check(room, center, art)
 		if d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
 			lights += 1
 		elseif d:IsA("BasePart") then
-			local b = boxOf(d.CFrame, d.Size)
-			b = { b[1] - ox, b[2] - ox, b[3] - oy, b[4] - oy, b[5] - oz, b[6] - oz }
+			local b = boxOf(origin:ToObjectSpace(d.CFrame), d.Size) -- in the garage's frame
 			local upgrade, deskName, node = nil, nil, d.Parent
 			while node and node ~= room do
 				upgrade = upgrade or node:GetAttribute("Upgrade")
