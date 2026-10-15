@@ -88,7 +88,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | @mattimarca02 (Claude Code) | lobby-l0 | 2026-10-15 |
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
@@ -158,3 +158,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-l0 | 2026-10-15 |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | @mattimarca02 (Claude Code) | lobby-l0 | 2026-10-15 |
