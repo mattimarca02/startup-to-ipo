@@ -88,20 +88,20 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| TycoonCore | ServerScriptService | free | | |
 | ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
-| EmployeeClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
-| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| IpoServer | ServerScriptService | free | | |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -120,7 +120,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
 | CLAUDE.md | (repo only) | free | | |
-| PlotVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
@@ -143,7 +143,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | WorldVisuals | ServerScriptService | free | | |
 | IconArt | ReplicatedStorage | free | | |
 | IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| tools/world_test.py | (repo only) | free | | |
 | tools/icon_test.py | (repo only) | free | | |
 | tools/render_previews.py | (repo only) | free | | |
 | docs/previews/*.svg | (repo only) | free | | |
@@ -158,5 +158,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
-| docs/STUDIO_SYNC_LOBBY.md | (repo only) | @mattimarca02 (Claude Code) | lobby-l1 | 2026-10-15 |
+| tools/lobby_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
