@@ -771,6 +771,8 @@ local function onPlayerAdded(player)
 	-- Some of them wait for Roblox (pass checks, poaching checks), and leaving or an autosave in
 	-- that time must never write a save with parts missing. If a part can't be set up at all,
 	-- this session never saves, so the save on the DataStore stays as it was.
+	-- (tools/lobby_test.py checks that the code between the CLAIMLOAD markers is main's at 99eed7b, byte for byte.)
+	-- CLAIMLOAD-START
 	local saved, ok = load(player)
 	if playerData[player] ~= data then return end -- they left while loading: nothing was saved
 	ok = readableSave(saved, ok, player.Name)
@@ -861,6 +863,7 @@ local function onPlayerAdded(player)
 
 	refreshSign(player)
 	data.ready = true -- the shop waits for this before granting purchases
+	-- CLAIMLOAD-END
 
 	player.CharacterAdded:Connect(function(character)
 		teleportToPlot(character, slot)
