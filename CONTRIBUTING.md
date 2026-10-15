@@ -158,3 +158,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
