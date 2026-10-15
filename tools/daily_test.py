@@ -1652,7 +1652,7 @@ local Instance = { new = function(class)
 	table.insert(CREATED, i)
 	return i
 end }
-local Vector3, Color3, UDim2, Enum = ghost, ghost, ghost, ghost
+local Vector3, Color3, UDim2, Enum, CFrame = ghost, ghost, ghost, ghost, ghost
 local task = { spawn = function(f, ...) f(...) end, delay = function() end, wait = function() end }
 local os = { time = function() return 1700000000 end, clock = function() return 0 end }
 local function token(name) return { Name = name, WaitForChild = function(_, n) return token(n) end } end
@@ -1775,7 +1775,7 @@ local CORE = {
 	getData = function(p) return p.data end,
 	save = function() saves += 1; return true end,
 	onPerksChanged = function() end, updateIncome = function() end,
-	plotCenter = function() return ghost end,
+	plotFrame = function() return ghost end, -- TycoonCore hands IpoServer the garage's frame (lobby PR L1)
 }
 IpoServer.init(CORE)
 local onAction
@@ -3731,6 +3731,7 @@ local function matmul(a, b)
 end
 CF.__index = function(t, k)
 	if k == "Position" then return vec(t.x, t.y, t.z) end
+	if k == "Rotation" then return cf(0, 0, 0, t.r) end
 	return CF[k]
 end
 CF.__mul = function(a, b)
@@ -3745,10 +3746,41 @@ local function rx(a) local c, s = math.cos(a), math.sin(a) return { 1, 0, 0, 0, 
 local function ry(a) local c, s = math.cos(a), math.sin(a) return { c, 0, s, 0, 1, 0, -s, 0, c } end
 local function rz(a) local c, s = math.cos(a), math.sin(a) return { c, -s, 0, s, c, 0, 0, 0, 1 } end
 local CFrame = {
-	new = function(x, y, z) return cf(x or 0, y or 0, z or 0) end,
+	new = function(x, y, z, ...)
+		if getmetatable(x) == V then return cf(x.X, x.Y, x.Z) end -- CFrame.new(position)
+		if select("#", ...) == 9 then return cf(x, y, z, { ... }) end -- CFrame.new(x, y, z, R00, R01, R02, R10, ..., R22), row by row
+		return cf(x or 0, y or 0, z or 0)
+	end,
 	Angles = function(a, b, c) return cf(0, 0, 0, matmul(matmul(rx(a), ry(b)), rz(c))) end,
 	fromEulerAnglesYXZ = function(a, b, c) return cf(0, 0, 0, matmul(matmul(ry(b), rx(a)), rz(c))) end,
 }
+-- What a turned garage needs (lobby PR L1): the inverse (a rotation's inverse is its transpose), ToObjectSpace, the
+-- YXZ angles, CFrame.lookAt, and typeof for the fake's Vector3 and CFrame
+function CF.Inverse(t)
+	local r = t.r
+	local q = { r[1], r[4], r[7], r[2], r[5], r[8], r[3], r[6], r[9] }
+	return cf(-(q[1] * t.x + q[2] * t.y + q[3] * t.z), -(q[4] * t.x + q[5] * t.y + q[6] * t.z), -(q[7] * t.x + q[8] * t.y + q[9] * t.z), q)
+end
+function CF.ToObjectSpace(a, b) return a:Inverse() * b end
+function CF.ToEulerAnglesYXZ(t)
+	local r = t.r
+	return math.asin(-math.clamp(r[6], -1, 1)), math.atan2(r[3], r[9]), math.atan2(r[4], r[5])
+end
+CFrame.lookAt = function(at, target) -- -Z looks at the target, +Y stays up (never straight up or down here)
+	local lx, ly, lz = target.X - at.X, target.Y - at.Y, target.Z - at.Z
+	local n = math.sqrt(lx * lx + ly * ly + lz * lz)
+	lx, ly, lz = lx / n, ly / n, lz / n
+	local rx_, ry_, rz_ = -lz, 0, lx -- look x up(0, 1, 0)
+	local m = math.sqrt(rx_ * rx_ + rz_ * rz_)
+	rx_, rz_ = rx_ / m, rz_ / m
+	local ux, uy, uz = ry_ * lz - rz_ * ly, rz_ * lx - rx_ * lz, rx_ * ly - ry_ * lx -- right x look
+	return cf(at.X, at.Y, at.Z, { rx_, ux, -lx, ry_, uy, -ly, rz_, uz, -lz })
+end
+local function typeof(v)
+	local mt = getmetatable(v)
+	if mt == CF then return "CFrame" elseif mt == V then return "Vector3" end
+	return type(v)
+end
 
 -- Enums: an unknown name errors, like Roblox
 local function enumType(names)
@@ -4073,6 +4105,7 @@ do
 	local floor = newInstance("Part")
 	floor.Name = "Floor"
 	floor.Size = Vector3.new(60, 1, 60)
+	floor.CFrame = CFrame.new(center) -- TycoonCore makes it at the plot center (unturned here)
 	floor.Parent = folder
 	SPAWNED = {}
 	local plot = PlotVisuals.newPlot(folder, center, PlotArt, floor, 1)
@@ -7371,8 +7404,8 @@ def visuals_expected_lua():
         raise SystemExit("itemOffset changed in TycoonCore.lua: update visuals_expected_lua and PlotArt.Layout")
     x0, dx, z0, dz = (num(item.group(k)) for k in (1, 2, 3, 4))
     slots = [(x0 + ((i - 1) // 3) * dx, z0 + ((i - 1) % 3) * dz) for i in range(1, len(upgrades) + 1)]
-    spawn = re.search(r"local spawnPos = plotCenter\(slot\) \+ Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
-    floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotCenter\(slot\)', core)
+    spawn = re.search(r"local spawnPos = plotFrame\(slot\) \* Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
+    floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotFrame\(slot\)', core)
     center_y = re.search(r"return Vector3\.new\(startX \+ \(slot - 1\) \* PLOT_SPACING, ([\d.]+), 150\)", core)
     buy = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core)
     ipo = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", read("IpoServer.lua"))
@@ -7435,6 +7468,765 @@ def visuals_wiring_checks():
     check("TycoonCore: no new remote, DataStore or save field for the looks",
           code.count('Instance.new("Remote') == 0 and code.count("GetDataStore(") == 1 and "looks =" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
     return passed, failed
+
+
+# --- The plot frame (lobby PR L1, docs/LOBBY_GARAGE_PROPOSAL.md section 4.3) -----------------------------------------
+# Every "center + offset" of a garage goes through TycoonCore's plotFrame (the center turned by GARAGE_TURNS), so a turned
+# garage is the unturned one turned. L1 turns nothing: every turn is 0 and every position must be main's, exactly. The
+# real code of TycoonCore, EmployeeServer, IpoServer, PlotVisuals and PlotArt runs in the visuals fake (real rotations).
+
+FRAME_TESTS = r"""
+-- More of Roblox for these tests: a Part's Position and CFrame are one property, Models pivot, prompts connect
+do
+	local index, newindex = Mt.__index, Mt.__newindex
+	Mt.__index = function(t, k)
+		if k == "Position" and rawget(t, "CFrame") then return rawget(t, "CFrame").Position end
+		return index(t, k)
+	end
+	Mt.__newindex = function(t, k, v)
+		if k == "Position" and rawget(t, "ClassName") == "Part" then
+			local c = rawget(t, "CFrame")
+			rawset(t, "CFrame", cf(v.X, v.Y, v.Z, c and c.r or nil))
+			return
+		end
+		newindex(t, k, v)
+	end
+end
+function Methods.PivotTo(t, c) rawset(t, "pivot", c) end
+function Methods.WaitForChild(t, name) return t:FindFirstChild(name) end
+Methods.Triggered = { Connect = function() end }
+Enum.MeshType = enumType({ "Sphere" })
+UDim2.new = function() return {} end
+UDim2.fromOffset = function(x, y) return { x, y } end
+Color3.new = function(r, g, b) return { R = r, G = g, B = b } end
+
+local PlotArt = (function()
+__PLOTART__
+end)()
+local PlotVisuals = (function()
+__PLOTVISUALS__
+end)()
+
+-- CompanyConfig (the placement rules), loaded the way the server requires it
+local MODULES = {}
+local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
+local SERVICES = { ReplicatedStorage = token("ReplicatedStorage"), RunService = { IsStudio = function() return true end } }
+local game = { GetService = function(_, n) return SERVICES[n] end }
+MODULES.SectorConfig = (function()
+__SECTORCONFIG__
+end)()
+MODULES.IpoConfig = (function()
+__IPOCONFIG__
+end)()
+MODULES.CompanyConfig = (function()
+__COMPANYCONFIG__
+end)()
+local CompanyConfig = MODULES.CompanyConfig
+
+-- The real TycoonCore code, with the garages turned by TURNS (its own GARAGE_TURNS line is read separately below)
+local function coreAt(TURNS)
+	local playerData = {}
+__CORE_CONSTANTS__
+	local GARAGE_TURNS = TURNS
+__UPGRADES__
+__CORE_FUNCTIONS__
+	local plotZones = __PLOTZONES__
+	return { plotFrame = plotFrame, plotCenter = plotCenter, makePart = makePart, itemOffset = itemOffset, spawnItem = spawnItem,
+		refreshSign = refreshSign, teleportToPlot = teleportToPlot, plotZones = plotZones, playerData = playerData, UPGRADES = UPGRADES,
+		MAX_PLOTS = MAX_PLOTS, SIGN_OFFSET = SIGN_OFFSET }
+end
+local REAL_TURNS = (function()
+__TURNS_LINE__
+	return GARAGE_TURNS
+end)()
+
+-- IpoServer's garage sign and EmployeeServer's employees and incubators, with a core that gives plotFrame
+local function ipoAt(core)
+__IPO_CONSTANTS__
+	local function refreshSign() end
+__BUILDSIGN__
+	return buildSign
+end
+local function employeeAt(core)
+__EMPLOYEE_CONSTANTS__
+	local CreatureConfig = { getCreature = function(name) return { name = name } end }
+	local CreatureModels = { build = function() local m = newInstance("Model") return m end }
+	local CollectionService = { AddTag = function() end }
+	local function addNameTag() end
+	local function makeLabel() return newInstance("TextLabel") end
+	local function hatch() end
+	local function refreshIncubator() end
+__EMPLOYEE_FUNCTIONS__
+	return placeEmployees, buildIncubator, EMPLOYEE_SPOTS, INCUBATOR_SPOTS, FEET
+end
+
+local EPS = 1e-6
+local function sameCF(a, b, eps)
+	if not a or not b then return false end
+	eps = eps or EPS
+	if math.abs(a.x - b.x) > eps or math.abs(a.y - b.y) > eps or math.abs(a.z - b.z) > eps then return false end
+	for i = 1, 9 do if math.abs(a.r[i] - b.r[i]) > eps then return false end end
+	return true
+end
+local function exactCF(a, b) return sameCF(a, b, 0) end
+local function sameVec(a, b, eps)
+	eps = eps or EPS
+	return a ~= nil and b ~= nil and math.abs(a.X - b.X) <= eps and math.abs(a.Y - b.Y) <= eps and math.abs(a.Z - b.Z) <= eps
+end
+local IDENTITY = cf(0, 0, 0)
+local function rowCenter(slot) return Vector3.new(-225 + (slot - 1) * 90, 0.5, 150) end -- main's plotCenter, written out
+local function partsOf(model)
+	local out = {}
+	for _, d in ipairs(model:GetDescendants()) do if d:IsA("BasePart") then table.insert(out, d) end end
+	return out
+end
+-- Is listT the 0-degree list0 moved from frame0 into frameT, part for part (names, sizes and CFrames)?
+local function turnedMatch(list0, listT, frame0, frameT)
+	if #list0 == 0 or #list0 ~= #listT then return false, #list0 .. " / " .. #listT .. " parts" end
+	local move = frameT * frame0:Inverse()
+	for i = 1, #list0 do
+		local a, b = list0[i], listT[i]
+		if a.Name ~= b.Name or not sameVec(a.Size, b.Size, 0) or not sameCF(move * a.CFrame, b.CFrame) then return false, b:GetFullName() end
+	end
+	return true
+end
+local function newPlayer()
+	local player = newInstance("Player")
+	player.UserId = 7
+	return player
+end
+
+local ZERO = { 0, 0, 0, 0, 0, 0 }
+local MIXED = { 90, 180, 270, 0, 270, 90 } -- each turn on two garages, and slot 4 unturned
+local core0, coreT = coreAt(ZERO), coreAt(MIXED)
+local TURN_NAMES = { [0] = "0", [90] = "90", [180] = "180", [270] = "270" }
+local function slotsAt(turn)
+	local out = {}
+	for slot, t in ipairs(MIXED) do if t == turn then table.insert(out, slot) end end
+	return out
+end
+
+-- 1. The turn math ---------------------------------------------------------------------------------------------------
+do
+	local zeros, quarters = #REAL_TURNS > 0, #REAL_TURNS > 0
+	for _, t in ipairs(REAL_TURNS) do
+		if t ~= 0 then zeros = false end
+		if t ~= 0 and t ~= 90 and t ~= 180 and t ~= 270 then quarters = false end
+	end
+	check("turn math: L1 turns no garage (GARAGE_TURNS is six zeros)", zeros and #REAL_TURNS == 6, table.concat(REAL_TURNS, ","))
+	check("turn math: one turn per garage (#GARAGE_TURNS == MAX_PLOTS)", #REAL_TURNS == core0.MAX_PLOTS, #REAL_TURNS .. " turns, " .. core0.MAX_PLOTS .. " plots")
+	check("turn math: every turn is a quarter turn (0, 90, 180 or 270)", quarters, table.concat(REAL_TURNS, ","))
+	local real = coreAt(REAL_TURNS)
+	local same, centers = true, true
+	local ran, crash = pcall(function() -- a turn plotFrame can't make (not a quarter turn) errors: a failed check here, not a crash
+		for slot = 1, core0.MAX_PLOTS do
+			local want = rowCenter(slot)
+			if not exactCF(real.plotFrame(slot), cf(want.X, want.Y, want.Z)) then same = false end
+			local c = real.plotCenter(slot)
+			if c.X ~= want.X or c.Y ~= want.Y or c.Z ~= want.Z then centers = false end
+		end
+	end)
+	check("turn math: plotFrame(slot) is main's plotCenter(slot), unturned, for all six garages (exactly)", ran and same, crash)
+	check("turn math: plotCenter is main's row (x -225 to 225, 90 apart, y 0.5, z 150), exactly", centers)
+	local function dir(frame, x, z)
+		local p = frame * Vector3.new(x, 0, z)
+		return Vector3.new(p.X - frame.x, p.Y - frame.y, p.Z - frame.z)
+	end
+	local WANT = { -- the garage's front (+Z) and right (+X) in world axes; west garages turn 90 and face +X (section 4.2)
+		[90] = { "+X", Vector3.new(1, 0, 0), "-Z", Vector3.new(0, 0, -1) },
+		[180] = { "-Z", Vector3.new(0, 0, -1), "-X", Vector3.new(-1, 0, 0) },
+		[270] = { "-X", Vector3.new(-1, 0, 0), "+Z", Vector3.new(0, 0, 1) },
+	}
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local w, ok = WANT[turn], true
+		for _, slot in ipairs(slotsAt(turn)) do
+			local f = coreT.plotFrame(slot)
+			if not (sameVec(dir(f, 0, 1), w[2]) and sameVec(dir(f, 1, 0), w[4])) then ok = false end
+		end
+		check("turn math: at " .. turn .. " degrees the garage's front (+Z) faces world " .. w[1] .. " and its right (+X) faces world " .. w[3], ok)
+	end
+	local keeps = true
+	for slot = 1, 6 do
+		local f = coreT.plotFrame(slot)
+		if not sameVec(f.Position, rowCenter(slot), 0) or not sameVec(f * Vector3.new(0, 1, 0) - f.Position, Vector3.new(0, 1, 0)) then keeps = false end
+	end
+	check("turn math: a turn keeps the garage's center (Position is plotCenter) and its up (+Y)", keeps)
+end
+
+-- 2. The room, the props and the Floor (PlotVisuals.newPlot takes the turn from the Floor) ------------------------------
+-- What the join builds in a garage: the Floor (onPlayerAdded), the room of a stage with its props (the load: newPlot on
+-- the room line, with plotCenter(slot), then spawnItem for every upgrade owned).
+local function buildGarage(core, slot, withLooks)
+	ROOT = newInstance("Folder")
+	local folder = newInstance("Folder")
+	folder.Parent = ROOT
+	local floor = core.makePart(folder, "Floor", Vector3.new(60, 1, 60), core.plotFrame(slot), Color3.fromRGB(90, 90, 100))
+	local data = { slot = slot, folder = folder, items = {}, owned = {} }
+	if withLooks then
+		data.looks = PlotVisuals.newPlot(folder, core.plotCenter(slot), PlotArt, floor, 1)
+	end
+	for i, upg in ipairs(core.UPGRADES) do
+		data.owned[upg.name] = true
+		core.spawnItem(data, i, upg)
+	end
+	return data, floor
+end
+do
+	local stages = #PlotArt.Stages
+	-- at 0 degrees: the room is main's, part for part (main built it from the Vector3 plot center)
+	local exact, exactWhy = true, nil
+	local floorExact = true
+	for slot = 1, 6 do
+		local data, floor = buildGarage(core0, slot, true)
+		if not exactCF(floor.CFrame, cf(rowCenter(slot).X, 0.5, 150)) then floorExact = false end
+		for s = 1, stages do
+			PlotVisuals.setStage(data.looks, s, false)
+			local main = PlotVisuals.buildRoom(nil, rowCenter(slot), PlotArt, s)
+			for i, upg in ipairs(core0.UPGRADES) do
+				PlotVisuals.buildProp(main:FindFirstChild("UpgradeProps"), rowCenter(slot), PlotArt, upg.name, core0.itemOffset(i))
+			end
+			local a, b = partsOf(main), partsOf(data.looks.room)
+			if #a ~= #b or #a == 0 then exact = false; exactWhy = exactWhy or (#a .. " / " .. #b) end
+			for i = 1, math.min(#a, #b) do
+				if a[i].Name ~= b[i].Name or not exactCF(a[i].CFrame, b[i].CFrame) then exact = false; exactWhy = exactWhy or b[i]:GetFullName() end
+			end
+		end
+	end
+	check("room at 0 degrees: every stage room with the six props is main's, part for part (same names, exactly the same CFrames)", exact, exactWhy)
+	check("room at 0 degrees: the Floor is main's (at plotCenter, unturned), exactly", floorExact)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local same, why, clean, problem = true, nil, true, nil
+		for _, slot in ipairs(slotsAt(turn)) do
+			local d0, f0 = buildGarage(core0, slot, true)
+			local dT, fT = buildGarage(coreT, slot, true)
+			for s = 1, stages do
+				PlotVisuals.setStage(d0.looks, s, false)
+				PlotVisuals.setStage(dT.looks, s, false)
+				local l0, lT = partsOf(d0.looks.room), partsOf(dT.looks.room)
+				table.insert(l0, f0)
+				table.insert(lT, fT)
+				local ok, w = turnedMatch(l0, lT, core0.plotFrame(slot), coreT.plotFrame(slot))
+				if not ok then same = false; why = why or ("stage " .. s .. ": " .. tostring(w)) end
+				local probs = PlotVisuals.check(dT.looks.room, coreT.plotFrame(slot), PlotArt)
+				if #probs > 0 then clean = false; problem = problem or ("stage " .. s .. ": " .. probs[1]) end
+			end
+		end
+		check("room at " .. turn .. " degrees: every stage room, the six props and the Floor are the 0-degree build turned", same, why)
+		check("room at " .. turn .. " degrees: PlotVisuals.check in the garage's frame finds no problem (every stage, six props)", clean, problem)
+	end
+end
+
+-- 3. The plain blocks (no plot visuals) and the next-upgrade sign (TycoonCore) ----------------------------------------------
+do
+	local exact = true
+	for slot = 1, 6 do
+		local data = buildGarage(core0, slot, false)
+		for i, upg in ipairs(core0.UPGRADES) do
+			local want = rowCenter(slot) + core0.itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0)
+			if not exactCF(data.items[upg.name].CFrame, cf(want.X, want.Y, want.Z)) then exact = false end
+		end
+	end
+	check("blocks at 0 degrees: the six plain upgrade blocks (no plot visuals) stand where main puts them, exactly", exact)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local same, why = true, nil
+		for _, slot in ipairs(slotsAt(turn)) do
+			local d0, dT = buildGarage(core0, slot, false), buildGarage(coreT, slot, false)
+			local l0, lT = {}, {}
+			for _, upg in ipairs(core0.UPGRADES) do
+				table.insert(l0, d0.items[upg.name])
+				table.insert(lT, dT.items[upg.name])
+			end
+			local ok, w = turnedMatch(l0, lT, core0.plotFrame(slot), coreT.plotFrame(slot))
+			if not ok then same = false; why = why or w end
+		end
+		check("blocks at " .. turn .. " degrees: the six plain upgrade blocks are the 0-degree blocks turned", same, why)
+	end
+	local function buySign(core, slot)
+		ROOT = newInstance("Folder")
+		local player = newPlayer()
+		local folder = newInstance("Folder")
+		folder.Parent = ROOT
+		local data = { slot = slot, folder = folder, owned = {}, items = {} }
+		core.playerData[player] = data
+		core.refreshSign(player)
+		local post = data.sign
+		return post, post and post:FindFirstChild("Board")
+	end
+	local exactSign = true
+	for slot = 1, 6 do
+		local post, board = buySign(core0, slot)
+		local foot = rowCenter(slot) + core0.SIGN_OFFSET
+		if not (post and board and exactCF(post.CFrame, cf(foot.X, foot.Y + 1.5, foot.Z)) and exactCF(board.CFrame, cf(foot.X, foot.Y + 4.3, foot.Z))) then exactSign = false end
+	end
+	check("BuySign at 0 degrees: the next-upgrade sign's post and board are main's, exactly", exactSign)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local same, why = true, nil
+		for _, slot in ipairs(slotsAt(turn)) do
+			local p0, b0 = buySign(core0, slot)
+			local pT, bT = buySign(coreT, slot)
+			local ok, w = turnedMatch({ p0, b0 }, { pT, bT }, core0.plotFrame(slot), coreT.plotFrame(slot))
+			if not ok then same = false; why = why or w end
+		end
+		check("BuySign at " .. turn .. " degrees: the next-upgrade sign (post and board) is the 0-degree sign turned", same, why)
+	end
+end
+
+-- 4. The IPO sign (IpoServer) ---------------------------------------------------------------------------------------------
+do
+	local function ipoSign(core, slot)
+		ROOT = newInstance("Folder")
+		local folder = newInstance("Folder")
+		folder.Parent = ROOT
+		local data = { slot = slot, folder = folder, ipo = {} }
+		ipoAt({ plotFrame = core.plotFrame })(newPlayer(), data)
+		local post = folder:FindFirstChild("IpoSign")
+		return post, post and post:FindFirstChild("Board")
+	end
+	local exact = true
+	for slot = 1, 6 do
+		local post, board = ipoSign(core0, slot)
+		local foot = rowCenter(slot) + Vector3.new(21, 0.5, 24)
+		if not (post and board and exactCF(post.CFrame, cf(foot.X, foot.Y + 1.5, foot.Z)) and exactCF(board.CFrame, cf(foot.X, foot.Y + 4.3, foot.Z))) then exact = false end
+	end
+	check("IpoSign at 0 degrees: the IPO sign's post and board are main's, exactly (21, 0.5, 24 from the center)", exact)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local same, why = true, nil
+		for _, slot in ipairs(slotsAt(turn)) do
+			local p0, b0 = ipoSign(core0, slot)
+			local pT, bT = ipoSign(coreT, slot)
+			local ok, w = turnedMatch({ p0, b0 }, { pT, bT }, core0.plotFrame(slot), coreT.plotFrame(slot))
+			if not ok then same = false; why = why or w end
+		end
+		check("IpoSign at " .. turn .. " degrees: the IPO sign (post and board) is the 0-degree sign turned", same, why)
+	end
+end
+
+-- 5. Hire spots, employee facing and incubators (EmployeeServer) ------------------------------------------------------
+do
+	local HIRES = 13 -- more than the 11 spots: the second lap is shifted too
+	local function team(core, slot)
+		ROOT = newInstance("Folder")
+		local folder = newInstance("Folder")
+		folder.Parent = ROOT
+		local data = { slot = slot, folder = folder, team = { employees = {}, models = {}, incubatorParts = {} } }
+		for i = 1, HIRES do table.insert(data.team.employees, { id = "e" .. i, creature = "CodingCat" }) end
+		local place, incubator, spots, incubatorSpots, feet = employeeAt({ plotFrame = core.plotFrame })
+		place(data)
+		for i = 1, 5 do incubator(newPlayer(), data, i) end
+		local models = {}
+		for i = 1, HIRES do models[i] = data.team.models["e" .. i] end
+		return data, models, spots, incubatorSpots, feet
+	end
+	local homesExact, faceExact = true, true
+	for slot = 1, 6 do
+		local _, models, spots, _, feet = team(core0, slot)
+		for i, model in ipairs(models) do
+			local lap = (i - 1) // #spots
+			local want = rowCenter(slot) + (spots[(i - 1) % #spots + 1] + Vector3.new(lap * 2, 0, lap * 2)) + feet
+			local home = model:GetAttribute("Home")
+			if not (home and home.X == want.X and home.Y == want.Y and home.Z == want.Z) then homesExact = false end
+			if not exactCF(model.pivot, CFrame.new(want) * CFrame.Angles(0, math.pi, 0)) or model:GetAttribute("Facing") ~= math.pi then faceExact = false end
+		end
+	end
+	check("hire spots at 0 degrees: every employee's Home is main's (center + spot + feet, second lap included), exactly", homesExact)
+	check("employee facing at 0 degrees: every employee is pivoted as on main (math.pi) and Facing is exactly math.pi", faceExact)
+	local incubatorsExact = true
+	for slot = 1, 6 do
+		local data, _, _, incubatorSpots = team(core0, slot)
+		for i = 1, 5 do
+			local parts, spot = data.team.incubatorParts[i], rowCenter(slot) + incubatorSpots[i]
+			if not (parts and sameVec(parts.base.Position, spot + Vector3.new(0, 1, 0), 0) and sameVec(parts.glow.Position, spot + Vector3.new(0, 1.6, 0), 0)
+				and sameVec(parts.egg.Position, spot + Vector3.new(0, 3.3, 0), 0)) then incubatorsExact = false end
+		end
+	end
+	check("incubators at 0 degrees: the five incubators (base, glow, egg) stand where main puts them, exactly", incubatorsExact)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local homes, facing, facingWhy, incubators = true, true, nil, true
+		for _, slot in ipairs(slotsAt(turn)) do
+			local d0, m0 = team(core0, slot)
+			local dT, mT = team(coreT, slot)
+			local move = coreT.plotFrame(slot) * core0.plotFrame(slot):Inverse()
+			local front = coreT.plotFrame(slot) * Vector3.new(0, 0, 1) - coreT.plotFrame(slot).Position
+			for i = 1, HIRES do
+				if not sameVec(mT[i]:GetAttribute("Home"), move * m0[i]:GetAttribute("Home")) then homes = false end
+				local pivot = mT[i].pivot
+				local look = pivot and (pivot * Vector3.new(0, 0, -1) - pivot.Position) -- models face -Z
+				local yaw = mT[i]:GetAttribute("Facing")
+				if not (pivot and sameCF(pivot, move * m0[i].pivot) and sameVec(look, front) and type(yaw) == "number"
+					and sameCF(CFrame.Angles(0, yaw, 0), pivot.Rotation)) then
+					facing = false
+					facingWhy = facingWhy or ("employee " .. i .. " in garage " .. slot)
+				end
+			end
+			for i = 1, 5 do
+				local a, b = d0.team.incubatorParts[i], dT.team.incubatorParts[i]
+				for _, key in ipairs({ "base", "glow", "egg" }) do
+					if not (a and b and sameVec(b[key].Position, move * a[key].Position)) then incubators = false end
+				end
+			end
+		end
+		check("hire spots at " .. turn .. " degrees: every employee's Home is the 0-degree Home turned (13 hires)", homes)
+		check("employee facing at " .. turn .. " degrees: every employee faces the garage's front (its -Z is the frame's +Z) and Facing is that yaw", facing, facingWhy)
+		check("incubators at " .. turn .. " degrees: the five incubators (base, glow, egg) are the 0-degree ones turned", incubators)
+	end
+end
+
+-- 6. The landing on spawn (teleportToPlot) ------------------------------------------------------------------------------
+do
+	local function land(core, slot)
+		local character = newInstance("Model")
+		local root = newInstance("Part")
+		root.Name = "HumanoidRootPart"
+		root.Parent = character
+		core.teleportToPlot(character, slot)
+		return root.CFrame
+	end
+	local exact = true
+	for slot = 1, 6 do
+		local c = rowCenter(slot)
+		if not exactCF(land(core0, slot), CFrame.lookAt(c + Vector3.new(0, 4, 12), c + Vector3.new(0, 4, 24))) then exact = false end
+	end
+	check("landing at 0 degrees: teleportToPlot lands where main lands (+12, looking at +24), exactly", exact)
+	for _, turn in ipairs({ 90, 180, 270 }) do
+		local same = true
+		for _, slot in ipairs(slotsAt(turn)) do
+			local move = coreT.plotFrame(slot) * core0.plotFrame(slot):Inverse()
+			if not sameCF(land(coreT, slot), move * land(core0, slot)) then same = false end
+		end
+		check("landing at " .. turn .. " degrees: teleportToPlot lands at the 0-degree landing turned, facing the front sign", same)
+	end
+end
+
+-- 7. plotZones and CompanyServer's placement: anchor coordinates, the same at every turn ---------------------------------
+do
+	local function serial(zones)
+		local out = {}
+		for _, z in ipairs(zones or {}) do
+			table.insert(out, string.format("%s|%s|%s|%.6f,%.6f,%.6f,%.6f,%.6f,%.6f", z.kind or "", z.name or "", tostring(z.owner), z.box[1], z.box[2], z.box[3], z.box[4], z.box[5], z.box[6]))
+		end
+		return table.concat(out, ";")
+	end
+	local raw0, depth0 = core0.plotZones()
+	local sameZones = raw0 ~= nil and #raw0 > 0
+	for _, turns in ipairs({ MIXED, { 90, 90, 90, 90, 90, 90 }, { 180, 180, 180, 180, 180, 180 }, { 270, 270, 270, 270, 270, 270 } }) do
+		local raw, depth = coreAt(turns).plotZones()
+		if serial(raw) ~= serial(raw0) or depth ~= depth0 then sameZones = false end
+	end
+	check("plotZones: the reserved zones CompanyServer places against are identical at every turn (anchor coordinates)", sameZones)
+	local function answers(raw, depth)
+		local env = { building = 1, zones = CompanyConfig.anchorZones(raw, depth), owned = {}, decor = {}, objects = {} }
+		for _, upg in ipairs(core0.UPGRADES) do env.owned[upg.name] = true end
+		local out = {}
+		for _, upg in ipairs(core0.UPGRADES) do
+			for x = -24, 24, 4 do
+				for z = -56, -4, 4 do
+					for _, r in ipairs({ 0, 2 }) do
+						local ok, reason = CompanyConfig.checkPlacement(env, upg.name, x, z, r)
+						table.insert(out, tostring(ok) .. tostring(reason))
+					end
+				end
+			end
+		end
+		return out
+	end
+	local a0 = answers(raw0, depth0)
+	local yes = 0
+	for _, a in ipairs(a0) do if string.sub(a, 1, 4) == "true" then yes += 1 end end
+	local samePlacement = yes > 0 and yes < #a0
+	for _, turns in ipairs({ MIXED, { 270, 270, 270, 270, 270, 270 } }) do
+		local aT = answers(coreAt(turns).plotZones())
+		if #aT ~= #a0 then samePlacement = false end
+		for i = 1, #a0 do if aT[i] ~= a0[i] then samePlacement = false end end
+	end
+	check("CompanyConfig.checkPlacement: " .. #a0 .. " placements (" .. yes .. " allowed) give the same answers at every turn", samePlacement)
+end
+
+print_real(string.format("%d passed, %d failed", passed, failed))
+"""
+
+
+def frame_texts():
+    """{file name: text} of the scripts the frame tests read."""
+    names = ("TycoonCore.lua", "EmployeeServer.lua", "IpoServer.lua", "PlotVisuals.lua", "PlotArt.lua", "EmployeeClient.lua",
+             "SectorConfig.lua", "IpoConfig.lua", "CompanyConfig.lua")
+    out = {}
+    for name in names:
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            out[name] = f.read()
+    return out
+
+
+def frame_extract_function(text, header):
+    """A top-level `local function` from its header line to its closing `end` at column 0 (empty when it is missing)."""
+    start = text.find(header)
+    if start < 0:
+        return ""
+    end = text.find("\nend\n", start)
+    return text[start:end + len("\nend\n")] if end >= 0 else ""
+
+
+def frame_block(text, header):
+    """A top-level table from its header line to its closing `}` at column 0 (empty when it is missing)."""
+    start = text.find(header)
+    if start < 0:
+        return ""
+    end = text.find("\n}\n", start)
+    return text[start:end + len("\n}\n")] if end >= 0 else ""
+
+
+def frame_line(text, prefix):
+    import re
+    m = re.search(r"^" + re.escape(prefix) + r".*$", text, re.M)
+    return m.group(0) if m else ""
+
+
+FRAME_CORE_FUNCTIONS = ("local function makePart(", "local function addLabel(", "local function plotCenter(", "local function plotFrame(",
+                        "local function itemOffset(", "local function nextUpgrade(", "local function looks(", "local function spawnItem(",
+                        "local function publishUpgrades(", "local function refreshSign(", "local function teleportToPlot(")
+
+
+def frame_source(texts):
+    """The frame test program, with the (possibly mutated) scripts in texts."""
+    core, ipo, employee = texts["TycoonCore.lua"], texts["IpoServer.lua"], texts["EmployeeServer.lua"]
+    constants = "\n".join(frame_line(core, "local %s = " % name) for name in ("PLOT_SPACING", "SIGN_OFFSET", "MAX_PLOTS"))
+    functions = "\n".join(frame_extract_function(core, header) for header in FRAME_CORE_FUNCTIONS)
+    functions = frame_line(core, "local QUARTER_TURNS = ") + "\n" + functions
+    zones_at = core.find("\tplotZones = function()")
+    zones_end = core.find("\n\tend,\n", zones_at)
+    plot_zones = core[zones_at + len("\tplotZones = "):zones_end + len("\n\tend")] if zones_at >= 0 and zones_end >= 0 else "nil"
+    ipo_constants = "\n".join(frame_line(ipo, "local %s = " % name) for name in ("SIGN_OFFSET", "SIGN_COLOR", "WHITE"))
+    employee_constants = "\n".join((frame_block(employee, "local EMPLOYEE_SPOTS = {"), frame_block(employee, "local INCUBATOR_SPOTS = {"),
+                                    frame_line(employee, "local FEET = "), frame_line(employee, "local WHITE = ")))
+    employee_functions = "\n".join(frame_extract_function(employee, header) for header in (
+        "local function makePart(", "local function spotFor(", "local function placeEmployees(", "local function buildIncubator("))
+    visuals_fake = VISUALS_TESTS[:VISUALS_TESTS.index("local PlotArt = (function()")]
+    text = (FRAME_TESTS.replace("__PLOTART__", texts["PlotArt.lua"]).replace("__PLOTVISUALS__", texts["PlotVisuals.lua"])
+            .replace("__SECTORCONFIG__", texts["SectorConfig.lua"]).replace("__IPOCONFIG__", texts["IpoConfig.lua"])
+            .replace("__COMPANYCONFIG__", texts["CompanyConfig.lua"])
+            .replace("__CORE_CONSTANTS__", constants).replace("__UPGRADES__", frame_block(core, "local UPGRADES = {"))
+            .replace("__CORE_FUNCTIONS__", functions).replace("__PLOTZONES__", plot_zones)
+            .replace("__TURNS_LINE__", frame_line(core, "local GARAGE_TURNS = ") or "local GARAGE_TURNS = {}")
+            .replace("__IPO_CONSTANTS__", ipo_constants).replace("__BUILDSIGN__", frame_extract_function(ipo, "local function buildSign("))
+            .replace("__EMPLOYEE_CONSTANTS__", employee_constants).replace("__EMPLOYEE_FUNCTIONS__", employee_functions))
+    return visuals_fake + text
+
+
+def frame_enclosing(text, index):
+    """The name of the top-level function (or init table) the character at index sits in."""
+    import re
+    best = "(top level)"
+    for m in re.finditer(r"^(?:local function (\w+)|function ([\w.:]+)|(\w+)\.init\(\{)", text[:index], re.M):
+        best = m.group(1) or m.group(2) or (m.group(3) + ".init")
+    return best
+
+
+# Where a garage position may be computed (file, function) -> how many lines use plotFrame. A new site fails until it is reviewed.
+FRAME_SITES = {
+    ("TycoonCore.lua", "spawnItem"): 1, ("TycoonCore.lua", "refreshSign"): 1,
+    ("TycoonCore.lua", "IpoServer.init"): 1, ("TycoonCore.lua", "EmployeeServer.init"): 1,
+    ("TycoonCore.lua", "teleportToPlot"): 2, ("TycoonCore.lua", "onPlayerAdded"): 1,
+    ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 1, ("IpoServer.lua", "buildSign"): 1,
+}
+# WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
+FRAME_UNWIRED = ("WorldArt.lua", "WorldVisuals.lua")
+WANDER_LINES = (
+    "\t\t\t\tw.target = math.random() < 0.3 and w.offset or Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)\n",
+    "\t\t\t\tw.yaw = math.atan2(-delta.X, -delta.Z) -- models face -Z\n",
+    "\t\t\tmodel:PivotTo(CFrame.new(home + w.offset + Vector3.new(0, bob, 0)) * CFrame.Angles(0, w.yaw, 0))\n",
+)
+
+
+def frame_static_checks(texts=None):
+    """[(name, ok, extra)]: where garage positions are computed, read from the source text of every script at the root."""
+    import re
+    if texts is None:
+        texts = {}
+        for name in sorted(os.listdir(ROOT)):
+            if name.endswith(".lua"):
+                with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+                    texts[name] = f.read()
+    out = []
+
+    def add(name, ok, extra=None):
+        out.append((name, bool(ok), extra))
+
+    offsets, core_center, sites = [], [], {}
+    for name, text in sorted(texts.items()):
+        if name in FRAME_UNWIRED:
+            continue
+        code = code_only(text)
+        offsets += ["%s: %s" % (name, m.group(0)) for m in re.finditer(r"plotCenter\s*\([^()]*\)\s*[-+*]", code)]
+        core_center += ["%s: %s" % (name, m.group(0)) for m in re.finditer(r"core\s*\.\s*plotCenter\s*\(", code)]
+        lines = set()
+        for m in re.finditer(r"plotFrame\b", code):
+            start = code.rfind("\n", 0, m.start()) + 1
+            if start in lines or re.match(r"\s*local function plotFrame\(", code[start:code.find("\n", m.start())]):
+                continue
+            lines.add(start)
+            key = (name, frame_enclosing(code, m.start()))
+            sites[key] = sites.get(key, 0) + 1
+    add("center plus offset: no script adds an offset to plotCenter (every garage position goes through plotFrame; WorldArt and WorldVisuals are PR L4's)",
+        not offsets, offsets[:3])
+    add("center plus offset: no module computes from core.plotCenter (IpoServer and EmployeeServer get core.plotFrame)", not core_center, core_center[:3])
+    want = {k: v for k, v in FRAME_SITES.items() if v}
+    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, the Floor, two core tables; "
+        "EmployeeServer: placeEmployees, buildIncubator; IpoServer: buildSign)", sites == want,
+        sorted(set(sites.items()) ^ set(want.items())))
+    core = code_only(texts.get("TycoonCore.lua", ""))
+    calls = [m.start() for m in re.finditer(r"(?<!function )\bplotCenter\s*\(", core)]
+    where = sorted(frame_enclosing(core, i) for i in calls)
+    room = "looks(\"room\", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))"
+    add("center plus offset: plotCenter is called only by plotFrame and on the room line (newPlot takes the turn from the Floor)",
+        where == ["onPlayerAdded", "plotFrame"] and core.count(room) == 1, where)
+    client = texts.get("EmployeeClient.lua", "")
+    beat_at = client.find("RunService.Heartbeat:Connect(function(dt)")
+    beat = client[beat_at:client.find("\nend)\n", beat_at)] if beat_at >= 0 else ""
+    add("EmployeeClient: the wander, the walking yaw and the pivot are in world axes (pinned: main's three lines, nothing turned in the Heartbeat)",
+        all(client.count(line) == 1 and line in beat for line in WANDER_LINES)
+        and not re.search(r"Facing|plotFrame|ToObjectSpace|VectorToWorldSpace|\bturn\b", code_only(beat)))
+    add("EmployeeClient: a walker starts at the server's Facing (math.pi when it is missing)",
+        client.count("\t\tlocal facing = model:GetAttribute(\"Facing\")\n") == 1
+        and client.count("yaw = type(facing) == \"number\" and facing or math.pi,") == 1)
+    employee = texts.get("EmployeeServer.lua", "")
+    place = frame_extract_function(employee, "local function placeEmployees(")
+    facing_at, parent_at = place.find("model:SetAttribute(\"Facing\", facing)"), place.find("model.Parent = data.folder")
+    add("EmployeeServer: Facing is set before the new model is parented (it reaches the client with the model)",
+        place.count("model:SetAttribute(\"Facing\", facing)") == 1 and 0 <= facing_at < parent_at)
+    return out
+
+
+# (what is broken, [(file, old, new)], the start of the named check that must fail)
+FRAME_MUTATIONS = [
+    # The proposal's L1 set
+    ("the IPO sign offset not turned", [("IpoServer.lua", "local pos = core.plotFrame(data.slot) * CFrame.new(SIGN_OFFSET)",
+                                         "local pos = CFrame.new(core.plotFrame(data.slot).Position + SIGN_OFFSET)")], "IpoSign at 90 degrees"),
+    ("the employee facing ignores the turn", [("EmployeeServer.lua", "local facing = math.pi + turn", "local facing = math.pi")],
+     "employee facing at 90 degrees"),
+    ("the turn's sign flipped", [("TycoonCore.lua", "c, 0, s, 0, 1, 0, -s, 0, c)", "c, 0, -s, 0, 1, 0, s, 0, c)")],
+     "turn math: at 90 degrees the garage's front"),
+    ("PlotVisuals.check in world axes", [("PlotVisuals.lua", "\t\t\tlocal b = boxOf(origin:ToObjectSpace(d.CFrame), d.Size) -- in the garage's frame\n",
+                                          "\t\t\tlocal b, o = boxOf(d.CFrame, d.Size), origin.Position\n"
+                                          "\t\t\tb = { b[1] - o.X, b[2] - o.X, b[3] - o.Y, b[4] - o.Y, b[5] - o.Z, b[6] - o.Z }\n")],
+     "room at 90 degrees: PlotVisuals.check in the garage's frame"),
+    # Every other site of section 4.3
+    ("the next-upgrade sign not turned", [("TycoonCore.lua", "local pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET)",
+                                           "local pos = CFrame.new(plotFrame(data.slot).Position + SIGN_OFFSET)")], "BuySign at 90 degrees"),
+    ("the plain upgrade block not turned", [("TycoonCore.lua", "local pos = plotFrame(data.slot) * CFrame.new(itemOffset(i)",
+                                             "local pos = CFrame.new(plotFrame(data.slot).Position + itemOffset(i)")], "blocks at 90 degrees"),
+    ("the landing not turned", [("TycoonCore.lua", "local spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)",
+                                 "local spawnPos = plotFrame(slot).Position + Vector3.new(0, 4, 12)")], "landing at 90 degrees"),
+    ("the hire spots not turned", [("EmployeeServer.lua", "local home = frame * (spotFor(i) + FEET)", "local home = frame.Position + spotFor(i) + FEET")],
+     "hire spots at 90 degrees"),
+    ("the incubators not turned", [("EmployeeServer.lua", "local spot = core.plotFrame(data.slot) * (INCUBATOR_SPOTS[i]",
+                                    "local spot = core.plotFrame(data.slot).Position + (INCUBATOR_SPOTS[i]")], "incubators at 90 degrees"),
+    ("the room ignores the Floor's turn", [("PlotVisuals.lua", "local frame = floor and CFrame.new(center) * floor.CFrame.Rotation or center",
+                                            "local frame = center")], "room at 90 degrees: every stage room"),
+    ("makePart drops the turn of a CFrame (places only its position)", [("TycoonCore.lua", "\t\tp.CFrame = position -- a part placed in a garage's frame",
+                                                                        "\t\tp.Position = position.Position -- a part placed in a garage's frame")],
+     "BuySign at 90 degrees"),
+    ("every garage takes the first garage's turn", [("TycoonCore.lua", "local c, s = QUARTER_TURNS[GARAGE_TURNS[slot]][1], QUARTER_TURNS[GARAGE_TURNS[slot]][2]",
+                                                     "local c, s = QUARTER_TURNS[GARAGE_TURNS[1]][1], QUARTER_TURNS[GARAGE_TURNS[1]][2]")],
+     "turn math: at 180 degrees"),
+    ("an employee re-pivoted without the turn", [("EmployeeServer.lua", "\t\t\tmodel:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0)) -- face",
+                                                 "\t\t\tmodel:PivotTo(CFrame.new(home) * CFrame.Angles(0, math.pi, 0)) -- face")],
+     "employee facing at 90 degrees"),
+    # L1 changes no behavior
+    ("a garage turned in L1", [("TycoonCore.lua", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }", "local GARAGE_TURNS = { 0, 0, 0, 90, 0, 0 }")],
+     "turn math: L1 turns no garage"),
+    ("seven turns for six garages", [("TycoonCore.lua", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0, 0 }")],
+     "turn math: one turn per garage"),
+    ("a turn that is not a quarter turn", [("TycoonCore.lua", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 45 }")],
+     "turn math: every turn is a quarter turn"),
+    ("the row moved (plotCenter's z 150 becomes 151)", [("TycoonCore.lua", "(slot - 1) * PLOT_SPACING, 0.5, 150)", "(slot - 1) * PLOT_SPACING, 0.5, 151)")],
+     "turn math: plotFrame(slot) is main's plotCenter(slot)"),
+    ("the employees face the back at 0 degrees (math.pi dropped)", [("EmployeeServer.lua", "local facing = math.pi + turn", "local facing = turn")],
+     "employee facing at 0 degrees"),
+    ("the room built half a stud higher in the frame", [("PlotVisuals.lua", "return center * CFrame.new(0, art.Layout.floorTop, 0) -- a turned garage",
+                                                         "return center * CFrame.new(0, art.Layout.floorTop + 0.5, 0) -- a turned garage")],
+     "room at 0 degrees: every stage room"),
+    ("plotZones turned with the first garage", [("TycoonCore.lua", "\t\tif not zones then return nil end\n\t\treturn zones, PlotArt.Layout.floorSize[3]",
+                                                 "\t\tif not zones then return nil end\n\t\tif GARAGE_TURNS[1] ~= 0 then for _, z in ipairs(zones) do "
+                                                 "z.box = { -z.box[2], -z.box[1], z.box[3], z.box[4], z.box[5], z.box[6] } end end\n"
+                                                 "\t\treturn zones, PlotArt.Layout.floorSize[3]")],
+     "plotZones: the reserved zones CompanyServer places against are identical at every turn"),
+    # The source pins
+    ("a new center plus offset in PoachServer", [("PoachServer.lua", "return PoachServer\n", "local spot = core.plotCenter(1) + Vector3.new(0, 0, 9)\nreturn PoachServer\n")],
+     "center plus offset: no script adds an offset to plotCenter"),
+    ("a new plotFrame site in DailyServer", [("DailyServer.lua", "return DailyServer\n", "local frame = core.plotFrame and core.plotFrame(1)\nreturn DailyServer\n")],
+     "center plus offset: every plotFrame use is pinned"),
+    ("the Floor back on plotCenter", [("TycoonCore.lua", "Vector3.new(60, 1, 60), plotFrame(slot), Color3", "Vector3.new(60, 1, 60), plotCenter(slot), Color3")],
+     "center plus offset: every plotFrame use is pinned"),
+    ("EmployeeServer back on core.plotCenter", [("EmployeeServer.lua", "local frame = core.plotFrame(data.slot)\n",
+                                                 "local frame = CFrame.new(core.plotCenter(data.slot))\n")],
+     "center plus offset: no module computes from core.plotCenter"),
+    ("EmployeeClient's walking yaw turned by Facing", [("EmployeeClient.lua", "w.yaw = math.atan2(-delta.X, -delta.Z) -- models face -Z",
+                                                        "w.yaw = math.atan2(-delta.X, -delta.Z) + (model:GetAttribute(\"Facing\") or math.pi) - math.pi -- models face -Z")],
+     "EmployeeClient: the wander, the walking yaw and the pivot are in world axes"),
+    ("EmployeeClient's wander turned into the garage's frame", [("EmployeeClient.lua", "Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)",
+                                                                 "CFrame.Angles(0, w.turn or 0, 0) * Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)")],
+     "EmployeeClient: the wander, the walking yaw and the pivot are in world axes"),
+    ("EmployeeClient ignores Facing", [("EmployeeClient.lua", "yaw = type(facing) == \"number\" and facing or math.pi,", "yaw = math.pi,")],
+     "EmployeeClient: a walker starts at the server's Facing"),
+    ("Facing set after the model is parented", [("EmployeeServer.lua", "\t\t\tmodel:SetAttribute(\"Facing\", facing) -- EmployeeClient starts them facing it\n", ""),
+                                                ("EmployeeServer.lua", "\t\tmodel:SetAttribute(\"Home\", home)\n",
+                                                 "\t\tmodel:SetAttribute(\"Home\", home)\n\t\tmodel:SetAttribute(\"Facing\", facing)\n")],
+     "EmployeeServer: Facing is set before the new model is parented"),
+]
+
+
+def frame_mutant_texts(edits):
+    """The scripts with the mutation's edits applied in memory, or None when an edit's old text is not there exactly once."""
+    texts = frame_texts()
+    for name in ("PoachServer.lua", "DailyServer.lua"):
+        with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+            texts[name] = f.read()
+    for name, old, new in edits:
+        if texts.get(name, "").count(old) != 1:
+            return None
+        texts[name] = texts[name].replace(old, new)
+    return texts
+
+
+def run_frame_mutants(luau, mutations=None):
+    """Each mutation must be caught by its NAMED check: a Luau run that reaches its summary line with that FAIL line, or a
+    source pin of that name. A crash, or a run that never reaches its summary, is never a catch."""
+    import re
+    caught, problems = 0, []
+    for label, edits, want in (FRAME_MUTATIONS if mutations is None else mutations):
+        texts = frame_mutant_texts(edits)
+        if texts is None:
+            problems.append("FAIL: frame mutation not applied (its text is missing or there twice): " + label)
+            continue
+        static = [name for name, ok, _ in frame_static_checks(all_root_texts(texts)) if not ok]
+        result = run_luau(luau, frame_source(texts))
+        finished = result.returncode == 0 and re.search(r"^\d+ passed, \d+ failed$", result.stdout, re.M) is not None
+        named = [line[len("FAIL: "):].split(" -- ")[0] for line in result.stdout.split("\n") if line.startswith("FAIL: ")] if finished else []
+        hit = next((n for n in static + named if n.startswith(want)), None)
+        if hit:
+            caught += 1
+            print("  frame mutant caught: %s -> %s" % (label, hit))
+        else:
+            why = "the tests crashed: " + (result.stderr.strip().split("\n")[0] if result.stderr.strip() else "no summary") if not finished else \
+                "\"%s\" stayed green (failed: %s)" % (want, static + named)
+            problems.append("FAIL: frame mutation not caught by its named check: %s -- %s" % (label, why))
+    return caught, problems
+
+
+def all_root_texts(overrides):
+    """{file name: text} for every script at the root, with overrides (the mutated scripts) in place of the real ones."""
+    texts = {}
+    for name in sorted(os.listdir(ROOT)):
+        if name.endswith(".lua"):
+            with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+                texts[name] = f.read()
+    texts.update(overrides)
+    return texts
+
+
+# A mutation that makes the frame tests crash must never count as caught (the harness's own self-test)
+FRAME_SELF_TEST = ("the frame tests crash (plotFrame errors)", [("TycoonCore.lua", "local function plotFrame(slot)\n", "local function plotFrame(slot)\n\terror(\"boom\")\n")],
+                   "turn math: plotFrame(slot) is main's plotCenter(slot)")
 
 
 def addearnings_calls(code):
@@ -7855,6 +8647,27 @@ def main():
     print("Plot visuals wiring check: %d passed, %d failed" % (visuals_passed, visuals_failed))
     if visuals_failed:
         code = 1
+    frame = run_luau(luau, frame_source(frame_texts()))
+    print("Plot frame check (lobby L1: every garage position through plotFrame; 0 degrees is main's, 90/180/270 the same garage turned): "
+          + (frame.stdout.strip() or frame.stderr.strip()))
+    if frame.returncode != 0 or " 0 failed" not in frame.stdout:
+        code = 1
+    pins = frame_static_checks()
+    for name, ok, extra in pins:
+        if not ok:
+            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
+            code = 1
+    print("Plot frame source pins: %d passed, %d failed" % (sum(1 for _, ok, _ in pins if ok), sum(1 for _, ok, _ in pins if not ok)))
+    frame_caught, frame_problems = run_frame_mutants(luau)
+    for line in frame_problems:
+        print(line)
+        code = 1
+    print("Plot frame mutations: %d of %d caught, each by its named check" % (frame_caught, len(FRAME_MUTATIONS)))
+    self_caught, self_problems = run_frame_mutants(luau, [FRAME_SELF_TEST])
+    if self_caught or "the tests crashed" not in "".join(self_problems):
+        print("FAIL: the frame mutation harness counted a mutant that crashed the tests as caught")
+        code = 1
+    print("Plot frame harness self-test (a mutant that crashes the tests never counts): %d of 1 reported as not caught" % (0 if self_caught else 1))
     result19 = run_luau(luau, buy_source())
     print("Office upgrade and HR purchase check: " + (result19.stdout.strip() or result19.stderr.strip()))
     if result19.returncode != 0 or " 0 failed" not in result19.stdout:

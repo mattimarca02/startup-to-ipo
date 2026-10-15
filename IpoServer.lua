@@ -25,7 +25,7 @@ local MAX_DEBUG_AMOUNT = 1e12
 
 local IpoServer = {}
 
-local core -- { getData, save, updateIncome, plotCenter, commitIpo, isPoachBusy, callOffPoachDeals, countEggs, onPerksChanged }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotFrame, commitIpo, isPoachBusy, callOffPoachDeals, countEggs, onPerksChanged }, given by TycoonCore
 local remotes = {}
 
 -- Helpers ---------------------------------------------------------------
@@ -290,12 +290,12 @@ end
 -- only a sign: nothing happens when you step on it. The IPO window opens from the IPO button on
 -- the HUD (and from the valuation bar), and going public always needs the two-step confirm there.
 local function buildSign(player, data)
-	local pos = core.plotCenter(data.slot) + SIGN_OFFSET
-	local function part(parent, name, size, position, color, material)
+	local pos = core.plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage
+	local function part(parent, name, size, cframe, color, material)
 		local p = Instance.new("Part")
 		p.Name = name
 		p.Size = size
-		p.Position = position
+		p.CFrame = cframe
 		p.Color = color
 		p.Material = material
 		p.Anchored = true
@@ -307,8 +307,8 @@ local function buildSign(player, data)
 		p.Parent = parent
 		return p
 	end
-	local post = part(data.folder, "IpoSign", Vector3.new(0.4, 3, 0.4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
-	local board = part(post, "Board", Vector3.new(8, 2.6, 0.3), pos + Vector3.new(0, 4.3, 0), SIGN_COLOR, Enum.Material.SmoothPlastic)
+	local post = part(data.folder, "IpoSign", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+	local board = part(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), SIGN_COLOR, Enum.Material.SmoothPlastic)
 
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromScale(10, 2.6) -- in studs

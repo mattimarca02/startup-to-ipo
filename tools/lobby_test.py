@@ -10,15 +10,18 @@ or luau-ubuntu.zip). Put it on your PATH, or point to it:
 
 PR L0 (this file's first version) only adds the CLAIMLOAD markers to TycoonCore.lua, around the join load that PR L3
 moves into claimGarage: onPlayerAdded from `local saved, ok = load(player)` to `data.ready = true`, lines 774-863 of
-TycoonCore.lua at main 99eed7b (the proposal's section 2.1). It checks that:
+TycoonCore.lua at main 99eed7b (the proposal's section 2.1). PR L1 (the plot frame) changes ten places outside the
+markers and none inside: every garage position goes through plotFrame, all turns 0. It checks that:
 - there is one CLAIMLOAD-START line and one CLAIMLOAD-END line, comment lines only, inside onPlayerAdded;
-- the text between them is lines 774-863 of TycoonCore.lua at 99eed7b (read with git show), byte for byte;
-- TycoonCore.lua without its CLAIMLOAD comment lines is the file at 99eed7b, byte for byte (L0 adds comments
-  only; L1 changes other lines and narrows this check);
-- docs/STUDIO_SYNC_LOBBY.md gives TycoonCore.lua's real SHA-256 and size, and its hash block (run in Luau against a
-  fake Studio) says OK for the real file and DIFFERENT for a changed one.
+- the text between them is lines 774-863 of TycoonCore.lua at 99eed7b (read with git show), byte for byte (L1 keeps
+  the room line's plotCenter(slot): PlotVisuals takes the turn from the Floor);
+- TycoonCore.lua without its CLAIMLOAD comment lines is the file at 99eed7b with L1's ten plot-frame edits (L1_EDITS,
+  each old text found once and replaced once), byte for byte: any other change outside the markers fails;
+- docs/STUDIO_SYNC_LOBBY.md's L1 section gives the real SHA-256 and size of the five scripts L1 changes, and its hash
+  block (run in Luau against a fake Studio) says ALL OK for the real files and NOT YET for a changed one.
 Then it breaks TycoonCore.lua on purpose, in memory (mutation runs): each must be caught by its named check, never
 by a crash. Running the marked block with fakes (a DataStore, the modules, a player leaving at each yield) is PR L3's.
+The plot frame's own tests (turns 0, 90, 180, 270; every "center + offset"; the mutants) are in tools/daily_test.py.
 
 It changes nothing in the game or in Studio. It never edits the other test files.
 """
@@ -37,6 +40,69 @@ FIRST, LAST = 774, 863      # the block's lines at BASE (docs/LOBBY_GARAGE_PROPO
 START = "-- CLAIMLOAD-START"
 END = "-- CLAIMLOAD-END"
 SYNC_DOC = "docs/STUDIO_SYNC_LOBBY.md"
+L1_HEADING = "## L1. Plot frame (nothing visible)"
+# The five scripts PR L1 changes: (file, Studio class, Studio place)
+L1_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService"), ("EmployeeServer", "ModuleScript", "ServerScriptService"),
+              ("IpoServer", "ModuleScript", "ServerScriptService"), ("PlotVisuals", "ModuleScript", "ServerScriptService"),
+              ("EmployeeClient", "LocalScript", "StarterPlayerScripts"))
+
+# PR L1's edits outside the CLAIMLOAD markers: (text at BASE, its L1 text). Applied in order, each old text must be in
+# the file exactly once. Nothing else outside the markers may change (the "outside" check).
+L1_EDITS = (
+    # the turn of each garage, next to MAX_PLOTS
+    ("local MAX_PLOTS = 6\n",
+     "local MAX_PLOTS = 6\n-- Each garage's turn in degrees, one per slot (quarter turns only: 0, 90, 180 or 270). Offsets inside a garage are in\n"
+     "-- its own frame (+X right, +Z the front, toward the signs), so they turn with it (plotFrame). All 0 for now: every\n"
+     "-- garage stands as it always has (docs/LOBBY_GARAGE_PROPOSAL.md, PR L1; the ring of PR L4 turns them).\n"
+     "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }\n"),
+    # makePart places a part by CFrame when it is given one (a part in a garage's frame)
+    ("\tp.Position = position\n",
+     "\tif typeof(position) == \"CFrame\" then\n\t\tp.CFrame = position -- a part placed in a garage's frame, turned with it\n"
+     "\telse\n\t\tp.Position = position\n\tend\n"),
+    # plotFrame, right after plotCenter (which stays as it is)
+    ("\treturn Vector3.new(startX + (slot - 1) * PLOT_SPACING, 0.5, 150)\nend\n",
+     "\treturn Vector3.new(startX + (slot - 1) * PLOT_SPACING, 0.5, 150)\nend\n\n"
+     "-- A garage's frame: its center, turned by its GARAGE_TURNS. frame * offset is where an offset in the garage lands in\n"
+     "-- the world, at any turn (plotFrame(slot).Position is plotCenter(slot)). Quarter turns are exact (cos and sin are -1, 0\n"
+     "-- or 1), so a turned room's boxes stay on the grid: the turn is about +Y, and 90 turns the front (+Z) to world +X.\n"
+     "local QUARTER_TURNS = { [0] = { 1, 0 }, [90] = { 0, 1 }, [180] = { -1, 0 }, [270] = { 0, -1 } } -- degrees -> cos, sin\n"
+     "local function plotFrame(slot)\n\tlocal center = plotCenter(slot)\n"
+     "\tlocal c, s = QUARTER_TURNS[GARAGE_TURNS[slot]][1], QUARTER_TURNS[GARAGE_TURNS[slot]][2]\n"
+     "\treturn CFrame.new(center.X, center.Y, center.Z, c, 0, s, 0, 1, 0, -s, 0, c)\nend\n"),
+    # spawnItem's plain block
+    ("\tlocal pos = plotCenter(data.slot) + itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0)\n",
+     "\tlocal pos = plotFrame(data.slot) * CFrame.new(itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0))\n"),
+    # refreshSign: the next-upgrade sign's spot, post and board
+    ("\tlocal pos = plotCenter(data.slot) + SIGN_OFFSET\n"
+     "\tlocal post = makePart(data.folder, \"BuySign\", Vector3.new(0.4, 3, 0.4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)\n",
+     "\tlocal pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage\n"
+     "\tlocal post = makePart(data.folder, \"BuySign\", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)\n"),
+    ("\tlocal board = makePart(post, \"Board\", Vector3.new(8, 2.6, 0.3), pos + Vector3.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)\n",
+     "\tlocal board = makePart(post, \"Board\", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)\n"),
+    # IpoServer and EmployeeServer get the frame (PoachServer keeps plotCenter: it never computes a position)
+    ("\tupdateIncome = updateIncome,\n\tplotCenter = plotCenter,\n\tcommitIpo = commitIpo,\n",
+     "\tupdateIncome = updateIncome,\n\tplotFrame = plotFrame,\n\tcommitIpo = commitIpo,\n"),
+    ("\tupdateIncome = updateIncome,\n\tplotCenter = plotCenter,\n})\n\n-- Poaching",
+     "\tupdateIncome = updateIncome,\n\tplotFrame = plotFrame,\n})\n\n-- Poaching"),
+    # teleportToPlot: the landing and the look, in the garage's frame
+    ("\t-- Land in the middle of the garage, facing the front sign\n\tlocal spawnPos = plotCenter(slot) + Vector3.new(0, 4, 12)\n"
+     "\tlocal signPos = plotCenter(slot) + Vector3.new(0, 4, 24)\n",
+     "\t-- Land in the middle of the garage, facing the front sign (both in the garage's frame)\n"
+     "\tlocal spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)\n\tlocal signPos = plotFrame(slot) * Vector3.new(0, 4, 24)\n"),
+    # the Floor, made in the garage's frame (newPlot takes the room's turn from it)
+    ("\tlocal floor = makePart(folder, \"Floor\", Vector3.new(60, 1, 60), plotCenter(slot), Color3.fromRGB(90, 90, 100))\n",
+     "\tlocal floor = makePart(folder, \"Floor\", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it\n"),
+)
+
+
+def with_l1_edits(base):
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS applied, or None when an old text is not there exactly once."""
+    text = base.decode("utf-8")
+    for old, new in L1_EDITS:
+        if text.count(old) != 1:
+            return None
+        text = text.replace(old, new)
+    return text.encode("utf-8")
 
 
 def read(name):
@@ -88,8 +154,9 @@ def marked_block(lines):
     return b"".join(line + b"\n" for line in lines[starts[0] + 1:ends[0]])
 
 
-def checks(core, base, doc):
-    """[(name, ok, extra)] for TycoonCore.lua's bytes (core), the file at BASE (base, or None) and the sync doc."""
+def checks(core, base, doc, others=None):
+    """[(name, ok, extra)] for TycoonCore.lua's bytes (core), the file at BASE (base, or None), the sync doc, and the
+    bytes of L1's other four scripts (others: {name: bytes}, read from the folder when None)."""
     out = []
 
     def add(name, ok, extra=None):
@@ -124,17 +191,41 @@ def checks(core, base, doc):
     add("outside: every line that names CLAIMLOAD is a comment line (no code hides on one)",
         all(line.lstrip(b"\t ").startswith(b"--") for line in named), [line[:60] for line in named])
     stripped = b"\n".join(line for line in lines if b"CLAIMLOAD" not in line)
-    add("outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s, byte for byte (L0 adds comments only)" % BASE,
-        base is not None and stripped == base)
+    edited = with_l1_edits(base) if base is not None else None
+    add("outside: L1's %d plot-frame edits each apply once to TycoonCore.lua at %s (their old text is there exactly once)" % (len(L1_EDITS), BASE),
+        edited is not None)
+    add("outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits, byte for byte "
+        "(L0 adds comments only, L1 only its listed edits)" % BASE, edited is not None and stripped == edited)
     add("file: TycoonCore.lua has no word \"Touched\", comments included (tools/daily_test.py searches the raw text)",
         b"Touched" not in core)
 
-    digest = hashlib.sha256(core).hexdigest()
-    add("doc: %s's table row has TycoonCore.lua's real SHA-256 and size (%s, %d bytes)" % (SYNC_DOC, digest[:12], len(core)),
-        ("| `TycoonCore` | Script, ServerScriptService | changed | `%s` | %d |" % (digest, len(core))) in doc)
-    add("doc: %s's hash block expects TycoonCore.lua's real SHA-256 and size" % SYNC_DOC,
-        ('{ "TycoonCore", "Script", "ServerScriptService", "%s", %d },' % (digest, len(core))) in doc)
+    section = l1_section(doc)
+    add("doc: %s has the L1 section (%s)" % (SYNC_DOC, L1_HEADING), bool(section))
+    files = dict(others if others is not None else l1_others())
+    files["TycoonCore"] = core
+    for name, cls, place in L1_SCRIPTS:
+        body = files.get(name)
+        digest = hashlib.sha256(body).hexdigest() if body is not None else "missing"
+        size = len(body) if body is not None else -1
+        add("doc: %s's L1 table row has %s.lua's real SHA-256 and size (%s, %d bytes)" % (SYNC_DOC, name, digest[:12], size),
+            ("| `%s` | %s, %s | changed | `%s` | %d |" % (name, cls, place, digest, size)) in section)
+        add("doc: %s's L1 hash block expects %s.lua's real SHA-256 and size" % (SYNC_DOC, name),
+            ('{ "%s", "%s", "%s", "%s", %d },' % (name, cls, place, digest, size)) in section)
     return out
+
+
+def l1_section(doc):
+    """docs/STUDIO_SYNC_LOBBY.md from the L1 heading to the next PR heading (or the end), or "" when it is missing."""
+    at = doc.find(L1_HEADING)
+    if at < 0:
+        return ""
+    nxt = doc.find("\n## L", at + len(L1_HEADING))
+    return doc[at:nxt if nxt >= 0 else len(doc)]
+
+
+def l1_others():
+    """{name: bytes} of L1's scripts other than TycoonCore, as they are in the folder."""
+    return {name: read_bytes(name + ".lua") for name, _, _ in L1_SCRIPTS if name != "TycoonCore"}
 
 
 def lua_block(doc, heading):
@@ -147,29 +238,50 @@ def lua_block(doc, heading):
 
 
 FAKE_STUDIO = """
-local scripts = { TycoonCore = { ClassName = "Script", Source = __SOURCE__ } }
-local server = { FindFirstChild = function(_, name) return scripts[name] end }
-game = { GetService = function(_, name) if name == "ServerScriptService" then return server end return nil end }
+local function folder(scripts) return { FindFirstChild = function(_, name) return scripts[name] end } end
+local server = folder({ __SERVER__ })
+local playerScripts = folder({ __CLIENT__ })
+local starterPlayer = { FindFirstChild = function(_, name) if name == "StarterPlayerScripts" then return playerScripts end return nil end }
+game = { GetService = function(_, name)
+	if name == "ServerScriptService" then return server elseif name == "StarterPlayer" then return starterPlayer end
+	return nil
+end }
 """
 
 
+def fake_studio(sources):
+    """The fake Studio holding L1's five scripts ({name: source text}) with their classes and places."""
+    server, client = [], []
+    for name, cls, place in L1_SCRIPTS:
+        entry = "%s = { ClassName = \"%s\", Source = %s }" % (name, cls, lua_long_string(sources[name]))
+        (client if place == "StarterPlayerScripts" else server).append(entry)
+    return FAKE_STUDIO.replace("__SERVER__", ", ".join(server)).replace("__CLIENT__", ", ".join(client))
+
+
 def hash_block_checks(luau, core, doc):
-    """docs/STUDIO_SYNC_LOBBY.md's hash block, run in Luau against a fake Studio holding TycoonCore."""
+    """docs/STUDIO_SYNC_LOBBY.md's L1 hash block, run in Luau against a fake Studio holding L1's five scripts."""
     out = []
-    block = lua_block(doc, "## (c) Hash check (command bar)")
+    block = lua_block(l1_section(doc), "### (c) Hash check (command bar)")
     master = lua_block(read("docs/STUDIO_SYNC_MASTER.md"), "## 6. Hash check (command bar)")
     fn = re.compile(r"^local K = \{.*?\nend\n", re.S)
     mine, theirs = fn.search(block), fn.search(master)
     out.append(("doc: the hash block's sha256 is docs/STUDIO_SYNC_MASTER.md section 6's, character for character",
                 bool(mine and theirs and mine.group(0) == theirs.group(0)), None))
-    text = core.decode("utf-8")
-    cases = (("the real file", text, "ALL OK"),
-             ("the real file with its last newline dropped (Studio may do that)", text[:-1], "ALL OK"),
-             ("a file with one byte changed", text.replace("REREAD_WAIT_SECONDS = 7", "REREAD_WAIT_SECONDS = 8", 1), "NOT YET"))
-    for label, source, want in cases:
-        result = run_luau(luau, FAKE_STUDIO.replace("__SOURCE__", lua_long_string(source)) + block)
+    real = {name: body.decode("utf-8") for name, body in l1_others().items()}
+    real["TycoonCore"] = core.decode("utf-8")
+    dropped = {name: text[:-1] for name, text in real.items()}
+    client = dict(real)
+    client["EmployeeClient"] = client["EmployeeClient"].replace("local walkers = {}", "local walkers = { }", 1)
+    server = dict(real)
+    server["TycoonCore"] = server["TycoonCore"].replace("REREAD_WAIT_SECONDS = 7", "REREAD_WAIT_SECONDS = 8", 1)
+    cases = (("the five real files", real, "ALL OK"),
+             ("the five real files with their last newline dropped (Studio may do that)", dropped, "ALL OK"),
+             ("TycoonCore with one byte changed", server, "NOT YET"),
+             ("EmployeeClient (in StarterPlayerScripts) with one byte changed", client, "NOT YET"))
+    for label, sources, want in cases:
+        result = run_luau(luau, fake_studio(sources) + block)
         last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else result.stderr.strip()[:200]
-        out.append(("doc: the hash block, run in Luau on a fake Studio with %s, ends with %s" % (label, want),
+        out.append(("doc: the L1 hash block, run in Luau on a fake Studio with %s, ends with %s" % (label, want),
                     result.returncode == 0 and last.startswith(want), last))
     return out
 
@@ -207,12 +319,13 @@ LEADERSTATS = ('\tlocal leaderstats = Instance.new("Folder")\n\tleaderstats.Name
                '\tlocal cash = Instance.new("IntValue")\n\tcash.Name = "Cash"\n\tcash.Parent = leaderstats\n\n'
                '\tlocal income = Instance.new("IntValue")\n\tincome.Name = "Income"\n\tincome.Parent = leaderstats\n\n')
 BLOCK_CHECK = "block: the text between the CLAIMLOAD markers is lines %d-%d of TycoonCore.lua at %s, byte for byte" % (FIRST, LAST, BASE)
-OUTSIDE_CHECK = "outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s, byte for byte (L0 adds comments only)" % BASE
+OUTSIDE_CHECK = "outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits, byte for byte" % BASE
+EDITS_CHECK = "outside: L1's %d plot-frame edits each apply once" % len(L1_EDITS)
 COUNT_CHECK = "markers: exactly one CLAIMLOAD-START line and one CLAIMLOAD-END line, START first"
 SHAPE_CHECK = "markers: each marker line is a tab and the marker, nothing else"
 PLACE_CHECK = "markers: both are inside onPlayerAdded (after its first line, before Players.PlayerAdded:Connect)"
 COMMENT_CHECK = "outside: every line that names CLAIMLOAD is a comment line (no code hides on one)"
-DOC_ROW_CHECK = "doc: %s's table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
+DOC_ROW_CHECK = "doc: %s's L1 table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
 
 # (what is broken, how, the start of the named check that must fail)
 MUTANTS = [
@@ -260,6 +373,17 @@ MUTANTS = [
      swap("local REREAD_WAIT_SECONDS = 7\n", "local REREAD_WAIT_SECONDS = 0\n"), OUTSIDE_CHECK),
     ("the CLAIMLOAD note above the markers reworded (comments only: the doc's hash goes stale)",
      swap("byte for byte.)\n\t" + START, "byte by byte.)\n\t" + START), DOC_ROW_CHECK),
+    # PR L1: only its listed plot-frame edits outside the markers, and none inside
+    ("L1: the room line inside the block given the frame (plotFrame(slot) instead of plotCenter(slot))",
+     swap("PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt", "PlotVisuals.newPlot, folder, plotFrame(slot), PlotArt"), BLOCK_CHECK),
+    ("L1: a garage turned (GARAGE_TURNS with a 90)", swap("local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }", "local GARAGE_TURNS = { 0, 0, 0, 90, 0, 0 }"),
+     OUTSIDE_CHECK),
+    ("L1: the landing put back on plotCenter (an edit not in L1's list)",
+     swap("\tlocal spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)\n", "\tlocal spawnPos = plotCenter(slot) + Vector3.new(0, 4, 12)\n"), OUTSIDE_CHECK),
+    ("L1: PoachServer's core given plotFrame too (a third core table edited)",
+     swap("\tplotCenter = plotCenter,\n\tpeekSave = peekSave,\n", "\tplotFrame = plotFrame,\n\tpeekSave = peekSave,\n"), OUTSIDE_CHECK),
+    ("L1: a comment line of the frame reworded (the doc's hash goes stale and the edit list no longer matches)",
+     swap("-- garage stands as it always has", "-- garage stands where it always stood"), OUTSIDE_CHECK),
 ]
 
 # The harness must report this as not caught: the checks crash on it (the file is not text), and a crash never counts.

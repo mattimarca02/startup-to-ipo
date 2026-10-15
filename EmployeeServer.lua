@@ -28,6 +28,7 @@ local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 -- back incubators and the first row). Each hire's desk is in front of it (+Z) in PlotArt, all facing
 -- the same way. The spots fill the grid row by row from the middle out, so a small team looks even.
 -- The spawn lane (x -3 to 3) and the two walls of upgrade props (TycoonCore itemOffset) stay free.
+-- These offsets (and INCUBATOR_SPOTS) are in the garage's frame (TycoonCore plotFrame): they turn with it.
 local EMPLOYEE_SPOTS = {
 	Vector3.new(-4.5, 0, -10), Vector3.new(4.5, 0, -10), Vector3.new(-13.5, 0, -10), Vector3.new(13.5, 0, -10),
 	Vector3.new(-4.5, 0, 2), Vector3.new(4.5, 0, 2), Vector3.new(-13.5, 0, 2), Vector3.new(13.5, 0, 2),
@@ -44,7 +45,7 @@ local WHITE = Color3.new(1, 1, 1)
 
 local EmployeeServer = {}
 
-local core -- { getData, save, updateIncome, plotCenter }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotFrame }, given by TycoonCore
 local remotes = {}
 local rng = Random.new()
 
@@ -178,23 +179,26 @@ end
 -- The client makes them wander around their "Home" spot.
 local function placeEmployees(data)
 	local team = data.team
-	local center = core.plotCenter(data.slot)
+	local frame = core.plotFrame(data.slot)
+	local _, turn = frame:ToEulerAnglesYXZ()
+	local facing = math.pi + turn -- the front of the plot, turned with the garage (models face -Z)
 	local employed = {}
 	for i, employee in ipairs(team.employees) do
 		employed[employee.id] = true
-		local home = center + spotFor(i) + FEET
+		local home = frame * (spotFor(i) + FEET)
 		local model = team.models[employee.id]
 		if not model then
 			local creature = CreatureConfig.getCreature(employee.creature)
 			model = CreatureModels.build(creature)
 			addNameTag(model, creature)
 			model:SetAttribute("EmployeeId", employee.id)
-			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, math.pi, 0)) -- face the front of the plot
+			model:SetAttribute("Facing", facing) -- EmployeeClient starts them facing it
+			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0)) -- face the front of the plot
 			CollectionService:AddTag(model, "Employee")
 			model.Parent = data.folder
 			team.models[employee.id] = model
 		elseif model:GetAttribute("Home") ~= home then
-			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, math.pi, 0))
+			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0))
 		end
 		model:SetAttribute("Home", home)
 	end
@@ -512,7 +516,7 @@ end
 -- One incubator on the back of the plot. Walk up to a ready egg to hatch it.
 local function buildIncubator(player, data, i)
 	local team = data.team
-	local spot = core.plotCenter(data.slot) + (INCUBATOR_SPOTS[i] or Vector3.new(-12 + (i - 1) * 12, 0, -25))
+	local spot = core.plotFrame(data.slot) * (INCUBATOR_SPOTS[i] or Vector3.new(-12 + (i - 1) * 12, 0, -25))
 	local base = makePart(data.folder, "Incubator" .. i, Vector3.new(5, 1, 5), spot + Vector3.new(0, 1, 0), Color3.fromRGB(60, 62, 72), Enum.Material.Metal)
 	local glow = makePart(data.folder, "IncubatorGlow", Vector3.new(4.4, 0.2, 4.4), spot + Vector3.new(0, 1.6, 0), Color3.fromRGB(90, 200, 255), Enum.Material.Neon)
 	local egg = makePart(data.folder, "IncubatorEgg", Vector3.new(2.4, 3.2, 2.4), spot + Vector3.new(0, 3.3, 0), WHITE)

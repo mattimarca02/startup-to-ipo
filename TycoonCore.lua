@@ -76,6 +76,10 @@ local UPGRADES = {
 local PLOT_SPACING = 90
 local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the garage sign that names the next upgrade (front of the plot)
 local MAX_PLOTS = 6
+-- Each garage's turn in degrees, one per slot (quarter turns only: 0, 90, 180 or 270). Offsets inside a garage are in
+-- its own frame (+X right, +Z the front, toward the signs), so they turn with it (plotFrame). All 0 for now: every
+-- garage stands as it always has (docs/LOBBY_GARAGE_PROPOSAL.md, PR L1; the ring of PR L4 turns them).
+local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
 local LOAD_TRIES = 3 -- reads of a joining player's save before giving up and kicking them
@@ -94,7 +98,11 @@ local function makePart(parent, name, size, position, color, material)
 	local p = Instance.new("Part")
 	p.Name = name
 	p.Size = size
-	p.Position = position
+	if typeof(position) == "CFrame" then
+		p.CFrame = position -- a part placed in a garage's frame, turned with it
+	else
+		p.Position = position
+	end
 	p.Color = color
 	p.Material = material or Enum.Material.SmoothPlastic
 	p.Anchored = true
@@ -125,6 +133,16 @@ end
 local function plotCenter(slot)
 	local startX = -((MAX_PLOTS - 1) * PLOT_SPACING) / 2
 	return Vector3.new(startX + (slot - 1) * PLOT_SPACING, 0.5, 150)
+end
+
+-- A garage's frame: its center, turned by its GARAGE_TURNS. frame * offset is where an offset in the garage lands in
+-- the world, at any turn (plotFrame(slot).Position is plotCenter(slot)). Quarter turns are exact (cos and sin are -1, 0
+-- or 1), so a turned room's boxes stay on the grid: the turn is about +Y, and 90 turns the front (+Z) to world +X.
+local QUARTER_TURNS = { [0] = { 1, 0 }, [90] = { 0, 1 }, [180] = { -1, 0 }, [270] = { 0, -1 } } -- degrees -> cos, sin
+local function plotFrame(slot)
+	local center = plotCenter(slot)
+	local c, s = QUARTER_TURNS[GARAGE_TURNS[slot]][1], QUARTER_TURNS[GARAGE_TURNS[slot]][2]
+	return CFrame.new(center.X, center.Y, center.Z, c, 0, s, 0, 1, 0, -s, 0, c)
 end
 
 -- Where each upgrade's prop stands: two walls of stations, the first three (Desk, Coffee Machine, Laptop) along
@@ -194,7 +212,7 @@ local function spawnItem(data, i, upg, popIn)
 		data.items[upg.name] = prop
 		return
 	end
-	local pos = plotCenter(data.slot) + itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0)
+	local pos = plotFrame(data.slot) * CFrame.new(itemOffset(i) + Vector3.new(0, 0.5 + upg.size.Y / 2, 0))
 	local item = makePart(data.folder, upg.name, upg.size, pos, upg.color)
 	if upg.name == "Neon Logo" then
 		item.Material = Enum.Material.Neon
@@ -225,10 +243,10 @@ local function refreshSign(player)
 	local i, upg = nextUpgrade(data)
 	if not i then return end -- everything bought
 
-	local pos = plotCenter(data.slot) + SIGN_OFFSET
-	local post = makePart(data.folder, "BuySign", Vector3.new(0.4, 3, 0.4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+	local pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage
+	local post = makePart(data.folder, "BuySign", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
 	post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
-	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos + Vector3.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
+	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
 	board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
 	addLabel(board, string.format("Next: %s  $%d\nBuy it in SHOP > Office", upg.name, upg.cost), 3)
 	data.sign = post
@@ -614,7 +632,7 @@ IpoServer.init({
 	end,
 	save = save,
 	updateIncome = updateIncome,
-	plotCenter = plotCenter,
+	plotFrame = plotFrame,
 	commitIpo = commitIpo,
 	isPoachBusy = function(player)
 		return PoachServer.isBusy(player)
@@ -652,7 +670,7 @@ EmployeeServer.init({
 	end,
 	save = save,
 	updateIncome = updateIncome,
-	plotCenter = plotCenter,
+	plotFrame = plotFrame,
 })
 
 -- Poaching (milestone 3 poaching) ---------------------------------------
@@ -725,9 +743,9 @@ DailyServer.init({
 local function teleportToPlot(character, slot)
 	local root = character:WaitForChild("HumanoidRootPart")
 	task.wait(0.1)
-	-- Land in the middle of the garage, facing the front sign
-	local spawnPos = plotCenter(slot) + Vector3.new(0, 4, 12)
-	local signPos = plotCenter(slot) + Vector3.new(0, 4, 24)
+	-- Land in the middle of the garage, facing the front sign (both in the garage's frame)
+	local spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)
+	local signPos = plotFrame(slot) * Vector3.new(0, 4, 24)
 	root.CFrame = CFrame.lookAt(spawnPos, signPos)
 end
 
@@ -764,7 +782,7 @@ local function onPlayerAdded(player)
 	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	playerData[player] = data
 
-	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotCenter(slot), Color3.fromRGB(90, 90, 100))
+	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it
 	addLabel(floor, player.DisplayName .. "'s Startup", 12)
 
 	-- Saving stays off (data.loaded is false) until every module has set up its part of the save.
