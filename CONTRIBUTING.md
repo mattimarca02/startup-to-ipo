@@ -146,7 +146,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/world_test.py | (repo only) | free | | |
 | tools/icon_test.py | (repo only) | free | | |
 | tools/render_previews.py | (repo only) | free | | |
-| docs/previews/*.svg | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/previews/*.svg | (repo only) | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
 | docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
@@ -160,6 +160,9 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
 | tools/lobby_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
-| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/MODEL_ASSETS_PLAN.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
+| docs/MODEL_ASSETS_PLAN.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
+| PlotBuilding | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
+| PlotBuildingVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
+| ModelSlots | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all-v1 | 2026-10-16 |
