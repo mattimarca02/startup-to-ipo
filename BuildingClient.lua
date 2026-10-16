@@ -1,13 +1,14 @@
--- BuildingClient: fades the roof and walls of a building when the local player is inside it (branch building-pass).
--- WHERE: a LocalScript named exactly BuildingClient in StarterPlayer > StarterPlayerScripts (create a new, empty
--- LocalScript there by hand and paste this whole file into it). It is not in the repo's game tree on purpose.
+-- BuildingClient: fades the shell of a garage's building when the local player is inside it (lobby L2, from building-pass).
+-- WHERE: a LocalScript named exactly BuildingClient in StarterPlayer > StarterPlayerScripts.
 --
--- Client only, looks only. The server builds the Model "PlotBuilding" (PlotBuildingVisuals) and tags it
--- "PlotBuilding"; the numbers this script needs are attributes of that Model. This script:
+-- Client only, looks only. The server builds the Model "PlotBuilding" (PlotBuildingVisuals) and tags it "PlotBuilding";
+-- the numbers this script needs are attributes of that Model: the garage's frame (Frame, a CFrame) and the inside box in
+-- that frame, so a garage turned to face any side of the plaza works the same. This script:
 --   * never fires a remote, never reads or writes a save, never touches anything outside tagged building Models;
---   * only writes Transparency of the parts in a building's "Fade" group (and TextTransparency / Enabled of the
---     SurfaceGui text on them), on this client only. Nothing it does reaches the server or another player;
---   * never touches CanCollide, CanTouch, CanQuery, Anchored or any part's position: the building has no effect on play.
+--   * only writes Transparency of the parts in a building's "Fade" group (the shell: kit MeshParts or Parts, each from
+--     its own starting value, glass from 0.3, up to 1), on this client only. Nothing it does reaches the server or
+--     another player. The furniture ("Static") and the invisible solid boxes ("Solid") are never touched;
+--   * never touches CanCollide, CanTouch, CanQuery, Anchored or any part's position: the server decides collision.
 -- The inside check and the fade maths below (BUILDINGMATH) are the same text as in PlotBuildingVisuals.lua,
 -- which tools/building_test.py tests; it fails if the two copies differ.
 
@@ -36,9 +37,9 @@ local function finite(n)
 end
 
 -- Is a point inside the building? b = { minX, maxX, minY, maxY, minZ, maxZ, doorMinX, doorMaxX, doorDepth, margin }
--- (world studs; maxY is the underside of the roof; the door is on the +Z side). Edges count as inside. The
+-- (the garage's frame; maxY is the ground floor's ceiling; the door is on the +Z side). Edges count as inside. The
 -- doorway and the apron in front of it count too, so the front wall starts to fade as you walk up to the
--- door. Above the roof is outside. wasInside makes the box `margin` bigger (no flicker on a wall line).
+-- door. Above the ceiling is outside. wasInside makes the box `margin` bigger (no flicker on a wall line).
 -- A coordinate that is NaN or infinite is never inside.
 local function isInside(b, x, y, z, wasInside)
 	if not (finite(x) and finite(y) and finite(z)) then
@@ -94,7 +95,7 @@ local FIELDS = {
 	doorMinX = "DoorMinX", doorMaxX = "DoorMaxX", doorDepth = "DoorDepth", margin = "Margin",
 }
 
--- The inside box from the Model's attributes, or nil if one is missing or not a finite number
+-- The inside box from the Model's attributes (in the garage's frame), or nil if one is missing or not a finite number
 local function readBounds(model)
 	local bounds = {}
 	for field, attribute in pairs(FIELDS) do
@@ -107,7 +108,7 @@ local function readBounds(model)
 	return bounds
 end
 
--- One state per building Model: { model, bounds, seconds, levels, fade, level, inside, parts, labels, guis, connections }
+-- One state per building Model: { model, bounds, frame, seconds, levels, fade, level, inside, parts, labels, guis, connections }
 local buildings = {}
 
 local function rootPart()
@@ -169,10 +170,10 @@ local function track(model)
 	if buildings[model] then
 		return
 	end
-	local bounds
+	local bounds, frame
 	for _ = 1, 20 do -- attributes and children can arrive a moment after the Model
-		bounds = readBounds(model)
-		if bounds and model:FindFirstChild("Fade") then
+		bounds, frame = readBounds(model), model:GetAttribute("Frame")
+		if bounds and typeof(frame) == "CFrame" and model:FindFirstChild("Fade") then
 			break
 		end
 		task.wait(0.25)
@@ -180,7 +181,7 @@ local function track(model)
 			return
 		end
 	end
-	if not bounds or not model:FindFirstChild("Fade") then
+	if not bounds or typeof(frame) ~= "CFrame" or not model:FindFirstChild("Fade") then
 		warn("BuildingClient: a building arrived without its numbers, so its roof will not fade")
 		return
 	end
@@ -191,11 +192,11 @@ local function track(model)
 	local root = rootPart()
 	local inside = false
 	if root then
-		local p = root.Position
+		local p = frame:PointToObjectSpace(root.Position) -- the character in the garage's frame
 		inside = isInside(bounds, p.X, p.Y, p.Z, false)
 	end
 	local state = {
-		model = model, bounds = bounds, seconds = seconds, levels = math.max(1, math.floor(levels + 0.5)),
+		model = model, bounds = bounds, frame = frame, seconds = seconds, levels = math.max(1, math.floor(levels + 0.5)),
 		fade = inside and 1 or 0, inside = inside, parts = {}, labels = {}, guis = {}, connections = {},
 	}
 	state.level = quantize(state.fade, state.levels)
@@ -223,7 +224,7 @@ CollectionService:GetInstanceRemovedSignal(TAG):Connect(forget)
 -- only when the step changes (nothing is written while a roof holds still).
 local function update(state, root, dt)
 	if root then -- no character (dead, respawning): hold the last state
-		local p = root.Position
+		local p = state.frame:PointToObjectSpace(root.Position) -- the character in the garage's frame
 		state.inside = isInside(state.bounds, p.X, p.Y, p.Z, state.inside)
 	end
 	local target = state.inside and 1 or 0

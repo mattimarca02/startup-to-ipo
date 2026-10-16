@@ -1,5 +1,7 @@
 # Building pass: a building around each of the five rooms, with a roof that fades when you walk in
 
+> **Built differently in lobby L2 (2026-10-16, branch `lobby-all`).** This pass's maths, inside check and fade client were kept (BuildingClient is now at the repo root and works in each garage's turned frame). Its Parts-only, never-solid shell was replaced by the five kit buildings with invisible solid walls (docs/PLOT_VISUALS.md, "The building"; docs/LOBBY_ALL_PROGRESS.md). The integration patch is not applied: L2 wired TycoonCore by hand (two of its three edits). The Studio steps are in docs/STUDIO_SYNC_LOBBY.md, not in docs/STUDIO_SYNC_BUILDING.md.
+
 Branch `building-pass` (from `visuals-garage` at `7f5c141`). Status: **all five phases built, new files only** (this file was the Phase 1 proposal; the numbers in sections 2, 4, 6 and 9 are now the real ones). Nothing in an existing file is changed by this branch except the claim rows in `CONTRIBUTING.md`. The edits to existing files are listed in section 8 and need your approval; they are also ready as `docs/building_pass_integration.patch`.
 
 Looks only, like the rest of the plot visuals: nothing is saved, sent through a remote or read back, no gameplay position moves, nothing collides, nothing is bought or opened by touching it.

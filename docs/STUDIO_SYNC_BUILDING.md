@@ -1,5 +1,7 @@
 # Studio sync for the building pass (addendum to docs/STUDIO_SYNC.md)
 
+> **Built differently in lobby L2 (2026-10-16, branch `lobby-all`).** This pass's maths, inside check and fade client were kept (BuildingClient is now at the repo root and works in each garage's turned frame). Its Parts-only, never-solid shell was replaced by the five kit buildings with invisible solid walls (docs/PLOT_VISUALS.md, "The building"; docs/LOBBY_ALL_PROGRESS.md). The integration patch is not applied: L2 wired TycoonCore by hand (two of its three edits). The Studio steps are in docs/STUDIO_SYNC_LOBBY.md, not in docs/STUDIO_SYNC_BUILDING.md.
+
 Branch `building-pass` (from `visuals-garage` at `7f5c141`). Nothing here touches Roblox: it is the list of what the Mac has to do, in order. `docs/STUDIO_SYNC.md` still describes everything of `visuals-garage`; this file adds only the building pass. The design is in `docs/BUILDING_PASS_PROPOSAL.md`.
 
 The pass has two halves, and you can do the first without approving the second:

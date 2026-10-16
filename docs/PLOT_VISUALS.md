@@ -28,7 +28,7 @@ The six upgrade props (Desk, Coffee Machine, Laptop, Server Rack, Whiteboard, Ne
 ## Rules every room keeps (tools/daily_test.py proves them for each room)
 
 - **Gameplay positions are fixed.** The hire grid (4 x 3, 11 spots), the six upgrade stations, the five incubators, the two signs, the spawn and the 6+ stud aisles are copied into `PlotArt.Layout` and compared with the scripts. Nothing of a room stands in a reserved zone (`PlotVisuals.zones`), nothing blocks the walking lane, and each hire desk and each prop stays inside its own zone.
-- **Open shells.** Low walls (6 studs at most) on the two sides and no wall along the front, a taller back wall (12 at most), no roof, no facade. A later pass adds the full building (see the ROADMAP).
+- **The room stays open; the building around it is closed** (lobby L2). `PlotArt` rooms keep their low walls (6 studs at most on the sides, no wall along the front, 12 at the back) and no roof: checks and fingerprints unchanged. Around each room, `PlotBuilding` builds the closed building of the funding stage (section "The building" below), as its own Model with its own budget.
 - **Decor never interferes.** Every part is anchored, `CanCollide`, `CanTouch` and `CanQuery` off. Nothing collides, not even the walls (a solid wall makes the camera zoom in); the real `Floor` Part is the only solid. The floor is only restyled (color, material), never renamed or resized.
 - **No floating part.** Everything rests on the floor, the ground or a chain of touching parts.
 - **Budgets per room:** at most 260 parts (the six props are 118 of them, so shell + decor + 11 desks have 142), at most 3 PointLights, tiny parts cast no shadow, big glass casts none either.
@@ -47,6 +47,16 @@ The six upgrade props (Desk, Coffee Machine, Laptop, Server Rack, Whiteboard, Ne
 
 `Workspace.PREVIEW_STAGES` (the rooms side by side at x = -600) exists only in Studio and **must be deleted before publishing**. docs/STUDIO_SYNC.md has the command-bar snippet that rebuilds it from the scripts.
 
-## Not built yet
+## The building (lobby L2)
 
-The full-building pass (a roof that fades out when the player is inside, a facade, a door, windows and a sign for all five stages) is in the ROADMAP. It needs a new empty LocalScript created by hand in StarterPlayerScripts.
+Each garage is permanent (`Workspace.Garages.Garage1..6`: the Floor, the building, the name sign); the owner's folder (room, props, employees, incubators, signs) stands in it while they play. `PlotBuilding` (data and pure layout) and `PlotBuildingVisuals` (the builder and its checks) build one building per funding stage from the 3D kit in `ReplicatedStorage.KitModels` (docs/KIT_MODELS.md), each piece from Parts where its model is missing. `BuildingClient` (a LocalScript) fades the shell for the local player inside. The rules, all checked by `tools/building_test.py` at five stages and four turns:
+
+- **Five buildings:** 1 Garage (one story, brick, roll-up door), 2 Small Office (one story, white), 3 Big Office (two stories), 4 Small Corporate (four stories of blue glass, a revolving door), 5 Big Corporate (a marble podium and a five-story dark glass tower, columns, a crown). Footprints from 68 x 66.2 to 82.4 x 74.4: at least building-pass's 62 x 62, inside the lot (82.6 x 86.6). They grow from the floor's front-center: the front face is z 32.2 in the garage's frame at every stage.
+- **Solid = invisible boxes.** Seven to ten anchored Parts per building (outer walls, the doorway left open, the roof, the floor of the furniture band) are `CanCollide` on, `CanTouch` off, Transparency 1. Every kit MeshPart and fallback Part is `CanCollide`, `CanTouch` and `CanQuery` off, no shadow. Every box is outside the 60 x 60 floor, except the roof (12 studs up). A stage change moves anyone standing where a new box is to the landing spot.
+- **The doorway** is at least 9 wide and 9 high and nothing solid stands in the lane (9 wide, from the room to the end of the 3.5-stud apron); only a stage's door piece (WallGarage, WallDoor, the revolving door) may stand in it, never solid. The claim post's spot, the landing and every reserved zone stay clear.
+- **The fade:** inside (the apron included), the shell (`Fade`) fades to 1 from each part's own Transparency (kit glass from 0.3). The furniture and the band's floor (`Static`) stay visible; the boxes are already invisible. Only the ground floor is inside: the upper stories are exterior only.
+- **Kit use:** only MeshParts of a kit model are used (anything else is left out with one warning), recolored per stage by their `Role` attribute (`PlotBuilding.Styles`: a color and a material per role), placed by the model's `WorldPivot`, turned by `PlotBuilding.KIT_FRONT_TURN`. Only `Wall`, `RoofEdge` (along X) and `Floor` (X and Z) are stretched.
+- **Budget:** at most 160 parts per building (kit or Parts, boxes included), no lights. Six garages at the biggest stage plus the plaza stay under 3,000.
+- **Furniture** (stages 2 to 5) stands in a band at most 4 deep along the shell's inner faces (Big Corporate's back band: 8), outside the room, the lane and every zone. `PlotBuilding.furnitureFootprints(stage)` lists the boxes for customize PR 2.
+
+Change a building in `PlotBuilding.lua` only, then run `python3 tools/building_test.py`.

@@ -1,5 +1,7 @@
 # Five buildings, one per funding stage (proposal, then built on `lobby-all`)
 
+> **Superseded (2026-10-16).** The kit plan (docs/KIT_MODELS.md, `ReplicatedStorage.KitModels`) replaced this design on branch `lobby-all`: see docs/LOBBY_ALL_PROGRESS.md and docs/PLOT_VISUALS.md, "The building". Kept for its measurements and reasoning.
+
 Design first (2026-10-16, branch `lobby-all`, from `main` `f6a546f`), then built on the same branch in stages `lobby-B1` to `lobby-B5` (see section 10). Line numbers are `main` `f6a546f`. **(unverified)** = only Studio or a phone can check it; each one is in docs/STUDIO_SYNC_LOBBY.md's "Not verified" list. The picture of the five buildings side by side is `docs/previews/buildings_plan.svg` (this proposal's numbers) and, once built, `docs/previews/buildings.svg` (drawn from the real data by `tools/render_buildings.py`).
 
 **What this adds:** around each garage's room (PlotArt, unchanged), a real closed building per funding stage (`IpoConfig.Stages`): **1 Garage, 2 Small Office (Seed), 3 Big Office (Series A), 4 Small Corporate (Series B), 5 Big Corporate (IPO-ready)**. Solid outer walls with one doorway, a roof, walls and roof that fade for the local player inside, a complete interior. Built from Parts in PlotArt's palette, nothing random, no odds text. **Every wall, door, window, floor piece and piece of furniture is a model slot** (docs/MODEL_ASSETS_PLAN.md): a ready-made model the owner adds later replaces its Parts version with no code change; with no model, the Parts version is built, so the game works today with none.

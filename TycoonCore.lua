@@ -197,12 +197,92 @@ local function stageOf(data)
 	return data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
 end
 
--- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
--- swaps the room with a quick flash. The bought props move along.
-local function syncRoom(data)
-	if data.looks and data.looks.stage ~= stageOf(data) then
-		looks("stage", PlotVisuals.setStage, data.looks, stageOf(data), true)
+-- The closed building around each garage: PlotBuildingVisuals builds it from PlotBuilding (both in ServerScriptService)
+-- with the 3D kit in ReplicatedStorage.KitModels (Parts where a model is missing), and the client script BuildingClient
+-- fades it while you are inside. Only looks plus invisible solid outer walls; never saved. Loaded inside pcall: if
+-- either is missing or broken, the garages stand open, as before.
+local buildingOk, PlotBuildingVisuals = pcall(require, script.Parent:WaitForChild("PlotBuildingVisuals", 5))
+local buildingDataOk, PlotBuilding = pcall(require, script.Parent:WaitForChild("PlotBuilding", 5))
+if not (buildingOk and buildingDataOk) then
+	warn("Plot buildings are off: " .. tostring(buildingOk and PlotBuilding or PlotBuildingVisuals))
+	PlotBuildingVisuals, PlotBuilding = nil, nil
+end
+
+-- The six garages (lobby L2: permanent). Each is Workspace.Garages.Garage<slot>: its Floor (60 x 60, the room's only
+-- solid part, in the garage's frame), its closed building (PlotBuilding) and its sign. An owner's folder (room, props,
+-- employees, incubators, signs) stands in it while they play; when they leave, the garage goes back to a new Garage.
+local garages = {} -- slot -> the garage Model
+
+-- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never
+-- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.
+local function syncBuilding(slot, stage)
+	if not (PlotBuildingVisuals and garages[slot]) then return end
+	local kit = ReplicatedStorage:FindFirstChild(PlotBuilding.KIT_FOLDER)
+	local ok, model, changed = pcall(PlotBuildingVisuals.sync, garages[slot], plotFrame(slot), PlotBuilding, stage, kit)
+	if not ok then
+		warn("Plot buildings: the building failed: " .. tostring(model))
+	elseif changed then
+		local roots = {}
+		for _, other in ipairs(Players:GetPlayers()) do
+			local root = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+			if root then table.insert(roots, root) end
+		end
+		pcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing
 	end
+end
+
+-- The name over a garage ("" hides it): set when someone moves in, cleared when they leave
+local function setGarageSign(slot, text)
+	local sign = garages[slot] and garages[slot]:FindFirstChild("GarageSign")
+	local gui = sign and sign:FindFirstChildOfClass("BillboardGui")
+	if gui then
+		gui.TextLabel.Text = text
+		gui.Enabled = text ~= ""
+	end
+end
+
+-- After the owner's leave save: the garage is a new Garage again (Floor and building at stage 1, no name)
+local function resetGarage(slot)
+	local garage = garages[slot]
+	if not garage then return end
+	if PlotVisuals then
+		looks("floor", PlotVisuals.styleFloor, garage.Floor, PlotArt, 1)
+	end
+	syncBuilding(slot, 1)
+	setGarageSign(slot, "")
+end
+
+-- Builds the six garages once, when the server starts, before anyone is set up
+local function buildGarages()
+	local root = Instance.new("Folder")
+	root.Name = "Garages"
+	for slot = 1, MAX_PLOTS do
+		local garage = Instance.new("Model")
+		garage.Name = "Garage" .. slot
+		garage:SetAttribute("Slot", slot)
+		makePart(garage, "Floor", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it
+		local sign = makePart(garage, "GarageSign", Vector3.new(1, 1, 1), plotFrame(slot), Color3.fromRGB(90, 90, 100))
+		sign.Transparency, sign.CanCollide, sign.CanTouch, sign.CanQuery = 1, false, false, false
+		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
+		garage.Parent = root
+		garages[slot] = garage
+	end
+	root.Parent = workspace
+	for slot = 1, MAX_PLOTS do
+		resetGarage(slot)
+	end
+end
+buildGarages()
+
+-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
+-- swaps the room with a quick flash (the bought props move along) and the building around it.
+-- data.debugStage is the Studio Debug button's (in memory only, never saved): it only changes what is shown.
+local function syncRoom(data)
+	local stage = data.debugStage or stageOf(data)
+	if data.looks and data.looks.stage ~= stage then
+		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+	end
+	syncBuilding(data.slot, stage)
 end
 
 -- An upgrade shows its prop from PlotArt in its slot (popIn on a purchase); without one, the plain block
@@ -662,6 +742,15 @@ ShopServer.init({
 	upgradeList = upgradeList,
 })
 
+-- Studio only (the Debug tab exists only in Studio): shows the next funding stage's room and building, to walk every
+-- doorway. In memory only: the valuation, the save and the stage rule are untouched; a rejoin shows the real stage.
+if RunService:IsStudio() then
+	ShopServer.addDebugAction("BuildingNextStage", function(_, data)
+		data.debugStage = (data.debugStage or stageOf(data)) % #IpoConfig.Stages + 1
+		return "Showing stage " .. data.debugStage .. " (" .. IpoConfig.Stages[data.debugStage].name .. "): Studio only, not saved"
+	end)
+end
+
 -- Eggs and employees (milestone 2) --------------------------------------
 
 EmployeeServer.init({
@@ -777,13 +866,13 @@ local function onPlayerAdded(player)
 
 	local folder = Instance.new("Folder")
 	folder.Name = player.Name .. "_Startup"
-	folder.Parent = workspace
+	folder.Parent = garages[slot] -- the owner's room, props, employees and signs stand in their garage
 
 	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	playerData[player] = data
 
-	local floor = makePart(folder, "Floor", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it
-	addLabel(floor, player.DisplayName .. "'s Startup", 12)
+	local floor = garages[slot].Floor -- permanent (buildGarages): the room takes its turn from it
+	setGarageSign(slot, player.DisplayName .. "'s Startup")
 
 	-- Saving stays off (data.loaded is false) until every module has set up its part of the save.
 	-- Some of them wait for Roblox (pass checks, poaching checks), and leaving or an autosave in
@@ -903,6 +992,7 @@ Players.PlayerRemoving:Connect(function(player)
 	local data = playerData[player]
 	if data then
 		data.folder:Destroy()
+		resetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it
 		plotOwners[data.slot] = nil
 		playerData[player] = nil
 	end

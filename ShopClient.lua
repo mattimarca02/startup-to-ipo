@@ -1443,6 +1443,7 @@ if debugRemote then
 	debugRow("📜", "Give 50 Shares", "Shares to try the IPO shop.", "Give", "IpoGrantShares", "50")
 	debugRow("💥", "Next IPO save fails", "The next IPO pretends its save failed. Nothing should change, and you're told.", "Set", "IpoFailNextSave")
 	debugRow("♻️", "Reset IPO progress", "0 IPOs, 0 Shares, no perks, valuation 0. Eggs in extra incubators are removed.", "Reset", "IpoReset")
+	debugRow("🏗️", "Building: next stage", "Shows the next funding stage's room and building, to walk every doorway. Not saved: a rejoin shows your real stage.", "Next", "BuildingNextStage")
 
 	-- First minute (milestone 5)
 	debugRow("🐣", "Restart tutorial", "Gives the free egg again and brings back the arrow and goal tracker, on any save.", "Restart", "OnboardingRestart")

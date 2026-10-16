@@ -1,45 +1,35 @@
--- PlotBuildingVisuals: builds the building around a stage room and holds the pure maths of the roof
--- fade (branch building-pass). Put this ModuleScript in ServerScriptService, next to PlotBuilding
--- (the data) and TycoonCore (which calls it through its looks() helper).
+-- PlotBuildingVisuals: builds the closed building around a garage from PlotBuilding's layout, with the 3D kit
+-- (ReplicatedStorage.KitModels) or, for any piece whose model is missing, from Parts; and holds the pure maths of the
+-- fade. Put this ModuleScript in ServerScriptService, next to PlotBuilding (the data) and TycoonCore (which calls it).
 --
--- Only looks: nothing here is saved, sent through a remote or read back by the game. Every part it
--- builds is anchored, with CanCollide, CanTouch and CanQuery off and no shadow, so the building never
--- changes how anything plays. The client script BuildingClient (a LocalScript made by hand in
--- StarterPlayerScripts, source in docs/studio_scripts/) fades it when the local player is inside.
--- The server never learns who is inside: it only publishes the numbers as attributes of the Model.
+-- Only looks, plus seven to ten invisible boxes that make the outer walls and the roof solid. Nothing is saved, sent
+-- through a remote or read back by the game. Every kit MeshPart and every fallback Part is anchored with CanCollide,
+-- CanTouch and CanQuery off and no shadow: it never decides collision, touch, rays or the camera. The solid boxes are
+-- anchored Parts with CanCollide on, CanTouch off, Transparency 1 (Roblox's camera ignores a part that transparent).
+-- The client script BuildingClient fades the "Fade" group when the local player is inside; the server never learns it.
 --
---   PlotBuildingVisuals.build(parent, center, art, building, stage) -> Model "PlotBuilding": Fade, Static
---   PlotBuildingVisuals.sync(folder, center, art, building, stage)  -> the Model for that stage in the plot folder
---                                                                      (does nothing when it already shows it)
---   PlotBuildingVisuals.bounds(center, art, building)               -> the inside box, in world studs (pure)
---   PlotBuildingVisuals.validate(building)                          -> problems in the data (empty = fine)
---   PlotBuildingVisuals.check(model, center, art, building, opts)   -> problems in a built Model (budgets, flags, zones...)
+--   PlotBuildingVisuals.build(parent, frame, building, stage, kit) -> Model "PlotBuilding": Fade, Static, Solid
+--   PlotBuildingVisuals.sync(garage, frame, building, stage, kit)  -> the Model of that stage in the garage, changed
+--   PlotBuildingVisuals.unstick(model, roots, landing)             -> moves a character found inside a solid box
+--   PlotBuildingVisuals.checkKit(folder, manifest)                 -> problems of ReplicatedStorage.KitModels (empty = fine)
+--   PlotBuildingVisuals.check(model, frame, building, opts)        -> problems of a built Model (budget, flags, lane...)
 --   Pure maths, the same text as BuildingClient (a test compares them):
 --   isInside(bounds, x, y, z, wasInside), fadeStep(fade, target, dt, seconds), quantize(fade, levels),
 --   transparencyAt(base, level, levels)
 --
--- Offsets in the data are studs from the plot's floor-top center (the middle of the Floor's top face,
--- plot center + art.Layout.floorTop). +X is right, +Z is the front (the door), -Z the back wall.
+-- frame = the garage's frame (TycoonCore plotFrame(slot), a CFrame: the plot center, turned). Every number of the
+-- layout is in it, from the Floor's top (frame * (0, FLOOR_TOP, 0)). kit = the KitModels folder, or nil (all Parts).
 
 local PlotBuildingVisuals = {}
 
 PlotBuildingVisuals.TAG = "PlotBuilding" -- CollectionService tag on the Model: the client finds buildings by it
-PlotBuildingVisuals.MATERIALS = {
-	Concrete = true, CorrodedMetal = true, Metal = true, DiamondPlate = true, Wood = true, WoodPlanks = true,
-	Brick = true, Fabric = true, Plastic = true, SmoothPlastic = true, Glass = true, Neon = true,
-}
-PlotBuildingVisuals.SHAPES = { Block = true, Cylinder = true, Ball = true }
-PlotBuildingVisuals.FONTS = { GothamBold = true, PermanentMarker = true, IndieFlower = true, LuckiestGuy = true, FredokaOne = true }
-PlotBuildingVisuals.LIGHT_WORDS = { "Bulb", "Lamp", "Light", "Screen", "LED", "Sign", "Logo", "Neon", "Glow" }
-PlotBuildingVisuals.MAX_REACH = 40 -- no part further than this from the plot center on x or z
-PlotBuildingVisuals.MAX_HEIGHT = 24 -- or higher than this above the floor top
+PlotBuildingVisuals.GROUPS = { Fade = true, Static = true, Solid = true }
 
-local OVERLAP = 0.01 -- parts must go this far into another to count as inside it
-local TOUCH = 0.06 -- parts closer than this touch (floating check)
+local OVERLAP = 0.01 -- parts must go this far into a box to count as inside it
 
--- The pure maths ---------------------------------------------------------------------------------------
--- No services, no Instances: they run the same in the tests (a fake Roblox) and in BuildingClient, which
--- carries a copy of this block (tools/building_test.py fails if the two texts differ).
+-- The pure maths ---------------------------------------------------------------------------------------------------
+-- No services, no Instances: they run the same in the tests (a fake Roblox) and in BuildingClient, which carries a copy
+-- of this block (tools/building_test.py fails if the two texts differ). The bounds are in the garage's frame.
 
 -- BUILDINGMATH-START
 local function clamp01(n)
@@ -59,9 +49,9 @@ local function finite(n)
 end
 
 -- Is a point inside the building? b = { minX, maxX, minY, maxY, minZ, maxZ, doorMinX, doorMaxX, doorDepth, margin }
--- (world studs; maxY is the underside of the roof; the door is on the +Z side). Edges count as inside. The
+-- (the garage's frame; maxY is the ground floor's ceiling; the door is on the +Z side). Edges count as inside. The
 -- doorway and the apron in front of it count too, so the front wall starts to fade as you walk up to the
--- door. Above the roof is outside. wasInside makes the box `margin` bigger (no flicker on a wall line).
+-- door. Above the ceiling is outside. wasInside makes the box `margin` bigger (no flicker on a wall line).
 -- A coordinate that is NaN or infinite is never inside.
 local function isInside(b, x, y, z, wasInside)
 	if not (finite(x) and finite(y) and finite(z)) then
@@ -115,17 +105,22 @@ PlotBuildingVisuals.fadeStep = fadeStep
 PlotBuildingVisuals.quantize = quantize
 PlotBuildingVisuals.transparencyAt = transparencyAt
 
--- Helpers ---------------------------------------------------------------------------------------------
+-- Helpers ------------------------------------------------------------------------------------------------------------
+
+-- One warning per server for each kind of problem (a missing kit warns once, not 60 times a build)
+local warned = {}
+local function warnOnce(kind, text)
+	if not warned[kind] then
+		warned[kind] = true
+		warn("Plot buildings: " .. text)
+	end
+end
+PlotBuildingVisuals.resetWarnings = function()
+	warned = {}
+end
 
 local function rgb(c)
 	return Color3.fromRGB(c[1], c[2], c[3])
-end
-
-local function turn(r)
-	if not r then
-		return CFrame.new()
-	end
-	return CFrame.fromEulerAnglesYXZ(math.rad(r[1]), math.rad(r[2]), math.rad(r[3]))
 end
 
 -- The world box around a part: { minX, maxX, minY, maxY, minZ, maxZ }
@@ -143,123 +138,230 @@ local function overlaps(a, b, margin)
 		and a[3] < b[4] - margin and b[3] < a[4] - margin
 		and a[5] < b[6] - margin and b[5] < a[6] - margin
 end
+PlotBuildingVisuals.overlaps = overlaps
 
-local function isLightName(name)
-	for _, word in ipairs(PlotBuildingVisuals.LIGHT_WORDS) do
-		if string.find(name, word, 1, true) then
-			return true
-		end
+-- The Floor's top in the garage's frame: every layout number starts here
+local function originOf(frame, building)
+	return frame * CFrame.new(0, building.FLOOR_TOP, 0)
+end
+PlotBuildingVisuals.originOf = originOf
+
+-- Where a piece stands: its bottom-center, turned (its front), then tilted about its own X (the rolled-up garage door)
+local function pieceFrame(origin, piece)
+	return origin * CFrame.new(piece.x, piece.y, piece.z) * CFrame.Angles(0, math.rad(piece.turn or 0), 0)
+		* CFrame.Angles(math.rad(piece.tilt or 0), 0, 0)
+end
+PlotBuildingVisuals.pieceFrame = pieceFrame
+
+-- The stretch a piece may have: only PlotBuilding.STRETCH keys, only on their axes. Anything else is built at kit size.
+local function stretchOf(building, piece)
+	local allowed = building.STRETCH[piece.key]
+	local sx, sz = piece.sx or 1, piece.sz or 1
+	if (sx ~= 1 and not (allowed and allowed.x)) or (sz ~= 1 and not (allowed and allowed.z)) then
+		warnOnce("stretch " .. piece.key, piece.key .. " may not be stretched: built at its kit size")
+		return 1, 1
 	end
-	return false
+	if not (finite(sx) and sx > 0 and finite(sz) and sz > 0) then
+		return 1, 1
+	end
+	return sx, sz
 end
+PlotBuildingVisuals.stretchOf = stretchOf
 
-local function floorOrigin(center, art)
-	return CFrame.new(center.X, center.Y + art.Layout.floorTop, center.Z)
-end
-
--- The inside box of a building at this plot center, in world studs (the numbers the client reads)
-function PlotBuildingVisuals.bounds(center, art, building)
-	local E, I = building.Envelope, building.Inside
-	local floorY = center.Y + art.Layout.floorTop
-	return {
-		minX = center.X - E.inner, maxX = center.X + E.inner,
-		minZ = center.Z - E.inner, maxZ = center.Z + E.inner,
-		minY = floorY - I.floorBelow, maxY = floorY + E.roofBottom,
-		doorMinX = center.X - E.doorHalf, doorMaxX = center.X + E.doorHalf,
-		doorDepth = I.doorDepth, margin = I.margin,
-	}
-end
-
--- The attribute names the client reads, in the order of the bounds table
-PlotBuildingVisuals.ATTRIBUTES = {
-	minX = "MinX", maxX = "MaxX", minY = "MinY", maxY = "MaxY", minZ = "MinZ", maxZ = "MaxZ",
-	doorMinX = "DoorMinX", doorMaxX = "DoorMaxX", doorDepth = "DoorDepth", margin = "Margin",
-}
-
--- Building ----------------------------------------------------------------------------------------------
-
--- One part from its spec. Always anchored, never solid, never touched, never hit by a ray, no shadow.
-function PlotBuildingVisuals.buildPart(parent, base, spec)
-	local size = Vector3.new(spec.size[1], spec.size[2], spec.size[3])
-	local part = Instance.new("Part")
-	part.Name = spec.name
-	part.Shape = Enum.PartType[spec.shape or "Block"]
-	part.Size = size
-	part.CFrame = base * CFrame.new(spec.offset[1], spec.offset[2], spec.offset[3]) * turn(spec.rot)
-	part.Color = rgb(spec.color)
-	part.Material = Enum.Material[spec.material]
-	part.Transparency = spec.transparency or 0
+-- The flags every look part gets: never solid, never touched, never hit by a ray, no shadow
+local function lookFlags(part)
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanTouch = false
 	part.CanQuery = false
 	part.CastShadow = false
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
+end
 
-	local text = spec.text
-	if text then
-		local gui = Instance.new("SurfaceGui")
-		gui.Name = "Text"
-		gui.Face = Enum.NormalId[text.face or "Back"] -- Back = the +Z side, toward the front
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
-		gui.LightInfluence = text.glow and 0 or 1
-		gui.Parent = part
-		local area = text.area or { 0, 0, 1, 1 }
-		local label = Instance.new("TextLabel")
-		label.Name = "Label"
-		label.Position = UDim2.fromScale(area[1], area[2])
-		label.Size = UDim2.fromScale(area[3], area[4])
-		label.BackgroundTransparency = 1
-		label.TextScaled = true
-		label.Font = Enum.Font[text.font or "GothamBold"]
-		label.TextColor3 = rgb(text.color)
-		label.Text = text.value
-		label.Parent = gui
+local function paint(part, building, stage, piece, role)
+	local style = building.styleOf(stage, piece.key, role, piece.look)
+	if not style then
+		warnOnce("style " .. piece.key .. "." .. tostring(role), "no style for " .. piece.key .. "." .. tostring(role))
+		return
 	end
+	part.Color = rgb(style.color)
+	part.Material = Enum.Material[style.material]
+	part.Transparency = style.transparency
+end
 
+local function tag(part, piece, role)
+	part:SetAttribute("Piece", piece.name)
+	part:SetAttribute("Key", piece.key)
+	part:SetAttribute("Role", role)
+end
+
+-- The Parts version of one piece (PlotBuilding.fallbackOf), in the building-pass style
+local function buildFallback(parent, origin, building, stage, piece)
+	local base = pieceFrame(origin, piece)
+	local sx, sz = stretchOf(building, piece)
+	local parts = {}
+	for i, b in ipairs(building.fallbackOf(piece.key) or {}) do
+		local part = Instance.new("Part")
+		part.Name = piece.name .. "_" .. b.role .. i
+		part.Size = Vector3.new(b.size[1] * sx, b.size[2], b.size[3] * sz)
+		part.CFrame = base * CFrame.new(b.at[1] * sx, b.at[2], b.at[3] * sz)
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.BottomSurface = Enum.SurfaceType.Smooth
+		lookFlags(part)
+		paint(part, building, stage, piece, b.role)
+		tag(part, piece, b.role)
+		part.Parent = parent
+		table.insert(parts, part)
+	end
+	return parts
+end
+
+-- The axis of a part (1 X, 2 Y, 3 Z) that lies along the model's axis (1 X or 3 Z), or nil when it is turned otherwise
+local function alignedAxis(rel, modelAxis)
+	local _, _, _, r00, r01, r02, _, _, _, r20, r21, r22 = rel:GetComponents()
+	local row = modelAxis == 1 and { r00, r01, r02 } or { r20, r21, r22 }
+	for i = 1, 3 do
+		if math.abs(math.abs(row[i]) - 1) < 1e-4 then
+			return i
+		end
+	end
+	return nil
+end
+
+-- The kit version of one piece: a copy of each MeshPart of KitModels.<key>, stretched (Wall, RoofEdge, Floor), turned
+-- by KIT_FRONT_TURN, placed by the model's WorldPivot. Returns the parts, or nil and why (then the Parts version is built).
+local function buildKit(parent, origin, building, stage, piece, template)
+	if not template:IsA("Model") then
+		return nil, "not a Model"
+	end
+	local entry = building.KitManifest[piece.key]
+	local size = template:GetAttribute("KitSize")
+	local kx = (typeof(size) == "Vector3" and size.X > 0) and size.X or entry.size[1]
+	local kz = (typeof(size) == "Vector3" and size.Z > 0) and size.Z or entry.size[3]
+	local sx, sz = stretchOf(building, piece)
+	sx, sz = sx * entry.size[1] / kx, sz * entry.size[3] / kz -- the wanted width over the model's real one
+	local pivot = template.WorldPivot
+	local target = pieceFrame(origin, piece) * CFrame.Angles(0, math.rad(building.KIT_FRONT_TURN), 0)
+	local made = {}
+	for _, d in ipairs(template:GetDescendants()) do
+		if d:IsA("MeshPart") then
+			local rel = pivot:ToObjectSpace(d.CFrame)
+			local partSize = d.Size
+			if sx ~= 1 or sz ~= 1 then
+				local ax, az = alignedAxis(rel, 1), alignedAxis(rel, 3)
+				if (sx ~= 1 and not ax) or (sz ~= 1 and not az) then
+					for _, p in ipairs(made) do
+						p:Destroy()
+					end
+					return nil, "a part is not square to the model, so it can't be stretched"
+				end
+				local s = { partSize.X, partSize.Y, partSize.Z }
+				if ax then s[ax] *= sx end
+				if az then s[az] *= sz end
+				partSize = Vector3.new(s[1], s[2], s[3])
+				local x, y, z = rel:GetComponents()
+				rel = CFrame.new(x * sx, y, z * sz) * rel.Rotation
+			end
+			local part = d:Clone()
+			for _, child in ipairs(part:GetChildren()) do
+				child:Destroy() -- only the MeshPart itself
+			end
+			local role = d:GetAttribute("Role") or (string.gsub(d.Name, "%d+$", ""))
+			part.Name = piece.name .. "_" .. role
+			part.Size = partSize
+			part.CFrame = target * rel
+			lookFlags(part)
+			paint(part, building, stage, piece, role)
+			tag(part, piece, role)
+			part.Parent = parent
+			table.insert(made, part)
+		else
+			warnOnce("kit extras", "KitModels: only MeshParts are used; other objects in a model are left out (" .. piece.key .. "." .. d.Name .. ")")
+		end
+	end
+	if #made == 0 then
+		return nil, "no MeshPart in it"
+	end
+	return made
+end
+
+-- One solid box: anchored, invisible, solid, never touched (the only solid parts of a building)
+local function buildBox(parent, origin, b)
+	local box = b.box
+	local part = Instance.new("Part")
+	part.Name = "Solid" .. b.name
+	part.Size = Vector3.new(box[2] - box[1], box[4] - box[3], box[6] - box[5])
+	part.CFrame = origin * CFrame.new((box[1] + box[2]) / 2, (box[3] + box[4]) / 2, (box[5] + box[6]) / 2)
+	part.Anchored = true
+	part.CanCollide = true
+	part.CanTouch = false
+	part.CanQuery = true
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Color = Color3.fromRGB(128, 128, 128)
+	part.Material = Enum.Material.SmoothPlastic
+	part:SetAttribute("Piece", b.name)
 	part.Parent = parent
 	return part
 end
 
-local function buildGroup(parent, name, base, specs)
-	local model = Instance.new("Model")
-	model.Name = name
-	for _, spec in ipairs(specs) do
-		PlotBuildingVisuals.buildPart(model, base, spec)
-	end
-	model.Parent = parent
-	return model
-end
+-- The attribute names the client reads (the inside box, in the garage's frame) and the frame itself
+PlotBuildingVisuals.ATTRIBUTES = {
+	minX = "MinX", maxX = "MaxX", minY = "MinY", maxY = "MaxY", minZ = "MinZ", maxZ = "MaxZ",
+	doorMinX = "DoorMinX", doorMaxX = "DoorMaxX", doorDepth = "DoorDepth", margin = "Margin",
+}
 
--- A stage past the last building shows the last one; below 1 shows the first
-local function shownStage(building, stage)
-	local last = #building.Stages
-	if type(stage) ~= "number" or stage ~= stage then
-		return 1
-	end
-	return math.clamp(math.floor(stage), 1, last)
-end
+-- Building ---------------------------------------------------------------------------------------------------------
 
--- The Model "PlotBuilding" of one stage: Fade (the roof, the walls, the front: everything that fades) and
--- Static (ground pieces). Its attributes are everything BuildingClient needs.
-function PlotBuildingVisuals.build(parent, center, art, building, stage)
-	local shown = shownStage(building, stage)
-	local look = building.Stages[shown]
-	local origin = floorOrigin(center, art)
+-- The Model "PlotBuilding" of one stage: Fade (the shell: it fades), Static (the furniture and the band's floor: it
+-- stays), Solid (the invisible boxes). Its attributes are everything BuildingClient needs.
+function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
+	local layout = building.layout(stage)
+	local origin = originOf(frame, building)
 	local model = Instance.new("Model")
 	model.Name = "PlotBuilding"
-	model:SetAttribute("Stage", shown)
-	model:SetAttribute("StageKey", look.key)
-	local bounds = PlotBuildingVisuals.bounds(center, art, building)
+	model:SetAttribute("Stage", layout.stage)
+	model:SetAttribute("StageKey", layout.key)
+	model:SetAttribute("Frame", origin)
 	for field, attribute in pairs(PlotBuildingVisuals.ATTRIBUTES) do
-		model:SetAttribute(attribute, bounds[field])
+		model:SetAttribute(attribute, layout.inside[field])
 	end
 	model:SetAttribute("FadeSeconds", building.Fade.seconds)
 	model:SetAttribute("FadeLevels", building.Fade.levels)
-	buildGroup(model, "Fade", origin, look.fade)
-	buildGroup(model, "Static", origin, look.static)
+	local groups = {}
+	for _, name in ipairs({ "Fade", "Static", "Solid" }) do
+		local g = Instance.new("Model")
+		g.Name = name
+		g.Parent = model
+		groups[name] = g
+	end
+	if not kit then
+		warnOnce("no kit", "ReplicatedStorage." .. building.KIT_FOLDER .. " is missing: every building is built from Parts")
+	end
+	local fromKit, fromParts = 0, 0
+	for _, piece in ipairs(layout.pieces) do
+		local parent2 = groups[piece.group] or groups.Fade
+		local template = kit and kit:FindFirstChild(piece.key)
+		local made, why = nil, nil
+		if template then
+			made, why = buildKit(parent2, origin, building, layout.stage, piece, template)
+			if not made then
+				warnOnce("kit " .. piece.key, "KitModels." .. piece.key .. " can't be used (" .. tostring(why) .. "): built from Parts")
+			end
+		elseif kit then
+			warnOnce("kit " .. piece.key, "KitModels." .. piece.key .. " is missing: built from Parts")
+		end
+		if made then
+			fromKit += 1
+		else
+			buildFallback(parent2, origin, building, layout.stage, piece)
+			fromParts += 1
+		end
+	end
+	for _, b in ipairs(layout.boxes) do
+		buildBox(groups.Solid, origin, b)
+	end
+	model:SetAttribute("KitPieces", fromKit)
+	model:SetAttribute("PartPieces", fromParts)
 	-- Tag it before it enters the game, so the client sees it the moment it arrives
 	local ok, service = pcall(function()
 		return game:GetService("CollectionService")
@@ -271,309 +373,224 @@ function PlotBuildingVisuals.build(parent, center, art, building, stage)
 	return model
 end
 
--- TycoonCore calls this every second (through looks()): it builds the building of `stage` in the player's plot
--- folder, or does nothing when the folder already has it. A new stage replaces the old Model.
-function PlotBuildingVisuals.sync(folder, center, art, building, stage)
-	local shown = shownStage(building, stage)
-	local old = folder:FindFirstChild("PlotBuilding")
+-- TycoonCore calls this every second (income loop), at server start and on a reset: the building of `stage` in the
+-- garage, or nothing to do when it already shows it. A new stage replaces the old Model. Returns the Model and whether
+-- it was just built.
+function PlotBuildingVisuals.sync(garage, frame, building, stage, kit)
+	local shown = building.shownStage(stage)
+	local old = garage:FindFirstChild("PlotBuilding")
 	if old and old:GetAttribute("Stage") == shown then
-		return old
+		return old, false
 	end
-	local model = PlotBuildingVisuals.build(nil, center, art, building, shown)
-	model.Parent = folder
+	local model = PlotBuildingVisuals.build(nil, frame, building, shown, kit)
+	model.Parent = garage
 	if old then
 		old:Destroy()
 	end
-	return model
+	return model, true
 end
 
--- Checks ----------------------------------------------------------------------------------------------------
+-- After a stage change: a character standing where a solid box now is (a visitor in the old building's furniture band
+-- when an IPO brings back the Garage) is moved to `landing` (a CFrame inside the room). roots = HumanoidRootParts.
+-- Returns how many were moved.
+function PlotBuildingVisuals.unstick(model, roots, landing)
+	local solid = model and model:FindFirstChild("Solid")
+	local frame = model and model:GetAttribute("Frame")
+	if not solid or typeof(frame) ~= "CFrame" then
+		return 0
+	end
+	local boxes = {}
+	for _, part in ipairs(solid:GetChildren()) do
+		if part:IsA("BasePart") then
+			table.insert(boxes, boxOf(frame:ToObjectSpace(part.CFrame), part.Size))
+		end
+	end
+	local moved = 0
+	for _, root in ipairs(roots) do
+		local p = frame:PointToObjectSpace(root.Position)
+		local body = { p.X - 1, p.X + 1, p.Y - 3, p.Y + 2, p.Z - 1, p.Z + 1 } -- a character around its root part
+		for _, b in ipairs(boxes) do
+			if overlaps(body, b, OVERLAP) then
+				root.CFrame = landing
+				moved += 1
+				break
+			end
+		end
+	end
+	return moved
+end
 
--- Problems in the data itself (empty list = fine)
-function PlotBuildingVisuals.validate(building)
+-- Checks -----------------------------------------------------------------------------------------------------------
+
+-- Problems of ReplicatedStorage.KitModels against the manifest (empty list = fine): every key a Model, KitSize within
+-- 0.05 of the manifest's size, its MeshParts' roles exactly the manifest's, nothing but MeshParts in it.
+function PlotBuildingVisuals.checkKit(folder, manifest)
 	local problems = {}
 	local function problem(text)
 		table.insert(problems, text)
 	end
-	local function triple(t, positive)
-		if type(t) ~= "table" or #t ~= 3 then
-			return false
-		end
-		for i = 1, 3 do
-			if not finite(t[i]) or (positive and t[i] <= 0) then
-				return false
-			end
-		end
-		return true
+	if not folder then
+		problem("ReplicatedStorage.KitModels is missing")
+		return problems
 	end
-	local function colorOk(c)
-		if type(c) ~= "table" or #c ~= 3 then
-			return false
-		end
-		for i = 1, 3 do
-			if type(c[i]) ~= "number" or c[i] % 1 ~= 0 or c[i] < 0 or c[i] > 255 then
-				return false
-			end
-		end
-		return true
+	local keys = {}
+	for key in pairs(manifest) do
+		table.insert(keys, key)
 	end
-	local function spec(where, s)
-		local name = type(s) == "table" and s.name
-		if type(name) ~= "string" or name == "" then
-			problem(where .. ": a part without a name")
-			return
-		end
-		where = where .. "." .. name
-		if not PlotBuildingVisuals.SHAPES[s.shape] then
-			problem(where .. ": unknown shape " .. tostring(s.shape))
-		end
-		if not triple(s.size, true) then
-			problem(where .. ": size must be 3 numbers above 0")
-		elseif s.shape == "Ball" and not (s.size[1] == s.size[2] and s.size[2] == s.size[3]) then
-			problem(where .. ": a Ball needs 3 equal sides")
-		elseif s.shape == "Cylinder" and s.size[2] ~= s.size[3] then
-			problem(where .. ": a Cylinder needs equal Y and Z (its diameter)")
-		end
-		if not triple(s.offset) then
-			problem(where .. ": offset must be 3 numbers")
-		end
-		if s.rot ~= nil and not triple(s.rot) then
-			problem(where .. ": rot must be 3 numbers (degrees)")
-		end
-		if not colorOk(s.color) then
-			problem(where .. ": color must be 3 whole numbers 0-255")
-		end
-		if not PlotBuildingVisuals.MATERIALS[s.material] then
-			problem(where .. ": material not allowed: " .. tostring(s.material))
-		elseif s.material == "Neon" and not isLightName(name) then
-			problem(where .. ": Neon is only for lights and signs (name it Sign, Glow, Neon...)")
-		end
-		if s.transparency ~= nil and not (finite(s.transparency) and s.transparency >= 0 and s.transparency <= 1) then
-			problem(where .. ": transparency must be 0-1")
-		end
-		if s.collide ~= nil or s.light ~= nil or s.particles ~= nil then
-			problem(where .. ": a building part never collides, lights or emits")
-		end
-		if s.text then
-			local t = s.text
-			if type(t.value) ~= "string" or not building.Texts[t.value] then
-				problem(where .. ": text must be one of OFFICE, HQ, BUILD YOUR STARTUP")
-			elseif not colorOk(t.color) or not PlotBuildingVisuals.FONTS[t.font or "GothamBold"] then
-				problem(where .. ": text needs a color and a known font")
-			end
-		end
-	end
-	local function list(where, specs)
-		if type(specs) ~= "table" or #specs == 0 then
-			problem(where .. ": missing or empty")
-			return
-		end
-		local names = {}
-		for i, s in ipairs(specs) do
-			spec(where .. "[" .. i .. "]", s)
-			if type(s) == "table" and s.name then
-				if names[s.name] then
-					problem(where .. ": two parts named " .. s.name)
+	table.sort(keys)
+	for _, key in ipairs(keys) do
+		local entry = manifest[key]
+		local model = folder:FindFirstChild(key)
+		if not model then
+			problem(key .. ": missing")
+		elseif not model:IsA("Model") then
+			problem(key .. ": is a " .. model.ClassName .. ", not a Model")
+		else
+			local size = model:GetAttribute("KitSize")
+			if typeof(size) ~= "Vector3" then
+				problem(key .. ": no KitSize attribute")
+			else
+				local want = entry.size
+				local dx, dy, dz = math.abs(size.X - want[1]), math.abs(size.Y - want[2]), math.abs(size.Z - want[3])
+				if dx > 0.05 or dy > 0.05 or dz > 0.05 then
+					problem(string.format("%s: KitSize %.2f x %.2f x %.2f, want %g x %g x %g (W x H x D)", key, size.X, size.Y, size.Z, want[1], want[2], want[3]))
 				end
-				names[s.name] = true
+			end
+			local seen, other = {}, {}
+			for _, d in ipairs(model:GetDescendants()) do
+				if d:IsA("MeshPart") then
+					local role = d:GetAttribute("Role")
+					if type(role) ~= "string" then
+						problem(key .. "." .. d.Name .. ": no Role attribute")
+					elseif not entry.roles[role] then
+						problem(key .. "." .. d.Name .. ": role " .. role .. " is not in the manifest")
+					else
+						seen[role] = true
+					end
+				else
+					table.insert(other, d.ClassName .. " " .. d.Name)
+				end
+			end
+			for role in pairs(entry.roles) do
+				if not seen[role] then
+					problem(key .. ": no MeshPart with role " .. role)
+				end
+			end
+			if #other > 0 then
+				problem(key .. ": not only MeshParts (" .. table.concat(other, ", ") .. "; the game leaves them out)")
 			end
 		end
 	end
-	if type(building.Stages) ~= "table" or #building.Stages == 0 then
-		problem("Stages: missing")
-		return problems
-	end
-	local E, I, F, Bg = building.Envelope, building.Inside, building.Fade, building.Budget
-	if type(E) ~= "table" or type(I) ~= "table" or type(F) ~= "table" or type(Bg) ~= "table" then
-		problem("Envelope, Inside, Fade and Budget are all needed")
-		return problems
-	end
-	for _, group in ipairs({ { E, "inner", "thick", "roofBottom", "roofThick", "roofHalf", "doorHalf", "doorHeight", "clearHeight" },
-		{ I, "floorBelow", "doorDepth", "margin" }, { F, "seconds", "levels" }, { Bg, "parts", "static", "gui" } }) do
-		for i = 2, #group do
-			if not (finite(group[1][group[i]]) and group[1][group[i]] > 0) then
-				problem("number missing or not above 0: " .. tostring(group[i]))
-			end
+	for _, child in ipairs(folder:GetChildren()) do
+		if not manifest[child.Name] then
+			problem(child.Name .. ": not in the manifest (unused)")
 		end
-	end
-	if finite(F.levels) and F.levels % 1 ~= 0 then
-		problem("Fade.levels must be a whole number")
-	end
-	for i, stage in ipairs(building.Stages) do
-		local where = "Stage " .. i
-		if type(stage.key) ~= "string" then
-			problem(where .. ": needs the key of its funding stage")
-		end
-		list(where .. " fade", stage.fade)
-		list(where .. " static", stage.static)
 	end
 	return problems
 end
 
--- Problems in a built building Model (empty list = fine). center = the plot center it was built at.
--- opts (all optional): zones = PlotVisuals.zones(art.Layout) (no part may stand in a gameplay zone),
--- roomBoxes = { { name, box } } of the room built at the same center, as offsets from the floor top
--- (no part may go into a room part, except yard marks on the ground).
-function PlotBuildingVisuals.check(model, center, art, building, opts)
+-- Problems of a built building (empty list = fine), measured in the garage's frame. opts (all optional): zones =
+-- PlotVisuals.zones(PlotArt.Layout) (no part in a reserved zone), roomBoxes = { { name, box } } of the room built in the
+-- same garage, in the frame of the Floor's top (no part goes into a room part, except flat marks on the ground).
+function PlotBuildingVisuals.check(model, frame, building, opts)
 	opts = opts or {}
 	local problems = {}
 	local function problem(text)
 		table.insert(problems, text)
 	end
-	local ox, oy, oz = center.X, center.Y + art.Layout.floorTop, center.Z
-	local E = building.Envelope
-	local ground = E.ground
-	local parts, lights, emitters, guis, statics = {}, 0, 0, 0, 0
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
-			lights += 1
-		elseif d:IsA("ParticleEmitter") then
-			emitters += 1
-		elseif d:IsA("SurfaceGui") then
-			guis += 1
-		elseif d:IsA("BasePart") then
-			local b = boxOf(d.CFrame, d.Size)
-			b = { b[1] - ox, b[2] - ox, b[3] - oy, b[4] - oy, b[5] - oz, b[6] - oz }
-			local _, _, _, _, r01, r02, r10, _, r12, r20, r21 = d.CFrame:GetComponents()
-			local straight = math.abs(r01) + math.abs(r02) + math.abs(r10) + math.abs(r12) + math.abs(r20) + math.abs(r21) < 1e-6
-			local group = d.Parent and d.Parent.Name
-			if group == "Static" then
-				statics += 1
-			end
-			table.insert(parts, { part = d, name = d:GetFullName(), box = b, straight = straight, group = group })
+	local origin = originOf(frame, building)
+	local layout = building.layout(model:GetAttribute("Stage"))
+	local lot, lane, post, landing = building.Lot, building.Lane, building.ClaimPost, building.Landing
+	local laneBox = { -lane.half, lane.half, building.GROUND, lane.top, lane.from, lane.to }
+	local postBox = { post.x0, post.x1, building.GROUND, post.top, post.z0, post.z1 }
+	local landBox = { landing.x - landing.half, landing.x + landing.half, 0, landing.top, landing.z - landing.half, landing.z + landing.half }
+	local edge = building.ROOM_EDGE
+	local laneKeys = {}
+	for _, piece in ipairs(layout.pieces) do
+		if piece.lane then
+			laneKeys[piece.name] = true
 		end
 	end
-	local budget = building.Budget
-	if #parts > budget.parts then
-		problem(string.format("%d parts (budget %d)", #parts, budget.parts))
+	local parts, lights = {}, 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Light") or d:IsA("ParticleEmitter") then
+			lights += 1
+		elseif d:IsA("BasePart") then
+			table.insert(parts, d)
+		end
 	end
-	if statics > budget.static then
-		problem(string.format("%d ground pieces (budget %d)", statics, budget.static))
-	end
-	if guis > budget.gui then
-		problem(string.format("%d SurfaceGuis (budget %d)", guis, budget.gui))
+	if #parts > building.Budget.parts then
+		problem(string.format("%d parts (budget %d)", #parts, building.Budget.parts))
 	end
 	if lights > 0 then
-		problem(lights .. " lights (a building has none)")
+		problem(lights .. " lights or emitters (a building has none)")
 	end
-	if emitters > 0 then
-		problem(emitters .. " particle emitters (a building has none)")
-	end
-	local fade = model:FindFirstChild("Fade")
-	if not fade or not model:FindFirstChild("Static") then
-		problem("the Model needs a Fade and a Static group")
-	end
-	if not (fade and fade:FindFirstChild("Roof")) then
-		problem("no part named Roof in Fade")
-	end
-
-	local clear = { -E.doorHalf, E.doorHalf, ground, E.clearHeight, E.inner - 2, 60 } -- the doorway and the way out of it
-	for _, p in ipairs(parts) do
-		local part, b = p.part, p.box
+	local solids = 0
+	for _, part in ipairs(parts) do
+		local name = part.Name
+		local group = part.Parent and part.Parent.Name
+		local b = boxOf(origin:ToObjectSpace(part.CFrame), part.Size)
+		local flat = b[4] - b[3] <= 0.25
+		if not PlotBuildingVisuals.GROUPS[group] or part.Parent.Parent ~= model then
+			problem(name .. ": not in Fade, Static or Solid")
+		end
 		if not part.Anchored then
-			problem(p.name .. ": not anchored")
+			problem(name .. ": not anchored")
 		end
-		if part.CanCollide or part.CanTouch or part.CanQuery then
-			problem(p.name .. ": CanCollide, CanTouch and CanQuery must all be off")
+		if group == "Solid" then
+			solids += 1
+			if not part.CanCollide or part.CanTouch or part.Transparency < 1 then
+				problem(name .. ": a solid box must be CanCollide on, CanTouch off, Transparency 1")
+			end
+			if overlaps(b, laneBox, OVERLAP) then
+				problem(name .. ": a solid box in the doorway lane")
+			end
+			-- over the 60 x 60 floor only well above a jumping player's head (the roof)
+			if b[1] < edge - OVERLAP and b[2] > -edge + OVERLAP and b[5] < edge - OVERLAP and b[6] > -edge + OVERLAP and b[3] < building.CLEAR_ABOVE then
+				problem(name .. ": a solid box over the floor, lower than " .. building.CLEAR_ABOVE)
+			end
+		else
+			if part.CanCollide or part.CanTouch or part.CanQuery then
+				problem(name .. ": CanCollide, CanTouch and CanQuery must all be off")
+			end
+			if part.CastShadow then
+				problem(name .. ": casts a shadow")
+			end
+			if not building.MATERIALS[part.Material.Name] then
+				problem(name .. ": material not allowed: " .. part.Material.Name)
+			elseif part.Material.Name == "Neon" and not building.NEON_KEYS[part:GetAttribute("Key")] then
+				problem(name .. ": Neon on something that isn't a light")
+			end
+			if not flat and overlaps(b, laneBox, OVERLAP) and not laneKeys[part:GetAttribute("Piece")] then
+				problem(name .. ": in the doorway lane")
+			end
 		end
-		if part.CastShadow then
-			problem(p.name .. ": casts a shadow")
+		if overlaps(b, postBox, OVERLAP) then
+			problem(name .. ": on the claim post's spot")
 		end
-		if p.group ~= "Fade" and p.group ~= "Static" then
-			problem(p.name .. ": not in Fade or Static")
+		if overlaps(b, landBox, OVERLAP) then
+			problem(name .. ": on the landing spot")
 		end
-		if not PlotBuildingVisuals.MATERIALS[part.Material.Name] then
-			problem(p.name .. ": material not allowed: " .. part.Material.Name)
-		elseif part.Material.Name == "Neon" and not isLightName(part.Name) then
-			problem(p.name .. ": Neon on something that isn't a light or a sign")
-		end
-		if b[1] < -PlotBuildingVisuals.MAX_REACH or b[2] > PlotBuildingVisuals.MAX_REACH or b[5] < -PlotBuildingVisuals.MAX_REACH
-			or b[6] > PlotBuildingVisuals.MAX_REACH or b[4] > PlotBuildingVisuals.MAX_HEIGHT or b[3] < ground - TOUCH then
-			problem(p.name .. ": outside the building's reach")
-		end
-		-- The door stays open: nothing hangs in the doorway or on the way out (flat ground marks are fine)
-		local flat = b[4] - b[3] <= 0.2 and b[3] <= ground + 0.2
-		if not flat and overlaps(b, clear, OVERLAP) then
-			problem(p.name .. " is in the doorway")
+		-- the lot; only the shell's pieces in front of the facade (plants, columns, the door leaf) may reach OUTSIDE_TO
+		local limit = group == "Fade" and building.OUTSIDE_TO or lot.front
+		if b[1] < -lot.half - OVERLAP or b[2] > lot.half + OVERLAP or b[5] < lot.back - OVERLAP or b[6] > limit + OVERLAP then
+			problem(name .. ": outside the lot")
 		end
 		for _, zone in ipairs(opts.zones or {}) do
 			if overlaps(b, zone.box, OVERLAP) then
-				problem(p.name .. " is inside " .. zone.kind .. " zone " .. zone.name)
+				problem(name .. " is inside " .. zone.kind .. " zone " .. zone.name)
 			end
 		end
 		for _, room in ipairs(opts.roomBoxes or {}) do
 			local rb = room.box
-			local mark = rb[4] <= 0.05 -- a yard mark lying on the ground outside the plot
+			local mark = rb[4] - rb[3] <= 0.25 and rb[3] <= building.GROUND + 0.3 -- a flat mark on the ground (stage 1's yard)
 			if not mark and overlaps(b, rb, OVERLAP) then
-				problem(p.name .. " goes into the room part " .. room.name)
+				problem(name .. " goes into the room part " .. room.name)
 			end
 		end
 	end
-
-	-- Two faces on the same plane, looking the same way, over the same area, flicker (z-fighting). Never
-	-- seen, so never counted: faces looking down (they rest on something), and faces that press against
-	-- a wall's outer face (a window frame, a column) or the roof.
-	local outer = E.inner + E.thick
-	local function hidden(axis, side, plane)
-		if axis == 1 then
-			return side == "lo"
-		elseif axis == 0 then
-			return (side == "hi" and math.abs(plane + outer) < OVERLAP) or (side == "lo" and math.abs(plane - outer) < OVERLAP)
-		end
-		return (side == "lo" and math.abs(plane - outer) < OVERLAP) or (side == "hi" and math.abs(plane + outer) < OVERLAP)
-	end
-	for i = 1, #parts do
-		for j = i + 1, #parts do
-			local a, b = parts[i], parts[j]
-			if a.straight and b.straight then
-				for axis = 0, 2 do
-					local lo, hi = axis * 2 + 1, axis * 2 + 2
-					local o1, o2 = (axis + 1) % 3, (axis + 2) % 3
-					local area1 = math.min(a.box[o1 * 2 + 2], b.box[o1 * 2 + 2]) - math.max(a.box[o1 * 2 + 1], b.box[o1 * 2 + 1])
-					local area2 = math.min(a.box[o2 * 2 + 2], b.box[o2 * 2 + 2]) - math.max(a.box[o2 * 2 + 1], b.box[o2 * 2 + 1])
-					if area1 > OVERLAP and area2 > OVERLAP then
-						local same = nil
-						if math.abs(a.box[hi] - b.box[hi]) < OVERLAP and not hidden(axis, "hi", a.box[hi]) then
-							same = "top/outer"
-						elseif math.abs(a.box[lo] - b.box[lo]) < OVERLAP and not hidden(axis, "lo", a.box[lo]) then
-							same = "bottom/inner"
-						end
-						if same then
-							problem(a.name .. " and " .. b.name .. " share a face (" .. same .. ", axis " .. axis .. ")")
-						end
-					end
-				end
-			end
-		end
-	end
-
-	-- Floating parts: everything rests on the ground or on a chain of touching parts
-	local supported, queue = {}, {}
-	for i, p in ipairs(parts) do
-		if p.box[3] <= ground + TOUCH then
-			supported[i] = true
-			table.insert(queue, i)
-		end
-	end
-	local head = 1
-	while head <= #queue do
-		local a = parts[queue[head]].box
-		head += 1
-		for j, p in ipairs(parts) do
-			if not supported[j] then
-				local b = p.box
-				if a[1] <= b[2] + TOUCH and b[1] <= a[2] + TOUCH and a[3] <= b[4] + TOUCH and b[3] <= a[4] + TOUCH
-					and a[5] <= b[6] + TOUCH and b[5] <= a[6] + TOUCH then
-					supported[j] = true
-					table.insert(queue, j)
-				end
-			end
-		end
-	end
-	for i, p in ipairs(parts) do
-		if not supported[i] then
-			problem(p.name .. " is floating")
-		end
+	if solids ~= #layout.boxes then
+		problem(string.format("%d solid parts, the layout has %d boxes", solids, #layout.boxes))
 	end
 	return problems
 end

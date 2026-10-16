@@ -1,5 +1,7 @@
 # Model slots: ready-made 3D models for the five buildings, with a Parts fallback
 
+> **Superseded (2026-10-16).** The kit plan (docs/KIT_MODELS.md, `ReplicatedStorage.KitModels`) replaced this design on branch `lobby-all`: see docs/LOBBY_ALL_PROGRESS.md and docs/PLOT_VISUALS.md, "The building". Kept for its measurements and reasoning.
+
 Plan (2026-10-16, branch `lobby-all`), then built on the same branch (`ModelSlots.lua`, the slot data in `PlotBuilding.lua`, the tests in `tools/building_test.py`). It changes docs/BUILDING_STAGES_PROPOSAL.md in one way: every wall, door, window, floor piece and piece of furniture of the five buildings is a **slot**. A slot is built from a ready-made model when the owner has added one, and from its **Parts version** otherwise. **No model is needed for the game or for any test.** No asset ID appears anywhere in the code or the data; this branch downloads, generates and inserts nothing.
 
 ## 1. The kit

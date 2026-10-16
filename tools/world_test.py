@@ -900,7 +900,7 @@ def real_numbers():
     spacing = int(one(r"local PLOT_SPACING = (\d+)", core, "PLOT_SPACING").group(1))
     count = int(one(r"local MAX_PLOTS = (\d+)", core, "MAX_PLOTS").group(1))
     center = one(r"return Vector3\.new\(startX \+ \(slot - 1\) \* PLOT_SPACING, ([\d.]+), ([\d.]+)\)", core, "plotCenter")
-    floor = one(r'makePart\(folder, "Floor", Vector3\.new\(([\d.]+), ([\d.]+), ([\d.]+)\), plotFrame\(slot\)', core, "the Floor")
+    floor = one(r'makePart\(garage, "Floor", Vector3\.new\(([\d.]+), ([\d.]+), ([\d.]+)\), plotFrame\(slot\)', core, "the Floor")  # lobby L2: in buildGarages
     buy = one(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core, "TycoonCore SIGN_OFFSET")
     ipo_sign = one(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", ipo, "IpoServer SIGN_OFFSET")
     # Both signs stand at `pos`, their spot in the garage's frame (lobby PR L1): post and board are placed from it with CFrame.new

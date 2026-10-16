@@ -237,3 +237,111 @@ docs/STUDIO_SYNC_MASTER.md (section 3's table and section 6's block) and docs/ST
 - `python3 tools/daily_test.py` runs the real code of the five scripts (and PlotArt, CompanyConfig) in a fake Roblox with real rotations: at 0 degrees every position is `main`'s, exactly (Floor, the five rooms with the six props, plain blocks, both signs, 13 hires and their facing, five incubators, the landing); at 90, 180 and 270 degrees each is the 0-degree build turned, and `PlotVisuals.check` finds no problem in the turned rooms; `plotZones` and `CompanyConfig.checkPlacement` give the same answers at every turn. Source pins list every place a garage position is computed, and the employees' wander stays in world axes. 28 mutants, each caught by its named check.
 - `python3 tools/lobby_test.py` checks that the CLAIMLOAD block is still `99eed7b`'s byte for byte, that TycoonCore outside it is `99eed7b`'s plus L1's ten listed edits, and this table and block (run in Luau against a fake Studio).
 - **Not done:** the paste, the hash block in real Studio and the playtest (steps 2 to 5). No garage was turned in Studio: a real turn at 90, 180 or 270 degrees is only tested in the fake.
+
+## Lobby all (L2 to L5)
+
+Branch `lobby-all` (docs/LOBBY_ALL_PROGRESS.md has the stages). This section is the one Studio list for everything the branch changes; it is finished in L5. Until then the table and the hash block below are kept current at every stage (tools/lobby_test.py checks them against the real files).
+
+### Scripts
+
+| Script | Class, place | State | SHA-256 | Bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `d652849c344623cc26a0b327b24eac1fac17ec087ebc98407d3916dbdf9e2859` | 42494 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `fe613ef07803ce0d9002b3af4c1e99d32fd5ec4594ccb2530721210d73d21124` | 59523 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | new | `f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1` | 34099 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a` | 24058 |
+| `BuildingClient` | LocalScript, StarterPlayerScripts | new | `450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec` | 9408 |
+
+### Steps so far (L2; L5 replaces this with the full list)
+
+1. **ServerScriptService:** create two ModuleScripts named exactly `PlotBuilding` and `PlotBuildingVisuals` and paste the files of the same names. **StarterPlayer > StarterPlayerScripts:** create a LocalScript named exactly `BuildingClient` and paste `BuildingClient.lua` (it moved from docs/studio_scripts to the repo root).
+2. Paste `TycoonCore.lua` and `ShopClient.lua` over their scripts. **View > Drafts**: commit every draft. Run the hash block below until it says `ALL OK`.
+3. `ReplicatedStorage.KitModels` must already hold the 36 kit models (docs/KIT_MODELS.md). Without it every building is built from Parts (one warning in the Output), which also works.
+4. Playtest (F5): your garage stands in a closed building; walk in and out of the door; the shell fades when you are inside; the Debug tab's "Building: next stage" shows the five buildings in turn.
+
+### Hash check (command bar)
+
+Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints `OK`, `DIFFERENT` (paste the file again), `MISSING` (create the script) or `WRONG CLASS` for each script, then `ALL OK` or `NOT YET`. Studio may drop the last newline or add one; both are accepted.
+
+```lua
+local K = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+}
+local function sha256(msg)
+	local h = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
+	local len = #msg
+	msg ..= "\128" .. string.rep("\0", (55 - len) % 64) .. string.pack(">I8", len * 8)
+	local w = {}
+	for chunk = 1, #msg, 64 do
+		for i = 0, 15 do w[i] = string.unpack(">I4", msg, chunk + i * 4) end
+		for i = 16, 63 do
+			local a, b = w[i - 15], w[i - 2]
+			local s0 = bit32.bxor(bit32.rrotate(a, 7), bit32.rrotate(a, 18), bit32.rshift(a, 3))
+			local s1 = bit32.bxor(bit32.rrotate(b, 17), bit32.rrotate(b, 19), bit32.rshift(b, 10))
+			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) % 2 ^ 32
+		end
+		local a, b, c, d, e, f, g, hh = table.unpack(h)
+		for i = 0, 63 do
+			local S1 = bit32.bxor(bit32.rrotate(e, 6), bit32.rrotate(e, 11), bit32.rrotate(e, 25))
+			local ch = bit32.bxor(bit32.band(e, f), bit32.band(bit32.bnot(e), g))
+			local t1 = (hh + S1 + ch + K[i + 1] + w[i]) % 2 ^ 32
+			local S0 = bit32.bxor(bit32.rrotate(a, 2), bit32.rrotate(a, 13), bit32.rrotate(a, 22))
+			local maj = bit32.bxor(bit32.band(a, b), bit32.band(a, c), bit32.band(b, c))
+			local t2 = (S0 + maj) % 2 ^ 32
+			hh, g, f, e, d, c, b, a = g, f, e, (d + t1) % 2 ^ 32, c, b, a, (t1 + t2) % 2 ^ 32
+		end
+		local r = { a, b, c, d, e, f, g, hh }
+		for i = 1, 8 do h[i] = (h[i] + r[i]) % 2 ^ 32 end
+	end
+	local out = {}
+	for i = 1, 8 do out[i] = string.format("%08x", h[i]) end
+	return table.concat(out)
+end
+
+-- STUDIO_SYNC_LOBBY Lobby all hash check: every script lobby-all creates or changes. Changes nothing.
+local function folderOf(place)
+	if place == "StarterPlayerScripts" then
+		return game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+	end
+	return game:GetService(place)
+end
+local WANT = {
+	{ "TycoonCore", "Script", "ServerScriptService", "d652849c344623cc26a0b327b24eac1fac17ec087ebc98407d3916dbdf9e2859", 42494 },
+	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "fe613ef07803ce0d9002b3af4c1e99d32fd5ec4594ccb2530721210d73d21124", 59523 },
+	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1", 34099 },
+	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a", 24058 },
+	{ "BuildingClient", "LocalScript", "StarterPlayerScripts", "450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec", 9408 },
+}
+local problems = {}
+for _, w in ipairs(WANT) do
+	local name, class, place, hash, bytes = w[1], w[2], w[3], w[4], w[5]
+	local folder = folderOf(place)
+	local script = folder and folder:FindFirstChild(name)
+	local result
+	if not script then
+		result = "MISSING (create a " .. class .. " in " .. place .. ")"
+	elseif script.ClassName ~= class then
+		result = "WRONG CLASS (it is a " .. script.ClassName .. ", it must be a " .. class .. ")"
+	else
+		local source = script.Source
+		local function matches(text)
+			return #text == bytes and sha256(text) == hash
+		end
+		-- the file as it is, or with its last newline dropped by Studio, or with one newline added by Studio
+		local ok = matches(source) or matches(source .. "\n") or (string.sub(source, -2) == "\n\n" and matches(string.sub(source, 1, -2)))
+		result = (ok and "OK" or "DIFFERENT") .. " " .. #source .. " bytes"
+	end
+	print(name, result)
+	if string.sub(result, 1, 2) ~= "OK" then
+		table.insert(problems, name)
+	end
+end
+print(#problems == 0 and ("ALL OK: the " .. #WANT .. " scripts match the repo (lobby-all)") or ("NOT YET: fix " .. table.concat(problems, ", ")))
+```

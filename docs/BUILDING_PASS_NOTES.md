@@ -1,5 +1,7 @@
 # Building pass: notes, judgment calls and what was not tested
 
+> **Built differently in lobby L2 (2026-10-16, branch `lobby-all`).** This pass's maths, inside check and fade client were kept (BuildingClient is now at the repo root and works in each garage's turned frame). Its Parts-only, never-solid shell was replaced by the five kit buildings with invisible solid walls (docs/PLOT_VISUALS.md, "The building"; docs/LOBBY_ALL_PROGRESS.md). The integration patch is not applied: L2 wired TycoonCore by hand (two of its three edits). The Studio steps are in docs/STUDIO_SYNC_LOBBY.md, not in docs/STUDIO_SYNC_BUILDING.md.
+
 Branch `building-pass`. **No phase was blocked.** This file is where I record what you should know that is not in the proposal.
 
 ## Judgment calls (change any of them)

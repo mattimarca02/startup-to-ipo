@@ -41,6 +41,13 @@ START = "-- CLAIMLOAD-START"
 END = "-- CLAIMLOAD-END"
 SYNC_DOC = "docs/STUDIO_SYNC_LOBBY.md"
 L1_HEADING = "## L1. Plot frame (nothing visible)"
+L1_COMMIT = "f6a546f"       # main with L1 merged: the L1 section's table is history, checked against the files of this commit
+ALL_HEADING = "## Lobby all (L2 to L5)"
+# Every script this branch (lobby-all) creates or changes: (file, Studio class, Studio place, "new" or "changed"). The
+# "Lobby all" section's table and hash block must give each one's real SHA-256 and size (the files in the folder).
+ALL_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService", "changed"), ("ShopClient", "LocalScript", "StarterPlayerScripts", "changed"),
+               ("PlotBuilding", "ModuleScript", "ServerScriptService", "new"),
+               ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"))
 # The five scripts PR L1 changes: (file, Studio class, Studio place)
 L1_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService"), ("EmployeeServer", "ModuleScript", "ServerScriptService"),
               ("IpoServer", "ModuleScript", "ServerScriptService"), ("PlotVisuals", "ModuleScript", "ServerScriptService"),
@@ -95,10 +102,127 @@ L1_EDITS = (
 )
 
 
+# PR L2's edits outside the CLAIMLOAD markers (the permanent, closed building), applied after L1_EDITS, each old text found
+# exactly once. Nothing between the markers changes: the room line still gets `floor` and `folder`.
+L2_EDITS = (
+    # the building modules (required in pcall like the plot visuals: a broken building never stops the game), then the
+    # garages: built once, the building synced with the stage, the sign, the reset; syncRoom also syncs the building
+    ("-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,\n"
+     "-- swaps the room with a quick flash. The bought props move along.\n"
+     "local function syncRoom(data)\n"
+     "\tif data.looks and data.looks.stage ~= stageOf(data) then\n"
+     "\t\tlooks(\"stage\", PlotVisuals.setStage, data.looks, stageOf(data), true)\n"
+     "\tend\n"
+     "end\n",
+     "-- The closed building around each garage: PlotBuildingVisuals builds it from PlotBuilding (both in ServerScriptService)\n"
+     "-- with the 3D kit in ReplicatedStorage.KitModels (Parts where a model is missing), and the client script BuildingClient\n"
+     "-- fades it while you are inside. Only looks plus invisible solid outer walls; never saved. Loaded inside pcall: if\n"
+     "-- either is missing or broken, the garages stand open, as before.\n"
+     "local buildingOk, PlotBuildingVisuals = pcall(require, script.Parent:WaitForChild(\"PlotBuildingVisuals\", 5))\n"
+     "local buildingDataOk, PlotBuilding = pcall(require, script.Parent:WaitForChild(\"PlotBuilding\", 5))\n"
+     "if not (buildingOk and buildingDataOk) then\n"
+     "\twarn(\"Plot buildings are off: \" .. tostring(buildingOk and PlotBuilding or PlotBuildingVisuals))\n"
+     "\tPlotBuildingVisuals, PlotBuilding = nil, nil\n"
+     "end\n\n"
+     "-- The six garages (lobby L2: permanent). Each is Workspace.Garages.Garage<slot>: its Floor (60 x 60, the room's only\n"
+     "-- solid part, in the garage's frame), its closed building (PlotBuilding) and its sign. An owner's folder (room, props,\n"
+     "-- employees, incubators, signs) stands in it while they play; when they leave, the garage goes back to a new Garage.\n"
+     "local garages = {} -- slot -> the garage Model\n\n"
+     "-- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never\n"
+     "-- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.\n"
+     "local function syncBuilding(slot, stage)\n"
+     "\tif not (PlotBuildingVisuals and garages[slot]) then return end\n"
+     "\tlocal kit = ReplicatedStorage:FindFirstChild(PlotBuilding.KIT_FOLDER)\n"
+     "\tlocal ok, model, changed = pcall(PlotBuildingVisuals.sync, garages[slot], plotFrame(slot), PlotBuilding, stage, kit)\n"
+     "\tif not ok then\n"
+     "\t\twarn(\"Plot buildings: the building failed: \" .. tostring(model))\n"
+     "\telseif changed then\n"
+     "\t\tlocal roots = {}\n"
+     "\t\tfor _, other in ipairs(Players:GetPlayers()) do\n"
+     "\t\t\tlocal root = other.Character and other.Character:FindFirstChild(\"HumanoidRootPart\")\n"
+     "\t\t\tif root then table.insert(roots, root) end\n"
+     "\t\tend\n"
+     "\t\tpcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing\n"
+     "\tend\n"
+     "end\n\n"
+     "-- The name over a garage (\"\" hides it): set when someone moves in, cleared when they leave\n"
+     "local function setGarageSign(slot, text)\n"
+     "\tlocal sign = garages[slot] and garages[slot]:FindFirstChild(\"GarageSign\")\n"
+     "\tlocal gui = sign and sign:FindFirstChildOfClass(\"BillboardGui\")\n"
+     "\tif gui then\n"
+     "\t\tgui.TextLabel.Text = text\n"
+     "\t\tgui.Enabled = text ~= \"\"\n"
+     "\tend\n"
+     "end\n\n"
+     "-- After the owner's leave save: the garage is a new Garage again (Floor and building at stage 1, no name)\n"
+     "local function resetGarage(slot)\n"
+     "\tlocal garage = garages[slot]\n"
+     "\tif not garage then return end\n"
+     "\tif PlotVisuals then\n"
+     "\t\tlooks(\"floor\", PlotVisuals.styleFloor, garage.Floor, PlotArt, 1)\n"
+     "\tend\n"
+     "\tsyncBuilding(slot, 1)\n"
+     "\tsetGarageSign(slot, \"\")\n"
+     "end\n\n"
+     "-- Builds the six garages once, when the server starts, before anyone is set up\n"
+     "local function buildGarages()\n"
+     "\tlocal root = Instance.new(\"Folder\")\n"
+     "\troot.Name = \"Garages\"\n"
+     "\tfor slot = 1, MAX_PLOTS do\n"
+     "\t\tlocal garage = Instance.new(\"Model\")\n"
+     "\t\tgarage.Name = \"Garage\" .. slot\n"
+     "\t\tgarage:SetAttribute(\"Slot\", slot)\n"
+     "\t\tmakePart(garage, \"Floor\", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it\n"
+     "\t\tlocal sign = makePart(garage, \"GarageSign\", Vector3.new(1, 1, 1), plotFrame(slot), Color3.fromRGB(90, 90, 100))\n"
+     "\t\tsign.Transparency, sign.CanCollide, sign.CanTouch, sign.CanQuery = 1, false, false, false\n"
+     "\t\taddLabel(sign, \"\", 12).Parent.Enabled = false -- the owner's name, over the garage\n"
+     "\t\tgarage.Parent = root\n"
+     "\t\tgarages[slot] = garage\n"
+     "\tend\n"
+     "\troot.Parent = workspace\n"
+     "\tfor slot = 1, MAX_PLOTS do\n"
+     "\t\tresetGarage(slot)\n"
+     "\tend\n"
+     "end\n"
+     "buildGarages()\n\n"
+     "-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,\n"
+     "-- swaps the room with a quick flash (the bought props move along) and the building around it.\n"
+     "-- data.debugStage is the Studio Debug button's (in memory only, never saved): it only changes what is shown.\n"
+     "local function syncRoom(data)\n"
+     "\tlocal stage = data.debugStage or stageOf(data)\n"
+     "\tif data.looks and data.looks.stage ~= stage then\n"
+     "\t\tlooks(\"stage\", PlotVisuals.setStage, data.looks, stage, true)\n"
+     "\tend\n"
+     "\tsyncBuilding(data.slot, stage)\n"
+     "end\n"),
+    # Studio only: a Debug button that steps the room and the building through the five stages (walk every doorway)
+    ("\tbuyUpgrade = buyUpgrade, -- the Office tab\n\tupgradeList = upgradeList,\n})\n",
+     "\tbuyUpgrade = buyUpgrade, -- the Office tab\n\tupgradeList = upgradeList,\n})\n\n"
+     "-- Studio only (the Debug tab exists only in Studio): shows the next funding stage's room and building, to walk every\n"
+     "-- doorway. In memory only: the valuation, the save and the stage rule are untouched; a rejoin shows the real stage.\n"
+     "if RunService:IsStudio() then\n"
+     "\tShopServer.addDebugAction(\"BuildingNextStage\", function(_, data)\n"
+     "\t\tdata.debugStage = (data.debugStage or stageOf(data)) % #IpoConfig.Stages + 1\n"
+     "\t\treturn \"Showing stage \" .. data.debugStage .. \" (\" .. IpoConfig.Stages[data.debugStage].name .. \"): Studio only, not saved\"\n"
+     "\tend)\n"
+     "end\n"),
+    # the owner's folder stands in their garage
+    ("\tfolder.Parent = workspace\n",
+     "\tfolder.Parent = garages[slot] -- the owner's room, props, employees and signs stand in their garage\n"),
+    # the Floor is the garage's (permanent); the owner's name goes on the garage sign, not on a new billboard per join
+    ("\tlocal floor = makePart(folder, \"Floor\", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100)) -- the room takes its turn from it\n"
+     "\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n",
+     "\tlocal floor = garages[slot].Floor -- permanent (buildGarages): the room takes its turn from it\n"
+     "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n"),
+    # the reset on leave, after the leave save and the folder
+    ("\t\tdata.folder:Destroy()\n\t\tplotOwners[data.slot] = nil\n",
+     "\t\tdata.folder:Destroy()\n\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n\t\tplotOwners[data.slot] = nil\n"),
+)
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS then L2_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS:
+    for old, new in L1_EDITS + L2_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
@@ -192,17 +316,16 @@ def checks(core, base, doc, others=None):
         all(line.lstrip(b"\t ").startswith(b"--") for line in named), [line[:60] for line in named])
     stripped = b"\n".join(line for line in lines if b"CLAIMLOAD" not in line)
     edited = with_l1_edits(base) if base is not None else None
-    add("outside: L1's %d plot-frame edits each apply once to TycoonCore.lua at %s (their old text is there exactly once)" % (len(L1_EDITS), BASE),
-        edited is not None)
-    add("outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits, byte for byte "
-        "(L0 adds comments only, L1 only its listed edits)" % BASE, edited is not None and stripped == edited)
+    add("outside: L1's %d plot-frame edits and L2's %d building edits each apply once to TycoonCore.lua at %s (their old text is there exactly once)"
+        % (len(L1_EDITS), len(L2_EDITS), BASE), edited is not None)
+    add("outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits and L2's building "
+        "edits, byte for byte (L0 adds comments only, L1 and L2 only their listed edits)" % BASE, edited is not None and stripped == edited)
     add("file: TycoonCore.lua has no word \"Touched\", comments included (tools/daily_test.py searches the raw text)",
         b"Touched" not in core)
 
     section = l1_section(doc)
     add("doc: %s has the L1 section (%s)" % (SYNC_DOC, L1_HEADING), bool(section))
     files = dict(others if others is not None else l1_others())
-    files["TycoonCore"] = core
     for name, cls, place in L1_SCRIPTS:
         body = files.get(name)
         digest = hashlib.sha256(body).hexdigest() if body is not None else "missing"
@@ -211,6 +334,39 @@ def checks(core, base, doc, others=None):
             ("| `%s` | %s, %s | changed | `%s` | %d |" % (name, cls, place, digest, size)) in section)
         add("doc: %s's L1 hash block expects %s.lua's real SHA-256 and size" % (SYNC_DOC, name),
             ('{ "%s", "%s", "%s", "%s", %d },' % (name, cls, place, digest, size)) in section)
+
+    # The current section: every script lobby-all creates or changes, at its real hash (the files in the folder)
+    current = doc_section(doc, ALL_HEADING)
+    add("doc: %s has the section %s" % (SYNC_DOC, ALL_HEADING), bool(current))
+    now = all_files()
+    now["TycoonCore"] = core
+    for name, cls, place, state in ALL_SCRIPTS:
+        body = now.get(name)
+        digest = hashlib.sha256(body).hexdigest() if body is not None else "missing"
+        size = len(body) if body is not None else -1
+        add("doc: %s's Lobby all table row has %s.lua's real SHA-256 and size (%s, %d bytes)" % (SYNC_DOC, name, digest[:12], size),
+            ("| `%s` | %s, %s | %s | `%s` | %d |" % (name, cls, place, state, digest, size)) in current)
+        add("doc: %s's Lobby all hash block expects %s.lua's real SHA-256 and size" % (SYNC_DOC, name),
+            ('{ "%s", "%s", "%s", "%s", %d },' % (name, cls, place, digest, size)) in current)
+    return out
+
+
+def doc_section(doc, heading):
+    """docs/STUDIO_SYNC_LOBBY.md from heading to the next "## " heading (or the end), or "" when it is missing."""
+    at = doc.find(heading)
+    if at < 0:
+        return ""
+    nxt = doc.find("\n## ", at + len(heading))
+    return doc[at:nxt if nxt >= 0 else len(doc)]
+
+
+def all_files():
+    """{name: bytes} of the scripts lobby-all creates or changes, as they are in the folder (missing ones left out)."""
+    out = {}
+    for name, _, _, _ in ALL_SCRIPTS:
+        path = os.path.join(ROOT, name + ".lua")
+        if os.path.exists(path):
+            out[name] = read_bytes(name + ".lua")
     return out
 
 
@@ -224,8 +380,13 @@ def l1_section(doc):
 
 
 def l1_others():
-    """{name: bytes} of L1's scripts other than TycoonCore, as they are in the folder."""
-    return {name: read_bytes(name + ".lua") for name, _, _ in L1_SCRIPTS if name != "TycoonCore"}
+    """{name: bytes} of L1's five scripts as L1 merged them into main (L1_COMMIT): the L1 section is history."""
+    out = {}
+    for name, _, _ in L1_SCRIPTS:
+        body = git_show(L1_COMMIT, name + ".lua")
+        if body is not None:
+            out[name] = body
+    return out
 
 
 def lua_block(doc, heading):
@@ -249,10 +410,12 @@ end }
 """
 
 
-def fake_studio(sources):
-    """The fake Studio holding L1's five scripts ({name: source text}) with their classes and places."""
+def fake_studio(sources, scripts=None):
+    """The fake Studio holding scripts ({name: source text}) with their classes and places (default: L1's five)."""
     server, client = [], []
-    for name, cls, place in L1_SCRIPTS:
+    for name, cls, place in (scripts or L1_SCRIPTS):
+        if name not in sources:
+            continue
         entry = "%s = { ClassName = \"%s\", Source = %s }" % (name, cls, lua_long_string(sources[name]))
         (client if place == "StarterPlayerScripts" else server).append(entry)
     return FAKE_STUDIO.replace("__SERVER__", ", ".join(server)).replace("__CLIENT__", ", ".join(client))
@@ -268,7 +431,6 @@ def hash_block_checks(luau, core, doc):
     out.append(("doc: the hash block's sha256 is docs/STUDIO_SYNC_MASTER.md section 6's, character for character",
                 bool(mine and theirs and mine.group(0) == theirs.group(0)), None))
     real = {name: body.decode("utf-8") for name, body in l1_others().items()}
-    real["TycoonCore"] = core.decode("utf-8")
     dropped = {name: text[:-1] for name, text in real.items()}
     client = dict(real)
     client["EmployeeClient"] = client["EmployeeClient"].replace("local walkers = {}", "local walkers = { }", 1)
@@ -282,6 +444,25 @@ def hash_block_checks(luau, core, doc):
         result = run_luau(luau, fake_studio(sources) + block)
         last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else result.stderr.strip()[:200]
         out.append(("doc: the L1 hash block, run in Luau on a fake Studio with %s, ends with %s" % (label, want),
+                    result.returncode == 0 and last.startswith(want), last))
+
+    # The Lobby all block, on the real files (TycoonCore as given), then with one byte changed, then with one missing
+    block = lua_block(doc_section(doc, ALL_HEADING), "### Hash check (command bar)")
+    mine = fn.search(block)
+    out.append(("doc: the Lobby all hash block's sha256 is docs/STUDIO_SYNC_MASTER.md section 6's, character for character",
+                bool(mine and theirs and mine.group(0) == theirs.group(0)), None))
+    scripts = [(name, cls, place) for name, cls, place, _ in ALL_SCRIPTS]
+    now = {name: body.decode("utf-8") for name, body in all_files().items()}
+    now["TycoonCore"] = core.decode("utf-8")
+    changed = dict(now)
+    changed["BuildingClient"] = changed["BuildingClient"].replace("local TAG = ", "local  TAG = ", 1)
+    missing = {name: text for name, text in now.items() if name != "PlotBuilding"}
+    cases = (("every real file", now, "ALL OK"), ("every real file with its last newline dropped", {n: s[:-1] for n, s in now.items()}, "ALL OK"),
+             ("BuildingClient (in StarterPlayerScripts) with one byte changed", changed, "NOT YET"), ("PlotBuilding missing", missing, "NOT YET"))
+    for label, sources, want in cases:
+        result = run_luau(luau, fake_studio(sources, scripts) + block)
+        last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else result.stderr.strip()[:200]
+        out.append(("doc: the Lobby all hash block, run in Luau on a fake Studio with %s, ends with %s" % (label, want),
                     result.returncode == 0 and last.startswith(want), last))
     return out
 
@@ -319,13 +500,13 @@ LEADERSTATS = ('\tlocal leaderstats = Instance.new("Folder")\n\tleaderstats.Name
                '\tlocal cash = Instance.new("IntValue")\n\tcash.Name = "Cash"\n\tcash.Parent = leaderstats\n\n'
                '\tlocal income = Instance.new("IntValue")\n\tincome.Name = "Income"\n\tincome.Parent = leaderstats\n\n')
 BLOCK_CHECK = "block: the text between the CLAIMLOAD markers is lines %d-%d of TycoonCore.lua at %s, byte for byte" % (FIRST, LAST, BASE)
-OUTSIDE_CHECK = "outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits, byte for byte" % BASE
-EDITS_CHECK = "outside: L1's %d plot-frame edits each apply once" % len(L1_EDITS)
+OUTSIDE_CHECK = "outside: TycoonCore.lua without its CLAIMLOAD comment lines is TycoonCore.lua at %s plus L1's plot-frame edits and L2's building edits" % BASE
+EDITS_CHECK = "outside: L1's %d plot-frame edits and L2's %d building edits each apply once" % (len(L1_EDITS), len(L2_EDITS))
 COUNT_CHECK = "markers: exactly one CLAIMLOAD-START line and one CLAIMLOAD-END line, START first"
 SHAPE_CHECK = "markers: each marker line is a tab and the marker, nothing else"
 PLACE_CHECK = "markers: both are inside onPlayerAdded (after its first line, before Players.PlayerAdded:Connect)"
 COMMENT_CHECK = "outside: every line that names CLAIMLOAD is a comment line (no code hides on one)"
-DOC_ROW_CHECK = "doc: %s's L1 table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
+DOC_ROW_CHECK = "doc: %s's Lobby all table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
 
 # (what is broken, how, the start of the named check that must fail)
 MUTANTS = [
@@ -384,6 +565,20 @@ MUTANTS = [
      swap("\tplotCenter = plotCenter,\n\tpeekSave = peekSave,\n", "\tplotFrame = plotFrame,\n\tpeekSave = peekSave,\n"), OUTSIDE_CHECK),
     ("L1: a comment line of the frame reworded (the doc's hash goes stale and the edit list no longer matches)",
      swap("-- garage stands as it always has", "-- garage stands where it always stood"), OUTSIDE_CHECK),
+    # PR L2: only its listed building edits outside the markers, and none inside
+    ("L2: the building synced inside the CLAIMLOAD block (building-pass's third edit, which L2 drops)",
+     ins_after("	data.looks = PlotVisuals and looks(\"room\", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))\n",
+               "	syncBuilding(slot, stageOf(data))\n"), BLOCK_CHECK),
+    ("L2: no reset on leave (the garage keeps the old owner's building and name)",
+     swap("\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n", ""), OUTSIDE_CHECK),
+    ("L2: a label per owner (the join adds a billboard on the Floor again)",
+     swap("\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n"), OUTSIDE_CHECK),
+    ("L2: the building required without pcall (a broken building module would stop the game)",
+     swap("local buildingOk, PlotBuildingVisuals = pcall(require, script.Parent:WaitForChild(\"PlotBuildingVisuals\", 5))",
+          "local buildingOk, PlotBuildingVisuals = true, require(script.Parent:WaitForChild(\"PlotBuildingVisuals\"))"), OUTSIDE_CHECK),
+    ("L2: the Floor made per join again (a second Floor in the owner's folder)",
+     swap("\tlocal floor = garages[slot].Floor -- permanent (buildGarages): the room takes its turn from it\n",
+          "\tlocal floor = makePart(folder, \"Floor\", Vector3.new(60, 1, 60), plotFrame(slot), Color3.fromRGB(90, 90, 100))\n"), OUTSIDE_CHECK),
 ]
 
 # The harness must report this as not caught: the checks crash on it (the file is not text), and a crash never counts.

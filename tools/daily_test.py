@@ -7405,7 +7405,7 @@ def visuals_expected_lua():
     x0, dx, z0, dz = (num(item.group(k)) for k in (1, 2, 3, 4))
     slots = [(x0 + ((i - 1) // 3) * dx, z0 + ((i - 1) % 3) * dz) for i in range(1, len(upgrades) + 1)]
     spawn = re.search(r"local spawnPos = plotFrame\(slot\) \* Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
-    floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotFrame\(slot\)', core)
+    floor = re.search(r'makePart\(garage, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotFrame\(slot\)', core)  # lobby L2: made once, in buildGarages
     center_y = re.search(r"return Vector3\.new\(startX \+ \(slot - 1\) \* PLOT_SPACING, ([\d.]+), 150\)", core)
     buy = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core)
     ipo = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", read("IpoServer.lua"))
@@ -7467,6 +7467,19 @@ def visuals_wiring_checks():
     check("TycoonCore: a purchase pops its prop in", re.search(r"spawnItem\(data, i, upg, true\)", code) is not None)
     check("TycoonCore: no new remote, DataStore or save field for the looks",
           code.count('Instance.new("Remote') == 0 and code.count("GetDataStore(") == 1 and "looks =" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
+    # Lobby L2: the closed building (PlotBuilding, PlotBuildingVisuals) and its client (BuildingClient); tools/building_test.py
+    # tests them in depth. Here: looks only, wired like the plot visuals.
+    for name in ("PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua"):
+        text = code_only(read(name))
+        for word in ("RemoteEvent", "RemoteFunction", "FireServer", "DataStore", "SetAsync", "addEarnings", "math.random", "Random.new",
+                     "rbxasset", "http", "MeshId", "require("):
+            check("%s never uses %s (looks only: no remotes, saves, earnings, randomness or assets)" % (name, word), word not in text)
+    check("TycoonCore: PlotBuilding and PlotBuildingVisuals are required inside pcall (a building bug can never stop the game)",
+          re.search(r'pcall\(require, script\.Parent:WaitForChild\("PlotBuildingVisuals", \d+\)\)', code) is not None
+          and re.search(r'pcall\(require, script\.Parent:WaitForChild\("PlotBuilding", \d+\)\)', code) is not None)
+    check("TycoonCore: the building is synced only through pcall (syncBuilding) and never inside the save code",
+          code.count("PlotBuildingVisuals.sync") == 1 and "pcall(PlotBuildingVisuals.sync" in code
+          and "PlotBuilding" not in core[core.index("-- BUILDSAVE-START"):core.index("-- SAVEFN-END")])
     return passed, failed
 
 
@@ -8025,7 +8038,10 @@ def frame_enclosing(text, index):
 FRAME_SITES = {
     ("TycoonCore.lua", "spawnItem"): 1, ("TycoonCore.lua", "refreshSign"): 1,
     ("TycoonCore.lua", "IpoServer.init"): 1, ("TycoonCore.lua", "EmployeeServer.init"): 1,
-    ("TycoonCore.lua", "teleportToPlot"): 2, ("TycoonCore.lua", "onPlayerAdded"): 1,
+    ("TycoonCore.lua", "teleportToPlot"): 2,
+    # lobby L2: the Floor and the garage sign are made once, in buildGarages; syncBuilding builds the building in the
+    # garage's frame and gives unstick its landing (the join no longer makes a Floor)
+    ("TycoonCore.lua", "buildGarages"): 2, ("TycoonCore.lua", "syncBuilding"): 2,
     ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 1, ("IpoServer.lua", "buildSign"): 1,
 }
 # WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
@@ -8070,7 +8086,7 @@ def frame_static_checks(texts=None):
         not offsets, offsets[:3])
     add("center plus offset: no module computes from core.plotCenter (IpoServer and EmployeeServer get core.plotFrame)", not core_center, core_center[:3])
     want = {k: v for k, v in FRAME_SITES.items() if v}
-    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, the Floor, two core tables; "
+    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, buildGarages x2, syncBuilding x2, two core tables; "
         "EmployeeServer: placeEmployees, buildIncubator; IpoServer: buildSign)", sites == want,
         sorted(set(sites.items()) ^ set(want.items())))
     core = code_only(texts.get("TycoonCore.lua", ""))

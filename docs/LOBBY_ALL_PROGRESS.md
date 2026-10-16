@@ -5,8 +5,8 @@ Branch `lobby-all`, from `main` `f6a546f` (the latest `origin/main` on 2026-10-1
 | Stage | What | State |
 |---|---|---|
 | setup | `origin/kit-models` merged first, then `origin/building-pass` (CONTRIBUTING conflict: both sides' rows kept); claim rows for every file this branch edits | done |
-| L2 | permanent closed building: `buildGarages`, the Floor in the garage, the garage sign, reset on leave; the five kit buildings (PlotBuilding, PlotBuildingVisuals), `BuildingClient` at the root, `tools/building_test.py` | next |
-| L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | to do |
+| L2 | permanent closed building: `buildGarages`, the Floor in the garage, the garage sign, reset on leave; the five kit buildings (PlotBuilding, PlotBuildingVisuals), `BuildingClient` at the root, `tools/building_test.py` | done |
+| L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | next |
 | L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | to do |
 | L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | to do |
 
@@ -29,7 +29,7 @@ daily_test 2,746 checks, 281 mutants; hud_test 1,072 / 94; world_test 350 / 82; 
 4. **Solid = 7 invisible boxes per stage** (left, right, back, front left, front right, lintel, roof). Kit MeshParts and fallback Parts never collide. The roof box is over the floor but starts at y 12 (a jumping player's head stays under it); every other box is outside the 60 x 60.
 5. **Doorway:** solid gap 20 wide x 11 high (Garage: the WallGarage hole), 9 x 9 (offices: WallDoor), 10 x 11 (Small Corporate: the revolving door), 12 x 10 (Big Corporate). Always at least 9 x 9.
 6. **The furniture stays visible when the shell fades** (it is in the `Static` group): the fade is for the shell, so the player sees the interior. Every solid box is Transparency 1, every shell part reaches 1 at full fade. (The prompt's "every part at least 0.25 transparent" is read as every shell and solid part; furniture is non-solid and never pulls the camera.)
-7. **Pieces in front of the facade** (plants, door leaf, columns, pillars, the bulb) stay before z 38 (WorldArt's `plotReach.front` is 40) and out of the lane, the apron and the claim post's spot (x 6 to 10, z 34.2 to 36.2: L3's post 3 studs outside the front wall at x +7, and its lamp).
+7. **Pieces in front of the facade** (plants, door leaf, columns, pillars, the bulb) stay before z 40 (WorldArt's `plotReach.front`; Small Corporate's revolving door is a vestibule from z 30 to 40, so it stays out of the room's walking-lane zone) and out of the lane, the apron and the claim post's spot (x 6 to 10, z 34.2 to 36.2: L3's post 3 studs outside the front wall at x +7, and its lamp).
 8. **Upper stories** are exterior only: a hollow shell over a ceiling slab. Big Corporate is a one-story podium on the whole footprint with a 5-story tower (48 x 32) on top, so it fits the 160-part budget.
 
 ## Problems found in the plan (with the fix used, each one data only)
@@ -37,6 +37,20 @@ daily_test 2,746 checks, 281 mutants; hud_test 1,072 / 94; world_test 350 / 82; 
 - **P1. WallDoor's opening is 6 wide; the doorway must be at least 9.** The kit may not be stretched. Fix: the solid doorway stays 9 wide (boxes at x +-4.5); the WallDoor mesh's jambs stand 1.5 studs into it on each side, non-solid (a player walking off-center goes through 1.5 studs of door frame). Alternative if the owner prefers: no WallDoor, a plain 9-wide opening with a RoofEdge lintel (one line per stage in PlotBuilding).
 - **P2. Big Corporate's BoardTable (8 deep), Rug (8 deep) and Bell (6 deep) cannot stand in a band 4 deep.** Fix: Big Corporate's back band is 8 deep (z -40.2 to -32.2, still outside the room and every zone); its side bands stay 4. Alternative: leave those three out (one line).
 - **P3. Small Corporate's "two short pillars":** the kit has no short pillar and pieces may not be scaled. Fix: two `Corner` pieces (2 x 2 x 14) beside the revolving door.
+
+## L2: done (what it built)
+
+- **TycoonCore** (5 edits, listed once in `tools/lobby_test.py` `L2_EDITS` and applied from there): the building modules required in pcall; `Workspace.Garages.Garage1..6` built at server start (`buildGarages`: the Floor, the stage 1 building, a hidden name sign); `syncBuilding` (every second through `syncRoom`, in pcall; a new building moves anyone standing in a new solid box to the landing); `setGarageSign` replaces the per-join billboard; `resetGarage` after the leave save (stage 1 Floor and building, no name); a Studio-only Debug button "Building: next stage" (in memory, never saved). Nothing between the CLAIMLOAD markers changed.
+- **PlotBuilding** (data and pure layout): the 36-key `KitManifest` (copied from docs/KIT_MODELS.md, checked against it), a Parts fallback per key (every role, exactly the kit size), per-stage styles (color and material per role), the five layouts, the solid boxes, the furniture footprints.
+- **PlotBuildingVisuals:** the builder (kit MeshParts only, recolored by Role, placed by WorldPivot, `KIT_FRONT_TURN`, only Wall/RoofEdge/Floor stretched; Parts fallback per piece with one warning per server), `sync`, `unstick`, `checkKit` (for the Studio command), `check`. BUILDINGMATH unchanged from building-pass except the comments.
+- **BuildingClient** moved to the root; it checks the character in the garage's frame (the `Frame` attribute) and fades only the `Fade` group (glass from 0.3).
+- **ShopClient:** one Debug row. docs/STUDIO_SYNC_SHOP.md's ShopClient row kept current (shop_ux_test checks it).
+- Tests: `tools/building_test.py` rewritten for the kit (data, 5 stages x 4 turns x 3 kit modes, math, client, TycoonCore's garage code, source pins); daily_test's Floor regex, plotFrame sites and wiring checks; world_test's Floor regex; lobby_test's outside check (L1 + L2 edits), L1 doc history against `f6a546f`, the new "Lobby all" doc section, 5 L2 mutants.
+- Counts after L2: daily 2,803 checks / 281 mutants; hud 1,072 / 94; world 350 / 82; icon 371 / 68; shop_ux 6,300 / 101; lobby 43 / 31; building 1,218 / 28. All pass.
+- Found while building: the revolving door (10 deep) can't straddle the facade without entering the room's walking-lane zone, so it is a vestibule in front (z 30 to 40). The ring plaza (L4) must stay at or under 480 parts so six garages at their biggest stage plus the plaza stay under 3,000 (6 x (257 room + 153 building + 2)).
+- Not verified (Studio only): the kit's real front direction (`KIT_FRONT_TURN`), that MeshPart sizes stretch as computed, the look of the five buildings, Roblox's camera with the invisible boxes, phone frame rate.
+
+Next: L3.
 
 ## How to continue
 

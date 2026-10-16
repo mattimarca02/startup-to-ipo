@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
-"""Tests for the building pass (PlotBuilding.lua, PlotBuildingVisuals.lua and the roof-fade client), outside Studio.
+"""Tests for the closed garage buildings (lobby L2 and the five kit buildings), outside Studio.
 
 Run:   python3 tools/building_test.py
 
-It needs the free Luau command-line tool (https://github.com/luau-lang/luau/releases, the
-"luau" file from luau-macos.zip, luau-windows.zip or luau-ubuntu.zip). Put it on your PATH, or point to it:
+It needs the free Luau command-line tool (https://github.com/luau-lang/luau/releases, the "luau" file from
+luau-macos.zip, luau-windows.zip or luau-ubuntu.zip). Put it on your PATH, or point to it:
        LUAU=/path/to/luau python3 tools/building_test.py
 
-It runs the real PlotArt, PlotVisuals, PlotBuilding and PlotBuildingVisuals code with a fake Roblox
-(real vector and rotation maths, Instances with parents and attributes) and checks, for each of the five
-stages: the part budget, that no building part collides, is touched or hit by a ray, that nothing stands in
-a gameplay zone, in the doorway or inside a room part, that nothing floats or flickers, the pure inside check
-(door, corners, above the roof, hysteresis, bad numbers) and the pure fade maths (always 0..1). Then it
-breaks the inside check and the fade on purpose (mutation runs): every one of them must be caught.
-It changes nothing in the game or in Studio. It never edits tools/daily_test.py (another session owns it).
+It runs the real PlotArt, PlotVisuals, PlotBuilding, PlotBuildingVisuals and BuildingClient code, and TycoonCore's real
+garage functions, in a fake Roblox (real vector and rotation maths, Instances with classes, parents, attributes and
+clones, a fake ReplicatedStorage.KitModels made from the kit's sizes and roles). It checks:
+- the kit manifest in PlotBuilding against docs/KIT_MODELS.md (36 keys, sizes, roles, colors);
+- the layout of the five stages: footprints between building-pass's 62 x 62 and the lot (82.6 x 86.6), the front fixed,
+  the doorway, the boxes, the furniture band, the style table, the part budget (kit and Parts), only Wall, RoofEdge and
+  Floor stretched;
+- every stage built at four turns, with the kit, with the kit imported turned around (both KIT_FRONT_TURN values) and
+  with no kit (the Parts fallback): exactly the boxes solid, every look part non-solid, lane, apron, claim post,
+  landing, reserved zones, hire spots and incubators clear, every solid part outside the floor, nothing inside a room
+  part, everything 0.25 or more transparent at full fade, the kit and the fallback building the same pieces;
+- the pure inside check and fade maths (in the module and in BuildingClient, the same text), and the real BuildingClient
+  in a fake world (a turned garage, glass from 0.3, the furniture and the boxes never touched);
+- TycoonCore's garages (buildGarages, syncBuilding, the sign, the reset, the leave handler) and its source pins.
+Then it breaks the code and the data on purpose (mutation runs): each break must be caught by its NAMED check, never by
+a crash. It changes nothing in the game or in Studio.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,32 +34,42 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PRELUDE = r"""-- Fake Roblox environment for testing the building pass outside Studio (a copy of the plot visuals fake, plus
--- CollectionService, SurfaceGui and ParticleEmitter, so the building builder runs the way it does in Studio)
+# ---------------------------------------------------------------------------------------------------------------------
+# The fake Roblox (from the earlier lobby-all attempt's harness, itself from tools/world_test.py's fake)
+PRELUDE = r"""
 local print_real = print
 local passed, failed = 0, 0
 local function check(name, cond, extra)
-	if cond then passed += 1 else failed += 1; print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+	if cond then
+		passed += 1
+	else
+		failed += 1
+		print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or ""))
+	end
 end
-local function warn() end
-local SPAWNED = {}
-local task = { spawn = function(f, ...) table.insert(SPAWNED, f) end, wait = function() end }
-local CLOCK = 0
-local os = { clock = function() CLOCK += 0.05; return CLOCK end, time = function() return 0 end }
+local WARNED = {}
+local function warn(...) table.insert(WARNED, table.concat({ ... }, " ")) end
+local task = { spawn = function(f, ...) end, wait = function() end, delay = function() end }
 
--- Vector3
 local V = {}
+V.__index = function(t, k)
+	if k == "Magnitude" then return math.sqrt(t.X * t.X + t.Y * t.Y + t.Z * t.Z) end
+	return V[k]
+end
 local function vec(x, y, z) return setmetatable({ X = x, Y = y, Z = z }, V) end
-V.__index = V
 V.__add = function(a, b) return vec(a.X + b.X, a.Y + b.Y, a.Z + b.Z) end
 V.__sub = function(a, b) return vec(a.X - b.X, a.Y - b.Y, a.Z - b.Z) end
+V.__unm = function(a) return vec(-a.X, -a.Y, -a.Z) end
 V.__mul = function(a, b)
 	if type(a) == "number" then return vec(a * b.X, a * b.Y, a * b.Z) end
-	return vec(a.X * b, a.Y * b, a.Z * b)
+	if type(b) == "number" then return vec(a.X * b, a.Y * b, a.Z * b) end
+	return vec(a.X * b.X, a.Y * b.Y, a.Z * b.Z)
 end
+V.__div = function(a, b) return vec(a.X / b, a.Y / b, a.Z / b) end
+V.__eq = function(a, b) return a.X == b.X and a.Y == b.Y and a.Z == b.Z end
+V.__tostring = function(a) return string.format("%g, %g, %g", a.X, a.Y, a.Z) end
 local Vector3 = { new = function(x, y, z) return vec(x or 0, y or 0, z or 0) end }
 
--- CFrame: position + row-major rotation matrix, composed like Roblox's
 local CF = {}
 local function cf(x, y, z, r) return setmetatable({ x = x, y = y, z = z, r = r or { 1, 0, 0, 0, 1, 0, 0, 0, 1 } }, CF) end
 local function matmul(a, b)
@@ -61,8 +81,16 @@ local function matmul(a, b)
 	end
 	return m
 end
+local function transpose(r) return { r[1], r[4], r[7], r[2], r[5], r[8], r[3], r[6], r[9] } end
+local function inverse(a)
+	local t = transpose(a.r)
+	return cf(-(t[1] * a.x + t[2] * a.y + t[3] * a.z), -(t[4] * a.x + t[5] * a.y + t[6] * a.z), -(t[7] * a.x + t[8] * a.y + t[9] * a.z), t)
+end
 CF.__index = function(t, k)
 	if k == "Position" then return vec(t.x, t.y, t.z) end
+	if k == "Rotation" then return cf(0, 0, 0, t.r) end
+	if k == "LookVector" then return vec(-t.r[3], -t.r[6], -t.r[9]) end
+	if k == "X" then return t.x elseif k == "Y" then return t.y elseif k == "Z" then return t.z end
 	return CF[k]
 end
 CF.__mul = function(a, b)
@@ -73,16 +101,31 @@ CF.__mul = function(a, b)
 	return cf(r[1] * b.x + r[2] * b.y + r[3] * b.z + a.x, r[4] * b.x + r[5] * b.y + r[6] * b.z + a.y, r[7] * b.x + r[8] * b.y + r[9] * b.z + a.z, matmul(r, b.r))
 end
 function CF.GetComponents(t) local r = t.r return t.x, t.y, t.z, r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9] end
+function CF.Inverse(t) return inverse(t) end
+function CF.ToObjectSpace(a, b) return inverse(a) * b end
+function CF.PointToObjectSpace(a, v) return inverse(a) * v end
+function CF.ToWorldSpace(a, b) return a * b end
 local function rx(a) local c, s = math.cos(a), math.sin(a) return { 1, 0, 0, 0, c, -s, 0, s, c } end
 local function ry(a) local c, s = math.cos(a), math.sin(a) return { c, 0, s, 0, 1, 0, -s, 0, c } end
 local function rz(a) local c, s = math.cos(a), math.sin(a) return { c, -s, 0, s, c, 0, 0, 0, 1 } end
 local CFrame = {
-	new = function(x, y, z) return cf(x or 0, y or 0, z or 0) end,
+	new = function(x, y, z, ...)
+		if type(x) == "table" then return cf(x.X, x.Y, x.Z) end
+		local n = select("#", ...)
+		if n == 9 then return cf(x, y, z, { ... }) end
+		return cf(x or 0, y or 0, z or 0)
+	end,
 	Angles = function(a, b, c) return cf(0, 0, 0, matmul(matmul(rx(a), ry(b)), rz(c))) end,
 	fromEulerAnglesYXZ = function(a, b, c) return cf(0, 0, 0, matmul(matmul(ry(b), rx(a)), rz(c))) end,
+	lookAt = function(at, target) return cf(at.X, at.Y, at.Z) end,
 }
+local function typeof(v)
+	local mt = getmetatable(v)
+	if mt == CF then return "CFrame" elseif mt == V then return "Vector3" end
+	if type(v) == "table" and rawget(v, "_children") then return "Instance" end
+	return type(v)
+end
 
--- Enums: an unknown name errors, like Roblox
 local function enumType(names)
 	local t = {}
 	for _, n in ipairs(names) do t[n] = { Name = n } end
@@ -92,19 +135,29 @@ local Enum = {
 	Material = enumType({ "Plastic", "SmoothPlastic", "Neon", "Wood", "WoodPlanks", "Marble", "Slate", "Concrete", "Granite", "Brick",
 		"Pebble", "Cobblestone", "CorrodedMetal", "DiamondPlate", "Foil", "Metal", "Grass", "Sand", "Fabric", "Ice", "Glass" }),
 	PartType = enumType({ "Block", "Cylinder", "Ball", "Wedge", "CornerWedge" }),
-	SurfaceType = enumType({ "Smooth" }),
+	SurfaceType = enumType({ "Smooth", "Studs" }),
 	NormalId = enumType({ "Top", "Bottom", "Left", "Right", "Front", "Back" }),
-	Font = enumType({ "GothamBold", "PermanentMarker", "IndieFlower", "LuckiestGuy", "FredokaOne" }),
-	SurfaceGuiSizingMode = enumType({ "PixelsPerStud" }),
+	Font = enumType({ "GothamBold", "GothamBlack", "Gotham", "FredokaOne", "LuckiestGuy", "PermanentMarker", "IndieFlower" }),
+	SurfaceGuiSizingMode = enumType({ "PixelsPerStud", "FixedSize" }),
+	ModelStreamingMode = enumType({ "Default", "Atomic", "Persistent", "PersistentPerPlayer", "Nonatomic" }),
 }
-local Color3 = { fromRGB = function(r, g, b) return { R = r / 255, G = g / 255, B = b / 255, rgb = { r, g, b } } end }
-local UDim2 = { fromScale = function(x, y) return { x, y } end }
-local NumberRange = { new = function(a, b) return { a, b } end }
-local NumberSequence = { new = function(a, b) return { a, b } end }
-local ColorSequence = { new = function(a, b) return { a, b } end }
-local Vector2 = { new = function(x, y) return { x, y } end }
+local C3 = {}
+C3.__eq = function(a, b) return a.R == b.R and a.G == b.G and a.B == b.B end
+local Color3 = {
+	fromRGB = function(r, g, b) return setmetatable({ R = r / 255, G = g / 255, B = b / 255, rgb = { r, g, b } }, C3) end,
+	new = function(r, g, b) return setmetatable({ R = r, G = g, B = b, rgb = { math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5) } }, C3) end,
+	fromHex = function(h) return setmetatable({ rgb = { tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16) } }, C3) end,
+}
+local UDim2 = {
+	fromScale = function(x, y) return { 0, x, 0, y } end,
+	fromOffset = function(x, y) return { x, 0, y, 0 } end,
+	new = function(a, b, c, d) return { b, a, d, c } end,
+}
+local Vector2 = { new = function(x, y) return { X = x, Y = y } end }
+local NumberRange = { new = function(a, b) return { a, b or a } end }
+local NumberSequence = { new = function(a, b) return { a, b or a } end }
+local ColorSequence = { new = function(a, b) return { a, b or a } end }
 
--- Signals (Connect, Disconnect, and fire() for the test)
 local function newSignal()
 	local s = { handlers = {} }
 	function s.Connect(self, fn)
@@ -113,25 +166,40 @@ local function newSignal()
 		table.insert(self.handlers, c)
 		return c
 	end
-	function s.fire(...) for _, c in ipairs(table.clone(s.handlers)) do if c.connected then c.fn(...) end end end
+	function s.Fire(self, ...) for _, c in ipairs(table.clone(self.handlers)) do if c.connected then c.fn(...) end end end
 	return s
 end
 
--- Instances with parents, children, attributes and DescendantAdded. WRITES counts every Transparency write.
-local WRITES = 0
-local IS_A = { Part = { BasePart = true }, PointLight = { Light = true } }
+local WRITES = 0 -- every Transparency write (the client must not write while a building holds still)
+local PART = { BasePart = true, PVInstance = true }
+local IS_A = {
+	Part = PART, MeshPart = PART, WedgePart = PART, CornerWedgePart = PART, UnionOperation = PART, SpawnLocation = { Part = true, BasePart = true, PVInstance = true },
+	PointLight = { Light = true }, SpotLight = { Light = true }, SurfaceLight = { Light = true },
+	Model = { PVInstance = true }, Workspace = { Model = true, PVInstance = true },
+	Script = { BaseScript = true, LuaSourceContainer = true }, LocalScript = { Script = true, BaseScript = true, LuaSourceContainer = true },
+	ModuleScript = { LuaSourceContainer = true }, SurfaceGui = { LayerCollector = true, GuiBase = true },
+	BillboardGui = { LayerCollector = true, GuiBase = true }, TextLabel = { GuiObject = true, GuiBase2d = true },
+	Decal = { FaceInstance = true }, Texture = { Decal = true, FaceInstance = true }, SurfaceAppearance = {},
+}
+local PART_CLASSES = { Part = true, MeshPart = true, WedgePart = true, CornerWedgePart = true, UnionOperation = true, SpawnLocation = true }
 local Methods = {}
 local Mt = {}
 Mt.__index = function(t, k)
 	if k == "Parent" then return rawget(t, "_parent") end
-	local def = rawget(t, "_def")
-	if def and def[k] ~= nil then return def[k] end
+	local props = rawget(t, "_props")
+	if props then
+		if k == "Position" and props.CFrame then return props.CFrame.Position end
+		if props[k] ~= nil then return props[k] end
+	end
 	if k == "DescendantAdded" then
 		local s = rawget(t, "_descAdded")
 		if not s then s = newSignal(); rawset(t, "_descAdded", s) end
 		return s
 	end
-	return Methods[k]
+	local m = Methods[k]
+	if m then return m end
+	for _, c in ipairs(rawget(t, "_children")) do if c.Name == k then return c end end -- garage.Floor, gui.TextLabel
+	return nil
 end
 Mt.__newindex = function(t, k, v)
 	if k == "Parent" then
@@ -145,22 +213,43 @@ Mt.__newindex = function(t, k, v)
 			local a = v
 			while a do
 				local s = rawget(a, "_descAdded")
-				if s then s.fire(t) end
+				if s then s:Fire(t) end
 				a = rawget(a, "_parent")
 			end
 		end
-	else
-		if k == "Transparency" then WRITES += 1 end
-		local def = rawget(t, "_def")
-		if def and def[k] ~= nil then def[k] = v else rawset(t, k, v) end
+		return
 	end
+	if k == "Transparency" then WRITES += 1 end
+	local props = rawget(t, "_props")
+	if props then
+		if k == "Position" then
+			local old = props.CFrame
+			props.CFrame = cf(v.X, v.Y, v.Z, old and old.r or nil)
+			return
+		end
+		props[k] = v
+		return
+	end
+	rawset(t, k, v)
 end
 local function newInstance(class)
 	local i = setmetatable({ ClassName = class, Name = class, _children = {}, _attrs = {} }, Mt)
-	if class == "Part" then
-		rawset(i, "_def", { Anchored = false, CanCollide = true, CanTouch = true, CanQuery = true, CastShadow = true, Transparency = 0 })
-	elseif class == "TextLabel" then rawset(i, "TextTransparency", 0)
-	elseif class == "SurfaceGui" then rawset(i, "Enabled", true) end
+	if PART_CLASSES[class] then
+		rawset(i, "_props", {
+			Anchored = false, CanCollide = true, CanTouch = true, CanQuery = true, CastShadow = true, Transparency = 0,
+			Size = vec(4, 1.2, 2), CFrame = cf(0, 0, 0), Color = Color3.fromRGB(163, 162, 165), Material = Enum.Material.Plastic,
+			Shape = Enum.PartType.Block,
+		})
+	elseif class == "Model" then
+		rawset(i, "_props", { ModelStreamingMode = Enum.ModelStreamingMode.Default, WorldPivot = cf(0, 0, 0) })
+	elseif class == "TextLabel" then
+		rawset(i, "TextTransparency", 0)
+		rawset(i, "Text", "")
+	elseif class == "SurfaceGui" or class == "BillboardGui" then
+		rawset(i, "Enabled", true)
+	elseif class == "Decal" or class == "Texture" then
+		rawset(i, "Transparency", 0)
+	end
 	return i
 end
 local Instance = { new = newInstance }
@@ -171,159 +260,68 @@ function Methods.GetDescendants(t)
 	walk(t)
 	return out
 end
-function Methods.FindFirstChild(t, name) for _, c in ipairs(t._children) do if c.Name == name then return c end end return nil end
+function Methods.FindFirstChild(t, name, recursive)
+	for _, c in ipairs(recursive and t:GetDescendants() or t._children) do if c.Name == name then return c end end
+	return nil
+end
+function Methods.FindFirstChildOfClass(t, class)
+	for _, c in ipairs(t._children) do if c.ClassName == class then return c end end
+	return nil
+end
 function Methods.IsA(t, class) return t.ClassName == class or (IS_A[t.ClassName] ~= nil and IS_A[t.ClassName][class] == true) end
 function Methods.SetAttribute(t, k, v) t._attrs[k] = v end
 function Methods.GetAttribute(t, k) return t._attrs[k] end
+function Methods.GetAttributes(t) return table.clone(t._attrs) end
 function Methods.Destroy(t) t.Parent = nil; rawset(t, "destroyed", true) end
-function Methods.GetFullName(t) local p = t.Parent return (p and (p:GetFullName() .. ".") or "") .. t.Name end
-function Methods.ScaleTo(t, s) rawset(t, "scale", s) end
+function Methods.GetFullName(t) local p = t.Parent return (p and p.ClassName ~= "DataModel" and (p:GetFullName() .. ".") or "") .. t.Name end
+function Methods.GetPivot(t)
+	local props = rawget(t, "_props")
+	if props and props.CFrame then return props.CFrame end
+	return (props and props.WorldPivot) or cf(0, 0, 0)
+end
+function Methods.Clone(t)
+	local c = newInstance(t.ClassName)
+	for k, v in pairs(t) do
+		if k ~= "_children" and k ~= "_attrs" and k ~= "_props" and k ~= "_parent" and k ~= "_descAdded" then rawset(c, k, v) end
+	end
+	local from, to = rawget(t, "_props"), rawget(c, "_props")
+	if from and to then for k, v in pairs(from) do to[k] = v end end
+	for k, v in pairs(t._attrs) do c._attrs[k] = v end
+	for _, child in ipairs(t._children) do child:Clone().Parent = c end
+	return c
+end
+
+local TAGS = {}
+local TAG_ADDED, TAG_REMOVED = newSignal(), newSignal()
+local CollectionService = {
+	AddTag = function(_, inst, tag) TAGS[inst] = tag; TAG_ADDED:Fire(inst) end,
+	GetTagged = function(_, tag)
+		local out = {}
+		for inst, t in pairs(TAGS) do if t == tag and not rawget(inst, "destroyed") then table.insert(out, inst) end end
+		return out
+	end,
+	GetInstanceAddedSignal = function() return TAG_ADDED end,
+	GetInstanceRemovedSignal = function() return TAG_REMOVED end,
+}
+local game = newInstance("DataModel")
+local workspace = newInstance("Workspace")
+workspace.Name = "Workspace"
+workspace.Parent = game
+local SERVICES = { CollectionService = CollectionService, Workspace = workspace }
+for _, name in ipairs({ "ServerScriptService", "ReplicatedStorage", "Players", "StarterPlayer", "RunService" }) do
+	local s = newInstance(name)
+	s.Name = name
+	s.Parent = game
+	SERVICES[name] = s
+end
+function Methods.GetService(t, name)
+	local s = SERVICES[name]
+	if not s then error("no service " .. tostring(name)) end
+	return s
+end
 """
 
-# The builder's world: CollectionService.AddTag is recorded (the builder tags the Model before it enters the game)
-MODULE_GAME = r"""
-local TAGGED = {}
-local game = { GetService = function(_, name)
-	if name == "CollectionService" then
-		return { AddTag = function(_, inst, tag) TAGGED[inst] = tag end }
-	end
-	error("no service " .. tostring(name))
-end }
-"""
-
-MATH_A = r"""local function inside(x, y, z, was) return M.isInside(b, x, y, z, was) end
-check("inside: standing in the middle of the room", inside(cx, fy + 3, cz) == true)
-check("inside: at the spawn (0, 12) of the plot", inside(cx, fy + 3, cz + 12) == true)
-check("inside: next to an incubator at the back", inside(cx - 12, fy + 3, cz - 25) == true)
-check("inside: far outside the building is outside", inside(cx + 200, fy + 3, cz) == false and inside(cx, fy + 3, cz + 200) == false and inside(cx, fy + 3, cz - 200) == false)
-check("inside: in front of a neighbor's plot (90 studs away) is outside this one", inside(cx + 90, fy + 3, cz) == false and inside(cx - 90, fy + 3, cz) == false)
--- Edges are inside, a hair beyond them is outside
-check("inside: the four inner corners count as inside (edges are inclusive)", inside(b.minX, fy + 3, b.minZ) and inside(b.maxX, fy + 3, b.minZ)
-	and inside(b.minX, fy + 3, b.maxZ) and inside(b.maxX, fy + 3, b.maxZ))
-check("inside: 0.01 beyond a corner is outside (on both axes, all four corners)", not inside(b.minX - 0.01, fy + 3, b.minZ - 0.01) and not inside(b.maxX + 0.01, fy + 3, b.minZ - 0.01)
-	and not inside(b.minX - 0.01, fy + 3, b.maxZ + 0.01) and not inside(b.maxX + 0.01, fy + 3, b.maxZ + 0.01))
-check("inside: 0.01 past the left, right and back walls is outside", not inside(b.minX - 0.01, fy + 3, cz) and not inside(b.maxX + 0.01, fy + 3, cz) and not inside(cx, fy + 3, b.minZ - 0.01))
-check("inside: 0.01 past the front wall, away from the door, is outside", not inside(cx + 10, fy + 3, b.maxZ + 0.01) and not inside(cx - 10, fy + 3, b.maxZ + 0.01))
-check("inside: a corner of the building seen from outside, diagonal, is outside", not inside(b.maxX + 1, fy + 3, b.maxZ + 1))
--- The door
-check("inside: in the doorway (on the front wall line) is inside", inside(cx, fy + 3, b.maxZ + 0.4) == true)
-check("inside: on the apron in front of the door is inside, up to its end (3.5 studs)", inside(cx, fy + 3, b.maxZ + 1) and inside(cx, fy + 3, b.maxZ + 3.5))
-check("inside: 0.01 past the end of the apron is outside", not inside(cx, fy + 3, b.maxZ + 3.51))
-check("inside: the apron is as wide as the door (edges inclusive), not wider", inside(b.doorMaxX, fy + 3, b.maxZ + 2) and inside(b.doorMinX, fy + 3, b.maxZ + 2)
-	and not inside(b.doorMaxX + 0.01, fy + 3, b.maxZ + 2) and not inside(b.doorMinX - 0.01, fy + 3, b.maxZ + 2))
-check("inside: beside the door, in front of the wall, is outside", not inside(cx + 6, fy + 3, b.maxZ + 1) and not inside(cx - 6, fy + 3, b.maxZ + 1))
-check("inside: there is no door at the back or the sides (no apron there)", not inside(cx, fy + 3, b.minZ - 1) and not inside(b.maxX + 1, fy + 3, cz) and not inside(b.minX - 1, fy + 3, cz))
-check("inside: walking in through the door is outside, apron, inside in that order",
-	(function()
-		local seq = {}
-		for z = b.maxZ + 6, b.maxZ - 6, -0.5 do seq[#seq + 1] = inside(cx, fy + 3, z) end
-		local state, changes = seq[1], 0
-		for i = 2, #seq do if seq[i] ~= state then changes += 1 state = seq[i] end end
-		return seq[1] == false and seq[#seq] == true and changes == 1
-	end)())
--- Height: the floor, the ceiling, above the roof
-check("inside: at the floor top and 3 below it is inside, 3.01 below is outside", inside(cx, fy, cz) and inside(cx, fy - 3, cz) and not inside(cx, fy - 3.01, cz))
-check("inside: just under the roof (the underside) is inside", inside(cx, b.maxY, cz) == true)
-check("inside: 0.01 above the underside of the roof is outside (the roof stays solid for someone on it)", not inside(cx, b.maxY + 0.01, cz))
-check("inside: high above the roof, flying, is outside", not inside(cx, fy + 100, cz) and not inside(cx, fy + 1e6, cz))
-check("inside: far below the map (a fall) is outside", not inside(cx, fy - 500, cz))
-check("inside: above the roof is outside even above the door apron", not inside(cx, fy + 20, b.maxZ + 1))
--- Bad numbers
-check("inside: NaN in any coordinate is never inside", not inside(0 / 0, fy + 3, cz) and not inside(cx, 0 / 0, cz) and not inside(cx, fy + 3, 0 / 0))
-check("inside: infinity in any coordinate is never inside", not inside(math.huge, fy + 3, cz) and not inside(-math.huge, fy + 3, cz)
-	and not inside(cx, math.huge, cz) and not inside(cx, fy + 3, math.huge) and not inside(cx, fy + 3, -math.huge))
-check("inside: NaN is never inside, even when the player just was (hysteresis)", not inside(0 / 0, fy + 3, cz, true) and not inside(cx, 0 / 0, cz, true))
-do
-	local function safe(...) local ok, r = pcall(M.isInside, b, ...) return ok and r == false end
-	check("inside: text, nil or a table instead of a number is never inside (and never an error)", safe("5", fy + 3, cz) and safe(cx, nil, cz) and safe(cx, fy + 3, {}) and safe(nil, nil, nil))
-end
--- Hysteresis
-check("hysteresis: 0.5 past a wall is outside for someone who was outside, inside for someone who was inside", not inside(b.maxX + 0.5, fy + 3, cz, false)
-	and inside(b.maxX + 0.5, fy + 3, cz, true))
-check("hysteresis: exactly the margin (1 stud) past a wall still counts for someone who was inside, a hair more does not", inside(b.maxX + 1, fy + 3, cz, true)
-	and not inside(b.maxX + 1.01, fy + 3, cz, true))
-check("hysteresis: it works on every wall, on the roof line and on the floor line", inside(b.minX - 1, fy + 3, cz, true) and inside(cx, fy + 3, b.minZ - 1, true)
-	and inside(cx, fy + 3, b.maxZ + 1, true) and inside(cx, b.maxY + 1, cz, true) and not inside(cx, b.maxY + 1.01, cz, true)
-	and inside(cx, b.minY - 1, cz, true) and not inside(cx, b.minY - 1.01, cz, true))
-check("hysteresis: the apron grows by the margin too (4.5 studs for someone who was inside)", inside(cx, fy + 3, b.maxZ + 4.5, true) and not inside(cx, fy + 3, b.maxZ + 4.51, true)
-	and not inside(cx, fy + 3, b.maxZ + 3.51, false))
-check("hysteresis: the apron widens by the margin for someone who was inside", inside(b.doorMaxX + 1, fy + 3, b.maxZ + 2, true) and not inside(b.doorMaxX + 1.01, fy + 3, b.maxZ + 2, true))
-check("hysteresis: nobody is inside because of it from far away", not inside(b.maxX + 5, fy + 3, cz, true) and not inside(cx, fy + 3, b.minZ - 5, true))
-"""
-
-MATH_B = r"""-- 6. The pure fade maths ------------------------------------------------------------------------------------------------
-local step = M.fadeStep
-check("fade: moves toward 1 by dt / seconds (0.1 s of 0.4 s = 0.25)", math.abs(step(0, 1, 0.1, 0.4) - 0.25) < 1e-9)
-check("fade: moves toward 0 by dt / seconds", math.abs(step(1, 0, 0.1, 0.4) - 0.75) < 1e-9)
-check("fade: never goes past the target (a long frame stops at 1 and at 0)", step(0.9, 1, 5, 0.4) == 1 and step(0.1, 0, 5, 0.4) == 0)
-check("fade: a huge or infinite frame time stops at the target", step(0, 1, math.huge, 0.4) == 1 and step(1, 0, math.huge, 0.4) == 0)
-check("fade: holds when it is at the target", step(1, 1, 0.1, 0.4) == 1 and step(0, 0, 0.1, 0.4) == 0 and step(0.5, 0.5, 0.1, 0.4) == 0.5)
-check("fade: a zero, negative or NaN frame time changes nothing", step(0.3, 1, 0, 0.4) == 0.3 and step(0.3, 1, -1, 0.4) == 0.3 and step(0.3, 1, 0 / 0, 0.4) == 0.3)
-check("fade: a time of zero, below zero or NaN jumps to the target", step(0, 1, 0.1, 0) == 1 and step(1, 0, 0.1, -3) == 0 and step(0, 1, 0.1, 0 / 0) == 1)
-check("fade: values outside 0..1 are clamped (a fade of 5 is 1, of -5 is 0)", step(5, 5, 0.1, 0.4) == 1 and step(-5, -5, 0.1, 0.4) == 0 and step(5, 0, 0.1, 0.4) == 0.75
-	and step(-5, 1, 0.1, 0.4) == 0.25)
-check("fade: NaN as the fade or the target is treated as 0", step(0 / 0, 1, 0.1, 0.4) == 0.25 and step(1, 0 / 0, 0.1, 0.4) == 0.75 and step(0 / 0, 0 / 0, 0.1, 0.4) == 0)
-check("fade: infinity is clamped, not passed on", step(math.huge, 1, 0.1, 0.4) == 1 and step(-math.huge, 0, 0.1, 0.4) == 0 and step(0, math.huge, 0.1, 0.4) == 0.25)
-do
-	local f, frames = 0, 0
-	while f < 1 and frames < 1000 do f = step(f, 1, 1 / 60, 0.4) frames += 1 end
-	check("fade: at 60 frames a second a full fade takes 0.4 s (24 frames)", f == 1 and frames >= 24 and frames <= 25, frames)
-	frames = 0
-	while f > 0 and frames < 1000 do f = step(f, 0, 1 / 30, 0.4) frames += 1 end
-	check("fade: at 30 frames a second it takes 12 frames and ends at exactly 0", f == 0 and frames >= 12 and frames <= 13, frames)
-end
-local seed = 12345
-local function rand() seed = (seed * 1664525 + 1013904223) % 4294967296 return seed / 4294967296 end
-do
-	local bad, mono, over = nil, nil, nil
-	for _ = 1, 3000 do
-		local f, t = rand() * 4 - 2, rand() * 4 - 2
-		local dt, s = rand() * 2 - 0.5, rand() * 2 - 0.2
-		local n = step(f, t, dt, s)
-		if not (n >= 0 and n <= 1) or n ~= n then bad = bad or string.format("%g %g %g %g -> %g", f, t, dt, s, n) end
-		local cf, ct = math.clamp(f, 0, 1), math.clamp(t, 0, 1)
-		if cf < ct and n < cf then mono = mono or "went down" end
-		if cf > ct and n > cf then mono = mono or "went up" end
-		if (cf < ct and n > ct) or (cf > ct and n < ct) then over = over or "overshot" end
-	end
-	check("fade: 3,000 random inputs always give a value in 0..1", bad == nil, bad)
-	check("fade: 3,000 random inputs always move the right way and never overshoot", mono == nil and over == nil, mono or over)
-end
-do
-	local bad = nil
-	for _ = 1, 2000 do
-		local f, lv = rand() * 6 - 3, math.floor(rand() * 40) + 1
-		local q = M.quantize(f, lv)
-		if q ~= math.floor(q) or q < 0 or q > lv then bad = bad or string.format("%g %d -> %g", f, lv, q) end
-	end
-	check("quantize: always a whole step from 0 to the number of steps", bad == nil, bad)
-	check("quantize: 0 is step 0, 1 is the last step, 0.5 is half, below 0 and above 1 clamp", M.quantize(0, 20) == 0 and M.quantize(1, 20) == 20 and M.quantize(0.5, 20) == 10
-		and M.quantize(-3, 20) == 0 and M.quantize(3, 20) == 20 and M.quantize(0 / 0, 20) == 0)
-	check("quantize: a step number of 0, NaN or below counts as one step (never divides by zero)", M.quantize(1, 0) == 1 and M.quantize(1, 0 / 0) == 1 and M.quantize(1, -4) == 1)
-	check("quantize: a tiny fade is still step 0, so nothing is written for dust", M.quantize(0.0001, 20) == 0 and M.quantize(0.9999, 20) == 20)
-end
-do
-	local t = M.transparencyAt
-	check("transparency: step 0 gives the part's own value back (glass stays 0.35, solid stays 0)", t(0.35, 0, 20) == 0.35 and t(0, 0, 20) == 0)
-	check("transparency: the last step is 1 (gone) whatever the base", t(0.35, 20, 20) == 1 and t(0, 20, 20) == 1 and t(1, 20, 20) == 1 and t(0.9, 20, 20) == 1)
-	check("transparency: halfway between the base and 1", math.abs(t(0.4, 10, 20) - 0.7) < 1e-9 and math.abs(t(0, 10, 20) - 0.5) < 1e-9)
-	check("transparency: a base outside 0..1 is clamped (-1 is 0, 2 is 1), NaN is 0", t(-1, 0, 20) == 0 and t(2, 0, 20) == 1 and t(0 / 0, 0, 20) == 0)
-	check("transparency: a step past the ends is clamped", t(0.2, 99, 20) == 1 and t(0.2, -5, 20) == 0.2)
-	local bad, mono = nil, nil
-	for _ = 1, 2000 do
-		local base, lv, lvl = rand() * 3 - 1, math.floor(rand() * 30) + 1, math.floor(rand() * 40) - 5
-		local v = t(base, lvl, lv)
-		if not (v >= 0 and v <= 1) or v ~= v then bad = bad or string.format("%g %d %d -> %g", base, lvl, lv, v) end
-		if t(base, lvl + 1, lv) < v then mono = mono or "a later step is more solid" end
-	end
-	check("transparency: 2,000 random inputs always give 0..1", bad == nil, bad)
-	check("transparency: never less transparent at a later step", mono == nil, mono)
-end
-
-"""
-
-
-BUILDING_TESTS = r"""-- Tests: the real PlotArt, PlotVisuals, PlotBuilding and PlotBuildingVisuals with the fake Roblox --------------
+MODULES = r"""
 local PlotArt = (function()
 __PLOTART__
 end)()
@@ -334,456 +332,645 @@ local PlotBuilding = (function()
 __PLOTBUILDING__
 end)()
 local PBV = (function()
-__PLOTBUILDINGVISUALS__
+__PBV__
 end)()
-local IpoConfig = (function()
-__IPOCONFIG__
-end)()
-
-local function anyMatch(list, word) for _, p in ipairs(list) do if string.find(p, word, 1, true) then return true end end return false end
-local function deepCopy(t)
-	if type(t) ~= "table" then return t end
-	local c = {}
-	for k, v in pairs(t) do c[deepCopy(k)] = deepCopy(v) end
-	return c
-end
-local function find(list, name) for _, s in ipairs(list) do if s.name == name then return s end end end
-
-local center = Vector3.new(-135, 0.5, 150) -- a real plot center (slot 2)
-local floorTop = PlotArt.Layout.floorTop
-local zones = PlotVisuals.zones(PlotArt.Layout)
-
--- A room with all six props, and the boxes of its parts as offsets from the floor top (what check() compares with)
-local function fullRoom(stage)
-	local room = PlotVisuals.buildRoom(nil, center, PlotArt, stage)
-	for _, slot in ipairs(PlotArt.Layout.itemSlots) do
-		PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
-	end
-	return room
-end
-local function roomBoxes(room)
-	local out = {}
-	for _, d in ipairs(room:GetDescendants()) do
-		if d:IsA("BasePart") then
-			local b = PBV.boxOf(d.CFrame, d.Size)
-			table.insert(out, { name = d:GetFullName(), box = { b[1] - center.X, b[2] - center.X, b[3] - center.Y - floorTop, b[4] - center.Y - floorTop, b[5] - center.Z, b[6] - center.Z } })
-		end
-	end
-	return out
-end
-local function partsOf(model)
-	local out = {}
-	for _, d in ipairs(model:GetDescendants()) do if d:IsA("BasePart") then table.insert(out, d) end end
-	return out
-end
-local function checkOf(model, room)
-	return PBV.check(model, center, PlotArt, PlotBuilding, { zones = zones, roomBoxes = room and roomBoxes(room) or nil })
-end
-
--- 1. The data -----------------------------------------------------------------------------------------------
-local problems = PBV.validate(PlotBuilding)
-check("PlotBuildingVisuals.validate finds no problem in PlotBuilding", #problems == 0, problems[1])
-check("one building per room (PlotArt) and per IpoConfig funding stage", #PlotBuilding.Stages == #PlotArt.Stages and #PlotBuilding.Stages == #IpoConfig.Stages,
-	#PlotBuilding.Stages .. " buildings, " .. #PlotArt.Stages .. " rooms, " .. #IpoConfig.Stages .. " stages")
-for i, look in ipairs(PlotBuilding.Stages) do
-	check("building " .. i .. " is keyed like room " .. i .. " and IpoConfig stage " .. i .. " (" .. tostring(look.key) .. ")",
-		look.key == PlotArt.Stages[i].key and look.key == IpoConfig.Stages[i].key, look.key)
-end
-local E, Inside, Fade, Budget = PlotBuilding.Envelope, PlotBuilding.Inside, PlotBuilding.Fade, PlotBuilding.Budget
-check("the building budget is its own (64 parts, 12 ground pieces, 2 SurfaceGuis) and below the room's 260 limit", Budget.parts == 64 and Budget.static == 12
-	and Budget.gui == 2 and Budget.parts < PlotVisuals.MAX_PARTS)
-check("the envelope is the one in the design: walls from 30.2, 0.8 thick, 14 to the roof, a 9 wide and 9 high door",
-	E.inner == 30.2 and E.thick == 0.8 and E.roofBottom == 14 and E.doorHalf == 4.5 and E.doorHeight == 9)
-check("the fade is 0.4 s in 20 steps and the inside margin is 1 stud", Fade.seconds == 0.4 and Fade.levels == 20 and Inside.margin == 1)
-check("only OFFICE, HQ and BUILD YOUR STARTUP may be written on a building (no odds text, D9)",
-	PlotBuilding.Texts["OFFICE"] and PlotBuilding.Texts["HQ"] and PlotBuilding.Texts["BUILD YOUR STARTUP"])
-local textCount = 0
-for _ in pairs(PlotBuilding.Texts) do textCount += 1 end
-check("exactly three texts are allowed", textCount == 3, textCount)
--- The building stands outside every old shell: each room part (props included) is either inside the inner face or
--- wholly beyond the outer face (the garage's weeds and yard marks outside the plot), never in the wall itself
-do
-	local outer = E.inner + E.thick
-	local straddles, reach = nil, 0
-	for i = 1, #PlotArt.Stages do
-		for _, r in ipairs(roomBoxes(fullRoom(i))) do
-			local bx = r.box
-			local isYard = bx[4] <= 0.05 or string.find(r.name, "Skyline", 1, true) ~= nil
-			local within = math.max(math.abs(bx[1]), math.abs(bx[2]), math.abs(bx[5]), math.abs(bx[6])) <= E.inner
-			local beyond = bx[1] >= outer - 1e-9 or bx[2] <= -outer + 1e-9 or bx[5] >= outer - 1e-9 or bx[6] <= -outer + 1e-9
-			if within then reach = math.max(reach, math.abs(bx[1]), math.abs(bx[2]), math.abs(bx[5]), math.abs(bx[6])) end
-			if not (isYard or within or beyond) then straddles = straddles or r.name end
-		end
-	end
-	check("no room part (props included) is in a wall of the building: inside the inner face or wholly beyond the outer one (reach " .. string.format("%.2f", reach) .. ")", straddles == nil, straddles)
-end
-
--- 2. Every stage, built --------------------------------------------------------------------------------------
-local PARTS = {}
-for i = 1, #PlotBuilding.Stages do
-	local room = fullRoom(i)
-	local model = PBV.build(nil, center, PlotArt, PlotBuilding, i)
-	local probs = checkOf(model, room)
-	check("stage " .. i .. ": no problem in the built building (budget, flags, zones, doorway, room parts, faces, floating) (PlotBuildingVisuals.check)", #probs == 0,
-		#probs .. " problem(s), first: " .. tostring(probs[1]))
-	local parts = partsOf(model)
-	PARTS[i] = #parts
-	local statics = #model:FindFirstChild("Static"):GetChildren()
-	check("stage " .. i .. ": " .. #parts .. " parts, at most " .. Budget.parts .. " (its own budget, not the room's 260)", #parts >= 30 and #parts <= Budget.parts, #parts)
-	check("stage " .. i .. ": " .. statics .. " ground pieces, at most " .. Budget.static, statics >= 1 and statics <= Budget.static, statics)
-	local flagged, shadow, nonAnchored = nil, nil, nil
-	local lights, emitters, guis, texts = 0, 0, 0, {}
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BasePart") then
-			if d.CanCollide or d.CanTouch or d.CanQuery then flagged = flagged or d:GetFullName() end
-			if d.CastShadow then shadow = shadow or d:GetFullName() end
-			if not d.Anchored then nonAnchored = nonAnchored or d:GetFullName() end
-		elseif d.ClassName == "PointLight" or d.ClassName == "SpotLight" or d.ClassName == "SurfaceLight" then lights += 1
-		elseif d.ClassName == "ParticleEmitter" then emitters += 1
-		elseif d.ClassName == "SurfaceGui" then guis += 1
-		elseif d.ClassName == "TextLabel" then table.insert(texts, d.Text) end
-	end
-	check("stage " .. i .. ": no building part collides, is touched or is hit by a ray (CanCollide, CanTouch, CanQuery off)", flagged == nil, flagged)
-	check("stage " .. i .. ": no building part casts a shadow", shadow == nil, shadow)
-	check("stage " .. i .. ": every part is anchored", nonAnchored == nil, nonAnchored)
-	check("stage " .. i .. ": no light, no particle emitter, at most 2 SurfaceGuis", lights == 0 and emitters == 0 and guis <= 2, lights .. "/" .. emitters .. "/" .. guis)
-	local textOk = true
-	for _, t in ipairs(texts) do if not PlotBuilding.Texts[t] then textOk = false end end
-	check("stage " .. i .. ": its text is only OFFICE, HQ or BUILD YOUR STARTUP", textOk, table.concat(texts, ","))
-	check("stage " .. i .. ": named PlotBuilding, with a Fade and a Static group and a Roof", model.Name == "PlotBuilding" and model:FindFirstChild("Fade") ~= nil
-		and model:FindFirstChild("Static") ~= nil and model:FindFirstChild("Fade"):FindFirstChild("Roof") ~= nil)
-	check("stage " .. i .. ": tagged PlotBuilding for the client", TAGGED[model] == PBV.TAG and PBV.TAG == "PlotBuilding")
-	check("stage " .. i .. ": knows its stage and key", model:GetAttribute("Stage") == i and model:GetAttribute("StageKey") == PlotBuilding.Stages[i].key)
-	-- The roof sits on the walls, wider than them, and everything that fades is in Fade
-	local roof = model:FindFirstChild("Fade"):FindFirstChild("Roof")
-	local rb = PBV.boxOf(roof.CFrame, roof.Size)
-	check("stage " .. i .. ": the roof is the top, sitting on the walls (underside at 14, a 65 x 65 slab)",
-		math.abs(rb[3] - (center.Y + floorTop + E.roofBottom)) < 1e-6 and math.abs((rb[2] - rb[1]) - 2 * E.roofHalf) < 1e-6 and math.abs((rb[6] - rb[5]) - 2 * E.roofHalf) < 1e-6)
-	local fadeCount = #partsOf(model:FindFirstChild("Fade"))
-	check("stage " .. i .. ": Fade holds every part but the ground pieces", fadeCount + statics == #parts, fadeCount)
-	-- The building never moves a gameplay position: it is only a Model next to the room
-	check("stage " .. i .. ": building a stage does not touch the room (the room is a separate Model)", room.Name == "PlotRoom" and model ~= room)
-end
-
--- 3. The numbers the client reads --------------------------------------------------------------------------------
-do
-	local model = PBV.build(nil, center, PlotArt, PlotBuilding, 3)
-	local b = PBV.bounds(center, PlotArt, PlotBuilding)
-	local floorY = center.Y + floorTop
-	check("bounds: the inner faces are 30.2 studs from the plot center on x and z", b.minX == center.X - 30.2 and b.maxX == center.X + 30.2
-		and b.minZ == center.Z - 30.2 and b.maxZ == center.Z + 30.2)
-	check("bounds: from 3 below the floor top to the underside of the roof", b.minY == floorY - 3 and b.maxY == floorY + 14)
-	check("bounds: the door is 9 wide, centered on the plot, with a 3.5 apron, and the margin is 1", b.doorMinX == center.X - 4.5 and b.doorMaxX == center.X + 4.5
-		and b.doorDepth == 3.5 and b.margin == 1)
-	local allThere = true
-	for field, attribute in pairs(PBV.ATTRIBUTES) do
-		if model:GetAttribute(attribute) ~= b[field] or type(model:GetAttribute(attribute)) ~= "number" then allThere = false end
-	end
-	check("the Model carries every number as an attribute (MinX MaxX MinY MaxY MinZ MaxZ DoorMinX DoorMaxX DoorDepth Margin)", allThere)
-	check("the Model carries the fade time and the number of steps", model:GetAttribute("FadeSeconds") == 0.4 and model:GetAttribute("FadeLevels") == 20)
-	local n = 0
-	for _ in pairs(PBV.ATTRIBUTES) do n += 1 end
-	check("exactly ten bounds attributes", n == 10, n)
-end
-
--- 4. sync: one building per plot folder, replaced when the stage changes ------------------------------------------
-do
-	local folder = newInstance("Folder")
-	local function count() local n = 0 for _, c in ipairs(folder:GetChildren()) do if c.Name == "PlotBuilding" then n += 1 end end return n end
-	local first = PBV.sync(folder, center, PlotArt, PlotBuilding, 1)
-	check("sync: builds the stage-1 building in the plot folder", first.Parent == folder and first:GetAttribute("Stage") == 1 and count() == 1)
-	local again = PBV.sync(folder, center, PlotArt, PlotBuilding, 1)
-	check("sync: the same stage again does nothing (the same Model, no rebuild)", again == first and count() == 1 and not first.destroyed)
-	local second = PBV.sync(folder, center, PlotArt, PlotBuilding, 2)
-	check("sync: a new stage replaces the building (the old one is destroyed, one is left)", second ~= first and first.destroyed == true and count() == 1 and second:GetAttribute("Stage") == 2)
-	local last = #PlotBuilding.Stages
-	check("sync: a stage past the last shows the last building", PBV.sync(folder, center, PlotArt, PlotBuilding, 99):GetAttribute("Stage") == last and count() == 1)
-	check("sync: stage 0 or below shows the first", PBV.sync(folder, center, PlotArt, PlotBuilding, 0):GetAttribute("Stage") == 1 and count() == 1)
-	check("sync: nil, NaN and text show the first (a bad stage never errors)", PBV.sync(folder, center, PlotArt, PlotBuilding, nil):GetAttribute("Stage") == 1
-		and PBV.sync(folder, center, PlotArt, PlotBuilding, 0 / 0):GetAttribute("Stage") == 1 and PBV.sync(folder, center, PlotArt, PlotBuilding, "x"):GetAttribute("Stage") == 1)
-	check("sync: 2.7 shows the stage below it", PBV.sync(folder, center, PlotArt, PlotBuilding, 2.7):GetAttribute("Stage") == 2)
-	PBV.sync(folder, center, PlotArt, PlotBuilding, 5)
-	PBV.sync(folder, center, PlotArt, PlotBuilding, 1) -- an IPO: back to the Garage
-	check("sync: back to the Garage after an IPO leaves one building", count() == 1 and folder:FindFirstChild("PlotBuilding"):GetAttribute("Stage") == 1)
-	-- A room next to it is never touched
-	local room = PlotVisuals.buildRoom(folder, center, PlotArt, 1)
-	local kids = #room:GetDescendants()
-	PBV.sync(folder, center, PlotArt, PlotBuilding, 4)
-	check("sync: the PlotRoom in the same folder is not touched", room.Parent == folder and not room.destroyed and #room:GetDescendants() == kids)
-end
-
--- 5. The pure inside check (these tests also run on the copy inside BuildingClient, see CLIENT_TESTS) ------------------------------------
-local M = PBV
-local b = PBV.bounds(center, PlotArt, PlotBuilding)
-local cx, cz = center.X, center.Z
-local fy = center.Y + floorTop
-__MATH_A__
--- Several buildings: a different center gives different bounds
-do
-	local other = PBV.bounds(Vector3.new(cx + 90, 0.5, cz), PlotArt, PlotBuilding)
-	check("inside: the building next door has its own box (90 studs over)", PBV.isInside(other, cx + 90, fy + 3, cz, false) and not PBV.isInside(other, cx, fy + 3, cz, false)
-		and not PBV.isInside(b, cx + 90, fy + 3, cz, false))
-end
--- Every point of the plot's floor that a hire or a prop uses is inside
-do
-	local all = true
-	for _, s in ipairs(PlotArt.Layout.employeeSpots) do if not inside(cx + s[1], fy + 3, cz + s[2]) then all = false end end
-	for _, s in ipairs(PlotArt.Layout.incubators) do if not inside(cx + s[1], fy + 3, cz + s[2]) then all = false end end
-	for _, s in ipairs(PlotArt.Layout.itemSlots) do if not inside(cx + s.x, fy + 3, cz + s.z) then all = false end end
-	check("inside: every hire spot, incubator and upgrade station of the plot is inside the building", all)
-	check("inside: both garage signs and the spawn are inside the building", inside(cx + PlotArt.Layout.signs[1].x, fy + 3, cz + PlotArt.Layout.signs[1].z)
-		and inside(cx + PlotArt.Layout.signs[2].x, fy + 3, cz + PlotArt.Layout.signs[2].z) and inside(cx + PlotArt.Layout.spawn.x, fy + 3, cz + PlotArt.Layout.spawn.z))
-end
-
-__MATH_B__
--- 6b. The checks catch broken buildings (a check that can't fail proves nothing) --------------------------------------------------------------
-do
-	local room3 = fullRoom(3)
-	local boxes3 = roomBoxes(room3)
-	-- A copy of the data, changed by `fn`, built at stage 3 and checked against the real zones and the real room
-	local function broken(fn)
-		local copy = deepCopy(PlotBuilding)
-		fn(copy)
-		local ok, model = pcall(PBV.build, nil, center, PlotArt, copy, 3) -- a missing envelope number can't even be built
-		if not ok then return { "build failed: " .. tostring(model) }, PBV.validate(copy) end
-		return PBV.check(model, center, PlotArt, copy, { zones = zones, roomBoxes = boxes3 }), PBV.validate(copy)
-	end
-	local function spec(name, x, y, z, w, h, d, extra)
-		local s = { name = name, shape = "Block", size = { w, h, d }, offset = { x, y, z }, color = { 200, 200, 200 }, material = "Concrete" }
-		for k, v in pairs(extra or {}) do s[k] = v end
-		return s
-	end
-	local clean = broken(function() end)
-	check("a copy of the real data passes the same checks (the mutations below start from a clean building)", #clean == 0, clean[1])
-	check("mutation: a 65th part is caught (budget 64)", anyMatch((broken(function(c) for i = 1, 65 - #c.Stages[3].fade - #c.Stages[3].static do table.insert(c.Stages[3].fade, spec("Fill" .. i, 30 + (i % 3), -0.5, 20 + i * 0.6, 0.4, 1, 0.4)) end end)), "parts (budget"))
-	check("mutation: a 13th ground piece is caught (budget 12)", anyMatch((broken(function(c) for i = 1, 13 do table.insert(c.Stages[3].static, spec("Pebble" .. i, 20 + i, -0.5, 40, 0.5, 1, 0.5)) end end)), "ground pieces (budget"))
-	check("mutation: a third SurfaceGui is caught (budget 2)", anyMatch((broken(function(c) for i = 1, 3 do table.insert(c.Stages[3].fade, spec("Label" .. i, 12 + i * 3, 6, 31.5, 2, 1, 0.1, { text = { value = "OFFICE", font = "FredokaOne", color = { 0, 0, 0 } } })) end end)), "SurfaceGuis (budget"))
-	do
-		local model = PBV.build(nil, center, PlotArt, PlotBuilding, 3)
-		local one = partsOf(model:FindFirstChild("Fade"))[3]
-		one.CanCollide = true
-		check("mutation: a part with CanCollide on is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "CanCollide"))
-		one.CanCollide = false
-		one.CanQuery = true
-		check("mutation: a part with CanQuery on (it would stop rays and the camera) is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "CanQuery"))
-		one.CanQuery = false
-		one.CanTouch = true
-		check("mutation: a part with CanTouch on is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "CanTouch"))
-		one.CanTouch = false
-		one.CastShadow = true
-		check("mutation: a part that casts a shadow is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "casts a shadow"))
-		one.CastShadow = false
-		one.Anchored = false
-		check("mutation: an unanchored part is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "not anchored"))
-		one.Anchored = true
-		check("...and with everything put back the building is clean again", #PBV.check(model, center, PlotArt, PlotBuilding) == 0)
-		local light = Instance.new("PointLight")
-		light.Parent = one
-		check("mutation: a PointLight in a building is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "lights"))
-		light.Parent = nil
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Parent = one
-		check("mutation: a particle emitter in a building is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "particle"))
-		emitter.Parent = nil
-		one.Parent = model -- not in Fade or Static
-		check("mutation: a part outside the Fade and Static groups is caught", anyMatch(PBV.check(model, center, PlotArt, PlotBuilding), "not in Fade or Static"))
-	end
-	check("mutation: a block standing in the doorway is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("Barrier", 0, 3, 32, 2, 5, 0.4)) table.insert(c.Stages[3].fade, spec("BarrierPost", 0, -0.5, 32, 1, 1, 1)) end)), "in the doorway"))
-	check("mutation: a hanging door (nothing under 5.5 studs) is caught: a slat at head height", anyMatch((broken(function(c) table.insert(c.Stages[3].static, spec("LowBeam", 0, 3, 36, 8, 0.4, 0.4)) table.insert(c.Stages[3].static, spec("LowBeamLeg", 4, -0.5, 36, 0.4, 1, 0.4)) end)), "in the doorway"))
-	check("mutation: a flat path in the doorway is fine (a mat on the ground is not a barrier)", #(broken(function(c) table.insert(c.Stages[3].static, spec("Mat2", 0, -0.88, 33, 3, 0.1, 3)) end)) == 0)
-	check("mutation: a part inside a hire's zone is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("InHire", -4.5, 3, -10, 1, 1, 1)) end)), "hire zone"))
-	check("mutation: a part on the next-upgrade sign's zone is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("OnSign", 0, 3, 24, 1, 1, 1)) end)), "sign zone BuySign"))
-	check("mutation: a part in the walking lane is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("InLane", 0, 3, 5, 1, 1, 1)) end)), "lane zone"))
-	check("mutation: a part in an upgrade station's slot is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("InSlot", -23, 3, 2, 1, 1, 1)) end)), "slot zone"))
-	check("mutation: a part inside a room part (a prop) is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("IntoRoom", 23, 6, 2, 6, 6, 3)) end)), "goes into the room part"))
-	check("mutation: a floating part is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("Floater", 20, 20, 36, 1, 1, 1)) end)), "Floater is floating"))
-	check("mutation: a part far outside the building (past 40 studs) is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].static, spec("TooFar", 0, -0.5, 45, 1, 1, 1)) end)), "outside the building's reach"))
-	check("mutation: a part above 24 studs is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("TooTall", 24, 22, -24, 1, 12, 1)) end)), "outside the building's reach"))
-	check("mutation: a part below the ground is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].static, spec("Buried", 20, -3, 36, 1, 1, 1)) end)), "outside the building's reach"))
-	check("mutation: two faces on the same plane (z-fighting) are caught", anyMatch((broken(function(c)
-		table.insert(c.Stages[3].fade, spec("PanelA", -40 + 56, 3, 31.5, 4, 4, 0.2))
-		table.insert(c.Stages[3].fade, spec("PanelB", -40 + 57, 3, 31.5, 4, 4, 0.2))
-	end)), "share a face"))
-	check("mutation: a second roof slab on the first one's top plane (flicker) is caught", anyMatch((broken(function(c) table.insert(c.Stages[3].fade, spec("RoofTwin", 0, 14.45, 0, 65, 0.9, 65)) end)), "share a face"))
-	check("mutation: no Roof in the Fade group is caught", anyMatch((broken(function(c) for _, s in ipairs(c.Stages[3].fade) do if s.name == "Roof" then s.name = "Lid" end end end)), "no part named Roof"))
-	check("mutation: a material outside the list is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].material = "Grass" end)), "material not allowed: Grass"))
-	check("mutation: Neon on something that is not a light or a sign is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].material = "Neon" end)), "Neon is only for lights"))
-	check("mutation: a Wedge is caught (its orientation can't be checked without Studio) (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].shape = "Wedge" end)), "unknown shape"))
-	check("mutation: a squashed Ball is caught (validate)", anyMatch(select(2, broken(function(c) table.insert(c.Stages[3].static, { name = "Squashed", shape = "Ball", size = { 1, 2, 1 }, offset = { 0, 0, 40 }, color = { 1, 2, 3 }, material = "Fabric" }) end)), "a Ball needs 3 equal sides"))
-	check("mutation: odds text on a building (D9) is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[#c.Stages[3].fade].text = { value = "LEGENDARY 5%", font = "GothamBold", color = { 0, 0, 0 } } end)), "text must be one of"))
-	check("mutation: text that is not OFFICE, HQ or BUILD YOUR STARTUP is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[2].text = { value = "FREE EGGS", font = "GothamBold", color = { 0, 0, 0 } } end)), "text must be one of"))
-	check("mutation: a collidable or glowing building part in the data is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].collide = true end)), "never collides, lights or emits")
-		and anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].light = { color = { 1, 1, 1 }, brightness = 1, range = 10 } end)), "never collides, lights or emits"))
-	check("mutation: a color over 255 is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].color = { 300, 0, 0 } end)), "color must be"))
-	check("mutation: a size of 0 is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[1].size = { 0, 1, 1 } end)), "size must be"))
-	check("mutation: two parts with the same name are caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].fade[2].name = c.Stages[3].fade[1].name end)), "two parts named"))
-	check("mutation: a stage without its key is caught (validate)", anyMatch(select(2, broken(function(c) c.Stages[3].key = nil end)), "needs the key"))
-	check("mutation: a missing envelope number is caught (validate)", anyMatch(select(2, broken(function(c) c.Envelope.inner = nil end)), "number missing"))
-	-- Heights: the roof clears everything in every room
-	local clearance = math.huge
-	for i = 1, #PlotArt.Stages do
-		for _, r in ipairs(roomBoxes(fullRoom(i))) do
-			if not string.find(r.name, "Skyline", 1, true) then clearance = math.min(clearance, E.roofBottom - r.box[4]) end
-		end
-	end
-	check("the roof clears the tallest part of every room (props included) by at least 1 stud (" .. string.format("%.2f", clearance) .. ")", clearance >= 1, clearance)
-	-- The five buildings differ: nobody gets the same shell twice
-	local seen, distinct = {}, true
-	for i = 1, #PlotBuilding.Stages do
-		local sig = {}
-		for _, s in ipairs(PlotBuilding.Stages[i].fade) do table.insert(sig, s.name .. s.color[1] .. s.color[2] .. s.color[3] .. s.material) end
-		local key = table.concat(sig, ";")
-		if seen[key] then distinct = false end
-		seen[key] = true
-	end
-	check("the five buildings are all different (each stage has its own look)", distinct)
-	local roofColors = {}
-	for i = 1, #PlotBuilding.Stages do
-		local roofSpec = find(PlotBuilding.Stages[i].fade, "Roof")
-		roofColors[roofSpec.color[1] .. "," .. roofSpec.color[2] .. "," .. roofSpec.color[3]] = true
-	end
-	local nColors = 0
-	for _ in pairs(roofColors) do nColors += 1 end
-	check("each stage has its own roof color", nColors >= 4, nColors)
-end
-
--- 7. Nothing existing moved: the rooms, the props and every gameplay position are exactly what they were ------------------
--- The fingerprints were taken from PlotArt at 7f5c141 (the five rooms of visuals-garage). Stage 1, the props and the layout
--- are the same numbers tools/daily_test.py pins; stages 2 to 5 are pinned here. If one fails, a room, a prop or a gameplay
--- position changed: only allowed on purpose, by hand, and the building must then be checked against it again.
-local function num(n) return string.format("%.4f", n) end
-local function triple(t) if not t then return "-" end return num(t[1]) .. "," .. num(t[2]) .. "," .. num(t[3]) end
-local function specString(s)
-	local tr = s.text and (s.text.value .. s.text.font) or ""
-	local lt = s.light and (s.light.brightness .. "/" .. s.light.range) or ""
-	return table.concat({ s.name, s.shape, triple(s.size), triple(s.offset), triple(s.rot), triple(s.color), s.material, num(s.transparency or 0), tostring(s.collide), tr, lt }, "|")
-end
-local function listString(list)
-	local out = {}
-	for _, s in ipairs(list) do table.insert(out, specString(s)) end
-	return table.concat(out, ";")
-end
-local function hash(str)
-	local h = 5381
-	for i = 1, #str do h = (h * 33 + string.byte(str, i)) % 4294967291 end
-	return h
-end
-local function fingerprints()
-	local fp = { stages = {} }
-	for i, g in ipairs(PlotArt.Stages) do
-		fp.stages[i] = { hash(listString(g.shell) .. "#" .. listString(g.decor) .. "#" .. listString(g.desk) .. g.floor.material .. triple(g.floor.color) .. g.key), #g.shell, #g.decor, #g.desk }
-	end
-	local names = {}
-	for n in pairs(PlotArt.Props) do table.insert(names, n) end
-	table.sort(names)
-	local ps = {}
-	for _, n in ipairs(names) do table.insert(ps, n .. "=" .. listString(PlotArt.Props[n])) end
-	fp.props = hash(table.concat(ps, "##"))
-	local L2 = PlotArt.Layout
-	local ls = {}
-	for _, s in ipairs(L2.employeeSpots) do table.insert(ls, s[1] .. "," .. s[2]) end
-	for _, s in ipairs(L2.incubators) do table.insert(ls, s[1] .. "," .. s[2]) end
-	for _, s in ipairs(L2.itemSlots) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
-	for _, s in ipairs(L2.signs) do table.insert(ls, s.name .. s.x .. "," .. s.z) end
-	for _, s in ipairs(L2.desks) do table.insert(ls, s[1] .. "," .. s[2] .. "," .. s[3]) end
-	table.insert(ls, L2.spawn.x .. "," .. L2.spawn.z)
-	local rs = {}
-	for k, v in pairs(L2.reserve) do table.insert(rs, k .. "=" .. v) end
-	table.sort(rs)
-	fp.layout = hash(table.concat(ls, ";") .. table.concat(rs, ";"))
-	fp.flash = hash(listString({ PlotArt.Flash.part }))
-	return fp
-end
-local WANT = {
-	{ 2156961517, 35, 81, 2 }, { 1293939730, 28, 43, 5 }, { 2848503495, 41, 40, 5 }, { 947567108, 29, 51, 5 }, { 1423901377, 34, 39, 6 },
-}
-local before = fingerprints()
-check("PlotArt still has exactly the five rooms of visuals-garage", #PlotArt.Stages == 5, #PlotArt.Stages)
-for i = 1, 5 do
-	local got, want = before.stages[i], WANT[i]
-	check("room " .. i .. " is unchanged (fingerprint of its shell, decor, desks, floor and key, and its part counts)",
-		got ~= nil and got[1] == want[1] and got[2] == want[2] and got[3] == want[3] and got[4] == want[4], got and (got[1] .. " " .. got[2] .. "/" .. got[3] .. "/" .. got[4]))
-end
-check("the six upgrade props are unchanged (fingerprint of every part; the same number daily_test.py pins)", before.props == 893633666, before.props)
-check("every gameplay position is unchanged: hire grid, incubators, upgrade stations, signs, spawn, desk offsets, reserved zones (the same fingerprint daily_test.py pins)", before.layout == 1471280708, before.layout)
-check("the stage-change flash is unchanged", before.flash == 381513097, before.flash)
--- The same positions, compared one by one with the scripts (EXPECTED is read from TycoonCore, EmployeeServer and IpoServer)
-do
-	local EXPECTED = __EXPECTED__
-	local L = PlotArt.Layout
-	check("layout: Floor size and top match TycoonCore (60 x 1 x 60, top 0.5)", L.floorSize[1] == EXPECTED.floor[1] and L.floorSize[2] == EXPECTED.floor[2] and L.floorSize[3] == EXPECTED.floor[3] and L.floorTop == EXPECTED.floorTop)
-	local signsOk = true
-	for _, sign in ipairs(L.signs) do local e = EXPECTED.signs[sign.name] if not e or sign.x ~= e[1] or sign.z ~= e[2] then signsOk = false end end
-	check("layout: the two signs are where their scripts put them", signsOk and #L.signs == 2)
-	check("layout: the spawn is where teleportToPlot lands", L.spawn.x == EXPECTED.spawn[1] and L.spawn.z == EXPECTED.spawn[2])
-	local slotsOk = #L.itemSlots == #EXPECTED.upgrades
-	for i, slot in ipairs(L.itemSlots) do local e = EXPECTED.slots[i] if not e or slot.name ~= EXPECTED.upgrades[i] or slot.x ~= e[1] or slot.z ~= e[2] then slotsOk = false end end
-	check("layout: the six upgrade stations are where TycoonCore's itemOffset puts them", slotsOk)
-	local function sameSpots(a, b)
-		if #a ~= #b then return false end
-		for i = 1, #a do if a[i][1] ~= b[i][1] or a[i][2] ~= b[i][2] then return false end end
-		return true
-	end
-	check("layout: the 11 hire spots are EmployeeServer's EMPLOYEE_SPOTS", sameSpots(L.employeeSpots, EXPECTED.spots))
-	check("layout: the 5 incubators are EmployeeServer's INCUBATOR_SPOTS", sameSpots(L.incubators, EXPECTED.incubators))
-	-- The door is on the walking lane: the lane (and the spawn) fit through it with room to spare
-	local R = L.reserve
-	check("the door opening (9 wide) is wider than the walking lane and centered on it", PlotBuilding.Envelope.doorHalf > R.spawnHalf + 1 and L.spawn.x == 0)
-	check("the door opening leaves the lane's end (z = laneEnd) inside the wall: the lane ends before the building's inner face", R.laneEnd <= PlotBuilding.Envelope.inner)
-end
--- Building changes nothing of the room: a room built beside a building is checked by the room's own check, unchanged
-do
-	local folder = newInstance("Folder")
-	local room = PlotVisuals.buildRoom(folder, center, PlotArt, 4)
-	for _, slot in ipairs(PlotArt.Layout.itemSlots) do
-		PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
-	end
-	local partsBefore = #room:GetDescendants()
-	PBV.sync(folder, center, PlotArt, PlotBuilding, 4)
-	local probs = PlotVisuals.check(room, center, PlotArt)
-	check("a room next to its building still passes PlotVisuals.check (parts, zones, flags, budget 260)", #probs == 0 and #room:GetDescendants() == partsBefore, probs[1])
-	local roomParts = 0
-	for _, d in ipairs(room:GetDescendants()) do if d:IsA("BasePart") then roomParts += 1 end end
-	check("the room's own count (" .. roomParts .. ") stays under its 260 limit and does not include the building", roomParts <= PlotVisuals.MAX_PARTS)
-end
-local after = fingerprints()
-local same = after.props == before.props and after.layout == before.layout and after.flash == before.flash
-for i = 1, 5 do same = same and after.stages[i][1] == before.stages[i][1] end
-check("building and checking everything above changed no PlotArt data (the fingerprints are the same afterwards)", same)
-
-print_real(string.format("%d passed, %d failed", passed, failed))
-for i, n in ipairs(PARTS) do print_real("  stage " .. i .. ": " .. n .. " building parts") end
+local PB = PlotBuilding
 """
 
+# Shared Luau helpers: the fake kit (made from the manifest's sizes and the fallback boxes, imported turned by `turn`),
+# frames at a turn, rooms, boxes in the frame of the Floor's top.
+HELPERS = r"""
+local EPS = 1e-6
+local function near(a, b, e) return math.abs(a - b) <= (e or EPS) end
+local function frameAt(turn, x, z)
+	return CFrame.new(x or -135, 0.5, z or 150) * CFrame.Angles(0, math.rad(turn), 0)
+end
+local function inFrame(origin, part) return PBV.boxOf(origin:ToObjectSpace(part.CFrame), part.Size) end
+-- The Floor's top in a garage's frame, computed here (not with the module's helper, so a builder that ignores the turn is seen)
+local function topOf(frame) return frame * CFrame.new(0, PB.FLOOR_TOP, 0) end
+local function overlaps(a, b, m) return PBV.overlaps(a, b, m or 0.01) end
 
-CLIENT_TESTS = r"""-- Tests: the real BuildingClient (the LocalScript source in docs/studio_scripts) running against a fake world ---------------
--- The fake world has a CollectionService (tags), a Heartbeat the test fires frame by frame, and a local character that
--- the test moves. The building Models are the real ones PlotBuildingVisuals builds. Expected values are written out here
--- (base + (1 - base) * step / 20), not taken from the code under test.
-local PlotArt = (function()
-__PLOTART__
-end)()
-local PlotBuilding = (function()
-__PLOTBUILDING__
-end)()
-local PBV = (function()
-__PLOTBUILDINGVISUALS__
-end)()
-
-local task = { spawn = function(f, ...) f(...) end, wait = function() end }
-local WORLD
-local game = { GetService = function(_, name)
-	if name == "CollectionService" then return WORLD.cs
-	elseif name == "Players" then return WORLD.players
-	elseif name == "RunService" then return WORLD.run end
-	error("no service " .. tostring(name))
-end }
-
-local function startClient()
-__CLIENT__
-return { isInside = isInside, fadeStep = fadeStep, quantize = quantize, transparencyAt = transparencyAt }
+-- A fake ReplicatedStorage.KitModels: one Model per key, its MeshParts from the fallback boxes (same sizes and roles), the
+-- whole model turned by `importTurn` about +Y (what Studio's importer may have done), its WorldPivot the bottom-center,
+-- its KitSize the box. Parts get Roblox-like names (main2, trim11), only the Role attribute names them.
+local function makeKit(importTurn, skip)
+	local folder = Instance.new("Folder")
+	folder.Name = "KitModels"
+	local i = 0
+	local keys = {}
+	for key in pairs(PB.KitManifest) do table.insert(keys, key) end
+	table.sort(keys)
+	for _, key in ipairs(keys) do
+		i += 1
+		if not (skip and skip[key]) then
+			local entry = PB.KitManifest[key]
+			local m = Instance.new("Model")
+			m.Name = key
+			local pivot = CFrame.new(400 + i * 40, 7, -300 - i * 3) -- anywhere: the importer leaves them somewhere
+			m.WorldPivot = pivot
+			m:SetAttribute("KitSize", Vector3.new(entry.size[1], entry.size[2], entry.size[3]))
+			for j, b in ipairs(PB.fallbackOf(key)) do
+				local p = Instance.new("MeshPart")
+				p.Name = b.role .. (j * 3 + 1)
+				p:SetAttribute("Role", b.role)
+				p.Size = Vector3.new(b.size[1], b.size[2], b.size[3])
+				p.CFrame = pivot * CFrame.Angles(0, math.rad(importTurn), 0) * CFrame.new(b.at[1], b.at[2], b.at[3])
+				p.Color = Color3.fromRGB(163, 162, 165)
+				p.Anchored = true
+				p.Parent = m
+			end
+			m.Parent = folder
+		end
+	end
+	return folder
 end
 
+-- The room of a stage with the six upgrade props, built at a frame: its parts' boxes in the frame of the Floor's top
+local function roomBoxes(frame, stage)
+	local room = PlotVisuals.buildRoom(nil, frame, PlotArt, stage)
+	local props = room:FindFirstChild("UpgradeProps")
+	for _, slot in ipairs(PlotArt.Layout.itemSlots) do
+		PlotVisuals.buildProp(props, frame, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
+	end
+	local origin = topOf(frame)
+	local out = {}
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("BasePart") then table.insert(out, { name = d:GetFullName(), box = inFrame(origin, d) }) end
+	end
+	return out
+end
+
+-- Every part of a built building by piece name: { role, box } sorted, in the frame of the Floor's top
+local function piecesOf(model, frame)
+	local origin = topOf(frame)
+	local out = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Parent.Name ~= "Solid" then
+			local name = d:GetAttribute("Piece")
+			out[name] = out[name] or {}
+			table.insert(out[name], { role = d:GetAttribute("Role"), box = inFrame(origin, d) })
+		end
+	end
+	for _, list in pairs(out) do
+		table.sort(list, function(a, b)
+			for k = 1, 6 do
+				if math.abs(a.box[k] - b.box[k]) > 1e-4 then return a.box[k] < b.box[k] end
+			end
+			return tostring(a.role) < tostring(b.role)
+		end)
+	end
+	return out
+end
+local function samePieces(a, b)
+	for name, list in pairs(a) do
+		local other = b[name]
+		if not other or #other ~= #list then return false, name .. " (count)" end
+		for i, e in ipairs(list) do
+			if e.role ~= other[i].role then return false, name .. " (role)" end
+			for k = 1, 6 do if not near(e.box[k], other[i].box[k], 1e-4) then return false, name .. " (box)" end end
+		end
+	end
+	for name in pairs(b) do if not a[name] then return false, name .. " (missing)" end end
+	return true
+end
+local function unionBox(list)
+	local u = { math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge }
+	for _, e in ipairs(list) do
+		for k = 1, 5, 2 do u[k] = math.min(u[k], e.box[k]); u[k + 1] = math.max(u[k + 1], e.box[k + 1]) end
+	end
+	return u
+end
+-- The box a piece takes, from the layout alone (its kit size, stretch, turn and tilt), in the frame of the Floor's top
+local function pieceBox(p)
+	local s = PB.KitManifest[p.key].size
+	local origin = CFrame.new()
+	local f = PBV.pieceFrame(origin, p)
+	local w, h, d = s[1] * (p.sx or 1), s[2], s[3] * (p.sz or 1)
+	local c = f * CFrame.new(0, h / 2, 0)
+	return PBV.boxOf(c, Vector3.new(w, h, d))
+end
+"""
+
+DATA_TESTS = r"""
+-- 1. The manifest against docs/KIT_MODELS.md -----------------------------------------------------------------------
+do
+	local n, bad = 0, nil
+	for key, want in pairs(EXPECTED_KIT) do
+		n += 1
+		local e = PB.KitManifest[key]
+		if not e then bad = bad or (key .. " missing") else
+			if not (near(e.size[1], want.w, 0.05) and near(e.size[2], want.h, 0.05) and near(e.size[3], want.d, 0.05)) then bad = bad or (key .. " size") end
+			for role, hex in pairs(want.roles) do if e.roles[role] ~= hex then bad = bad or (key .. "." .. role) end end
+			for role in pairs(e.roles) do if not want.roles[role] then bad = bad or (key .. "." .. role .. " extra") end end
+		end
+	end
+	local mine = 0
+	for _ in pairs(PB.KitManifest) do mine += 1 end
+	check("manifest: docs/KIT_MODELS.md has 36 models", n == 36, n)
+	check("manifest: PlotBuilding.KitManifest has the same 36 keys, sizes (within 0.05) and roles with their colors", bad == nil and mine == 36, bad or mine)
+end
+
+-- 2. The fallback: the Parts version of every key fills exactly its kit size, with the key's roles only ------------------
+do
+	local bad = nil
+	for key, e in pairs(PB.KitManifest) do
+		local list = PB.fallbackOf(key)
+		if not list or #list == 0 then bad = bad or (key .. ": no Parts version") else
+			local u = { math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge }
+			for _, b in ipairs(list) do
+				if not e.roles[b.role] then bad = bad or (key .. ": role " .. tostring(b.role)) end
+				local bx = { b.at[1] - b.size[1] / 2, b.at[1] + b.size[1] / 2, b.at[2] - b.size[2] / 2, b.at[2] + b.size[2] / 2, b.at[3] - b.size[3] / 2, b.at[3] + b.size[3] / 2 }
+				for k = 1, 5, 2 do u[k] = math.min(u[k], bx[k]); u[k + 1] = math.max(u[k + 1], bx[k + 1]) end
+			end
+			local s = e.size
+			if not (near(u[1], -s[1] / 2) and near(u[2], s[1] / 2) and near(u[3], 0) and near(u[4], s[2]) and near(u[5], -s[3] / 2) and near(u[6], s[3] / 2)) then
+				bad = bad or (key .. ": does not fill " .. s[1] .. " x " .. s[2] .. " x " .. s[3])
+			end
+		end
+	end
+	check("fallback: every piece is built and fills its kit size (bottom-center, front +Z), with its own roles", bad == nil, bad)
+end
+
+-- 3. The five layouts ------------------------------------------------------------------------------------------------
+local LAYOUTS = {}
+for s = 1, 5 do LAYOUTS[s] = PB.layout(s) end
+check("layout: five stages, one per funding stage, with PlotArt's keys in order", #PB.Stages == 5 and (function()
+	for s = 1, 5 do if LAYOUTS[s].key ~= PlotArt.Stages[s].key then return false end end return true end)())
+check("layout: a stage past the last shows the last, below 1 or not a number shows the first",
+	PB.layout(9).stage == 5 and PB.layout(0).stage == 1 and PB.layout(0 / 0).stage == 1 and PB.layout(nil).stage == 1)
+check("frame: PlotBuilding.FLOOR_TOP is PlotArt.Layout.floorTop", PB.FLOOR_TOP == PlotArt.Layout.floorTop)
+
+for s = 1, 5 do
+	local L = LAYOUTS[s]
+	local fp, lot, min = L.footprint, PB.Lot, PB.MinShell
+	check("footprint: stage " .. s .. " is at least building-pass's shell (62 x 62) and inside the lot (82.6 x 86.6)",
+		fp.x1 >= min.half and fp.x0 <= -min.half and fp.z0 <= min.back and fp.x1 <= lot.half and fp.x0 >= -lot.half and fp.z0 >= lot.back and fp.z1 <= lot.front,
+		string.format("%g..%g x %g..%g", fp.x0, fp.x1, fp.z0, fp.z1))
+	check("front: every stage's front face is z " .. PB.FRONT_OUT .. " (it grows from the floor's front-center; the front never moves)",
+		fp.z1 == PB.FRONT_OUT and fp.x0 == -fp.x1, fp.z1)
+	if s > 1 then
+		local prev = LAYOUTS[s - 1].footprint
+		check("footprint: stage " .. s .. " contains stage " .. (s - 1) .. " (it only grows)", fp.x1 >= prev.x1 and fp.z0 <= prev.z0)
+	end
+	-- keys and stretch
+	local unknown, stretched = nil, nil
+	for _, p in ipairs(L.pieces) do
+		if not PB.KitManifest[p.key] then unknown = unknown or p.key end
+		local allowed = STRETCH_ALLOWED[p.key]
+		if (p.sx ~= 1 and not (allowed and allowed.x)) or (p.sz ~= 1 and not (allowed and allowed.z)) then stretched = stretched or p.name end
+	end
+	check("kit: every key stage " .. s .. " uses is in the KitManifest", unknown == nil, unknown)
+	check("stretch: at stage " .. s .. " only Wall and RoofEdge (along X) and Floor (X and Z) are stretched", stretched == nil, stretched)
+	-- the doorway
+	local bx = {}
+	for _, b in ipairs(L.boxes) do bx[b.name] = b.box end
+	local gapW = bx.FrontRight[1] - bx.FrontLeft[2]
+	check("doorway: stage " .. s .. "'s solid opening is at least 9 wide and 9 high, centered on the lane",
+		gapW >= 9 and bx.Lintel[3] >= 9 and near(bx.FrontRight[1], -bx.FrontLeft[2]) and bx.FrontLeft[2] <= -PB.Lane.half and bx.FrontRight[1] >= PB.Lane.half,
+		gapW .. " x " .. bx.Lintel[3])
+	-- the solid boxes: the lane, the floor, the lot
+	local laneBox = { -PB.Lane.half, PB.Lane.half, PB.GROUND, PB.Lane.top, PB.Lane.from, PB.Lane.to }
+	local inLane, overFloor, outLot = nil, nil, nil
+	for _, b in ipairs(L.boxes) do
+		if overlaps(b.box, laneBox) then inLane = inLane or b.name end
+		local e = PB.ROOM_EDGE
+		if b.box[1] < e - 0.01 and b.box[2] > -e + 0.01 and b.box[5] < e - 0.01 and b.box[6] > -e + 0.01 and b.box[3] < PB.CLEAR_ABOVE then overFloor = overFloor or b.name end
+		if b.box[1] < -PB.Lot.half or b.box[2] > PB.Lot.half or b.box[5] < PB.Lot.back or b.box[6] > PB.Lot.front then outLot = outLot or b.name end
+	end
+	check("lane: at stage " .. s .. " no solid box stands in the doorway lane (9 wide, 9 high, room to the end of the apron)", inLane == nil, inLane)
+	check("floor: at stage " .. s .. " every solid box is outside the 60 x 60 floor, or above " .. PB.CLEAR_ABOVE .. " (the roof)", overFloor == nil, overFloor)
+	check("lot: at stage " .. s .. " every solid box is inside the lot", outLot == nil, outLot)
+	-- pieces: in front only to OUTSIDE_TO, never past the lot's sides and back; the shell's walls on the lot's front line
+	local far = nil
+	for _, p in ipairs(L.pieces) do
+		local b = pieceBox(p)
+		if b[1] < -PB.Lot.half - 0.01 or b[2] > PB.Lot.half + 0.01 or b[5] < PB.Lot.back - 0.01 or b[6] > PB.OUTSIDE_TO + 0.01 then far = far or p.name end
+		if string.find(p.name, "Front", 1, true) and b[6] > PB.Lot.front + 0.01 then far = far or p.name end
+	end
+	check("lot: every piece of stage " .. s .. " stands inside the lot (pieces in front of the facade up to z " .. PB.OUTSIDE_TO .. ")", far == nil, far)
+	-- the style table
+	local nostyle = nil
+	for _, p in ipairs(L.pieces) do
+		for role in pairs(PB.KitManifest[p.key].roles) do
+			local st = PB.styleOf(s, p.key, role, p.look)
+			if not st or type(st.color) ~= "table" or #st.color ~= 3 or not PB.MATERIALS[st.material] or not (st.transparency >= 0 and st.transparency < 1) then
+				nostyle = nostyle or (p.key .. "." .. role)
+			elseif st.material == "Neon" and not PB.NEON_KEYS[p.key] then
+				nostyle = nostyle or (p.key .. "." .. role .. " Neon")
+			end
+		end
+	end
+	check("style: stage " .. s .. "'s table has every role of every key it uses (a color, an allowed material, Neon only on a light)", nostyle == nil, nostyle)
+	-- the budget, both ways
+	local kitParts, fbParts = #L.boxes, #L.boxes
+	for _, p in ipairs(L.pieces) do
+		for _ in pairs(PB.KitManifest[p.key].roles) do kitParts += 1 end
+		fbParts += #PB.fallbackOf(p.key)
+	end
+	check("budget: stage " .. s .. " is at most " .. PB.Budget.parts .. " parts, kit MeshParts plus boxes (" .. kitParts .. ")", kitParts <= PB.Budget.parts, kitParts)
+	check("budget: stage " .. s .. " is at most " .. PB.Budget.parts .. " parts built from Parts too (" .. fbParts .. ")", fbParts <= PB.Budget.parts, fbParts)
+	-- the shell fades: every piece but the furniture and the band's floor is in Fade (the roof included)
+	local wrong = nil
+	for _, p in ipairs(L.pieces) do
+		local inside = string.find(p.name, "Furniture", 1, true) or string.find(p.name, "Band", 1, true)
+		if (inside and p.group ~= "Static") or (not inside and p.group ~= "Fade") then wrong = wrong or p.name end
+	end
+	check("fade: at stage " .. s .. " the roof and every wall, door and outside piece are in Fade, the furniture and the band's floor in Static", wrong == nil, wrong)
+	-- the furniture band
+	local band = LAYOUTS[s]
+	local inner, backInner = band.footprint.x1 - PB.WALL, band.footprint.z0 + PB.WALL
+	local def = PB.Stages[s]
+	local inRoom, deep, clash, zone = nil, nil, nil, nil
+	local zones = PlotVisuals.zones(PlotArt.Layout)
+	for i, f in ipairs(L.furniture) do
+		local fb = { f.x0, f.x1, 0, f.top, f.z0, f.z1 }
+		if f.x1 > -PB.Room.half and f.x0 < PB.Room.half and f.z1 > -PB.Room.half and f.z0 < PB.Room.half then inRoom = inRoom or f.key end
+		local limit = (f.side == "back") and (def.backBand or PB.BAND) or PB.BAND
+		local depth = (f.side == "back") and (f.z1 - backInner) or (f.side == "left" and (f.x1 + inner) or (inner - f.x0))
+		if depth > limit + 1e-6 or f.x0 < -inner - 1e-6 or f.x1 > inner + 1e-6 or f.z0 < backInner - 1e-6 or f.z1 > PB.FRONT_IN + 1e-6 then deep = deep or f.key end
+		for j = i + 1, #L.furniture do
+			local g = L.furniture[j]
+			if overlaps(fb, { g.x0, g.x1, 0, g.top, g.z0, g.z1 }) then clash = clash or (f.key .. "/" .. g.key) end
+		end
+		for _, z in ipairs(zones) do if overlaps(fb, z.box) then zone = zone or (f.key .. " in " .. z.name) end end
+		if overlaps(fb, laneBox) then zone = zone or (f.key .. " in the lane") end
+	end
+	check("furniture: at stage " .. s .. " every piece of furniture is outside the 60 x 60 room", inRoom == nil, inRoom)
+	check("furniture: at stage " .. s .. " it stands in a band at most " .. PB.BAND .. " deep along the shell's inner faces (back band " .. (def.backBand or PB.BAND) .. ")", deep == nil, deep)
+	check("furniture: at stage " .. s .. " no two pieces overlap, none is in a reserved zone or the lane", clash == nil and zone == nil, clash or zone)
+	check("furniture: stage " .. s .. "'s footprints are listed for customize PR 2 (PlotBuilding.furnitureFootprints)", #PB.furnitureFootprints(s) == #def.furniture)
+end
+-- the furniture each stage adds (the owner's list)
+do
+	local function keys(s) local t = {} for _, f in ipairs(PB.Stages[s].furniture) do t[f.key] = (t[f.key] or 0) + 1 end return t end
+	local k2, k3, k4, k5 = keys(2), keys(3), keys(4), keys(5)
+	check("furniture: Small Office has ReceptionDesk, Plant, Sofa", k2.ReceptionDesk and k2.Plant and k2.Sofa and #PB.Stages[1].furniture == 0)
+	check("furniture: Big Office adds CoffeeMachine, Whiteboard, Shelf", k3.ReceptionDesk and k3.CoffeeMachine and k3.Whiteboard and k3.Shelf)
+	check("furniture: Small Corporate adds Armchairs, LobbyTrees, ServerRack", k4.Shelf and (k4.Armchair or 0) >= 2 and (k4.LobbyTree or 0) >= 2 and k4.ServerRack)
+	check("furniture: Big Corporate adds BoardTable, Rug, Bell", k5.ServerRack and k5.BoardTable and k5.Rug and k5.Bell)
+end
+-- the looks the owner asked for
+do
+	local function has(s, key) for _, p in ipairs(LAYOUTS[s].pieces) do if p.key == key then return true end end return false end
+	local function stories(s) return (LAYOUTS[s].height + 1) / PB.STORY end
+	check("look: Garage: one story, Corner posts, WallGarage with the GarageDoor rolled up, a BareBulb, WallWindow, RoofEdge",
+		stories(1) == 1 and has(1, "Corner") and has(1, "WallGarage") and has(1, "GarageDoor") and has(1, "BareBulb") and has(1, "WallWindow") and has(1, "RoofEdge"))
+	check("look: Small Office: one story, WallDoor with a DoorLeaf, WallWindow, Plants, RoofEdge",
+		stories(2) == 1 and has(2, "WallDoor") and has(2, "DoorLeaf") and has(2, "WallWindow") and has(2, "Plant") and has(2, "RoofEdge"))
+	check("look: Big Office: two stories, WallWindow and WallGlass, RoofEdge", stories(3) == 2 and has(3, "WallWindow") and has(3, "WallGlass") and has(3, "WallDoor"))
+	check("look: Small Corporate: four stories, WallGlass, a RevolvingDoor on the lane, two pillars", stories(4) == 4 and has(4, "WallGlass") and has(4, "RevolvingDoor"))
+	check("look: Big Corporate: the tallest (six stories), Columns, a RoofCrown", stories(5) == 6 and has(5, "Column") and has(5, "RoofCrown")
+		and stories(5) > stories(4))
+	local mats = {}
+	for s = 1, 5 do mats[s] = PB.styleOf(s, "Wall", "main").material end
+	check("look: Brick for the garage, SmoothPlastic for the office, Glass for the tower, Marble for the headquarters",
+		mats[1] == "Brick" and mats[2] == "SmoothPlastic" and mats[4] == "Glass" and mats[5] == "Marble" and PB.styleOf(5, "Column", "accent").color[1] == 255)
+	local lanes = {}
+	for s = 1, 5 do for _, p in ipairs(LAYOUTS[s].pieces) do if p.lane then lanes[p.key] = true end end end
+	check("lane: only door pieces may stand in the lane (WallGarage, WallDoor, RevolvingDoor), never solid",
+		(function() for k in pairs(lanes) do if k ~= "WallGarage" and k ~= "WallDoor" and k ~= "RevolvingDoor" then return false end end return true end)())
+end
+"""
+
+BUILD_TESTS = r"""
+-- 4. Every stage built at four turns, with the kit, with the kit imported turned around, and from Parts --------------
+local zones = PlotVisuals.zones(PlotArt.Layout)
+local KITS = { { name = "kit", kit = makeKit(0), turn = 0, front = 0 }, { name = "kit imported turned 180", kit = makeKit(180), turn = 180, front = 180 },
+	{ name = "no kit", kit = nil } }
+local laneBox = { -PB.Lane.half, PB.Lane.half, PB.GROUND, PB.Lane.top, PB.Lane.from, PB.Lane.to }
+local postBox = { PB.ClaimPost.x0, PB.ClaimPost.x1, PB.GROUND, PB.ClaimPost.top, PB.ClaimPost.z0, PB.ClaimPost.z1 }
+local landBox = { PB.Landing.x - PB.Landing.half, PB.Landing.x + PB.Landing.half, 0, PB.Landing.top, PB.Landing.z - PB.Landing.half, PB.Landing.z + PB.Landing.half }
+local apronBox = { -PB.Lane.half, PB.Lane.half, PB.GROUND, PB.Lane.top, PB.FRONT_OUT, PB.FRONT_OUT + PB.APRON }
+local results = {}
+for s = 1, 5 do
+	local L = PB.layout(s)
+	local laneOk = {}
+	for _, p in ipairs(L.pieces) do if p.lane then laneOk[p.name] = true end end
+	local rooms = {}
+	for _, turn in ipairs({ 0, 90, 180, 270 }) do
+		local frame = frameAt(turn)
+		local origin = topOf(frame)
+		local rb = roomBoxes(frame, s)
+		local built = {}
+		for _, K in ipairs(KITS) do
+			PB.KIT_FRONT_TURN = K.front or 0
+			PBV.resetWarnings()
+			local m = PBV.build(nil, frame, PB, s, K.kit)
+			built[K.name] = m
+			local tag = "stage " .. s .. " at " .. turn .. " (" .. K.name .. ")"
+			local problems = PBV.check(m, frame, PB, { zones = zones, roomBoxes = rb })
+			check("check: PlotBuildingVisuals.check finds nothing wrong with " .. tag, #problems == 0, problems[1])
+			local solids, meshSolid, partSolid, flags, lane, apron, post, land, zone, hidden, room, mats = 0, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+			local count = 0
+			for _, d in ipairs(m:GetDescendants()) do
+				if d:IsA("BasePart") then
+					count += 1
+					local b = inFrame(origin, d)
+					local isSolid = d.Parent.Name == "Solid"
+					if d.CanCollide then
+						solids += 1
+						if not isSolid then
+							if d.ClassName == "MeshPart" then meshSolid = meshSolid or d.Name else partSolid = partSolid or d.Name end
+						end
+					end
+					if isSolid then
+						if d.CanTouch or not d.Anchored or d.Transparency < 1 or not d.CanCollide then flags = flags or d.Name end
+						if overlaps(b, laneBox) then lane = lane or d.Name end
+					else
+						if d.CanTouch or d.CanQuery or not d.Anchored or d.CastShadow then flags = flags or d.Name end
+						if overlaps(b, laneBox) and b[4] - b[3] > 0.25 and not laneOk[d:GetAttribute("Piece")] then lane = lane or d.Name end
+						if not PB.MATERIALS[d.Material.Name] then mats = mats or d.Name end
+					end
+					if overlaps(b, apronBox) and not laneOk[d:GetAttribute("Piece")] and b[4] - b[3] > 0.25 then apron = apron or d.Name end
+					if overlaps(b, postBox) then post = post or d.Name end
+					if overlaps(b, landBox) then land = land or d.Name end
+					for _, z in ipairs(zones) do if overlaps(b, z.box) then zone = zone or (d.Name .. " in " .. z.name) end end
+					-- at full fade: the shell reaches 1, the boxes are 1 already (the camera ignores both)
+					if d.Parent.Name == "Fade" then
+						if PBV.transparencyAt(d.Transparency, PB.Fade.levels, PB.Fade.levels) < 0.25 then hidden = hidden or d.Name end
+					elseif isSolid and d.Transparency < 0.25 then hidden = hidden or d.Name end
+					for _, r in ipairs(rb) do
+						local mark = r.box[4] - r.box[3] <= 0.25 and r.box[3] <= PB.GROUND + 0.3
+						if not mark and overlaps(b, r.box) then room = room or (d.Name .. " in " .. r.name) end
+					end
+				end
+			end
+			check("solid: " .. tag .. ": exactly the layout's boxes are solid (" .. #L.boxes .. ")", solids == #L.boxes and meshSolid == nil and partSolid == nil, meshSolid or partSolid or solids)
+			check("flags: " .. tag .. ": every kit MeshPart and fallback Part is anchored, CanCollide, CanTouch and CanQuery off, no shadow; every box anchored, CanTouch off, Transparency 1",
+				flags == nil and meshSolid == nil, flags or meshSolid)
+			check("lane: " .. tag .. ": nothing stands in the doorway lane but the door piece", lane == nil, lane)
+			check("apron: " .. tag .. ": the apron in front of the door is clear", apron == nil, apron)
+			check("claim post: " .. tag .. ": its spot (x 6 to 10, 3 in front of the wall) is clear", post == nil, post)
+			check("landing: " .. tag .. ": the respawn landing is clear", land == nil, land)
+			check("zones: " .. tag .. ": no part in a reserved zone (signs, spawn, lane, incubators, hire spots and desks, upgrade slots, aisles)", zone == nil, zone)
+			check("room: " .. tag .. ": no part goes into a part of the room or the six props (stage 1's flat yard marks aside)", room == nil, room)
+			check("fade: " .. tag .. ": at full fade every shell part and every box is at least 0.25 transparent", hidden == nil, hidden)
+			check("budget: " .. tag .. ": " .. count .. " parts, at most " .. PB.Budget.parts, count <= PB.Budget.parts, count)
+			check("materials: " .. tag .. ": allowed materials only", mats == nil, mats)
+			check("attributes: " .. tag .. ": the Frame and the inside box the client reads",
+				m:GetAttribute("Frame") == nil and false or (function()
+					local fr = m:GetAttribute("Frame")
+					local ok = typeof(fr) == "CFrame"
+					for field, attr in pairs(PBV.ATTRIBUTES) do if m:GetAttribute(attr) ~= L.inside[field] then ok = false end end
+					return ok and near((origin.Position - fr.Position).Magnitude, 0) and m:GetAttribute("Stage") == s
+				end)())
+			if K.kit then
+				check("kit: " .. tag .. ": every piece is built from the kit (" .. #L.pieces .. ")", m:GetAttribute("KitPieces") == #L.pieces and m:GetAttribute("PartPieces") == 0,
+					tostring(m:GetAttribute("KitPieces")) .. " / " .. tostring(m:GetAttribute("PartPieces")))
+				local onlyMesh = true
+				for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") and d.ClassName ~= "MeshPart" then onlyMesh = false end end
+				check("kit: " .. tag .. ": the shell is MeshParts only", onlyMesh)
+			else
+				check("fallback: " .. tag .. ": every piece is built from Parts, with one warning for the missing kit",
+					m:GetAttribute("PartPieces") == #L.pieces and #WARNED >= 1)
+			end
+		end
+		-- The kit and the fallback build the same pieces (same roles, same boxes): the turn of the kit's front is right
+		local a, b = piecesOf(built["kit"], frame), piecesOf(built["no kit"], frame)
+		local same, why = samePieces(a, b)
+		check("kit front: stage " .. s .. " at " .. turn .. ": the kit (KIT_FRONT_TURN 0) builds every piece exactly where the Parts version stands", same, why)
+		local c = piecesOf(built["kit imported turned 180"], frame)
+		local same2, why2 = samePieces(c, b)
+		check("kit front: stage " .. s .. " at " .. turn .. ": a kit imported turned around, with KIT_FRONT_TURN 180, builds every piece where the Parts version stands", same2, why2)
+		local boxesA, boxesB = {}, {}
+		for _, d in ipairs(built["kit"]:FindFirstChild("Solid"):GetChildren()) do boxesA[d.Name] = inFrame(origin, d) end
+		for _, d in ipairs(built["no kit"]:FindFirstChild("Solid"):GetChildren()) do boxesB[d.Name] = inFrame(origin, d) end
+		local sameBoxes = true
+		for n, bx in pairs(boxesA) do
+			if not boxesB[n] then sameBoxes = false else for k = 1, 6 do if not near(bx[k], boxesB[n][k]) then sameBoxes = false end end end
+		end
+		for n in pairs(boxesB) do if not boxesA[n] then sameBoxes = false end end
+		check("fallback: stage " .. s .. " at " .. turn .. ": the Parts version builds the same solid boxes as the kit", sameBoxes)
+		if turn ~= 0 then
+			-- at a turn, the building is the 0-degree one turned: compare in each garage's own frame
+			local zero = piecesOf(results[s], frameAt(0))
+			local same3, why3 = samePieces(a, zero)
+			check("turn: stage " .. s .. " at " .. turn .. ": in its garage's frame the building is the same as at 0", same3, why3)
+		else
+			results[s] = built["kit"]
+		end
+	end
+	PB.KIT_FRONT_TURN = 0
+end
+-- The check is sensitive: a kit imported turned around with KIT_FRONT_TURN left at 0 faces backward
+do
+	PB.KIT_FRONT_TURN = 0
+	local frame = frameAt(0)
+	local wrong = piecesOf(PBV.build(nil, frame, PB, 5, makeKit(180)), frame)
+	local right = piecesOf(PBV.build(nil, frame, PB, 5, nil), frame)
+	check("kit front: a kit imported turned around with KIT_FRONT_TURN left at 0 faces backward, and the kit front check sees it", not samePieces(wrong, right))
+end
+
+-- 5. Kit details: a missing key, extras in a model, a stretch the builder refuses, the kit check ------------------------
+do
+	PBV.resetWarnings()
+	WARNED = {}
+	local kit = makeKit(0, { WallGarage = true })
+	local m = PBV.build(nil, frameAt(0), PB, 1, kit)
+	local partPieces = m:GetAttribute("PartPieces")
+	local warnings = 0
+	for _, w in ipairs(WARNED) do if string.find(w, "WallGarage", 1, true) then warnings += 1 end end
+	check("fallback: a missing key (WallGarage) is built from Parts, the rest from the kit, with one warning", partPieces == 1 and warnings == 1, partPieces .. " " .. warnings)
+	PBV.build(nil, frameAt(0), PB, 1, kit)
+	local again = 0
+	for _, w in ipairs(WARNED) do if string.find(w, "WallGarage", 1, true) then again += 1 end end
+	check("fallback: building it again does not warn again (one warning per server)", again == 1, again)
+end
+do
+	PBV.resetWarnings()
+	WARNED = {}
+	local kit = makeKit(0)
+	local wall = kit:FindFirstChild("Wall")
+	local script = Instance.new("Script")
+	script.Name = "Sneaky"
+	script.Parent = wall
+	local plain = Instance.new("Part")
+	plain.Name = "PlainPart"
+	plain.Parent = wall
+	local m = PBV.build(nil, frameAt(0), PB, 2, kit)
+	local foreign = nil
+	for _, d in ipairs(m:GetDescendants()) do
+		if d.ClassName == "Script" or d.Name == "Sneaky" or (d:IsA("BasePart") and d.Parent.Name == "Fade" and d.ClassName ~= "MeshPart") then foreign = foreign or d.Name end
+	end
+	local warnings = 0
+	for _, w in ipairs(WARNED) do if string.find(w, "only MeshParts", 1, true) then warnings += 1 end end
+	check("kit: only MeshParts are used: a Script and a Part inside KitModels.Wall are left out, with one warning", foreign == nil and warnings == 1, foreign or warnings)
+end
+do
+	PBV.resetWarnings()
+	local piece = { name = "Test", key = "Column", x = 0, y = -1, z = 0, turn = 0, sx = 3, sz = 1 }
+	local sx, sz = PBV.stretchOf(PB, piece)
+	local f = Instance.new("Folder")
+	local m = PBV.build(nil, frameAt(0), PB, 5, makeKit(0))
+	local col = nil
+	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:GetAttribute("Key") == "Column" and d:GetAttribute("Role") == "main" then col = d break end end
+	check("stretch: the builder refuses to stretch a Column (built at its kit size 3 x 14 x 3)", sx == 1 and sz == 1 and col and near(col.Size.X, 3) and near(col.Size.Z, 3))
+	local wall = { name = "W", key = "Wall", x = 0, y = -1, z = 0, turn = 0, sx = 2, sz = 3 }
+	local wx, wz = PBV.stretchOf(PB, wall)
+	check("stretch: a Wall may stretch along X only (a Z stretch is refused)", wx == 1 and wz == 1)
+	local floor = { name = "F", key = "Floor", x = 0, y = -1, z = 0, turn = 0, sx = 2, sz = 3 }
+	local fx, fz = PBV.stretchOf(PB, floor)
+	check("stretch: a Floor may stretch along X and Z", fx == 2 and fz == 3)
+end
+do
+	local ok = PBV.checkKit(makeKit(0), PB.KitManifest)
+	check("checkKit: the fake KitModels (36 keys, right sizes and roles) is OK", #ok == 0, ok[1])
+	check("checkKit: no KitModels folder", #PBV.checkKit(nil, PB.KitManifest) == 1)
+	local kit = makeKit(0, { Bell = true })
+	local p1 = PBV.checkKit(kit, PB.KitManifest)
+	check("checkKit: a missing key is named", #p1 == 1 and string.find(p1[1], "Bell", 1, true) ~= nil, p1[1])
+	kit = makeKit(0)
+	kit:FindFirstChild("Sofa"):SetAttribute("KitSize", Vector3.new(8, 4.2, 4))
+	kit:FindFirstChild("Desk"):FindFirstChildOfClass("MeshPart"):SetAttribute("Role", "mian")
+	local p2 = PBV.checkKit(kit, PB.KitManifest)
+	local joined = table.concat(p2, "|")
+	check("checkKit: a size off by 0.2 and a wrong role are both named", string.find(joined, "Sofa: KitSize", 1, true) ~= nil and string.find(joined, "mian", 1, true) ~= nil, joined)
+	kit = makeKit(0)
+	kit:FindFirstChild("Rug"):SetAttribute("KitSize", Vector3.new(12.04, 0.2, 7.96))
+	check("checkKit: a size within 0.05 is OK", #PBV.checkKit(kit, PB.KitManifest) == 0)
+end
+
+-- 6. sync, and a stage change never traps a player ---------------------------------------------------------------------
+do
+	local garage = Instance.new("Model")
+	local frame = frameAt(90)
+	local m1, c1 = PBV.sync(garage, frame, PB, 1, nil)
+	local m2, c2 = PBV.sync(garage, frame, PB, 1, nil)
+	check("sync: the same stage again does nothing (the same Model, not rebuilt)", m1 == m2 and c1 == true and c2 == false)
+	local m3, c3 = PBV.sync(garage, frame, PB, 4, nil)
+	local count = 0
+	for _, c in ipairs(garage:GetChildren()) do if c.Name == "PlotBuilding" then count += 1 end end
+	check("sync: a new stage replaces the building (one Model, the old one destroyed)", c3 and m3 ~= m1 and count == 1 and rawget(m1, "destroyed") == true)
+	local m4 = PBV.sync(garage, frame, PB, 12, nil)
+	check("sync: a stage past the last shows the last", m4:GetAttribute("Stage") == 5)
+	-- a visitor stands in Big Corporate's band; an IPO brings back the Garage, whose wall stands there
+	local origin = PBV.originOf(frame, PB)
+	local root = Instance.new("Part")
+	root.CFrame = origin * CFrame.new(33, 2, 0) -- in the Garage's right wall (x 32 to 34)
+	local safe = Instance.new("Part")
+	safe.CFrame = origin * CFrame.new(0, 3, 0)
+	local landing = frame * CFrame.new(0, 4, 12)
+	local m5 = PBV.sync(garage, frame, PB, 1, nil)
+	local moved = PBV.unstick(m5, { root, safe }, landing)
+	check("unstick: a character standing where the new building's wall is goes to the landing; one in the room stays",
+		moved == 1 and near((root.Position - landing.Position).Magnitude, 0) and near((safe.Position - (origin * Vector3.new(0, 3, 0))).Magnitude, 0))
+end
+
+-- 7. Six garages at the biggest stage, and the plaza: under 3,000 parts -------------------------------------------------
+do
+	local room = 0
+	local r = PlotVisuals.buildRoom(nil, frameAt(0), PlotArt, 5)
+	for _, slot in ipairs(PlotArt.Layout.itemSlots) do PlotVisuals.buildProp(r:FindFirstChild("UpgradeProps"), frameAt(0), PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z)) end
+	for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") then room += 1 end end
+	local biggest = 0
+	for s = 1, 5 do
+		local m = PBV.build(nil, frameAt(0), PB, s, makeKit(0))
+		local n = 0
+		for _, d in ipairs(m:GetDescendants()) do if d:IsA("BasePart") then n += 1 end end
+		biggest = math.max(biggest, n)
+	end
+	local total = 6 * (room + biggest + 2) + PLAZA_BUDGET -- + the Floor and the garage sign
+	check("budget: six garages at their biggest stage (room " .. room .. " + building " .. biggest .. ") plus the plaza (" .. PLAZA_BUDGET .. ") is under 3,000: " .. total, total < 3000, total)
+end
+"""
+
+MATH_A = r"""
+local function inside(x, y, z, was) return M.isInside(b, x, y, z, was) end
+local cx, cz, fy = 0, 0, 0
+check("inside: standing in the middle of the room", inside(cx, fy + 3, cz) == true)
+check("inside: at the landing (0, 12)", inside(cx, fy + 3, cz + 12) == true)
+check("inside: next to an incubator at the back", inside(cx - 12, fy + 3, cz - 25) == true)
+check("inside: in the furniture band, beside the room", inside(b.maxX - 1, fy + 3, cz) == true)
+check("inside: far outside the building is outside", inside(cx + 200, fy + 3, cz) == false and inside(cx, fy + 3, cz + 200) == false and inside(cx, fy + 3, cz - 200) == false)
+check("inside: the four inner corners count as inside (edges are inclusive)", inside(b.minX, fy + 3, b.minZ) and inside(b.maxX, fy + 3, b.minZ)
+	and inside(b.minX, fy + 3, b.maxZ) and inside(b.maxX, fy + 3, b.maxZ))
+check("inside: 0.01 beyond a corner is outside (on both axes, all four corners)", not inside(b.minX - 0.01, fy + 3, b.minZ - 0.01) and not inside(b.maxX + 0.01, fy + 3, b.minZ - 0.01)
+	and not inside(b.minX - 0.01, fy + 3, b.maxZ + 0.01) and not inside(b.maxX + 0.01, fy + 3, b.maxZ + 0.01))
+check("inside: 0.01 past the left, right and back walls is outside", not inside(b.minX - 0.01, fy + 3, cz) and not inside(b.maxX + 0.01, fy + 3, cz) and not inside(cx, fy + 3, b.minZ - 0.01))
+check("inside: 0.01 past the front wall, away from the door, is outside", not inside(cx + 10, fy + 3, b.maxZ + 0.01) or b.doorMaxX >= 10)
+check("inside: in the doorway (inside the front wall's thickness) is inside", inside(cx, fy + 3, b.maxZ + 1) == true)
+check("inside: on the apron in front of the door is inside, up to its end (the wall's 2 plus 3.5)", inside(cx, fy + 3, b.maxZ + 3) and inside(cx, fy + 3, b.maxZ + b.doorDepth))
+check("inside: 0.01 past the end of the apron is outside", not inside(cx, fy + 3, b.maxZ + b.doorDepth + 0.01))
+check("inside: the apron is as wide as the door (edges inclusive), not wider", inside(b.doorMaxX, fy + 3, b.maxZ + 2) and inside(b.doorMinX, fy + 3, b.maxZ + 2)
+	and not inside(b.doorMaxX + 0.01, fy + 3, b.maxZ + 2) and not inside(b.doorMinX - 0.01, fy + 3, b.maxZ + 2))
+check("inside: there is no door at the back or the sides (no apron there)", not inside(cx, fy + 3, b.minZ - 1) and not inside(b.maxX + 1, fy + 3, cz) and not inside(b.minX - 1, fy + 3, cz))
+check("inside: behind the back wall, where the apron would be if it were on the wrong side, is outside", not inside(cx, fy + 3, b.minZ - 2) and not inside(cx, fy + 3, b.minZ - b.doorDepth))
+check("inside: walking in through the door is outside, apron, inside in that order",
+	(function()
+		local seq = {}
+		for z = b.maxZ + 9, b.maxZ - 6, -0.5 do seq[#seq + 1] = inside(cx, fy + 3, z) end
+		local state, changes = seq[1], 0
+		for i = 2, #seq do if seq[i] ~= state then changes += 1 state = seq[i] end end
+		return seq[1] == false and seq[#seq] == true and changes == 1
+	end)())
+check("inside: at the floor top and 3 below it is inside, 3.01 below is outside", inside(cx, fy, cz) and inside(cx, fy - 3, cz) and not inside(cx, fy - 3.01, cz))
+check("inside: just under the ceiling is inside, 0.01 above is outside (the upper stories are not inside)", inside(cx, b.maxY, cz) and not inside(cx, b.maxY + 0.01, cz))
+check("inside: high above, flying, is outside", not inside(cx, fy + 100, cz) and not inside(cx, fy + 1e6, cz))
+check("inside: NaN in any coordinate is never inside", not inside(0 / 0, fy + 3, cz) and not inside(cx, 0 / 0, cz) and not inside(cx, fy + 3, 0 / 0))
+check("inside: infinity in any coordinate is never inside", not inside(math.huge, fy + 3, cz) and not inside(-math.huge, fy + 3, cz)
+	and not inside(cx, math.huge, cz) and not inside(cx, fy + 3, math.huge) and not inside(cx, fy + 3, -math.huge))
+check("inside: NaN is never inside, even when the player just was (hysteresis)", not inside(0 / 0, fy + 3, cz, true) and not inside(cx, 0 / 0, cz, true))
+do
+	local function safe(...) local ok, r = pcall(M.isInside, b, ...) return ok and r == false end
+	check("inside: text, nil or a table instead of a number is never inside (and never an error)", safe("5", fy + 3, cz) and safe(cx, nil, cz) and safe(cx, fy + 3, {}) and safe(nil, nil, nil))
+end
+check("hysteresis: 0.5 past a wall is outside for someone who was outside, inside for someone who was inside", not inside(b.maxX + 0.5, fy + 3, cz, false)
+	and inside(b.maxX + 0.5, fy + 3, cz, true))
+check("hysteresis: exactly the margin (1 stud) past a wall still counts for someone who was inside, a hair more does not", inside(b.maxX + 1, fy + 3, cz, true)
+	and not inside(b.maxX + 1.01, fy + 3, cz, true))
+check("hysteresis: it works on every wall, on the ceiling line and on the floor line", inside(b.minX - 1, fy + 3, cz, true) and inside(cx, fy + 3, b.minZ - 1, true)
+	and inside(cx, b.maxY + 1, cz, true) and not inside(cx, b.maxY + 1.01, cz, true) and inside(cx, b.minY - 1, cz, true) and not inside(cx, b.minY - 1.01, cz, true))
+check("hysteresis: the apron grows by the margin too", inside(cx, fy + 3, b.maxZ + b.doorDepth + 1, true) and not inside(cx, fy + 3, b.maxZ + b.doorDepth + 1.01, true))
+check("hysteresis: nobody is inside because of it from far away", not inside(b.maxX + 5, fy + 3, cz, true) and not inside(cx, fy + 3, b.minZ - 5, true))
+"""
+
+MATH_B = r"""
+local step = M.fadeStep
+check("fade: moves toward 1 by dt / seconds (0.1 s of 0.4 s = 0.25)", math.abs(step(0, 1, 0.1, 0.4) - 0.25) < 1e-9)
+check("fade: moves toward 0 by dt / seconds", math.abs(step(1, 0, 0.1, 0.4) - 0.75) < 1e-9)
+check("fade: never goes past the target (a long frame stops at 1 and at 0)", step(0.9, 1, 5, 0.4) == 1 and step(0.1, 0, 5, 0.4) == 0)
+check("fade: holds when it is at the target", step(1, 1, 0.1, 0.4) == 1 and step(0, 0, 0.1, 0.4) == 0)
+check("fade: a zero, negative or NaN frame time changes nothing", step(0.3, 1, 0, 0.4) == 0.3 and step(0.3, 1, -1, 0.4) == 0.3 and step(0.3, 1, 0 / 0, 0.4) == 0.3)
+check("fade: a time of zero, below zero or NaN jumps to the target", step(0, 1, 0.1, 0) == 1 and step(1, 0, 0.1, -3) == 0 and step(0, 1, 0.1, 0 / 0) == 1)
+check("fade: values outside 0..1 are clamped", step(5, 5, 0.1, 0.4) == 1 and step(-5, -5, 0.1, 0.4) == 0 and step(5, 0, 0.1, 0.4) == 0.75)
+check("fade: NaN as the fade or the target is treated as 0", step(0 / 0, 1, 0.1, 0.4) == 0.25 and step(1, 0 / 0, 0.1, 0.4) == 0.75)
+do
+	local seed = 12345
+	local function rand() seed = (seed * 1664525 + 1013904223) % 4294967296 return seed / 4294967296 end
+	local bad = nil
+	for _ = 1, 3000 do
+		local f, t = rand() * 4 - 2, rand() * 4 - 2
+		local dt, s = rand() * 2 - 0.5, rand() * 2 - 0.2
+		local n = step(f, t, dt, s)
+		if not (n >= 0 and n <= 1) or n ~= n then bad = bad or string.format("%g %g %g %g -> %g", f, t, dt, s, n) end
+	end
+	check("fade: 3,000 random inputs always give a value in 0..1", bad == nil, bad)
+end
+check("quantize: 0 is step 0, 1 is the last step, 0.5 is half, below 0 and above 1 clamp", M.quantize(0, 20) == 0 and M.quantize(1, 20) == 20 and M.quantize(0.5, 20) == 10
+	and M.quantize(-3, 20) == 0 and M.quantize(3, 20) == 20 and M.quantize(0 / 0, 20) == 0)
+check("quantize: a step number of 0, NaN or below counts as one step", M.quantize(1, 0) == 1 and M.quantize(1, 0 / 0) == 1 and M.quantize(1, -4) == 1)
+do
+	local t = M.transparencyAt
+	check("transparency: step 0 gives the part's own value back (glass stays 0.3, solid stays 0)", t(0.3, 0, 20) == 0.3 and t(0, 0, 20) == 0)
+	check("transparency: the last step is 1 (gone) whatever the base, glass included", t(0.3, 20, 20) == 1 and t(0, 20, 20) == 1 and t(1, 20, 20) == 1 and t(0.9, 20, 20) == 1)
+	check("transparency: halfway between the base and 1", math.abs(t(0.4, 10, 20) - 0.7) < 1e-9 and math.abs(t(0, 10, 20) - 0.5) < 1e-9)
+	check("transparency: a base outside 0..1 is clamped, NaN is 0", t(-1, 0, 20) == 0 and t(2, 0, 20) == 1 and t(0 / 0, 0, 20) == 0)
+end
+"""
+
+MATH_TESTS = r"""
+local b = PB.layout(3).inside
+do
+	local M = PBV
+__MATH_A__
+__MATH_B__
+end
+"""
+
+CLIENT_TESTS = r"""
+-- The real BuildingClient against a fake world: tagged buildings (the real ones PBV builds, kit MeshParts with glass at
+-- 0.3), a Heartbeat the test fires, a local character the test moves. Expected values are written out here.
+local WORLD
 local function newWorld()
 	local w = { tagged = {}, added = newSignal(), removed = newSignal(), heartbeat = newSignal() }
 	w.cs = {
@@ -797,40 +984,38 @@ local function newWorld()
 	w.run = { Heartbeat = w.heartbeat }
 	return w
 end
-local function fresh()
-	WORLD = newWorld()
-	startClient()
-	return WORLD
+local clientGame = { GetService = function(_, name)
+	if name == "CollectionService" then return WORLD.cs elseif name == "Players" then return WORLD.players elseif name == "RunService" then return WORLD.run end
+	error("no service " .. tostring(name))
+end }
+local function startClient()
+	local game = clientGame
+	local task = { spawn = function(f, ...) f(...) end, wait = function() end }
+__CLIENT__
+	return { isInside = isInside, fadeStep = fadeStep, quantize = quantize, transparencyAt = transparencyAt }
 end
-local CLIENTMATH -- the maths as it sits inside BuildingClient: the same unit tests as the module's run on it
-local function frames(n, dt) for _ = 1, n do WORLD.heartbeat.fire(dt or 1 / 60) end end
-local function place(x, y, z) WORLD.root.Position = vec(x, y, z) end
+local function fresh() WORLD = newWorld() startClient() return WORLD end
+local function frames(n, dt) for _ = 1, n do WORLD.heartbeat:Fire(dt or 1 / 60) end end
 
-local centerA = Vector3.new(-135, 0.5, 150) -- slot 2
-local centerB = Vector3.new(-45, 0.5, 150) -- slot 3, 90 studs over
-local cx, cz, fy = centerA.X, centerA.Z, centerA.Y + PlotArt.Layout.floorTop
-local b = PBV.bounds(centerA, PlotArt, PlotBuilding)
-CLIENTMATH = (function() WORLD = newWorld() return startClient() end)()
-local M = CLIENTMATH
-local center = centerA
-do
-__MATH_A__
-__MATH_B__
-end
-local INSIDE = { cx, fy + 3, cz + 12 }
-local OUTSIDE = { cx, fy + 3, cz + 90 }
+local TURN = 90 -- a garage turned to face +X: world axes are not the garage's
+local frame = frameAt(TURN, -135, 150)
+local origin = PBV.originOf(frame, PB)
+local function place(x, y, z) WORLD.root.Position = origin * Vector3.new(x, y, z) end -- a spot in the garage's frame
+local INSIDE = { 0, 3, 12 }
+local OUTSIDE = { 0, 3, 90 }
 local function putInside() place(INSIDE[1], INSIDE[2], INSIDE[3]) end
 local function putOutside() place(OUTSIDE[1], OUTSIDE[2], OUTSIDE[3]) end
+local KIT = makeKit(0)
 
--- Adds a building the way the server does: built, tagged, then arriving in the world
-local function addBuilding(world, center, stage)
-	local m = PBV.build(nil, center, PlotArt, PlotBuilding, stage)
-	local bases, statics = {}, {}
-	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") then bases[d] = d.Transparency end end
-	for _, d in ipairs(m:FindFirstChild("Static"):GetDescendants()) do if d:IsA("BasePart") then statics[d] = d.Transparency end end
+local function addBuilding(world, stage, fr)
+	local m = PBV.build(nil, fr or frame, PB, stage, KIT)
+	local fade, static, solid = {}, {}, {}
+	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") then fade[d] = d.Transparency end end
+	for _, d in ipairs(m:FindFirstChild("Static"):GetDescendants()) do if d:IsA("BasePart") then static[d] = d.Transparency end end
+	for _, d in ipairs(m:FindFirstChild("Solid"):GetDescendants()) do if d:IsA("BasePart") then solid[d] = d.Transparency end end
 	table.insert(world.tagged, m)
-	world.added.fire(m)
-	return m, bases, statics
+	world.added:Fire(m)
+	return m, fade, static, solid
 end
 local function expected(base, level) return base + (1 - base) * level / 20 end
 local function allAt(bases, level)
@@ -838,301 +1023,222 @@ local function allAt(bases, level)
 	for part, base in pairs(bases) do worst = math.max(worst, math.abs(part.Transparency - expected(base, level))) end
 	return worst < 1e-9, worst
 end
-local function range(bases)
-	local lo, hi = 2, -1
-	for part in pairs(bases) do lo = math.min(lo, part.Transparency) hi = math.max(hi, part.Transparency) end
-	return lo, hi
-end
+local function untouched(bases) for part, base in pairs(bases) do if part.Transparency ~= base then return false end end return true end
 local function count(t) local n = 0 for _ in pairs(t) do n += 1 end return n end
-local function textsOf(m)
-	local labels, guis = {}, {}
-	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do
-		if d.ClassName == "TextLabel" then table.insert(labels, d) elseif d.ClassName == "SurfaceGui" then table.insert(guis, d) end
-	end
-	return labels, guis
-end
 local function snapshot(m)
 	local out = {}
 	for _, d in ipairs(m:GetDescendants()) do
 		if d:IsA("BasePart") then
-			table.insert(out, table.concat({ d:GetFullName(), tostring(d.Anchored), tostring(d.CanCollide), tostring(d.CanTouch), tostring(d.CanQuery), tostring(d.CastShadow),
-				d.Size.X, d.Size.Y, d.Size.Z, d.CFrame.x, d.CFrame.y, d.CFrame.z, d.Material.Name, d.Color.rgb[1], d.Color.rgb[2], d.Color.rgb[3] }, "|"))
+			table.insert(out, table.concat({ d:GetFullName(), tostring(d.Anchored), tostring(d.CanCollide), tostring(d.CanTouch), tostring(d.CanQuery),
+				d.Size.X, d.Size.Y, d.Size.Z, d.CFrame.x, d.CFrame.y, d.CFrame.z }, "|"))
 		end
 	end
 	return table.concat(out, "\n")
 end
 
--- 1. From outside to inside and back (stage 4: glass, a SurfaceGui with text, ground pieces) ----------------------------
+-- 1. Walking in and out of a turned garage ---------------------------------------------------------------------------
 do
 	fresh()
 	putOutside()
-	local m, bases, statics = addBuilding(WORLD, centerA, 4)
-	local labels, guis = textsOf(m)
+	local m, fade, static, solid = addBuilding(WORLD, 4)
 	local glass = 0
-	for _, base in pairs(bases) do if base > 0 and base < 1 then glass += 1 end end
-	check("the stage-4 building has glass (a base Transparency between 0 and 1), text on a SurfaceGui and ground pieces", glass >= 5 and #labels >= 1 and #guis >= 1 and count(statics) >= 1, glass .. " glass, " .. #labels .. " labels")
+	for part, base in pairs(fade) do if near(base, 0.3) then glass += 1 end end
+	check("client: the stage-4 building has kit glass at 0.3, furniture and solid boxes", glass >= 5 and count(static) >= 5 and count(solid) >= 7, glass)
 	local before = snapshot(m)
 	frames(120)
-	check("outside: the building stays solid (every part at its own Transparency, text and SurfaceGui as they were)", allAt(bases, 0) and labels[1].TextTransparency == 0 and guis[1].Enabled == true)
+	check("client: outside, the shell stays at its own Transparency", allAt(fade, 0))
 	local writes = WRITES
 	frames(300)
-	check("outside: nothing is written while it holds still (300 frames, 0 writes)", WRITES == writes, WRITES - writes)
-	-- Walk in
+	check("client: nothing is written while it holds still (300 frames)", WRITES == writes, WRITES - writes)
 	putInside()
-	frames(6)
-	local lo, hi = range(bases)
-	check("walking in: after 0.1 s the fade has started but is not done (some part between its base and 1)", lo >= 0 and hi <= 1 and (function()
-		for part, base in pairs(bases) do if part.Transparency > base + 0.01 and part.Transparency < 0.99 then return true end end return false end)())
-	local prevMax = 0
-	local mono, within = true, true
-	putOutside()
-	putInside()
-	local last = {}
-	for part in pairs(bases) do last[part] = part.Transparency end
-	writes = WRITES
-	for _ = 1, 40 do
-		frames(1)
-		for part in pairs(bases) do
-			if part.Transparency < last[part] - 1e-12 then mono = false end
-			if not (part.Transparency >= 0 and part.Transparency <= 1) then within = false end
-			last[part] = part.Transparency
-		end
-	end
-	check("walking in: every part only gets more transparent, and always stays between 0 and 1", mono and within)
-	local writeCount = WRITES - writes
-	check("walking in: all parts are completely transparent (1) after the fade", allAt(bases, 20))
-	check("walking in: the text is hidden too (TextTransparency 1) and its SurfaceGui is off, so no text floats", labels[1].TextTransparency == 1 and guis[1].Enabled == false)
-	local sPart = next(statics)
-	check("walking in: the ground pieces (Static) are never touched", (function() for part, base in pairs(statics) do if part.Transparency ~= base then return false end end return true end)())
-	writes = WRITES
-	frames(300)
-	check("inside: nothing is written while it holds still (300 frames, 0 writes)", WRITES == writes, WRITES - writes)
-	-- Walk out
+	frames(40)
+	check("client: inside a garage turned 90 degrees (the check in the garage's frame), the whole shell is gone (1)", allAt(fade, 20))
+	local glassDone = true
+	for part, base in pairs(fade) do if near(base, 0.3) and part.Transparency ~= 1 then glassDone = false end end
+	check("client: glass fades from 0.3 to 1 like the rest", glassDone)
+	check("client: the furniture (Static) and the solid boxes are never touched", untouched(static) and untouched(solid))
 	putOutside()
 	frames(60)
-	check("walking out: everything is back at exactly its own Transparency (glass 0.35 included), the text shows again", allAt(bases, 0) and labels[1].TextTransparency == 0 and guis[1].Enabled == true)
-	check("a full cycle changed nothing but Transparency, TextTransparency and SurfaceGui.Enabled (anchoring, collision, size, position, material, color all as built)", snapshot(m) == before)
-	-- A full fade writes each part at most 20 times (one per step), not once per frame
-	putInside()
-	writes = WRITES
-	frames(60)
-	local perPart = (WRITES - writes) / count(bases)
-	check("a full fade writes each part at most once per step (at most 20 times, not once per frame): " .. string.format("%.1f", perPart), perPart <= 20 and perPart >= 10, perPart)
+	check("client: walking out, every shell part is back at exactly its own Transparency (glass 0.3)", allAt(fade, 0))
+	check("client: a full cycle changed nothing but Transparency (collision, size, position as built)", snapshot(m) == before)
 end
-
--- 2. The fade takes the time it says (0.4 s) at any frame rate, and never jumps -------------------------------------------
+-- 2. The door, the apron, the corners, in the garage's frame ------------------------------------------------------------
 do
 	fresh()
 	putOutside()
-	local m, bases = addBuilding(WORLD, centerA, 2)
-	putInside()
-	frames(12, 1 / 60) -- 0.2 s: halfway
-	local lo, hi = range(bases)
-	check("at 60 fps, 0.2 s into the 0.4 s fade the solid parts are about halfway (0.5)", math.abs(lo - 0.5) < 0.06 or math.abs(lo - 0.5) < 0.12, lo)
-	frames(13, 1 / 60)
-	check("at 60 fps it is done after 0.4 s (25 frames)", allAt(bases, 20))
-	putOutside()
-	frames(12, 1 / 30) -- 0.4 s at 30 fps
-	check("at 30 fps it takes the same 0.4 s to come back", allAt(bases, 0))
-	putInside()
-	frames(1, 0.1) -- one long frame, a quarter of the fade
-	lo = range(bases)
-	check("one 0.1 s frame moves a quarter of the way (0.25), never more", math.abs(lo - 0.25) < 1e-9, lo)
-	-- Reversing mid-fade continues from where it is: no jump
-	frames(2, 0.1)
-	local mid = range(bases)
-	putOutside()
-	frames(1, 1 / 60)
-	local after = range(bases)
-	check("reversing in the middle of a fade goes back from where it was (no jump to the end)", after < mid and mid - after < 0.1, mid .. " -> " .. after)
+	local m, fade = addBuilding(WORLD, 2)
+	local b = PB.layout(2).inside
+	place(0, 3, b.maxZ + b.doorDepth + 0.2)
 	frames(60)
-	check("and gets back to solid", allAt(bases, 0))
-	frames(1, 1e9)
-	putInside()
-	frames(1, 1e9)
-	check("an enormous frame time finishes the fade at once, at exactly 1", allAt(bases, 20))
-	putOutside()
-	frames(1, 0)
-	frames(1, -5)
-	frames(1, 0 / 0)
-	check("a frame time of zero, below zero or NaN changes nothing", allAt(bases, 20))
+	check("client: in front of the door past the apron: solid", allAt(fade, 0))
+	place(0, 3, b.maxZ + b.doorDepth - 0.2)
 	frames(60)
-	check("and the next sane frames carry on", allAt(bases, 0))
+	check("client: on the apron: faded before you cross the door", allAt(fade, 20))
+	place(b.doorMaxX + 1.5, 3, b.maxZ + 3)
+	frames(60)
+	check("client: beside the door, in front of the wall: solid", allAt(fade, 0))
+	place(0, 3, b.minZ - 3)
+	frames(60)
+	check("client: behind the back wall (the apron is only at the front): solid", allAt(fade, 0))
+	place(b.maxX, 3, b.maxZ)
+	frames(60)
+	check("client: in a corner of the inside: faded", allAt(fade, 20))
+	place(0, b.maxY + 5, 0)
+	frames(60)
+	check("client: above the ground floor's ceiling: solid", allAt(fade, 0))
 end
-
--- 3. The door and the corners, as the client sees them ---------------------------------------------------------------------
 do
+	-- world axes are not the garage's: 3 studs past the front wall along WORLD +Z is the apron only for a garage facing +Z;
+	-- this one faces +X, so that spot is outside its left wall (the Garage: inner faces at x -32 and 32)
 	fresh()
 	putOutside()
-	local m, bases = addBuilding(WORLD, centerA, 3)
-	place(cx, fy + 3, b.maxZ + 3.6)
+	local m, fade = addBuilding(WORLD, 1)
+	local b = PB.layout(1).inside
+	WORLD.root.Position = origin.Position + Vector3.new(0, 3, b.maxZ + 3)
 	frames(60)
-	check("in front of the door, past the apron (3.6 studs from the wall): the roof stays solid", allAt(bases, 0))
-	place(cx, fy + 3, b.maxZ + 3.4)
-	frames(60)
-	check("on the apron, 3.4 studs from the wall: the building fades before you cross the door", allAt(bases, 20))
-	place(cx + 6, fy + 3, b.maxZ + 2)
-	frames(60)
-	check("beside the door, 2 studs in front of the wall: solid again", allAt(bases, 0))
-	place(b.maxX, fy + 3, b.maxZ)
-	frames(60)
-	check("standing exactly in a corner of the room: faded (edges count as inside)", allAt(bases, 20))
-	place(b.maxX + 1.5, fy + 3, b.maxZ + 1.5)
-	frames(60)
-	check("outside that corner: solid", allAt(bases, 0))
-	place(cx, b.maxY + 5, cz)
-	frames(60)
-	check("above the roof (a jump or a fall from above, y over the underside of the roof): the roof stays solid", allAt(bases, 0))
-	place(cx, b.maxY, cz)
-	frames(60)
-	check("just under the roof: faded", allAt(bases, 20))
-	place(cx, fy - 50, cz)
-	frames(60)
-	check("far below the floor: solid", allAt(bases, 0))
-	place(0 / 0, fy + 3, cz)
-	frames(60)
-	check("a NaN position is never inside: solid", allAt(bases, 0))
+	check("client: at 90 degrees, the world's +Z side of the garage is its left wall, not its door: solid", allAt(fade, 0))
 end
-
--- 4. The edge of a wall does not flicker (hysteresis) ------------------------------------------------------------------------
-do
-	fresh()
-	putOutside()
-	local m, bases = addBuilding(WORLD, centerA, 1)
-	place(b.maxX + 0.5, fy + 3, cz)
-	frames(60)
-	check("0.5 outside the wall, coming from outside: solid", allAt(bases, 0))
-	putInside()
-	frames(60)
-	place(b.maxX + 0.5, fy + 3, cz)
-	frames(60)
-	check("0.5 outside the wall, coming from inside: still faded (the margin keeps it from flickering)", allAt(bases, 20))
-	place(b.maxX + 1.5, fy + 3, cz)
-	frames(60)
-	check("1.5 outside the wall: solid", allAt(bases, 0))
-	check("and coming back to 0.5 outside the wall from there stays solid", (function() place(b.maxX + 0.5, fy + 3, cz) frames(60) return allAt(bases, 0) end)())
-end
-
--- 5. Starting inside, stage changes, no character, two buildings -------------------------------------------------------------
+-- 3. Arriving inside, a stage change, no character, two garages --------------------------------------------------------
 do
 	fresh()
 	putInside()
-	local m, bases = addBuilding(WORLD, centerA, 1)
-	check("a building that arrives while you stand inside is already faded (no frame needed, the roof never flashes shut)", allAt(bases, 20))
-	-- A new funding stage: the server destroys the old Model and adds the new one
-	local old = m
-	for i, c in ipairs(WORLD.tagged) do if c == old then table.remove(WORLD.tagged, i) break end end
-	WORLD.removed.fire(old)
-	old.Parent = nil
-	local m2, bases2 = addBuilding(WORLD, centerA, 2)
-	check("a new stage replaces the building and is faded at once for someone inside", allAt(bases2, 20))
-	frames(30)
-	check("and it stays faded", allAt(bases2, 20))
-	local writes = WRITES
-	local x = old:FindFirstChild("Fade"):FindFirstChild("Roof")
-	frames(30)
-	check("the removed building is forgotten (nothing is written to it any more)", WRITES == writes)
-	-- No character: dead or respawning
+	local m, fade = addBuilding(WORLD, 1)
+	check("client: a building that arrives while you stand inside is faded at once", allAt(fade, 20))
+	for i, c in ipairs(WORLD.tagged) do if c == m then table.remove(WORLD.tagged, i) break end end
+	WORLD.removed:Fire(m)
+	m.Parent = nil
+	local m2, fade2 = addBuilding(WORLD, 5)
+	check("client: a new stage replaces the building and is faded at once for someone inside", allAt(fade2, 20))
 	WORLD.players.LocalPlayer.Character = nil
 	frames(120)
-	check("with no character (dead, respawning) the roof holds its state: still faded", allAt(bases2, 20))
+	check("client: with no character the shell holds its state", allAt(fade2, 20))
 	WORLD.players.LocalPlayer.Character = WORLD.character
 	putOutside()
 	frames(60)
-	check("the new character appears outside: solid again", allAt(bases2, 0))
-	WORLD.root.Parent = nil
-	putInside()
-	frames(60)
-	check("a character whose root part was destroyed counts as no character (holds): still solid", allAt(bases2, 0))
-	WORLD.root.Parent = {}
-	frames(60)
-	check("and the root part coming back inside: faded", allAt(bases2, 20))
+	check("client: the character back outside: solid again", allAt(fade2, 0))
 end
 do
 	fresh()
 	putInside()
-	local a, basesA = addBuilding(WORLD, centerA, 1)
-	local bm, basesB = addBuilding(WORLD, centerB, 5)
+	local a, fadeA = addBuilding(WORLD, 1)
+	local other = frameAt(270, 300, 150)
+	local bm, fadeB = addBuilding(WORLD, 3, other)
 	frames(60)
-	check("two buildings 90 studs apart: inside one fades only that one", allAt(basesA, 20) and allAt(basesB, 0))
-	place(centerB.X, fy + 3, centerB.Z + 5)
+	check("client: two garages: inside one fades only that one", allAt(fadeA, 20) and allAt(fadeB, 0))
+	WORLD.root.Position = PBV.originOf(other, PB) * Vector3.new(0, 3, 5)
 	frames(60)
-	check("walking to the next plot: the first goes solid, the second fades", allAt(basesA, 0) and allAt(basesB, 20))
-end
-do
-	-- Buildings already in the world when the script starts (it starts after the server built them)
-	WORLD = newWorld()
-	putInside()
-	local m, bases = addBuilding(WORLD, centerA, 3)
-	startClient()
-	check("a building that was there before the script started is picked up (faded at once)", allAt(bases, 20))
-end
-
--- 6. Streaming, bad data, hammering -----------------------------------------------------------------------------------------------
-do
-	fresh()
-	putInside()
-	local m, bases = addBuilding(WORLD, centerA, 3)
-	local late = Instance.new("Part")
-	late.Name = "LatePart"
-	late.Transparency = 0.2
-	late.Parent = m:FindFirstChild("Fade")
-	check("a part that streams in late takes the current fade at once (faded)", late.Transparency == 1, late.Transparency)
-	putOutside()
-	frames(60)
-	check("and goes back to its own Transparency (0.2) with the rest", math.abs(late.Transparency - 0.2) < 1e-9 and allAt(bases, 0), late.Transparency)
+	check("client: walking into the other garage (turned 270): the first goes solid, the second fades", allAt(fadeA, 0) and allAt(fadeB, 20))
 end
 do
 	fresh()
 	putInside()
-	local m = PBV.build(nil, centerA, PlotArt, PlotBuilding, 2)
-	m:SetAttribute("MaxX", nil)
-	table.insert(WORLD.tagged, m)
+	local m = PBV.build(nil, frame, PB, 2, KIT)
+	m:SetAttribute("Frame", nil)
 	local bases = {}
 	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") then bases[d] = d.Transparency end end
-	WORLD.added.fire(m)
+	table.insert(WORLD.tagged, m)
+	WORLD.added:Fire(m)
 	frames(60)
-	check("a building without its numbers (no MaxX) is left alone: no error, nothing faded", allAt(bases, 0))
-	local m2 = PBV.build(nil, centerA, PlotArt, PlotBuilding, 2)
-	m2:SetAttribute("MinZ", 0 / 0)
-	local bases2 = {}
-	for _, d in ipairs(m2:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") then bases2[d] = d.Transparency end end
-	table.insert(WORLD.tagged, m2)
-	WORLD.added.fire(m2)
-	frames(60)
-	check("a building with a NaN number is left alone too", allAt(bases2, 0))
+	check("client: a building without its Frame is left alone (no error, nothing faded)", allAt(bases, 0))
 end
 do
 	fresh()
-	local m, bases = addBuilding(WORLD, centerA, 5)
-	local seed = 99
-	local function rand() seed = (seed * 1664525 + 1013904223) % 4294967296 return seed / 4294967296 end
-	local bad = nil
-	local specials = { 0, 1e-9, -1, 5, 1e9, 0 / 0, math.huge, -math.huge, 1 / 60, 1 / 30 }
-	for i = 1, 3000 do
-		local roll = rand()
-		if roll < 0.4 then putInside() elseif roll < 0.8 then putOutside() else place(cx + (rand() - 0.5) * 80, fy + (rand() - 0.2) * 30, cz + (rand() - 0.5) * 80) end
-		if rand() < 0.1 then place(specials[math.floor(rand() * #specials) + 1], fy + 3, cz) end
-		local dt = rand() < 0.3 and specials[math.floor(rand() * #specials) + 1] or rand() * 0.2
-		WORLD.heartbeat.fire(dt)
-		for part, base in pairs(bases) do
-			local v = part.Transparency
-			if not (v >= 0 and v <= 1) or v ~= v or v < base - 1e-9 then bad = bad or (i .. ": " .. tostring(v)) end
-		end
-	end
-	check("3,000 frames of random positions (NaN and infinity too) and frame times (zero, negative, NaN, huge): Transparency is always a number from its base to 1", bad == nil, bad)
+	putInside()
+	local m, fade = addBuilding(WORLD, 3)
+	local late = Instance.new("MeshPart")
+	late.Transparency = 0.3
+	late.Parent = m:FindFirstChild("Fade")
+	check("client: a MeshPart that streams in late takes the current fade at once", late.Transparency == 1)
 	putOutside()
 	frames(60)
-	check("after all that the building still answers: back outside it is solid again (nothing crashed or was dropped)", allAt(bases, 0))
+	check("client: and goes back to its own 0.3 with the rest", math.abs(late.Transparency - 0.3) < 1e-9 and allAt(fade, 0))
 end
-
--- 7. Heartbeat is the only thing the client listens to, and it never changes how anything plays ------------------------------------------
 do
 	fresh()
-	check("the script listens to Heartbeat, the tag added and the tag removed (and nothing else)", #WORLD.heartbeat.handlers == 1 and #WORLD.added.handlers == 1 and #WORLD.removed.handlers == 1)
+	check("client: the script listens to Heartbeat, the tag added and the tag removed (and nothing else)", #WORLD.heartbeat.handlers == 1 and #WORLD.added.handlers == 1 and #WORLD.removed.handlers == 1)
 end
+local M = (function() WORLD = newWorld() return startClient() end)()
+local b = PB.layout(3).inside
+do
+__MATH_A__
+__MATH_B__
+end
+"""
 
+CORE_TESTS = r"""
+-- TycoonCore's real garage functions (buildGarages, syncBuilding, setGarageSign, resetGarage) and its leave handler,
+-- run with the real PlotArt, PlotVisuals, PlotBuilding and PlotBuildingVisuals.
+local Players = { list = {}, removing = newSignal() }
+function Players.GetPlayers() return Players.list end
+Players.PlayerRemoving = Players.removing
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PlotBuildingVisuals = PBV -- TycoonCore's names for the two modules
+__KIT_SETUP__
+__CONSTANTS__
+__HELPERS_CORE__
+__LOOKS__
+__GARAGES__
+local root = workspace:FindFirstChild("Garages")
+check("garages: Workspace.Garages holds six garages, Garage1 to Garage6", root ~= nil and #root:GetChildren() == 6 and root:FindFirstChild("Garage6") ~= nil)
+local bad = nil
+for slot = 1, 6 do
+	local g = root:FindFirstChild("Garage" .. slot)
+	local floor = g and g:FindFirstChild("Floor")
+	local building = g and g:FindFirstChild("PlotBuilding")
+	local sign = g and g:FindFirstChild("GarageSign")
+	local f = plotFrame(slot)
+	if not (floor and near(floor.Size.X, 60) and near(floor.Size.Y, 1) and near(floor.Size.Z, 60) and floor.CanCollide and near((floor.Position - f.Position).Magnitude, 0)) then bad = bad or ("Floor " .. slot) end
+	if not (building and building:GetAttribute("Stage") == 1) then bad = bad or ("building " .. slot) end
+	local fr = building and building:GetAttribute("Frame")
+	if not (fr and near((fr.Position - (f * Vector3.new(0, PB.FLOOR_TOP, 0))).Magnitude, 0) and near(fr.LookVector.X, f.LookVector.X) and near(fr.LookVector.Z, f.LookVector.Z)) then bad = bad or ("frame " .. slot) end
+	local gui = sign and sign:FindFirstChildOfClass("BillboardGui")
+	if not (gui and gui.Enabled == false and sign.Transparency == 1 and not sign.CanCollide) then bad = bad or ("sign " .. slot) end
+	if g:GetAttribute("Slot") ~= slot then bad = bad or ("slot " .. slot) end
+end
+check("garages: each has its Floor (60 x 1 x 60, solid, at plotFrame), its building at stage 1 in its turned frame, a hidden sign", bad == nil, bad)
+setGarageSign(2, "Ana's Startup")
+local gui = root.Garage2.GarageSign:FindFirstChildOfClass("BillboardGui")
+check("sign: setGarageSign shows the owner's name over their garage", gui.Enabled == true and gui.TextLabel.Text == "Ana's Startup")
+syncBuilding(2, 3)
+check("syncBuilding: a stage change builds that stage's building in the garage", root.Garage2.PlotBuilding:GetAttribute("Stage") == 3)
+-- a visitor standing in the Big Office's band when the owner leaves: the reset never traps them
+local visitor = Instance.new("Part")
+visitor.Name = "HumanoidRootPart"
+local vf = PBV.originOf(plotFrame(2), PB)
+visitor.CFrame = vf * CFrame.new(-33, 2, 0)
+local character = { FindFirstChild = function(_, name) return name == "HumanoidRootPart" and visitor or nil end }
+Players.list = { { Character = character } }
+if PlotVisuals then PlotVisuals.styleFloor(root.Garage2.Floor, PlotArt, 3) end
+resetGarage(2)
+check("reset: the garage goes back to a new Garage: building at stage 1, no name, the Floor styled as stage 1",
+	root.Garage2.PlotBuilding:GetAttribute("Stage") == 1 and gui.Enabled == false and gui.TextLabel.Text == ""
+	and root.Garage2.Floor.Material.Name == PlotArt.Stages[1].floor.material)
+local landing = plotFrame(2) * Vector3.new(0, 4, 12)
+check("reset: a visitor standing where the Garage's wall now is goes to the landing (a stage change never traps a player)",
+	near((visitor.Position - landing).Magnitude, 0), tostring(visitor.Position))
+local guis = 0
+for _, d in ipairs(root.Garage2:GetDescendants()) do if d.ClassName == "BillboardGui" then guis += 1 end end
+check("sign: one name label per garage, whatever happened (no label per owner)", guis == 1, guis)
+-- the leave handler: the save first, then the folder, the reset, the slot
+local events = {}
+local function saveOnLeave(player) table.insert(events, "save") end
+local plotOwners, playerData = { [4] = "someone" }, {}
+local player = { Name = "Ana" }
+local folder = Instance.new("Folder")
+folder.Parent = root.Garage4
+playerData[player] = { folder = folder, slot = 4 }
+syncBuilding(4, 5)
+setGarageSign(4, "Ana's Startup")
+__LEAVE__
+Players.removing:Fire(player)
+check("leave: the leave save runs, then the owner's folder is destroyed, the garage reset to a new Garage and the slot freed",
+	events[1] == "save" and rawget(folder, "destroyed") == true and root.Garage4.PlotBuilding:GetAttribute("Stage") == 1
+	and root.Garage4.GarageSign:FindFirstChildOfClass("BillboardGui").Enabled == false and plotOwners[4] == nil and playerData[player] == nil)
+"""
+
+TAIL = r"""
 print_real(string.format("%d passed, %d failed", passed, failed))
+print_real("DONE")
 """
 
 
@@ -1141,235 +1247,225 @@ def read(name):
         return f.read()
 
 
-CLIENT_FILE = os.path.join("docs", "studio_scripts", "BuildingClient.lua")
-
-
 def run_luau(luau, source):
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
         path = f.name
     try:
-        result = subprocess.run([luau, path], capture_output=True, text=True)
+        return subprocess.run([luau, path], capture_output=True, text=True, timeout=900)
     finally:
-        os.remove(path)
-    return result
+        os.unlink(path)
 
 
-def visuals_expected_lua():
-    """The layout map read from the real scripts, as a Luau table (PlotArt.Layout must match it). Same reading as tools/daily_test.py."""
-    import re
-
-    def num(text):
-        return float(text) if "." in text else int(text)
-
-    def spots(text, name):
-        block = text[text.index("local %s = {" % name):]
-        block = block[:block.index("\n}")]
-        return [(num(x), num(z)) for x, z in re.findall(r"Vector3\.new\((-?[\d.]+), 0, (-?[\d.]+)\)", block)]
-
-    core = read("TycoonCore.lua")
-    upgrades_block = core[core.index("local UPGRADES = {"):]
-    upgrades_block = upgrades_block[:upgrades_block.index("\n}")]
-    upgrades = re.findall(r'name = "([^"]+)"', upgrades_block)
-    item = re.search(r"local function itemOffset\(i\)\s*local col = \(i - 1\) // 3\s*local row = \(i - 1\) % 3\s*return Vector3\.new\((-?[\d.]+) \+ col \* (-?[\d.]+), 0, (-?[\d.]+) \+ row \* (-?[\d.]+)\)", core)
-    if not item:
-        raise SystemExit("itemOffset changed in TycoonCore.lua: PlotArt.Layout and this test must be updated together")
-    x0, dx, z0, dz = (num(item.group(k)) for k in (1, 2, 3, 4))
-    slots = [(x0 + ((i - 1) // 3) * dx, z0 + ((i - 1) % 3) * dz) for i in range(1, len(upgrades) + 1)]
-    spawn = re.search(r"local spawnPos = plotCenter\(slot\) \+ Vector3\.new\((-?[\d.]+), 4, (-?[\d.]+)\)", core)
-    floor = re.search(r'makePart\(folder, "Floor", Vector3\.new\((\d+), (\d+), (\d+)\), plotCenter\(slot\)', core)
-    buy = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core)
-    ipo = re.search(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", read("IpoServer.lua"))
-    employee = read("EmployeeServer.lua")
-    if not all((buy, spawn, floor, ipo)):
-        raise SystemExit("A sign, the spawn or the Floor moved in the scripts: PlotArt.Layout and this test must be updated together")
-    floor_top = float(floor.group(2)) / 2  # the Floor is centered on plotCenter
-
-    def pairs(points):
-        return "{ " + ", ".join("{ %s, %s }" % p for p in points) + " }"
-
-    return ("{ upgrades = { %s }, slots = %s, spots = %s, incubators = %s, floor = { %s, %s, %s }, floorTop = %s, "
-            "signs = { BuySign = { %s, %s }, IpoSign = { %s, %s } }, spawn = { %s, %s } }") % (
-        ", ".join('"%s"' % u for u in upgrades), pairs(slots), pairs(spots(employee, "EMPLOYEE_SPOTS")),
-        pairs(spots(employee, "INCUBATOR_SPOTS")), floor.group(1), floor.group(2), floor.group(3), floor_top,
-        buy.group(1), buy.group(2), ipo.group(1), ipo.group(2), spawn.group(1), spawn.group(2))
+def kit_doc_table():
+    """docs/KIT_MODELS.md's 36 rows as a Luau table: { Key = { w, d, h, roles = { role = "HEX" } } }."""
+    doc = read("docs/KIT_MODELS.md")
+    rows = re.findall(r"^\| `(\w+)` \| [\w.]+ \| ([\d.]+) x ([\d.]+) x ([\d.]+) \| \d+ \| (.+?) \|$", doc, re.M)
+    out = []
+    for key, w, d, h, parts in rows:
+        roles = re.findall(r"(\w+) #([0-9A-F]{6})", parts)
+        out.append('%s = { w = %s, d = %s, h = %s, roles = { %s } }' % (key, w, d, h, ", ".join('%s = "%s"' % r for r in roles)))
+    return "local EXPECTED_KIT = { " + ", ".join(out) + " }\n"
 
 
-def building_source(module_text=None):
-    """The module tests with the real files. module_text replaces PlotBuildingVisuals.lua (for a mutation run)."""
-    return (PRELUDE + MODULE_GAME + BUILDING_TESTS.replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B).replace("__PLOTART__", read("PlotArt.lua")).replace("__PLOTVISUALS__", read("PlotVisuals.lua"))
-            .replace("__PLOTBUILDING__", read("PlotBuilding.lua")).replace("__PLOTBUILDINGVISUALS__", module_text or read("PlotBuildingVisuals.lua"))
-            .replace("__IPOCONFIG__", read("IpoConfig.lua")).replace("__EXPECTED__", visuals_expected_lua()))
+STRETCH_ALLOWED = 'local STRETCH_ALLOWED = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true } }\n'
 
 
-def client_source(client_text=None):
-    """The client tests with the real files. client_text replaces BuildingClient.lua (for a mutation run); the module stays as it is."""
-    return (PRELUDE + CLIENT_TESTS.replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B).replace("__PLOTART__", read("PlotArt.lua")).replace("__PLOTBUILDING__", read("PlotBuilding.lua"))
-            .replace("__PLOTBUILDINGVISUALS__", read("PlotBuildingVisuals.lua")).replace("__CLIENT__", client_text or read(CLIENT_FILE)))
+# The plaza's share of the 3,000 parts: six garages at their biggest stage take about 2,470, so the ring plaza (PR L4) may
+# use at most this many (tools/world_test.py checks the ring world against WorldArt's ring budget, which must not be more).
+PLAZA_SHARE = 480
+
+
+def plaza_budget():
+    """The plaza's allowance: WorldArt's ring budget once PR L4 adds it (Budget.ringParts), else PLAZA_SHARE."""
+    m = re.search(r"ringParts = (\d+)", read("WorldArt.lua"))
+    return int(m.group(1)) if m else PLAZA_SHARE
 
 
 def math_block(text):
-    start = text.index("-- BUILDINGMATH-START")
-    return text[start:text.index("-- BUILDINGMATH-END") + len("-- BUILDINGMATH-END")]
+    m = re.search(r"-- BUILDINGMATH-START\n.*?-- BUILDINGMATH-END\n", text, re.S)
+    return m.group(0) if m else None
+
+
+def between(text, start, end, inclusive_end=True):
+    a = text.find(start)
+    if a < 0:
+        return None
+    b = text.find(end, a)
+    if b < 0:
+        return None
+    return text[a:b + (len(end) if inclusive_end else 0)]
+
+
+def core_snippets(core):
+    """TycoonCore's garage code, cut out of the real file (None when a piece is missing)."""
+    consts = []
+    for pat in (r"local PLOT_SPACING = \d+\n", r"local MAX_PLOTS = \d+\n", r"local GARAGE_TURNS = \{[^}]*\}\n"):
+        m = re.search(pat, core)
+        if not m:
+            return None
+        consts.append(m.group(0))
+    helpers = between(core, "local function makePart(", "local function plotCenter(", False)
+    frame = between(core, "local function plotCenter(", "-- Where each upgrade's prop stands", False)
+    looks = between(core, "local function looks(", "-- The funding stage decides", False)
+    garages = between(core, "local garages = {} -- slot", "\nbuildGarages()\n")
+    leave = between(core, "Players.PlayerRemoving:Connect(function(player)\n", "\nend)\n")
+    if None in (helpers, frame, looks, garages, leave):
+        return None
+    return {"__CONSTANTS__": "".join(consts), "__HELPERS_CORE__": helpers + frame, "__LOOKS__": looks,
+            "__GARAGES__": garages, "__LEAVE__": leave}
+
+
+def program(part, sources):
+    """One Luau program: the fake, the modules and one test part."""
+    mods = (MODULES.replace("__PLOTART__", sources["PlotArt.lua"]).replace("__PLOTVISUALS__", sources["PlotVisuals.lua"])
+            .replace("__PLOTBUILDING__", sources["PlotBuilding.lua"]).replace("__PBV__", sources["PlotBuildingVisuals.lua"]))
+    head = PRELUDE + mods + kit_doc_table() + STRETCH_ALLOWED + ("local PLAZA_BUDGET = %d\n" % plaza_budget()) + HELPERS
+    if part == "data":
+        body = DATA_TESTS
+    elif part == "build":
+        body = BUILD_TESTS
+    elif part == "math":
+        body = MATH_TESTS.replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B)
+    elif part == "client":
+        body = CLIENT_TESTS.replace("__CLIENT__", sources["BuildingClient.lua"]).replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B)
+    else:
+        snips = core_snippets(sources["TycoonCore.lua"])
+        if snips is None:
+            body = 'check("core: TycoonCore\'s garage code (makePart, plotFrame, looks, the garages block, the leave handler) can be cut out", false)\n'
+        else:
+            body = CORE_TESTS.replace("__KIT_SETUP__", "")
+            for k, v in snips.items():
+                body = body.replace(k, v)
+    return head + body + TAIL
+
+
+PARTS = ("data", "build", "math", "client", "core")
+
+
+def run_parts(luau, sources, parts=PARTS):
+    """{part: (passed, failed, [failed names], crashed text or None)}"""
+    out = {}
+    for part in parts:
+        r = run_luau(luau, program(part, sources))
+        lines = r.stdout.splitlines()
+        names = [l[len("FAIL: "):].split(" -- ")[0] for l in lines if l.startswith("FAIL: ")]
+        m = re.search(r"(\d+) passed, (\d+) failed", r.stdout)
+        crashed = None
+        if r.returncode != 0 or "DONE" not in lines:
+            crashed = (r.stderr.strip() or r.stdout.strip())[-400:]
+        out[part] = (int(m.group(1)) if m else 0, int(m.group(2)) if m else 0, names, crashed)
+    return out
 
 
 def code_only(text):
-    """Lua source without comments (so a word in a comment is not a use)."""
-    import re
+    """The Luau text without comments (so a word in a comment never counts)."""
+    text = re.sub(r"--\[(=*)\[.*?\]\1\]", "", text, flags=re.S)
+    return re.sub(r"--[^\n]*", "", text)
+
+
+def static_checks(sources):
     out = []
-    for line in text.splitlines():
-        out.append(re.sub(r"--.*$", "", line))
-    return "\n".join(out)
 
+    def add(name, ok, extra=None):
+        out.append((name, bool(ok), extra))
 
-# Mutations: each breaks one rule of the inside check or the fade, in the BUILDINGMATH block (the same text lives in
-# PlotBuildingVisuals.lua and in BuildingClient.lua, so each is run in both). The tests must notice (a test that can't fail proves nothing).
-INSIDE_MUTATIONS = [
-    ("edges count as inside (a strict > on the back wall)", ("z >= b.minZ - m and", "z > b.minZ - m and")),
-    ("edges count as inside (a strict < on the right wall)", ("x <= b.maxX + m then", "x < b.maxX + m then")),
-    ("the roof ceiling (above the roof is outside)", ("y > b.maxY + m", "false")),
-    ("the floor limit (far below the map is outside)", ("y < b.minY - m or ", "")),
-    ("the door apron", ("return z > b.maxZ and z <= b.maxZ + b.doorDepth + m and x >= b.doorMinX - m and x <= b.doorMaxX + m", "return false")),
-    ("the apron depth", ("z <= b.maxZ + b.doorDepth + m", "z <= b.maxZ + 100")),
-    ("the apron width (the door's x range)", (" and x >= b.doorMinX - m and x <= b.doorMaxX + m", "")),
-    ("the hysteresis (the margin once inside)", ("local m = wasInside and b.margin or 0", "local m = 0")),
-    ("the hysteresis for outsiders (the margin always on)", ("local m = wasInside and b.margin or 0", "local m = b.margin")),
-    ("the apron's side (it is at the front, +Z)", ("return z > b.maxZ and", "return z < b.minZ and")),
-    ("the bad-number guard (NaN or infinity is never inside)", ("if not (finite(x) and finite(y) and finite(z)) then", "if false then")),
-    ("x and z mixed up in the room's box", ("x >= b.minX - m and x <= b.maxX + m then", "z >= b.minX - m and z <= b.maxX + m then")),
-]
-FADE_MUTATIONS = [
-    ("the fade overshoots its target upward", ("return clamp01(math.min(fade + step, target))", "return fade + step")),
-    ("the fade overshoots its target downward", ("return clamp01(math.max(fade - step, target))", "return fade - step")),
-    ("the fade speed (dt times seconds instead of dt over seconds)", ("local step = dt / seconds", "local step = dt * seconds")),
-    ("the frame-time guard (zero, negative or NaN dt)", ("if not (dt > 0) then\n\t\treturn fade\n\tend", "")),
-    ("the zero-seconds guard", ("if not (seconds > 0) then\n\t\treturn target\n\tend", "")),
-    ("the 0..1 clamp (an upper limit of 2)", ("elseif n > 1 then", "elseif n > 2 then")),
-    ("the NaN guard of the clamp", ("if n ~= n then\n\t\treturn 0\n\tend", "")),
-    ("the step rounding (rounds up, so dust writes a step)", ("math.floor(clamp01(fade) * n + 0.5)", "math.ceil(clamp01(fade) * n)")),
-    ("the base transparency (glass would fade from 0)", ("b + (1 - b) * clamp01(level / n)", "(1 - b) * clamp01(level / n)")),
-    ("the step limit of the transparency (a step below 0)", ("clamp01(level / n)", "(level / n)")),
-    ("the number of steps (a fixed 20)", ("local n = math.max(1, math.floor(levels + 0.5))\n\treturn math.floor", "local n = 20\n\treturn math.floor")),
-]
-# Mutations of the client's own wiring (only the client program is run)
-CLIENT_MUTATIONS = [
-    ("the direction (opaque when inside)", ("local target = state.inside and 1 or 0", "local target = state.inside and 0 or 1")),
-    ("only the Fade group fades (Static would fade too)", ('local fade = model:FindFirstChild("Fade")\n\tfor _, item in ipairs(fade:GetDescendants()) do', 'local fade = model\n\tfor _, item in ipairs(fade:GetDescendants()) do')),
-    ("the SurfaceGui switch (text would float on a gone roof)", ("gui.Enabled = level < levels", "gui.Enabled = true")),
-    ("the base Transparency (glass would be lost)", ("part.Transparency = transparencyAt(base, level, levels)", "part.Transparency = level / levels")),
-    ("holding the state with no character", ("if root then -- no character (dead, respawning): hold the last state", "if true then")),
-    ("the first state of a new building (it would fade in)", ("fade = inside and 1 or 0, inside = inside", "fade = 0, inside = inside")),
-    ("the hysteresis wiring (the last state is passed on)", ("isInside(state.bounds, p.X, p.Y, p.Z, state.inside)", "isInside(state.bounds, p.X, p.Y, p.Z, false)")),
-    ("parts that arrive late", ("table.insert(state.connections, fade.DescendantAdded:Connect(function(item)\n\t\tremember(state, item)\n\tend))", "")),
-    ("the frame time (a fixed 1 second)", ("fadeStep(state.fade, target, dt, state.seconds)", "fadeStep(state.fade, target, 1, state.seconds)")),
-    ("only writing when the step changes", ("if level ~= state.level then", "if true then")),
-    ("the building's own fade time", ("fade = inside and 1 or 0, inside = inside,", "fade = inside and 1 or 0, inside = inside, seconds = 5,")),
-]
-
-
-def apply_mutation(text, mutation, what):
-    old, new = mutation
-    if old not in text:
-        raise SystemExit("mutation target not found in %s: %r" % (what, old))
-    return text.replace(old, new, 1)
-
-
-def static_checks():
-    """Source checks on the new files: looks only, no services or remotes, the two math copies identical, no existing file edited."""
-    import re
-    passed, failed = 0, 0
-
-    def check(name, cond, extra=None):
-        nonlocal passed, failed
-        if cond:
-            passed += 1
-        else:
-            failed += 1
-            print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
-
-    data, builder, client = read("PlotBuilding.lua"), read("PlotBuildingVisuals.lua"), read(CLIENT_FILE)
-    check("the roof-fade maths is the same text in PlotBuildingVisuals.lua and in BuildingClient.lua", math_block(builder) == math_block(client))
-    check("the maths block is pure: no service, Instance, Vector3 or task in it", not any(w in math_block(builder) for w in ("game", "Instance", "Vector3", "task.", "workspace", "Enum")))
-    check("BuildingClient is a paste-ready script: it is in docs/studio_scripts, not at the repo root (not in the game tree)",
-          os.path.exists(os.path.join(ROOT, CLIENT_FILE)) and not os.path.exists(os.path.join(ROOT, "BuildingClient.lua")))
+    client, mod, core = sources["BuildingClient.lua"], sources["PlotBuildingVisuals.lua"], sources["TycoonCore.lua"]
+    add("files: BuildingClient.lua is at the repo root (one Studio script = one root .lua) and not in docs/studio_scripts",
+        os.path.exists(os.path.join(ROOT, "BuildingClient.lua")) and not os.path.exists(os.path.join(ROOT, "docs", "studio_scripts", "BuildingClient.lua")))
+    a, b = math_block(mod), math_block(client)
+    add("client: the inside check and fade maths in BuildingClient are the same text as in PlotBuildingVisuals", a is not None and a == b)
     cc = code_only(client)
-    for word in ("FireServer", "InvokeServer", "OnClientEvent", "RemoteEvent", "RemoteFunction", "DataStore", "SetAttribute", "CanCollide", "CanTouch", "CanQuery",
-                 "Anchored", "CFrame", "Position =", ".Size", "Destroy", "math.random", "HttpService", "MarketplaceService", "Touched"):
-        check("BuildingClient never uses %s (it only changes Transparency, TextTransparency and SurfaceGui.Enabled)" % word, word not in cc)
-    check("BuildingClient reads only what it needs: three services (CollectionService, Players, RunService)", sorted(re.findall(r'GetService\("(\w+)"\)', cc)) == ["CollectionService", "Players", "RunService"])
-    writes = sorted(set(re.findall(r"\b(\w+)\.(Transparency|TextTransparency|Enabled)\s*=[^=]", cc)))
-    check("BuildingClient writes only Transparency, TextTransparency and Enabled", all(w[1] in ("Transparency", "TextTransparency", "Enabled") for w in writes), writes)
-    check("BuildingClient has no Transparency write outside apply() and remember()", len(re.findall(r"\.Transparency\s*=[^=]", cc)) == 2 and len(re.findall(r"\.TextTransparency\s*=[^=]", cc)) == 2, writes)
-    check("BuildingClient finds buildings by the tag PlotBuilding and the server tags with the same word", 'local TAG = "PlotBuilding"' in client and 'TAG = "PlotBuilding"' in builder)
-    for name, text in (("PlotBuilding.lua", data), ("PlotBuildingVisuals.lua", builder)):
-        code = code_only(text)
-        for word in ("RemoteEvent", "RemoteFunction", "DataStore", "SetAsync", "addEarnings", "math.random", "Random", "rbxasset", "http", "Texture =", "MeshId", "Decal",
-                     "PointLight", "SpotLight", "ParticleEmitter", "Touched", "CanCollide = true", "collide = true"):
-            if name == "PlotBuildingVisuals.lua" and word in ("PointLight", "SpotLight", "ParticleEmitter"):
-                continue  # the checker looks for them, to forbid them
-            check("%s never uses %s (pure looks: no remotes, saves, assets, randomness, lights or solid parts)" % (name, word), word not in code)
-        size = len(text.encode("utf-8"))
-        check("%s stays under 120 KB (%d bytes)" % (name, size), size < 120 * 1024)
-    check("PlotBuilding.lua is pure data: no GetService, no require, no Instance.new", not any(w in code_only(data) for w in ("GetService", "require(", "Instance.new")))
-    check("PlotBuildingVisuals.lua asks for one service only, CollectionService (to tag the Model)", re.findall(r'GetService\("(\w+)"\)', code_only(builder)) == ["CollectionService"])
-    check("PlotBuildingVisuals.lua requires nothing (PlotBuilding and the art are passed in, so a failing module can't take another down)", "require(" not in code_only(builder))
-
-    # No existing file is edited. The base is the commit the branch was made from; only CONTRIBUTING.md (the claim rows) may differ,
-    # and TycoonCore.lua only when it is exactly the base plus docs/building_pass_integration.patch (the approved integration).
-    base = "7f5c141"
-    try:
-        have = subprocess.run(["git", "cat-file", "-e", base + "^{commit}"], cwd=ROOT, capture_output=True).returncode == 0
-    except OSError:
-        have = False
-    if not have:
-        print("note: git or the base commit %s is not available here, so the 'no existing file edited' check is skipped" % base)
-    else:
-        diff = subprocess.run(["git", "diff", "--name-only", "--diff-filter=MDRT", base, "--"], cwd=ROOT, capture_output=True, text=True).stdout.split()
-        changed = sorted(set(diff))
-        allowed = {"CONTRIBUTING.md"}
-        extra = [n for n in changed if n not in allowed]
-        if "TycoonCore.lua" in extra:
-            with tempfile.TemporaryDirectory() as tmp:
-                original = subprocess.run(["git", "show", base + ":TycoonCore.lua"], cwd=ROOT, capture_output=True).stdout
-                with open(os.path.join(tmp, "TycoonCore.lua"), "wb") as f:
-                    f.write(original)
-                applied = subprocess.run(["git", "apply", os.path.join(ROOT, "docs", "building_pass_integration.patch")], cwd=tmp, capture_output=True)
-                if applied.returncode == 0 and open(os.path.join(tmp, "TycoonCore.lua"), "rb").read() == open(os.path.join(ROOT, "TycoonCore.lua"), "rb").read():
-                    extra.remove("TycoonCore.lua")
-        check("no existing file is edited: against %s only CONTRIBUTING.md differs (TycoonCore.lua only as the approved patch)" % base, not extra, extra)
-        if os.path.exists(os.path.join(ROOT, "tools", "daily_test.py")):
-            same = subprocess.run(["git", "diff", "--quiet", base, "--", "tools/daily_test.py"], cwd=ROOT).returncode == 0
-            check("tools/daily_test.py (another session's file) is untouched", same)
-    return passed, failed
+    add("client: never fires a remote, never touches collision, anchoring or position", not re.search(
+        r"FireServer|InvokeServer|RemoteEvent|RemoteFunction|\.CanCollide\s*=|\.CanTouch\s*=|\.CanQuery\s*=|\.Anchored\s*=|\.CFrame\s*=|\.Position\s*=|\.Size\s*=", cc))
+    add("client: reads the garage's frame and checks the character in it (PointToObjectSpace)", "PointToObjectSpace(root.Position)" in cc and 'GetAttribute("Frame")' in cc)
+    add("client: fades only the Fade group", cc.count('FindFirstChild("Fade")') >= 1 and "Static" not in cc and '"Solid"' not in cc)
+    for name, text in (("BuildingClient", client), ("PlotBuildingVisuals", mod), ("PlotBuilding", sources["PlotBuilding.lua"]), ("TycoonCore", core)):
+        add("source: %s has no word \"Touched\" (nothing is bought or opened by touching the world)" % name, "Touched" not in text)
+    pb = code_only(sources["PlotBuilding.lua"])
+    add("data: PlotBuilding is data and pure layout (no Instance, no service, no require)", not re.search(r"Instance\.new|GetService|require\(|workspace", pb))
+    add("data: no asset id anywhere (rbxassetid, MeshId, TextureID)", not re.search(r"rbxassetid|MeshId|TextureI[Dd]", sources["PlotBuilding.lua"] + mod))
+    pbv = code_only(mod)
+    add("builder: no light, no particle emitter is ever made", not re.search(r'Instance\.new\("(PointLight|SpotLight|SurfaceLight|ParticleEmitter)"', pbv))
+    # TycoonCore's L2 wiring
+    add("core: PlotBuilding and PlotBuildingVisuals are required inside pcall (5 s wait), and set to nil when either fails",
+        'pcall(require, script.Parent:WaitForChild("PlotBuildingVisuals", 5))' in core and 'pcall(require, script.Parent:WaitForChild("PlotBuilding", 5))' in core
+        and "PlotBuildingVisuals, PlotBuilding = nil, nil" in core)
+    floors = re.findall(r'makePart\((\w+), "Floor"', core)
+    add("core: the Floor is made once, in buildGarages (the garage), never in the join", floors == ["garage"], floors)
+    m = re.search(r"local function onPlayerAdded\(player\)\n(.*?)\n\t-- CLAIMLOAD-START", core, re.S)
+    join = m.group(1) if m else ""
+    add("core: the join puts the owner's folder in their garage and takes the garage's Floor",
+        "\tfolder.Parent = garages[slot]" in join and "\tlocal floor = garages[slot].Floor" in join)
+    add("core: the join names the garage once (setGarageSign) and adds no label of its own (no label per owner)",
+        join.count("setGarageSign(slot, ") == 1 and "addLabel(" not in code_only(join))
+    block = between(core, "-- CLAIMLOAD-START", "-- CLAIMLOAD-END") or ""
+    add("core: nothing of the building is called inside the CLAIMLOAD block (building-pass's third edit is dropped)",
+        block != "" and "syncBuilding" not in block and "PlotBuilding" not in block)
+    sync = between(code_only(core), "local function syncRoom(data)", "\nend\n") or ""
+    add("core: syncRoom (every second) syncs the building with the stage (or the Studio Debug button's, in memory only)",
+        "local stage = data.debugStage or stageOf(data)" in sync and "syncBuilding(data.slot, stage)" in sync)
+    leave = between(core, "Players.PlayerRemoving:Connect(function(player)\n", "\nend)\n") or ""
+    add("core: the leave handler resets the garage after the leave save and the folder",
+        leave.find("saveOnLeave(player)") >= 0 and leave.find("saveOnLeave(player)") < leave.find("data.folder:Destroy()") < leave.find("resetGarage(data.slot)") < leave.find("plotOwners[data.slot] = nil"))
+    dbg = re.search(r'\nif RunService:IsStudio\(\) then\n\tShopServer\.addDebugAction\("BuildingNextStage", function\(_, data\)\n(.*?)\nend\n', core, re.S)
+    save = between(core, "-- BUILDSAVE-START", "-- SAVEFN-END") or ""
+    add("debug: the \"Building: next stage\" button is added only in Studio, and data.debugStage is never saved",
+        dbg is not None and core.count('addDebugAction("BuildingNextStage"') == 1 and "debugStage" not in save
+        and 'debugRow("🏗️", "Building: next stage",' in sources.get("ShopClient.lua", ""))
+    add("core: buildGarages runs once, before players are set up", core.count("\nbuildGarages()\n") == 1
+        and core.find("\nbuildGarages()\n") < core.find("Players.PlayerAdded:Connect(onPlayerAdded)"))
+    return out
 
 
-def integration_check(luau):
-    """Optional (--integration): apply the integration patch to a scratch copy of the repo and run both test suites there."""
-    with tempfile.TemporaryDirectory() as tmp:
-        files = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT, capture_output=True).stdout.split(b"\0")
-        for raw in files:
-            if not raw:
-                continue
-            name = raw.decode()
-            target = os.path.join(tmp, name)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            if os.path.exists(os.path.join(ROOT, name)):
-                shutil.copy(os.path.join(ROOT, name), target)
-        subprocess.run(["git", "show", "7f5c141:TycoonCore.lua"], cwd=ROOT, stdout=open(os.path.join(tmp, "TycoonCore.lua"), "wb"))
-        for name in ("PlotBuilding.lua", "PlotBuildingVisuals.lua"):
-            shutil.copy(os.path.join(ROOT, name), os.path.join(tmp, name))
-        applied = subprocess.run(["git", "apply", os.path.join(ROOT, "docs", "building_pass_integration.patch")], cwd=tmp, capture_output=True, text=True)
-        if applied.returncode != 0:
-            print("FAIL: the integration patch does not apply to the base TycoonCore.lua: " + applied.stderr.strip())
-            return False
-        env = dict(os.environ, LUAU=luau)
-        ok = True
-        for script in ("tools/daily_test.py", "tools/building_test.py"):
-            result = subprocess.run([sys.executable, os.path.join(tmp, script)], cwd=tmp, capture_output=True, text=True, env=env)
-            bad = [l for l in result.stdout.splitlines() if "FAIL" in l or (" failed" in l and " 0 failed" not in l)]
-            print("  with the patch, %s: %s" % (script, "all pass" if result.returncode == 0 and not bad else "FAILS " + "; ".join(bad[:3])))
-            ok = ok and result.returncode == 0 and not bad
-        return ok
+# --- mutation runs: break the code or the data on purpose; each must be caught by its NAMED check, never by a crash ----
+PB, PBV, CLIENT, CORE = "PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua", "TycoonCore.lua"
+MUTANTS = [
+    # (what is broken, file, old, new, the start of the check that must fail, which parts to run)
+    ("a box in the lane (FrontLeft reaches the middle)", PB, 'solid("FrontLeft", -h + W, -door.half,', 'solid("FrontLeft", -h + W, 0,', "lane:", ("data", "build")),
+    ("a kit MeshPart left solid", PBV, "\t\t\tlookFlags(part)\n\t\t\tpaint(part, building, stage, piece, role)\n\t\t\ttag(part, piece, role)\n\t\t\tpart.Parent = parent\n\t\t\ttable.insert(made, part)",
+     "\t\t\tlookFlags(part)\n\t\t\tpart.CanCollide = true\n\t\t\tpaint(part, building, stage, piece, role)\n\t\t\ttag(part, piece, role)\n\t\t\tpart.Parent = parent\n\t\t\ttable.insert(made, part)", "solid:", ("build",)),
+    ("the fade skips glass (the client remembers only opaque parts)", CLIENT, "\tif item:IsA(\"BasePart\") then\n\t\tstate.parts[item] = item.Transparency",
+     "\tif item:IsA(\"BasePart\") and item.Transparency == 0 then\n\t\tstate.parts[item] = item.Transparency", "client: glass fades", ("client",)),
+    ("a stage over the budget (Big Corporate gets 12 more columns)", PB, '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n',
+     '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n' + "".join('\t\t\t{ key = "Column", x = %d, y = -1, z = -50, turn = 0 },\n' % x for x in range(-33, 39, 6)), "budget:", ("data",)),
+    ("the front moves at stage 4 (z 33.2 instead of 32.2)", PB, "masses = { { half = 40, back = -40, front = 32.2,", "masses = { { half = 40, back = -40, front = 33.2,", "front:", ("data",)),
+    ("furniture inside the room (the band measured from the room's edge inward)", PB, "p.x, p.z, p.turn = -inner + depth / 2, f.along, 90", "p.x, p.z, p.turn = -30 + depth / 2, f.along, 90", "furniture:", ("data",)),
+    ("the fallback missing a wall (Wall has no Parts version)", PB, '\tWall = { box("main", 16, 13, 2, 0, 6.5, 0), box("trim", 16, 1, 2, 0, 13.5, 0) },', '\tWall = {},', "fallback:", ("data", "build")),
+    ("a stretched Column (STRETCH lets Column stretch, the pillars made 6 wide)", PB, "PlotBuilding.STRETCH = { Wall = { x = true },", "PlotBuilding.STRETCH = { Column = { x = true }, Wall = { x = true },", "stretch:", ("data", "build")),
+    ("the kit front turn ignored", PBV, "local target = pieceFrame(origin, piece) * CFrame.Angles(0, math.rad(building.KIT_FRONT_TURN), 0)", "local target = pieceFrame(origin, piece)", "kit front:", ("build",)),
+    ("the client checks in world axes (no garage frame)", CLIENT, "local p = state.frame:PointToObjectSpace(root.Position) -- the character in the garage's frame", "local p = root.Position - state.frame.Position", "client: at 90 degrees", ("client",)),
+    ("the apron on the wrong side (behind the back wall)", PBV, "return z > b.maxZ and z <= b.maxZ + b.doorDepth + m", "return z < b.minZ and z >= b.minZ - b.doorDepth - m", "inside:", ("math",)),
+    ("a door jamb in the lane (a Corner at x 3 in front of the Small Office's door)", PB, '\t\t\t{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },\n\t\t\t{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
+     '\t\t\t{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },\n\t\t\t{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
+    ("an inner part solid (the fallback's Parts collide)", PBV, "\t\tlookFlags(part)\n\t\tpaint(part, building, stage, piece, b.role)", "\t\tlookFlags(part)\n\t\tpart.CanCollide = true\n\t\tpaint(part, building, stage, piece, b.role)", "solid:", ("build",)),
+    ("the fade capped at 0.2", PBV, "\treturn clamp01(b + (1 - b) * clamp01(level / n))", "\treturn math.min(0.2, clamp01(b + (1 - b) * clamp01(level / n)))", "fade:", ("build", "math")),
+    ("the roof left unfaded (in Static)", PB, '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof" })',
+     '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof", group = "Static" })', "fade:", ("data",)),
+    ("a label per owner (the join adds a billboard again)", CORE, "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n", "core: the join names the garage once", ()),
+    ("no reset on leave", CORE, "\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n", "", "leave:", ("core",)),
+    ("the reset does not rebuild the Garage", CORE, "\tsyncBuilding(slot, 1)\n\tsetGarageSign(slot, \"\")\n", "\tsetGarageSign(slot, \"\")\n", "reset:", ("core",)),
+    ("a stage change may trap a player (unstick does nothing)", PBV, "\t\t\t\troot.CFrame = landing\n\t\t\t\tmoved += 1", "\t\t\t\tmoved += 1", "unstick:", ("build",)),
+    ("a solid box left visible (Transparency 0)", PBV, "\tpart.Transparency = 1\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "\tpart.Transparency = 0\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "flags:", ("build",)),
+    ("the builder keeps every BasePart of a kit model (not only MeshParts)", PBV, "\t\tif d:IsA(\"MeshPart\") then\n\t\t\tlocal rel = pivot:ToObjectSpace(d.CFrame)", "\t\tif d:IsA(\"BasePart\") then\n\t\t\tlocal rel = pivot:ToObjectSpace(d.CFrame)", "kit: only MeshParts", ("build",)),
+    ("the builder stretches anything it is asked to (no refusal)", PBV, "\tif (sx ~= 1 and not (allowed and allowed.x)) or (sz ~= 1 and not (allowed and allowed.z)) then", "\tif false then", "stretch:", ("build",)),
+    ("a missing key warns on every build", PBV, "\tif not warned[kind] then\n\t\twarned[kind] = true", "\tif true then\n\t\twarned[kind] = true", "fallback:", ("build",)),
+    ("the style table loses a role (stage 3 has no glass)", PB, '\t\t\tglass = S(rgb(170, 210, 232), "Glass", GLASS), dark = S(rgb(44, 52, 66), "Metal"),', '\t\t\tdark = S(rgb(44, 52, 66), "Metal"),', "style:", ("data",)),
+    ("the manifest's Sofa size drifts from docs/KIT_MODELS.md", PB, "\tSofa = kit(8, 4, 4,", "\tSofa = kit(8, 4.5, 4,", "manifest:", ("data",)),
+    ("the building is built in world axes (the Frame ignored)", PBV, "\treturn frame * CFrame.new(0, building.FLOOR_TOP, 0)", "\treturn CFrame.new(frame.Position) * CFrame.new(0, building.FLOOR_TOP, 0)", "turn:", ("build",)),
+    ("the stage Debug button added on live servers too (no Studio check)", CORE, "if RunService:IsStudio() then\n\tShopServer.addDebugAction(\"BuildingNextStage\"",
+     "if true then\n\tShopServer.addDebugAction(\"BuildingNextStage\"", "debug:", ()),
+    ("the lintel box starts at 5 (the doorway only 6 high)", PB, 'solid("Lintel", -door.half, door.half, door.top, top1,', 'solid("Lintel", -door.half, door.half, 5, top1,', "doorway:", ("data",)),
+]
+
+
+def apply(sources, file, old, new):
+    text = sources[file]
+    if text.count(old) != 1:
+        return None
+    out = dict(sources)
+    out[file] = text.replace(old, new)
+    return out
 
 
 def main():
@@ -1377,61 +1473,58 @@ def main():
     if not luau:
         print("Luau not found. Download it from https://github.com/luau-lang/luau/releases and set LUAU=/path/to/luau")
         return 2
+    names = ("PlotArt.lua", "PlotVisuals.lua", "PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua", "TycoonCore.lua", "ShopClient.lua")
+    sources = {n: read(n) for n in names}
     code = 0
-    total = 0
-
-    def counted(stdout):
-        nonlocal total
-        for line in stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 4 and parts[1] == "passed," and parts[0].isdigit():
-                total += int(parts[0])
-
-    result = run_luau(luau, building_source())
-    print("Building data, builder, inside check, fade maths and untouched rooms: " + (result.stdout.strip() or result.stderr.strip()))
-    counted(result.stdout)
-    if result.returncode != 0 or " 0 failed" not in result.stdout:
-        code = 1
-    result = run_luau(luau, client_source())
-    print("BuildingClient roof fade (the real script in a fake world): " + (result.stdout.strip() or result.stderr.strip()))
-    counted(result.stdout)
-    if result.returncode != 0 or " 0 failed" not in result.stdout:
-        code = 1
-    static_passed, static_failed = static_checks()
-    print("Building source checks: %d passed, %d failed" % (static_passed, static_failed))
-    total += static_passed
-    if static_failed:
+    total_pass = total_fail = 0
+    results = run_parts(luau, sources)
+    for part in PARTS:
+        p, f, failed, crashed = results[part]
+        for n in failed:
+            print("FAIL (%s): %s" % (part, n))
+        if crashed:
+            print("CRASH (%s): %s" % (part, crashed))
+            code = 1
+        print("Building check, %s: %d passed, %d failed" % (part, p, f))
+        total_pass += p
+        total_fail += f
+    stat = static_checks(sources)
+    sfail = [(n, e) for n, ok, e in stat if not ok]
+    for n, e in sfail:
+        print("FAIL (source): " + n + (" -- " + str(e) if e is not None else ""))
+    print("Building check, source: %d passed, %d failed" % (len(stat) - len(sfail), len(sfail)))
+    total_pass += len(stat) - len(sfail)
+    total_fail += len(sfail)
+    if total_fail:
         code = 1
 
-    # Mutation runs: break one rule at a time; the tests must run to the end and report failures (a crash would not count)
-    builder_text, client_text = read("PlotBuildingVisuals.lua"), read(CLIENT_FILE)
-    runs = caught = 0
-    for group, mutations in (("inside check", INSIDE_MUTATIONS), ("fade", FADE_MUTATIONS)):
-        for label, mutation in mutations:
-            for where, runner in (("module", lambda m: building_source(apply_mutation(builder_text, m, "PlotBuildingVisuals.lua"))),
-                                  ("client", lambda m: client_source(apply_mutation(client_text, m, "BuildingClient.lua")))):
-                runs += 1
-                mutant = run_luau(luau, runner(mutation))
-                if "passed," in mutant.stdout and " 0 failed" not in mutant.stdout:
-                    caught += 1
-                else:
-                    print("FAIL: mutation not caught by the %s tests: a broken %s (%s)" % (where, group, label))
-                    code = 1
-    for label, mutation in CLIENT_MUTATIONS:
-        runs += 1
-        mutant = run_luau(luau, client_source(apply_mutation(client_text, mutation, "BuildingClient.lua")))
-        if "passed," in mutant.stdout and " 0 failed" not in mutant.stdout:
+    caught = 0
+    for label, file, old, new, want, parts in MUTANTS:
+        mutated = apply(sources, file, old, new)
+        if mutated is None:
+            print("NOT CAUGHT: %s -- not applied (its anchor is missing or there twice)" % label)
+            continue
+        failed_names = []
+        crash = None
+        if parts:
+            res = run_parts(luau, mutated, parts)
+            for part in parts:
+                p, f, fn, crashed = res[part]
+                failed_names += fn
+                crash = crash or crashed
+        failed_names += [n for n, ok, _ in static_checks(mutated) if not ok]
+        hit = [n for n in failed_names if n.startswith(want)]
+        if crash and not hit:
+            print("NOT CAUGHT: %s -- it crashed: %s" % (label, crash[:200]))
+        elif hit:
             caught += 1
+            print("caught: %s -- by \"%s\"" % (label, hit[0]))
         else:
-            print("FAIL: mutation not caught by the client tests: a broken " + label)
-            code = 1
-    print("Building mutations: %d of %d broken rules caught (%d inside-check, %d fade, each run on the module and on the client; %d client wiring)" % (
-        caught, runs, len(INSIDE_MUTATIONS), len(FADE_MUTATIONS), len(CLIENT_MUTATIONS)))
-    if "--integration" in sys.argv:
-        print("Integration patch on a scratch copy:")
-        if not integration_check(luau):
-            code = 1
-    print("building_test.py: %d checks passed, %d mutation runs caught%s" % (total, caught, "" if code == 0 else "  -- SOMETHING FAILED"))
+            print("NOT CAUGHT: %s -- no failing check starts with \"%s\" (failed: %s)" % (label, want, failed_names[:3]))
+    print("Building mutations: %d of %d caught, each by its named check" % (caught, len(MUTANTS)))
+    if caught != len(MUTANTS):
+        code = 1
+    print("building_test.py: %d checks passed, %d of %d mutation runs caught" % (total_pass, caught, len(MUTANTS)))
     return code
 
 
