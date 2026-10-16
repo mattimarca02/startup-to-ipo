@@ -163,3 +163,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| PlotBuilding (new) | ServerScriptService (ModuleScript, new) | free | | |
+| PlotBuildingVisuals (new) | ServerScriptService (ModuleScript, new) | free | | |
+| docs/studio_scripts/BuildingClient.lua (new) | StarterPlayerScripts (LocalScript, made by hand, pasted from the docs folder; not in the game tree) | free | | |
+| tools/building_test.py (new) | (repo only) | free | | |
+| docs/BUILDING_PASS_PROPOSAL.md (new) | (repo only) | free | | |
+| docs/BUILDING_PASS_NOTES.md (new) | (repo only) | free | | |
+| docs/STUDIO_SYNC_BUILDING.md (new) | (repo only) | free | | |
+| docs/building_pass_integration.patch (new) | (repo only) | free | | |
