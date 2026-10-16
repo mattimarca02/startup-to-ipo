@@ -136,12 +136,16 @@ L2_EDITS = (
      "local garages = {} -- slot -> the garage Model\n\n"
      "-- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never\n"
      "-- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.\n"
+     "local buildingWarned = false -- it runs every second: a broken building is told once per server, not every second\n"
      "local function syncBuilding(slot, stage)\n"
      "\tif not (PlotBuildingVisuals and garages[slot]) then return end\n"
      "\tlocal kit = ReplicatedStorage:FindFirstChild(PlotBuilding.KIT_FOLDER)\n"
      "\tlocal ok, model, changed = pcall(PlotBuildingVisuals.sync, garages[slot], plotFrame(slot), PlotBuilding, stage, kit)\n"
      "\tif not ok then\n"
-     "\t\twarn(\"Plot buildings: the building failed: \" .. tostring(model))\n"
+     "\t\tif not buildingWarned then\n"
+     "\t\t\tbuildingWarned = true\n"
+     "\t\t\twarn(\"Plot buildings: the building failed: \" .. tostring(model))\n"
+     "\t\tend\n"
      "\telseif changed then\n"
      "\t\tlocal roots = {}\n"
      "\t\tfor _, other in ipairs(Players:GetPlayers()) do\n"
@@ -251,6 +255,12 @@ local lastClaimAsk = {} -- UserId -> os.clock() of their last claim request (one
 local garageState = {} -- slot -> "Free", "MovingIn", "Taken" or "Closing"
 local requestClaim -- a prompt's handler (the claim, below onPlayerAdded's helpers)
 
+-- A part of a garage's claim spot (its "ClaimPost" or its "FreeLamp"), or nil
+local function claimPart(slot, name)
+	local spot = garages[slot] and garages[slot]:FindFirstChild("ClaimSpot")
+	return spot and spot:FindFirstChild(name)
+end
+
 -- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
 -- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
 local function setGarageState(slot, state, ownerName)
@@ -260,7 +270,7 @@ local function setGarageState(slot, state, ownerName)
 	garage:SetAttribute("State", state)
 	garage:SetAttribute("OwnerName", ownerName or "")
 	local free = state == "Free" and LobbyConfig.ClaimEnabled
-	local post = garage:FindFirstChild("ClaimPost")
+	local post = claimPart(slot, "ClaimPost")
 	if post then
 		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
 		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
@@ -271,7 +281,7 @@ local function setGarageState(slot, state, ownerName)
 			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
 		end
 	end
-	local lamp = garage:FindFirstChild("FreeLamp")
+	local lamp = claimPart(slot, "FreeLamp")
 	if lamp then lamp.Transparency = free and 0 or 1 end
 end
 
@@ -310,11 +320,18 @@ end
 ''',
      '''		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
 		-- The claim post beside the door (lobby L3): the "Claim garage" prompt, the FREE sign and a lamp (Neon, no light).
-		-- Never solid, never touched; only shown while the claim is on.
+		-- Never solid, never touched; only shown while the claim is on. Both stand in the garage's ClaimSpot, a Persistent
+		-- model: with streaming on, every client has every post (and its prompt) from the start, however far away.
+		local spot = Instance.new("Model")
+		spot.Name = "ClaimSpot"
+		pcall(function()
+			spot.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+		end)
+		spot.Parent = garage
 		local postAt = plotFrame(slot) * CFrame.new(LobbyConfig.Post.x, 1.5, LobbyConfig.Post.z)
-		local post = makePart(garage, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+		local post = makePart(spot, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
 		post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
-		local lamp = makePart(garage, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
+		local lamp = makePart(spot, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
 		lamp.CanCollide, lamp.CanTouch, lamp.CanQuery = false, false, false
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = LobbyConfig.Texts.Prompt
@@ -434,7 +451,7 @@ requestClaim = function(player, slot)
 	if not inPlaza[player] then return end -- already moving in or playing, or gone
 	local now = os.clock()
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	local post = garages[slot] and garages[slot]:FindFirstChild("ClaimPost")
+	local post = claimPart(slot, "ClaimPost")
 	local distance = root and post and (root.Position - post.Position).Magnitude or nil
 	local ok, reason = LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, distance = distance, now = now })
 	lastClaimAsk[player.UserId] = now
@@ -809,15 +826,20 @@ def hash_block_checks(luau, core, doc):
     out.append(("doc: the hash block's sha256 is docs/STUDIO_SYNC_MASTER.md section 6's, character for character",
                 bool(mine and theirs and mine.group(0) == theirs.group(0)), None))
     real = {name: body.decode("utf-8") for name, body in l1_others().items()}
-    dropped = {name: text[:-1] for name, text in real.items()}
-    client = dict(real)
-    client["EmployeeClient"] = client["EmployeeClient"].replace("local walkers = {}", "local walkers = { }", 1)
-    server = dict(real)
-    server["TycoonCore"] = server["TycoonCore"].replace("REREAD_WAIT_SECONDS = 7", "REREAD_WAIT_SECONDS = 8", 1)
-    cases = (("the five real files", real, "ALL OK"),
-             ("the five real files with their last newline dropped (Studio may do that)", dropped, "ALL OK"),
-             ("TycoonCore with one byte changed", server, "NOT YET"),
-             ("EmployeeClient (in StarterPlayerScripts) with one byte changed", client, "NOT YET"))
+    lacking = [name for name, _, _ in L1_SCRIPTS if name not in real]
+    out.append(("git: L1's five scripts can be read at %s (git show; a copy without the git history or a shallow clone lacks them)" % L1_COMMIT,
+                not lacking, ", ".join(lacking) or None))
+    cases = ()
+    if not lacking:
+        dropped = {name: text[:-1] for name, text in real.items()}
+        client = dict(real)
+        client["EmployeeClient"] = client["EmployeeClient"].replace("local walkers = {}", "local walkers = { }", 1)
+        server = dict(real)
+        server["TycoonCore"] = server["TycoonCore"].replace("REREAD_WAIT_SECONDS = 7", "REREAD_WAIT_SECONDS = 8", 1)
+        cases = (("the five real files", real, "ALL OK"),
+                 ("the five real files with their last newline dropped (Studio may do that)", dropped, "ALL OK"),
+                 ("TycoonCore with one byte changed", server, "NOT YET"),
+                 ("EmployeeClient (in StarterPlayerScripts) with one byte changed", client, "NOT YET"))
     for label, sources, want in cases:
         result = run_luau(luau, fake_studio(sources) + block)
         last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else result.stderr.strip()[:200]
@@ -1002,17 +1024,20 @@ HOOKS = ("\n\treturn { playerData = playerData, plotOwners = plotOwners, claims 
          "claimedAt = claimedAt }\nend\n")
 
 
+FAKE_ARGS = "game, script, workspace, task, os, warn, require, newInstance, Enum, Vector3, CFrame, Color3, UDim2, typeof"
+
+
 def runtime_program(sources):
-    """The runtime test program for {file: text} (TycoonCore.lua, LobbyConfig.lua, IpoConfig.lua, ShopServer.lua)."""
+    """The runtime test program for {file: text} (TycoonCore.lua, LobbyConfig.lua, IpoConfig.lua, ShopServer.lua,
+    ShopConfig.lua): each real script runs as a function of the fake Roblox's globals."""
     body = read(RUNTIME_FILE)
-    boot = ("local function BOOT_CORE(game, script, workspace, task, os, warn, require, newInstance, Enum, Vector3, CFrame, Color3, UDim2, typeof)\n"
-            "\tlocal Instance = { new = newInstance }\n" + sources["TycoonCore.lua"] + HOOKS)
+    boot = ("local function BOOT_CORE(" + FAKE_ARGS + ")\n\tlocal Instance = { new = newInstance }\n" + sources["TycoonCore.lua"] + HOOKS)
+    shop = ("local function SHOP_SOURCE(" + FAKE_ARGS + ")\n\tlocal Instance = { new = newInstance }\n" + sources["ShopServer.lua"] + "\nend\n")
     mods = ("local LOBBY_SOURCE = function()\n" + sources["LobbyConfig.lua"] + "\nend\n"
-            "local IPOCONFIG_SOURCE = function()\n" + sources["IpoConfig.lua"] + "\nend\n")
-    m = re.search(r"local function waitForData\(player\)\n.*?\nend\n", sources["ShopServer.lua"], re.S)
-    wait = m.group(0).replace("local function waitForData(player)", "function waitForData(player)", 1) if m else 'error("waitForData not found in ShopServer.lua")\n'
+            "local IPOCONFIG_SOURCE = function()\n" + sources["IpoConfig.lua"] + "\nend\n"
+            "local SHOPCONFIG_SOURCE = function()\n" + sources["ShopConfig.lua"] + "\nend\n")
     at = body.index("-- One world:")
-    return body[:at] + boot + mods + body[at:].replace("__WAITFORDATA__", wait)
+    return body[:at] + boot + shop + mods + body[at:]
 
 
 def runtime_checks(luau, sources):
@@ -1032,7 +1057,7 @@ def runtime_checks(luau, sources):
 
 
 def runtime_sources():
-    return {name: read(name) for name in ("TycoonCore.lua", "LobbyConfig.lua", "IpoConfig.lua", "ShopServer.lua")}
+    return {name: read(name) for name in ("TycoonCore.lua", "LobbyConfig.lua", "IpoConfig.lua", "ShopServer.lua", "ShopConfig.lua")}
 
 
 # (what is broken, file, old, new, the start of the named runtime check that must fail)
@@ -1071,13 +1096,35 @@ L3_MUTANTS = [
     ("L4: plotCenter ignores the ring (the room in the row, the building in the ring)", "TycoonCore.lua",
      "\t\tlocal g = LobbyConfig.Garages[slot]\n\t\treturn Vector3.new(g.x, 0.5, g.z)\n", "\t\tlocal _ = LobbyConfig.Garages[slot]\n", "load: the claim's player lands in their garage"),
     ("the claim's rate check gone", "LobbyConfig.lua", "\t\tif last and finite(request.now) and request.now - last < LobbyConfig.ClaimInterval then", "\t\tif false then", "rate:"),
+    # The receipt path (the real ShopServer with the real TycoonCore)
+    ("ShopServer's waitForData without the data.ready check (a receipt granted on a save still loading)", "ShopServer.lua",
+     "\t\tif data and data.ready then\n\t\t\treturn data\n", "\t\tif data then\n\t\t\treturn data\n", "receipt: after the claim, once the save has loaded"),
+    ("ShopServer grants without data.loaded (a reward on a session that can never save)", "ShopServer.lua",
+     "\tif not data or not data.loaded then\n", "\tif not data then\n", "receipt: a session whose save never loaded"),
+    ("claimGarage never sets claimedAt (a receipt after the claim waits with no deadline)", "TycoonCore.lua", "\tclaimedAt[player] = os.clock()\n", "",
+     "receipt: 30 s after the claim with the save still loading"),
+    # The plaza, the income, the building, the claim spot
+    ("inPlaza not cleared on leave", "TycoonCore.lua", "\tinPlaza[player] = nil\n\tlocal data = playerData[player]\n\tlocal held = claims[player.UserId]\n",
+     "\tlocal data = playerData[player]\n\tlocal held = claims[player.UserId]\n", "leave: a player who leaves from the plaza"),
+    ("passive income ignores data.ready (Cash paid while loading or while an IPO saves)", "TycoonCore.lua", "\t\t\tif stats and data.ready then\n",
+     "\t\t\tif stats then\n", "income: while data.ready is off"),
+    ("a broken building warns every second", "TycoonCore.lua", "\t\tif not buildingWarned then\n", "\t\tif true then\n", "building: a broken building warns once"),
+    ("the claim spot streams like any model (not Persistent: a far post and its prompt are missing on the client)", "TycoonCore.lua",
+     "\t\t\tspot.ModelStreamingMode = Enum.ModelStreamingMode.Persistent\n", "\t\t\tspot.ModelStreamingMode = Enum.ModelStreamingMode.Default\n",
+     "plaza: each garage's claim post and lamp stand in its ClaimSpot"),
 ]
 
 
-def run_l3_mutants(luau):
+RAN_CHECK = "runtime: the program ran to the end"
+# The harness must report this as not caught: TycoonCore errors as it starts, so the test program itself crashes.
+RUNTIME_SELF_TEST = ("a mutant that makes TycoonCore error as it starts (the test program crashes)", "TycoonCore.lua",
+                     "local MAX_PLOTS = 6\n", "local MAX_PLOTS = 6\nerror(\"crash (test)\")\n", "plaza:")
+
+
+def run_l3_mutants(luau, mutants=None):
     base = runtime_sources()
     caught, lines = 0, []
-    for label, file, old, new, want in L3_MUTANTS:
+    for label, file, old, new, want in (L3_MUTANTS if mutants is None else mutants):
         if base[file].count(old) != 1:
             lines.append("NOT CAUGHT: %s -- not applied (its anchor is missing or there twice)" % label)
             continue
@@ -1085,7 +1132,9 @@ def run_l3_mutants(luau):
         mutated[file] = base[file].replace(old, new)
         failed = [name for name, ok, _ in runtime_checks(luau, mutated) if not ok]
         hit = [n for n in failed if n.startswith(want)]
-        if hit:
+        if any(n.startswith(RAN_CHECK) for n in failed):
+            lines.append("NOT CAUGHT: %s -- the test program crashed (a crash is never a catch)" % label)
+        elif hit:
             caught += 1
             lines.append("caught: %s -- by \"%s\"" % (label, hit[0]))
         else:
@@ -1122,7 +1171,32 @@ CLIENT_MUTANTS = [
      "client: with the claim off"),
     ("LobbyClient marks a garage that is not Free", 'if post and garage:GetAttribute("State") == "Free" then', "if post then", "client: the marker is over the nearest FREE"),
     ("LobbyClient keeps the banner after the claim", "local show = onPlaza()", "local show = true", "client: with a garage the banner"),
+    ("the marker put inside the banner's ScreenGui (a BillboardGui there never shows)", '\tParent = player:WaitForChild("PlayerGui"),\n})\nmake("TextLabel", {',
+     '\tParent = gui,\n})\nmake("TextLabel", {', "client: the marker is a BillboardGui straight in PlayerGui"),
+    ("the post looked for on the garage itself (not in its ClaimSpot: no marker ever)", 'local post = spot and spot:FindFirstChild("ClaimPost")',
+     'local post = garage:FindFirstChild("ClaimPost")', "client: the marker is over the nearest FREE"),
 ]
+CLEAN_CHECK = "client: ran without an error"
+DONE_CHECK = "client: the program ran to the end"
+# The harness must report this as not caught: the client errors on every frame, so checks about what it shows fail too,
+# but a client that errored is never a catch (the separate "ran without an error" check fails).
+CLIENT_SELF_TEST = ("a mutant that makes the client error on every frame", "\twaited += dt\n", "\twaited += dt\n\terror(\"crash (test)\")\n",
+                    "client: the marker is over the nearest FREE")
+
+
+def client_mutant_caught(luau, source, old, new, want):
+    """(caught, why): a client mutant counts only when the client ran without an error in every scenario, the program
+    ran to the end, and a check other than those two, starting with want, failed."""
+    if source.count(old) != 1:
+        return False, "not applied"
+    result = client_checks(luau, source.replace(old, new))
+    failed = [n for n, ok, _ in result if not ok]
+    errored = [n for n in failed if n.startswith(CLEAN_CHECK) or n.startswith(DONE_CHECK)]
+    if errored:
+        return False, "the client errored (%s): an error is never a catch" % errored[0]
+    if any(n.startswith(want) for n in failed):
+        return True, None
+    return False, "no failing check starts with \"%s\"" % want
 
 
 def main():
@@ -1132,6 +1206,9 @@ def main():
         return 2
     core = read_bytes("TycoonCore.lua")
     base = git_show(BASE, "TycoonCore.lua")
+    if base is None or git_show(L1_COMMIT, "TycoonCore.lua") is None:
+        print("FAIL: this test needs the repo's git history (commits %s and %s), and git cannot read it here. Run it in a full clone "
+              "of the repo (git clone, not a downloaded copy or a shallow clone); every check that needs that history fails below." % (BASE, L1_COMMIT))
     doc = read(SYNC_DOC) if os.path.exists(os.path.join(ROOT, SYNC_DOC)) else ""
     code = 0
 
@@ -1173,8 +1250,14 @@ def main():
     for line in l3_lines:
         if line.startswith("NOT CAUGHT"):
             print(line)
-    print("Claim mutations (PR L3): %d of %d caught, each by its named check" % (l3_caught, len(L3_MUTANTS)))
+    print("Claim mutations (PR L3): %d of %d caught, each by its named check (never by a crash)" % (l3_caught, len(L3_MUTANTS)))
     if l3_caught != len(L3_MUTANTS):
+        code = 1
+    rs_caught, rs_lines = run_l3_mutants(luau, [RUNTIME_SELF_TEST])
+    rs_ok = rs_caught == 0 and "crashed" in rs_lines[0]
+    print("Runtime harness self-test (a mutant that crashes the test program never counts): %d of 1 reported as not caught" % (1 if rs_ok else 0))
+    if not rs_ok:
+        print("FAIL: the runtime mutation harness counted a crashed run as caught (%s)" % rs_lines[0])
         code = 1
     client = client_checks(luau)
     cfail = [(n, e) for n, ok, e in client if not ok]
@@ -1186,16 +1269,20 @@ def main():
     c_caught = 0
     source = read("LobbyClient.lua")
     for label, old, new, want in CLIENT_MUTANTS:
-        if source.count(old) != 1:
-            print("NOT CAUGHT: %s -- not applied" % label)
-            continue
-        hit = [n for n, ok, _ in client_checks(luau, source.replace(old, new)) if not ok and n.startswith(want)]
-        if hit:
+        ok, why = client_mutant_caught(luau, source, old, new, want)
+        if ok:
             c_caught += 1
         else:
-            print("NOT CAUGHT: %s -- no failing check starts with \"%s\"" % (label, want))
-    print("LobbyClient mutations: %d of %d caught, each by its named check" % (c_caught, len(CLIENT_MUTANTS)))
+            print("NOT CAUGHT: %s -- %s" % (label, why))
+    print("LobbyClient mutations: %d of %d caught, each by its named check (never by an error)" % (c_caught, len(CLIENT_MUTANTS)))
     if c_caught != len(CLIENT_MUTANTS):
+        code = 1
+    label, old, new, want = CLIENT_SELF_TEST
+    self_hit, self_why = client_mutant_caught(luau, source, old, new, want)
+    self_ok = not self_hit and self_why is not None and "errored" in self_why
+    print("Client harness self-test (a client that errors never counts): %d of 1 reported as not caught" % (1 if self_ok else 0))
+    if not self_ok:
+        print("FAIL: the client mutation harness counted a client that errored as caught (%s)" % self_why)
         code = 1
     total_checks = len(results) - len(failed) + len(runtime) - len(rfail) + len(client) - len(cfail)
     print("lobby_test.py: %d checks passed, %d of %d mutation runs caught" % (total_checks, caught + l3_caught + c_caught,

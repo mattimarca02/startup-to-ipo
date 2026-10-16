@@ -43,7 +43,8 @@ PlotBuilding.Lane = { half = 4.5, top = 9, from = 26, to = 35.7 }
 PlotBuilding.APRON = 3.5 -- in front of the door: counts as inside for the fade
 PlotBuilding.ClaimPost = { x0 = 6, x1 = 10, z0 = 34.2, z1 = 36.2, top = 9 } -- PR L3's claim post (x 7, 3 in front of the wall) and its lamp
 PlotBuilding.Landing = { x = 0, z = 12, half = 2.5, top = 8 } -- where TycoonCore's teleportToPlot lands a player
-PlotBuilding.CLEAR_ABOVE = 11 -- a solid part over the 60 x 60 floor stays this high or higher (a jumping head is under 12.2)
+PlotBuilding.CLEAR_ABOVE = 12.5 -- a solid part over the 60 x 60 floor stays this high or higher (a jump reaches about 12.3)
+PlotBuilding.ROOF = 0.5 -- the roof's solid box: this thick, under the top of the outer mass (12.5 to 13 on one story)
 PlotBuilding.Budget = { parts = 160 } -- per building: kit MeshParts (or fallback Parts) plus the solid boxes. No lights.
 PlotBuilding.Inside = { floorBelow = 3, margin = 1 } -- the fade's inside box (PlotBuildingVisuals.isInside)
 PlotBuilding.Fade = { seconds = 0.4, levels = 20 }
@@ -53,7 +54,8 @@ PlotBuilding.MATERIALS = {
 }
 PlotBuilding.NEON_KEYS = { BareBulb = true } -- Neon only on a light
 -- Only these may be stretched (by scaling their parts): along X, and Floor along Z too. Every other piece keeps its size.
-PlotBuilding.STRETCH = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true } }
+-- WallDoor and its DoorLeaf are stretched 1.5 times along X (24 and 9 wide): the kit's opening is 6, the doorway lane 9.
+PlotBuilding.STRETCH = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true }, WallDoor = { x = true }, DoorLeaf = { x = true } }
 
 -- The kit, copied from docs/KIT_MODELS.md (tools/building_test.py compares the two) -----------------------------
 -- size = { width (X), height (Y), depth (Z) }. roles = the MeshParts of the model, one per role, with the file's colors.
@@ -264,7 +266,8 @@ end
 -- A building is one or more masses (a box of stories: half-width, back face, front face, first and last story, corner
 -- posts or not), the sequence of pieces along each wall of each story, the door, the pieces outside, and the furniture.
 -- Walls: doorWall (the front of the ground story), frontWall (the front above it), sideWall, backWall. A wall sequence lists pieces from one end to the other: { key = "WallWindow" } (its kit width), { fill = true } (a
--- Wall stretched to share what is left), { gap = 10 } (nothing: the doorway).
+-- Wall stretched to share what is left), { gap = 10 } (nothing in the wall run: the doorway, or the room an extra fills,
+-- like the offices' stretched WallDoor).
 
 local F = { fill = true }
 local function K(key) return { key = key } end
@@ -286,13 +289,15 @@ PlotBuilding.Stages = {
 	{ -- 2 Small Office: one story, white, WallDoor with its leaf swung open flat against the facade, windows, two plants
 		key = "Seed", bandFloor = true, name = "Small Office",
 		masses = { { half = 36.2, back = -36.2, front = 32.2, from = 1, to = 1, corners = true, roofEdge = true,
-			doorWall = { F, K("WallWindow"), K("WallDoor"), K("WallWindow"), F }, sideWall = { F, K("WallWindow"), K("WallWindow"), F },
+			doorWall = { F, K("WallWindow"), gap(24), K("WallWindow"), F }, sideWall = { F, K("WallWindow"), K("WallWindow"), F },
 			backWall = { F, K("WallWindow"), F } } },
-		door = { half = 4.5, top = 9, lanePiece = "WallDoor" }, -- the WallDoor opening is 6 wide: its jambs stand in the doorway, non-solid (P1)
+		door = { half = 4.5, top = 9 }, -- the WallDoor (an extra, stretched to 24) has a 9-wide opening, its frame on the lane's edges (P1)
 		extras = {
-			{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },
-			{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },
-			{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },
+			-- in the wall's 24-stud gap; lane = true only because the kit's one wall mesh spans its own opening
+			{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },
+			{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open flat against the facade, left of the opening
+			{ key = "Plant", x = -15.5, y = -1, z = 34, turn = 0 },
+			{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },
 		},
 		furniture = {
 			{ key = "ReceptionDesk", side = "left", along = 16 },
@@ -303,13 +308,14 @@ PlotBuilding.Stages = {
 	{ -- 3 Big Office: two stories, white and warm wood, glass beside the door, windows above
 		key = "SeriesA", bandFloor = true, name = "Big Office",
 		masses = { { half = 38, back = -38, front = 32.2, from = 1, to = 2, corners = true, roofEdge = true, ceiling = true,
-			doorWall = { F, K("WallGlass"), K("WallDoor"), K("WallGlass"), F }, frontWall = { F, K("WallWindow"), K("WallWindow"), K("WallWindow"), F },
+			doorWall = { F, K("WallGlass"), gap(24), K("WallGlass"), F }, frontWall = { F, K("WallWindow"), K("WallWindow"), K("WallWindow"), F },
 			sideWall = { F, K("WallWindow"), K("WallWindow"), F }, backWall = { F, K("WallWindow"), F } } },
-		door = { half = 4.5, top = 9, lanePiece = "WallDoor" },
+		door = { half = 4.5, top = 9 }, -- the stretched WallDoor, as in the Small Office
 		extras = {
-			{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },
-			{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },
-			{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },
+			{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },
+			{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 },
+			{ key = "Plant", x = -15.5, y = -1, z = 34, turn = 0 },
+			{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },
 		},
 		furniture = {
 			{ key = "ReceptionDesk", side = "left", along = 16 },
@@ -320,14 +326,15 @@ PlotBuilding.Stages = {
 			{ key = "Shelf", side = "back", along = 18 },
 		},
 	},
-	{ -- 4 Small Corporate: four stories of blue glass, a darker crown, a revolving door between two pillars
+	{ -- 4 Small Corporate: four stories of blue glass, a darker crown, an open entrance between two pillars
 		key = "SeriesB", bandFloor = true, name = "Small Corporate",
 		masses = { { half = 40, back = -40, front = 32.2, from = 1, to = 4, roofEdge = true, ceiling = true,
 			doorWall = { F, K("WallGlass"), gap(10), K("WallGlass"), F }, frontWall = { F, K("WallGlass"), K("WallGlass"), K("WallGlass"), K("WallGlass"), F },
 			sideWall = { F }, backWall = { F } } },
-		door = { half = 5, top = 11, lanePiece = "RevolvingDoor" },
+		-- An open entrance 10 wide. No RevolvingDoor: on the lane players walked through its middle post, and beside the
+		-- doorway (10 x 10) it would cut through the glass wall or reach past z 40.
+		door = { half = 5, top = 11 },
 		extras = {
-			{ key = "RevolvingDoor", x = 0, y = -1, z = 35, turn = 0, lane = true }, -- a vestibule in front of the doorway (z 30 to 40)
 			{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 }, -- a band over the door (P3: pillars below)
 			{ key = "Corner", x = -6, y = -1, z = 33.2, turn = 0 },
 			{ key = "Corner", x = 6, y = -1, z = 33.2, turn = 0 },
@@ -550,7 +557,7 @@ function PlotBuilding.layout(stage)
 		solid("FrontLeft", -h + W, -door.half, GR, top1, front - W, front),
 		solid("FrontRight", door.half, h - W, GR, top1, front - W, front),
 		solid("Lintel", -door.half, door.half, door.top, top1, front - W, front), -- from the door's top (above the floor top)
-		solid("Roof", -h + W, h - W, top1 - 1, top1, back + W, front - W),
+		solid("Roof", -h + W, h - W, top1 - PlotBuilding.ROOF, top1, back + W, front - W), -- from 12.5 on one story: over a jump
 	}
 	for _, b2 in ipairs(bandBoxes) do
 		table.insert(boxes, b2)
@@ -559,7 +566,9 @@ function PlotBuilding.layout(stage)
 	local inside = {
 		minX = -h + W, maxX = h - W, minZ = back + W, maxZ = front - W,
 		minY = -PlotBuilding.Inside.floorBelow, maxY = GR + ST - 1, -- the ground floor's ceiling
-		doorMinX = -door.half, doorMaxX = door.half, doorDepth = W + PlotBuilding.APRON, margin = PlotBuilding.Inside.margin,
+		-- the doorway and the apron count as inside only as wide as the lane (the Garage's door is 20 wide): the claim post
+		-- (x 6 to 10) is never inside, so the shell never fades for someone standing at it
+		doorMinX = -PlotBuilding.Lane.half, doorMaxX = PlotBuilding.Lane.half, doorDepth = W + PlotBuilding.APRON, margin = PlotBuilding.Inside.margin,
 	}
 	return {
 		stage = shown, key = def.key, name = def.name, pieces = pieces, boxes = boxes, inside = inside, furniture = furniture,

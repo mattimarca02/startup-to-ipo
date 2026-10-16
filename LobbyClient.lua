@@ -68,14 +68,16 @@ end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner)
 placeBanner()
 
--- The marker over the nearest free garage's claim post (this client only)
+-- The marker over the nearest free garage's claim post (this client only). A BillboardGui goes straight in PlayerGui
+-- (inside a ScreenGui it would not show in the world); it is hidden on its own when the banner hides.
 local marker = make("BillboardGui", {
 	Name = "FreeGarageMarker",
 	Size = UDim2.fromOffset(120, 60),
 	StudsOffset = Vector3.new(0, 7, 0),
 	AlwaysOnTop = true,
+	ResetOnSpawn = false,
 	Enabled = false,
-	Parent = gui,
+	Parent = player:WaitForChild("PlayerGui"),
 })
 make("TextLabel", {
 	Size = UDim2.fromScale(1, 1),
@@ -92,14 +94,16 @@ local function onPlaza()
 	return player:GetAttribute("Garage") == 0
 end
 
--- The claim post of the nearest garage that is Free, or nil
+-- The claim post of the nearest garage that is Free, or nil. Each post stands in its garage's ClaimSpot, a Persistent
+-- model, so it is here even with streaming on and the garage far away.
 local function nearestFreePost()
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local garages = workspace:FindFirstChild("Garages")
 	if not (root and garages) then return nil end
 	local best, bestDistance = nil, math.huge
 	for _, garage in ipairs(garages:GetChildren()) do
-		local post = garage:FindFirstChild("ClaimPost")
+		local spot = garage:FindFirstChild("ClaimSpot")
+		local post = spot and spot:FindFirstChild("ClaimPost")
 		if post and garage:GetAttribute("State") == "Free" then
 			local d = (post.Position - root.Position).Magnitude
 			if d < bestDistance then

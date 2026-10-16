@@ -1,5 +1,7 @@
 # Studio sync master list: everything for Studio in one session
 
+> **Out of date (lobby-all, 2026-10-16).** This list is Integration 2's. Since then: `WorldArt` and `WorldVisuals` are no longer PASTE LATER (TycoonCore requires them when `LobbyConfig.ClaimEnabled` is on: lobby L4), and five scripts are new (`LobbyConfig`, `PlotBuilding`, `PlotBuildingVisuals`, `BuildingClient`, `LobbyClient`). Its hash block (section 6) now says `DIFFERENT` for 10 scripts: the 6 that branch `lobby-all` changes (`TycoonCore`, `ShopServer`, `ShopClient`, `IpoClient`, `WorldArt`, `WorldVisuals`) and the 4 that lobby L1 changed on `main` (`EmployeeServer`, `IpoServer`, `PlotVisuals`, `EmployeeClient`). For those scripts use docs/STUDIO_SYNC_LOBBY.md (its L1 section, then section "Lobby all"): its table and hash block are current. The other 23 rows here are still right.
+
 The one list for putting **Integration 2** into Studio in one sitting: Integration 1 (design docs, sims, customize PR 1) plus `hud-cash`, `task-needs-desk`, `world-icons-pass` and `shop-build`. It covers every `.lua` file at the repo root. Written on branch `integration-2` at merge commit `8e41718` (the four merges; this file is the only commit after it). Nothing here touches Roblox by itself: it is what the owner does in Studio, by hand. No Studio and no MCP was used to write it.
 
 **How the numbers were made:** each SHA-256 was computed from the real file on the merged tree three ways: the Luau `sha256` of docs/STUDIO_SYNC.md (run in the `luau` tool), `sha256sum` and Python's `hashlib`. All 33 agree. Every file uses `\n` line endings and ends with one newline. The hash block in section 6 was run in `luau` against the real files with a fake `game` (see "What was checked").
@@ -34,7 +36,7 @@ The Studio MCP can't create a script inside a service, so create these by hand. 
 
 **Made by earlier syncs. Create only if the hash block says `MISSING`:** `PlotArt` and `PlotVisuals` (ModuleScript, ServerScriptService; docs/STUDIO_SYNC.md (c)), `TaskConfig` (ModuleScript, ReplicatedStorage), `TaskServer` (ModuleScript, ServerScriptService), `TaskClient` (LocalScript, StarterPlayer > StarterPlayerScripts; docs/PUBLISH_RULES.md 2b).
 
-**PASTE LATER (only when wired, or now for the previews):** `IconArt`, `IconVisuals` (ModuleScript, ReplicatedStorage), `WorldArt`, `WorldVisuals` (ModuleScript, ServerScriptService).
+**PASTE LATER (only when wired, or now for the previews):** `IconArt`, `IconVisuals` (ModuleScript, ReplicatedStorage), `WorldArt`, `WorldVisuals` (ModuleScript, ServerScriptService). (Out of date: with lobby-all, `WorldArt` and `WorldVisuals` are pasted now, from docs/STUDIO_SYNC_LOBBY.md "Lobby all"; see the note at the top.)
 
 ## 3. The list (paste in any order)
 
@@ -124,6 +126,8 @@ Already written down. Nothing here is new; check them, don't change them:
 - **Max Players: 6** (a place setting, docs/PUBLISH_RULES.md section 1). Check it after every publish.
 
 ## 6. Hash check (command bar): all 33 scripts (run it after you commit the drafts)
+
+> **Out of date (lobby-all):** on a place synced to branch `lobby-all` this block prints `DIFFERENT` for 10 scripts (see the note at the top). That is expected: check those with docs/STUDIO_SYNC_LOBBY.md's hash blocks instead.
 
 Paste the whole block into **View > Command Bar** and press Enter. It changes nothing. It prints one line per script, in the table's order: `OK`, `DIFFERENT` (paste the file again), `MISSING` (create it, section 2) or `WRONG CLASS` (delete it and create it again with the right class). The last line must say `ALL OK: 29 of 29 PASTE NOW scripts match the repo`. The four PASTE LATER lines may say `MISSING (PASTE LATER: not needed yet)`. Studio may drop a script's last newline or add one more, and the block accepts both cases (the same rule as docs/STUDIO_SYNC_SHOP.md (d)).
 

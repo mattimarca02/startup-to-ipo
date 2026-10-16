@@ -27,6 +27,8 @@ PlotBuildingVisuals.TAG = "PlotBuilding" -- CollectionService tag on the Model: 
 PlotBuildingVisuals.GROUPS = { Fade = true, Static = true, Solid = true }
 
 local OVERLAP = 0.01 -- parts must go this far into a box to count as inside it
+local STRETCH_EPS = 1e-3 -- a stretch this close to 1 is float noise (a KitSize of 15.9999), never a real stretch
+local PIVOT_EPS = 0.05 -- checkKit: a model's WorldPivot this close to the bottom-center of its parts is fine
 
 -- The pure maths ---------------------------------------------------------------------------------------------------
 -- No services, no Instances: they run the same in the tests (a fake Roblox) and in BuildingClient, which carries a copy
@@ -154,11 +156,15 @@ local function pieceFrame(origin, piece)
 end
 PlotBuildingVisuals.pieceFrame = pieceFrame
 
+local function stretched(s)
+	return math.abs(s - 1) > STRETCH_EPS
+end
+
 -- The stretch a piece may have: only PlotBuilding.STRETCH keys, only on their axes. Anything else is built at kit size.
 local function stretchOf(building, piece)
 	local allowed = building.STRETCH[piece.key]
 	local sx, sz = piece.sx or 1, piece.sz or 1
-	if (sx ~= 1 and not (allowed and allowed.x)) or (sz ~= 1 and not (allowed and allowed.z)) then
+	if (stretched(sx) and not (allowed and allowed.x)) or (stretched(sz) and not (allowed and allowed.z)) then
 		warnOnce("stretch " .. piece.key, piece.key .. " may not be stretched: built at its kit size")
 		return 1, 1
 	end
@@ -247,22 +253,28 @@ local function buildKit(parent, origin, building, stage, piece, template)
 		if d:IsA("MeshPart") then
 			local rel = pivot:ToObjectSpace(d.CFrame)
 			local partSize = d.Size
-			if sx ~= 1 or sz ~= 1 then
+			if stretched(sx) or stretched(sz) then
 				local ax, az = alignedAxis(rel, 1), alignedAxis(rel, 3)
-				if (sx ~= 1 and not ax) or (sz ~= 1 and not az) then
+				if (stretched(sx) and not ax) or (stretched(sz) and not az) then
 					for _, p in ipairs(made) do
 						p:Destroy()
 					end
 					return nil, "a part is not square to the model, so it can't be stretched"
 				end
 				local s = { partSize.X, partSize.Y, partSize.Z }
-				if ax then s[ax] *= sx end
-				if az then s[az] *= sz end
+				if ax and stretched(sx) then s[ax] *= sx end
+				if az and stretched(sz) then s[az] *= sz end
 				partSize = Vector3.new(s[1], s[2], s[3])
 				local x, y, z = rel:GetComponents()
-				rel = CFrame.new(x * sx, y, z * sz) * rel.Rotation
+				rel = CFrame.new(stretched(sx) and x * sx or x, y, stretched(sz) and z * sz or z) * rel.Rotation
 			end
 			local part = d:Clone()
+			if not part then -- Archivable is off: Roblox's Clone gives nil
+				for _, p in ipairs(made) do
+					p:Destroy()
+				end
+				return nil, "a MeshPart can't be copied (" .. d.Name .. ": Archivable is off)"
+			end
 			for _, child in ipairs(part:GetChildren()) do
 				child:Destroy() -- only the MeshPart itself
 			end
@@ -413,7 +425,8 @@ end
 
 -- After a stage change: a character standing where a solid box now is (a visitor in the old building's furniture band
 -- when an IPO brings back the Garage) is moved to `landing` (a CFrame inside the room). roots = HumanoidRootParts.
--- Returns how many were moved.
+-- The roof never counts: it is overhead, and a player under it in the middle of a jump is not trapped. Returns how many
+-- were moved.
 function PlotBuildingVisuals.unstick(model, roots, landing)
 	local solid = model and model:FindFirstChild("Solid")
 	local frame = model and model:GetAttribute("Frame")
@@ -422,7 +435,7 @@ function PlotBuildingVisuals.unstick(model, roots, landing)
 	end
 	local boxes = {}
 	for _, part in ipairs(solid:GetChildren()) do
-		if part:IsA("BasePart") then
+		if part:IsA("BasePart") and part:GetAttribute("Piece") ~= "Roof" then
 			table.insert(boxes, boxOf(frame:ToObjectSpace(part.CFrame), part.Size))
 		end
 	end
@@ -444,7 +457,8 @@ end
 -- Checks -----------------------------------------------------------------------------------------------------------
 
 -- Problems of ReplicatedStorage.KitModels against the manifest (empty list = fine): every key a Model, KitSize within
--- 0.05 of the manifest's size, its MeshParts' roles exactly the manifest's, nothing but MeshParts in it.
+-- 0.05 of the manifest's size, its MeshParts' roles exactly the manifest's (one MeshPart per role), its WorldPivot the
+-- bottom-center of its MeshParts (within 0.05: the builder stands every piece on it), nothing but MeshParts in it.
 function PlotBuildingVisuals.checkKit(folder, manifest)
 	local problems = {}
 	local function problem(text)
@@ -478,6 +492,8 @@ function PlotBuildingVisuals.checkKit(folder, manifest)
 				end
 			end
 			local seen, other = {}, {}
+			local pivot = model.WorldPivot
+			local bounds = { math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge }
 			for _, d in ipairs(model:GetDescendants()) do
 				if d:IsA("MeshPart") then
 					local role = d:GetAttribute("Role")
@@ -485,8 +501,15 @@ function PlotBuildingVisuals.checkKit(folder, manifest)
 						problem(key .. "." .. d.Name .. ": no Role attribute")
 					elseif not entry.roles[role] then
 						problem(key .. "." .. d.Name .. ": role " .. role .. " is not in the manifest")
+					elseif seen[role] then
+						problem(key .. "." .. d.Name .. ": a second MeshPart with role " .. role .. " (one per role)")
 					else
 						seen[role] = true
+					end
+					local b = boxOf(pivot:ToObjectSpace(d.CFrame), d.Size)
+					for k = 1, 5, 2 do
+						bounds[k] = math.min(bounds[k], b[k])
+						bounds[k + 1] = math.max(bounds[k + 1], b[k + 1])
 					end
 				else
 					table.insert(other, d.ClassName .. " " .. d.Name)
@@ -499,6 +522,13 @@ function PlotBuildingVisuals.checkKit(folder, manifest)
 			end
 			if #other > 0 then
 				problem(key .. ": not only MeshParts (" .. table.concat(other, ", ") .. "; the game leaves them out)")
+			end
+			if bounds[1] <= bounds[2] then
+				local cx, cz, bottom = (bounds[1] + bounds[2]) / 2, (bounds[5] + bounds[6]) / 2, bounds[3]
+				if math.abs(cx) > PIVOT_EPS or math.abs(bottom) > PIVOT_EPS or math.abs(cz) > PIVOT_EPS then
+					problem(string.format("%s: WorldPivot is not the bottom-center of its parts (the parts' bottom-center is at %.2f, %.2f, %.2f from it)",
+						key, cx, bottom, cz))
+				end
 			end
 		end
 	end

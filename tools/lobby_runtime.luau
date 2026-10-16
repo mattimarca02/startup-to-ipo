@@ -1,5 +1,6 @@
 -- The whole real TycoonCore.lua, run in a fake Roblox with a clock the test moves (lobby L3). Each scenario boots a fresh
--- server: its own players, DataStore (with a read and a write delay, and failures), modules and scheduler.
+-- server: its own players, DataStore (with a read and a write delay, and failures), modules and scheduler. The receipt
+-- scenarios (section 7) also run the real ShopServer.lua and ShopConfig.lua, wired to TycoonCore as in the game.
 local print_real = print
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -48,8 +49,18 @@ local function typeof(v)
 	if type(v) == "table" and rawget(v, "_children") then return "Instance" end
 	return type(v)
 end
+-- What a DataStore keeps: a full copy (like Roblox's, which serializes), never a table the game still holds
+local function deepCopy(v)
+	if type(v) ~= "table" then return v end
+	local out = {}
+	for k, x in pairs(v) do out[deepCopy(k)] = deepCopy(x) end
+	return out
+end
 local function enum(names) local t = {} for _, n in ipairs(names) do t[n] = { Name = n } end return t end
-local Enum = { Material = enum({ "SmoothPlastic", "Metal", "Neon", "Plastic", "Marble", "Concrete" }), SurfaceType = enum({ "Smooth" }), Font = enum({ "GothamBold" }) }
+local Enum = { Material = enum({ "SmoothPlastic", "Metal", "Neon", "Plastic", "Marble", "Concrete", "Glass", "Fabric" }), SurfaceType = enum({ "Smooth" }),
+	Font = enum({ "GothamBold" }), NormalId = enum({ "Back", "Front" }), ModelStreamingMode = enum({ "Default", "Atomic", "Persistent" }),
+	ProductPurchaseDecision = enum({ "PurchaseGranted", "NotProcessedYet" }) }
+local GRANTED, NOT_YET = Enum.ProductPurchaseDecision.PurchaseGranted, Enum.ProductPurchaseDecision.NotProcessedYet
 local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end, new = function(r, g, b) return { r, g, b } end }
 local UDim2 = { fromOffset = function(x, y) return { x, y } end, fromScale = function(x, y) return { x, y } end }
 
@@ -128,6 +139,10 @@ local function newWorld(opts)
 		if class == "IntValue" then o._props.Value = 0 end
 		if class == "ProximityPrompt" then o._props.Triggered = signal() o._props.Enabled = true end
 		if class == "BillboardGui" then o._props.Enabled = true end
+		if class == "Model" then o._props.ModelStreamingMode = Enum.ModelStreamingMode.Default end
+		if class == "RemoteEvent" then -- ShopServer's pop-up messages (the real ShopServer's notify)
+			o._props.FireClient = function(_, player, text) table.insert(W.notes, { player = player, text = text }) end
+		end
 		return o
 	end
 	W.new = new
@@ -146,11 +161,18 @@ local function newWorld(opts)
 	function M.IsA(t, class) return t.ClassName == class or (class == "BasePart" and t.ClassName == "Part") end
 	function M.GetDescendants(t) local out = {} local function walk(n) for _, c in ipairs(n._children) do table.insert(out, c) walk(c) end end walk(t) return out end
 	local oldIndex = Mt.__index
+	local EVENTS = { DescendantAdded = true, Touched = true } -- events nothing here fires (ShopServer connects to them)
 	Mt.__index = function(t, k)
 		if k == "ChildAdded" then
 			local s = rawget(t, "_childAdded")
 			if not s then s = signal() rawset(t, "_childAdded", s) end
 			return s
+		end
+		if EVENTS[k] then
+			local events = rawget(t, "_events") or {}
+			rawset(t, "_events", events)
+			events[k] = events[k] or signal()
+			return events[k]
 		end
 		return oldIndex(t, k)
 	end
@@ -163,34 +185,47 @@ local function newWorld(opts)
 	W.Players._props.MaxPlayers = opts.maxPlayers or 6
 	W.Players._props.GetPlayers = function() local out = {} for _, p in ipairs(W.players) do if p.Parent == W.Players then table.insert(out, p) end end return out end
 	W.Players._props.GetPlayerFromCharacter = function(_, ch) for _, p in ipairs(W.players) do if p.Character == ch then return p end end return nil end
+	W.Players._props.GetPlayerByUserId = function(_, id) for _, p in ipairs(W.players) do if p.Parent == W.Players and p.UserId == id then return p end end return nil end
 	W.store_api = {
 		GetAsync = function(_, key)
 			W.reads += 1
 			W.task.wait(W.readDelay)
 			if W.readFail then error("read failed (test)") end
-			local v = W.store[key]
-			return v and table.clone(v) or nil
+			return deepCopy(W.store[key])
 		end,
 		SetAsync = function(_, key, value)
 			W.task.wait(W.writeDelay)
 			if W.writeFail then error("write failed (test)") end
-			W.store[key] = table.clone(value)
+			W.store[key] = deepCopy(value)
 			table.insert(W.writes, { key = key, at = W.NOW, value = value })
 		end,
 	}
-	local DataStoreService = { GetDataStore = function() return W.store_api end }
+	local DataStoreService = { GetDataStore = function()
+		if opts.noStore then error("no API access (test)") end -- Studio with API access off
+		return W.store_api
+	end }
 	local RunService = { IsStudio = function() return opts.studio == true end }
 	W.ReplicatedStorage = new("ReplicatedStorage")
 	W.ServerScriptService = new("ServerScriptService")
+	-- What the real ShopServer asks Roblox: nobody owns a pass, paid random items are allowed, products are the receipts
+	-- the test sends to MarketplaceService.ProcessReceipt (set by ShopServer.init)
+	W.Marketplace = { PromptGamePassPurchaseFinished = signal(), UserOwnsGamePassAsync = function() return false end, PromptGamePassPurchase = function() end }
+	local PolicyService = { GetPolicyInfoForPlayerAsync = function() return { ArePaidRandomItemsRestricted = false } end }
+	local PhysicsService = { IsCollisionGroupRegistered = function() return true end, RegisterCollisionGroup = function() end, CollisionGroupSetCollidable = function() end }
+	local guids = 0
+	local HttpService = { GenerateGUID = function() guids += 1 return "GUID-" .. guids end }
 	local services = { Players = W.Players, DataStoreService = DataStoreService, ReplicatedStorage = W.ReplicatedStorage, RunService = RunService,
-		ServerScriptService = W.ServerScriptService, Workspace = W.workspace }
+		ServerScriptService = W.ServerScriptService, Workspace = W.workspace, MarketplaceService = W.Marketplace, PolicyService = PolicyService,
+		PhysicsService = PhysicsService, HttpService = HttpService }
 	W.game = { GetService = function(_, name) return services[name] or error("no service " .. name) end, BindToClose = function(_, fn) W.closeFn = fn end }
 
-	-- Modules: real IpoConfig and LobbyConfig, fake server modules that fill their save section
-	local function module(parent, name, value)
+	-- Modules: real IpoConfig and LobbyConfig, fake server modules that fill their save section (opts.realShop: the real
+	-- ShopServer and ShopConfig instead of the fake shop; opts.brokenBuilding: a PlotBuildingVisuals whose sync errors)
+	local function module(parent, name, value, loader)
 		local m = new("ModuleScript")
 		m.Name = name
 		m._module = value
+		m._loader = loader
 		m.Parent = parent
 	end
 	local lobby = (LOBBY_SOURCE)()
@@ -201,6 +236,19 @@ local function newWorld(opts)
 	module(W.ReplicatedStorage, "LobbyConfig", lobby)
 	local sections = { ShopServer = "shop", EmployeeServer = "team", PoachServer = "poach", IpoServer = "ipo", OnboardingServer = "onboarding",
 		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex" }
+	if opts.realShop then
+		sections.ShopServer = nil
+		W.ShopConfig = (SHOPCONFIG_SOURCE)()
+		module(W.ReplicatedStorage, "ShopConfig", W.ShopConfig)
+		module(W.ServerScriptService, "ShopServer", nil, function()
+			return SHOP_SOURCE(W.game, W.script, W.workspace, W.task, W.os, W.warn, W.require, function(class) return new(class) end,
+				Enum, Vector3, CFrame, Color3, UDim2, typeof)
+		end)
+	end
+	if opts.brokenBuilding then
+		module(W.ServerScriptService, "PlotBuildingVisuals", { sync = function() error("the building broke (test)") end, unstick = function() return 0 end })
+		module(W.ServerScriptService, "PlotBuilding", { KIT_FOLDER = "KitModels" })
+	end
 	W.mods = {}
 	for name, section in pairs(sections) do
 		local m = {}
@@ -218,13 +266,22 @@ local function newWorld(opts)
 		W.mods[name] = m
 		module(W.ServerScriptService, name, m)
 	end
-	W.mods.ShopServer.notify = function(player, text) table.insert(W.notes, { player = player, text = text }) end
-	W.mods.ShopServer.getCashMultiplier = function() return 1 end
+	if W.mods.ShopServer then
+		W.mods.ShopServer.notify = function(player, text) table.insert(W.notes, { player = player, text = text }) end
+		W.mods.ShopServer.getCashMultiplier = function() return 1 end
+	end
 	W.mods.IpoServer.getMultiplier = function() return 1 end
 	W.mods.IpoServer.perk = function() return 0 end
 	W.mods.EmployeeServer.getIncome = function() return 0 end
 	W.mods.EmployeeServer.countEggs = function() return 0 end
-	W.require = function(m) if not m then error("require of nothing") end return m._module end
+	W.require = function(m)
+		if not m then error("require of nothing") end
+		if m._loader then -- a real module's source: run once, like Roblox's require
+			m._module = m._loader()
+			m._loader = nil
+		end
+		return m._module
+	end
 	W.script = { Parent = W.ServerScriptService }
 
 	-- Players and characters
@@ -270,12 +327,21 @@ end
 local function noteFor(W, p) local out = {} for _, n in ipairs(W.notes) do if n.player == p then table.insert(out, n.text) end end return out end
 local function lastNote(W, p) local n = noteFor(W, p) return n[#n] end
 local function garage(W, slot) return W.workspace:FindFirstChild("Garages"):FindFirstChild("Garage" .. slot) end
-local function postOf(W, slot) return garage(W, slot):FindFirstChild("ClaimPost") end
+local function postOf(W, slot) return garage(W, slot):FindFirstChild("ClaimSpot"):FindFirstChild("ClaimPost") end
 local function promptOf(W, slot) return postOf(W, slot):FindFirstChildOfClass("ProximityPrompt") end
 local function nearPost(W, slot) return postOf(W, slot).Position + Vector3.new(3, 0, 0) end
 local function hold(W, p, slot) promptOf(W, slot).Triggered:Fire(p) end
 local function stateOf(W, slot) return garage(W, slot):GetAttribute("State") end
 local function noCrash(W, label) check(label .. ": no error in the server (" .. #W.crashes .. ")", #W.crashes == 0, W.crashes[1]) end
+-- A player's leaderstats value, nil-safe (a broken TycoonCore may make a second, empty leaderstats: the test must not crash)
+local function stat(p, name)
+	for _, c in ipairs(p:GetChildren()) do
+		if c.Name == "leaderstats" and c:FindFirstChild(name) then return c:FindFirstChild(name) end
+	end
+	return nil
+end
+local function cashOf(p) local v = stat(p, "Cash") return v and v.Value or -1 end
+local function setCash(p, value) local v = stat(p, "Cash") if v then v.Value = value end end
 local PLAZA = Vector3.new(0, 4, 175)
 -- A player on the plaza walks up to a garage's claim post
 local function walkTo(W, p, slot)
@@ -290,6 +356,15 @@ do
 	local H = W.H
 	check("plaza: the server starts with six Free garages, each with its prompt on", (function()
 		for s = 1, 6 do if stateOf(W, s) ~= "Free" or not promptOf(W, s).Enabled then return false end end return true end)())
+	check("plaza: each garage's claim post and lamp stand in its ClaimSpot, a Persistent model (with streaming on every client has every post)",
+		(function()
+			for s = 1, 6 do
+				local spot = garage(W, s):FindFirstChild("ClaimSpot")
+				if not (spot and spot.ModelStreamingMode == Enum.ModelStreamingMode.Persistent and spot:FindFirstChild("ClaimPost") and spot:FindFirstChild("FreeLamp")) then return false end
+				if garage(W, s):FindFirstChild("ClaimPost") or garage(W, s):FindFirstChild("FreeLamp") then return false end
+			end
+			return true
+		end)())
 	local ana = W.join("Ana", 11, Vector3.new(-1, 3, -1))
 	W.run(0.5)
 	check("plaza: a joining player gets no garage, no leaderstats, no data, and nothing is read", H.inPlaza[ana] == true and H.playerData[ana] == nil
@@ -315,7 +390,7 @@ do
 	W.run(2)
 	local data = H.playerData[ana]
 	check("load: the save is read once in the claim and loaded (Cash 500, the Desk), data.loaded and data.ready set",
-		data and data.loaded == true and data.ready == true and data.owned.Desk == true and ana.leaderstats.Cash.Value >= 500 and W.reads == 1, W.reads)
+		data and data.loaded == true and data.ready == true and data.owned.Desk == true and cashOf(ana) >= 500 and W.reads == 1, W.reads)
 	check("load: the garage shows Taken with the owner's name", stateOf(W, 3) == "Taken" and garage(W, 3):GetAttribute("OwnerName") == "Ana")
 	check("load: the claim's player lands in their garage on the next spawn", (function()
 		local ch, r = W.character(Vector3.new(0, 3, 175))
@@ -397,7 +472,7 @@ do
 	walkTo(W, old, 1)
 	hold(W, old, 1)
 	W.run(3)
-	old.leaderstats.Cash.Value = 7777
+	setCash(old, 7777)
 	W.writeDelay = 12 -- the leave save takes longer than the 7 s re-read
 	W.leave(old)
 	W.run(0.5)
@@ -413,8 +488,8 @@ do
 	hold(W, again, 2)
 	W.run(12)
 	local data = H.playerData[again]
-	check("rejoin: now the claim works, and its read sees the leave save (Cash 7777, not the older 100)", data and data.ready and again.leaderstats.Cash.Value >= 7777,
-		data and again.leaderstats.Cash.Value)
+	check("rejoin: now the claim works, and its read sees the leave save (Cash 7777, not the older 100)", data and data.ready and cashOf(again) >= 7777,
+		data and cashOf(again))
 	noCrash(W, "rejoin")
 end
 
@@ -459,6 +534,7 @@ do
 	W.run(3)
 	check("failed setup: the player is kicked, nothing saved, the garage Free again", W.kicks[p] ~= nil and #W.writes == 0 and stateOf(W, 6) == "Free"
 		and H.claims[72] == nil)
+	noCrash(W, "failed setup")
 end
 
 -- 5. Claim off (it ships off): today's behaviour through the same claim -------------------------------------------------------
@@ -475,7 +551,7 @@ do
 	W.run(2)
 	local root = p.Character:FindFirstChild("HumanoidRootPart")
 	check("claim off: the player is sent into their garage (not left on the plaza)", (root.Position - Vector3.new(-225, 4.5, 162)).Magnitude < 0.01, tostring(root.Position.X))
-	check("claim off: the save loads as before (Cash 42)", H.playerData[p] and H.playerData[p].ready and p.leaderstats.Cash.Value >= 42)
+	check("claim off: the save loads as before (Cash 42)", H.playerData[p] and H.playerData[p].ready and cashOf(p) >= 42)
 	local others = {}
 	for i = 2, 6 do table.insert(others, W.join("O" .. i, 90 + i)) end
 	W.run(3)
@@ -506,6 +582,7 @@ do
 	check("claim off: after 30 s with no free garage the joiner still waits", late.Parent ~= nil and W.kicks[late] == nil)
 	W.run(32)
 	check("claim off: after 60 s with no free garage, the old \"server is full\" kick", W.kicks[late] == W.LobbyConfig.Texts.Full)
+	noCrash(W, "60 s kick")
 end
 
 -- 6. Joined while the script started: set up once ---------------------------------------------------------------------
@@ -526,6 +603,7 @@ do
 	for s = 1, 6 do if H.plotOwners[s] == p then owned += 1 end end
 	check("early joiner: a player already in the server when the script starts is set up once (one garage, one load, never kicked)",
 		owned == 1 and W.reads == 1 and W.kicks[p] == nil and p.Parent == W.Players, owned .. " " .. W.reads .. " " .. tostring(W.kicks[p]))
+	noCrash(W, "early joiner")
 end
 check("config: LobbyConfig has one garage per slot (#Garages == MAX_PLOTS == 6), in the row and in the ring",
 	#(LOBBY_SOURCE)().Garages == 6 and #(LOBBY_SOURCE)().Row == 6 and #(LOBBY_SOURCE)().Ring == 6)
@@ -535,39 +613,211 @@ do
 		and L.Garages == (L.ClaimEnabled and L.Ring or L.Row))
 end
 
--- 7. A Robux receipt before the claim (ShopServer's real waitForData, cut out of ShopServer.lua) ----------------------------
+-- 7. Robux receipts: the real ShopServer (ProcessReceipt, waitForData, grantProduct) with the real TycoonCore ----------------
+-- A receipt runs in its own thread, like Roblox's ProcessReceipt callback; box.decision stays "pending" while it waits.
+local function receipt(W, userId, purchaseId)
+	local box = { decision = "pending" }
+	W.go(function()
+		box.decision = W.Marketplace.ProcessReceipt({ PlayerId = userId, ProductId = W.ShopConfig.getProduct("CashSmall").id, PurchaseId = purchaseId })
+	end)
+	return box
+end
+local function savedReceipts(W, userId)
+	local saved = W.store["player_" .. userId]
+	local n = {}
+	for _, id in ipairs(saved and saved.shop and saved.shop.receipts or {}) do n[id] = (n[id] or 0) + 1 end
+	return n
+end
 do
-	local W = newWorld({})
-	local task, os = W.task, W.os
-	local DATA_WAIT_SECONDS = 30
-	local claimedAt, ready = nil, nil
-	local core = { getData = function() return ready end, claimedAt = function() return claimedAt end }
-	local player = { Parent = true }
-	local waitForData
-	do
-__WAITFORDATA__
-	end
-	local got, doneAt = "pending", nil
-	W.go(function() got = waitForData(player) doneAt = W.NOW end)
+	local W = newWorld({ claim = true, realShop = true, save = { player_201 = { cash = 0, owned = {}, lastSeen = 0 } } })
+	W.boot()
+	local H = W.H
+	local pack = W.ShopConfig.cashPackAmount(W.ShopConfig.getProduct("CashSmall"), 0) -- a new company's income is 0: the pack's minimum
+	check("receipt: the real ShopServer is wired to the real TycoonCore (ProcessReceipt set, the claim's time hook given)",
+		type(W.Marketplace.ProcessReceipt) == "function" and pack > 0)
+	local p = W.join("Rae", 201, PLAZA)
+	W.run(0.2)
+	local first = receipt(W, 201, "P-1")
 	W.run(120)
-	check("receipt: a player on the plaza with no garage: the receipt keeps waiting (no deadline before the claim)", got == "pending")
-	claimedAt = W.NOW
+	check("receipt: a player on the plaza with no garage: the receipt keeps waiting (no deadline before the claim)", first.decision == "pending"
+		and #W.writes == 0, tostring(first.decision))
+	walkTo(W, p, 2)
+	hold(W, p, 2)
+	W.run(0.05)
+	check("receipt: right after the claim, while the save loads, the receipt still waits (it never grants on a save that is not ready)",
+		first.decision == "pending", first.decision ~= "pending" and first.decision.Name or nil)
 	W.run(5)
-	ready = { ready = true, loaded = true }
-	W.run(1)
-	check("receipt: after the claim, once the save is ready, the receipt goes on (it is granted then, once: the receipt list)", type(got) == "table" and got.ready == true)
-	local got2 = "pending"
-	ready, claimedAt = nil, W.NOW
-	W.go(function() got2 = waitForData(player) end)
-	W.run(29)
-	check("receipt: from the claim it waits up to 30 s", got2 == "pending")
+	local data = H.playerData[p]
+	check("receipt: after the claim, once the save has loaded, it is granted once and saved with its PurchaseId",
+		first.decision == GRANTED and data and data.ready and cashOf(p) == pack and savedReceipts(W, 201)["P-1"] == 1
+		and W.store.player_201.cash == pack, tostring(first.decision ~= "pending" and first.decision.Name or first.decision) .. " cash " .. tostring(cashOf(p)))
+	local again = receipt(W, 201, "P-1")
 	W.run(2)
-	check("receipt: 30 s after the claim with no save, it gives up (NotProcessedYet: Roblox asks again later)", got2 == nil)
-	local got3 = "pending"
-	player.Parent = nil
-	W.go(function() got3 = waitForData(player) end)
+	check("receipt: the same PurchaseId again is not granted twice (granted, the Cash and the saved id only once)",
+		again.decision == GRANTED and cashOf(p) == pack and savedReceipts(W, 201)["P-1"] == 1, cashOf(p))
+	W.writeFail = true
+	local failing = receipt(W, 201, "P-2")
+	W.run(2)
+	check("receipt: a failed save gets NotProcessedYet (Roblox asks again later)", failing.decision == NOT_YET and savedReceipts(W, 201)["P-2"] == nil,
+		tostring(failing.decision ~= "pending" and failing.decision.Name or failing.decision))
+	W.writeFail = false
+	local retry = receipt(W, 201, "P-2")
+	W.run(2)
+	check("receipt: Roblox's retry after the failed save is granted, and the reward was given only once", retry.decision == GRANTED
+		and cashOf(p) == 2 * pack and savedReceipts(W, 201)["P-2"] == 1, cashOf(p))
+	local nobody = receipt(W, 299, "P-3")
+	W.run(0.1)
+	check("receipt: a receipt for someone not in the server gets NotProcessedYet at once", nobody.decision == NOT_YET)
+	noCrash(W, "receipts")
+end
+do
+	local W = newWorld({ claim = true, realShop = true })
+	W.boot()
+	local p = W.join("Sam", 202, PLAZA)
+	W.run(0.2)
+	local box = receipt(W, 202, "P-4")
+	W.run(10)
+	W.leave(p)
 	W.run(1)
-	check("receipt: a player who left stops the wait", got3 == nil)
+	check("receipt: a player who leaves before claiming gets NotProcessedYet (nothing granted, nothing saved)", box.decision == NOT_YET and #W.writes == 0,
+		tostring(box.decision ~= "pending" and box.decision.Name or box.decision))
+	noCrash(W, "receipt, left on the plaza")
+end
+do
+	local W = newWorld({ claim = true, realShop = true, readDelay = 40 })
+	W.boot()
+	local p = W.join("Tia", 203, PLAZA)
+	W.run(0.2)
+	local box = receipt(W, 203, "P-5")
+	W.run(3)
+	walkTo(W, p, 4)
+	hold(W, p, 4)
+	W.run(29)
+	check("receipt: from the claim it waits up to 30 s for the save", box.decision == "pending")
+	W.run(2)
+	check("receipt: 30 s after the claim with the save still loading, it gives up: NotProcessedYet (Roblox asks again later)", box.decision == NOT_YET,
+		tostring(box.decision ~= "pending" and box.decision.Name or box.decision))
+	W.run(15)
+	check("receipt: nothing was granted by the receipt that gave up (the save loaded later, Cash 0)", W.H.playerData[p] and W.H.playerData[p].ready
+		and cashOf(p) == 0)
+	noCrash(W, "receipt, slow load")
+end
+do
+	-- Studio with API access off: the game plays unsaved (data.ready, but data.loaded stays false)
+	local W = newWorld({ claim = false, realShop = true, studio = true, noStore = true })
+	W.boot()
+	local p = W.join("Uma", 204, PLAZA)
+	W.run(12)
+	local data = W.H.playerData[p]
+	local box = receipt(W, 204, "P-6")
+	W.run(2)
+	check("receipt: a session whose save never loaded (Studio, no DataStore) gets NotProcessedYet and is granted nothing",
+		data and data.ready and not data.loaded and box.decision == NOT_YET and cashOf(p) == 0 and not data.shop.receiptSet["P-6"],
+		data and (tostring(box.decision ~= "pending" and box.decision.Name or box.decision) .. " cash " .. cashOf(p)))
+	noCrash(W, "receipt, unsaved Studio session")
+end
+
+-- 8. More of the plan's cases --------------------------------------------------------------------------------------------
+-- An early joiner with the claim ON: in the server before the script started, set up once, onto the plaza (no claim)
+do
+	local W = newWorld({ claim = true })
+	local p = W.new("Player")
+	p.Name, p.DisplayName, p.UserId = "Early", "Early", 140
+	p.CharacterAdded = W.signal()
+	p.Kick = function(self, msg) W.kicks[self] = msg end
+	table.insert(W.players, p)
+	p.Parent = W.Players
+	local ch = W.character(Vector3.new(-1, 3, -1))
+	p.Character = ch
+	W.Players.PlayerAdded.Connect = (function(orig) return function(self, fn) local c = orig(self, fn) W.task.defer(fn, p) return c end end)(W.Players.PlayerAdded.Connect)
+	W.boot()
+	local H = W.H
+	W.run(65)
+	check("early joiner, claim on: set up once, on the plaza (no garage, nothing read, never kicked, moved onto the plaza)",
+		H.inPlaza[p] == true and H.playerData[p] == nil and W.reads == 0 and W.kicks[p] == nil and p:GetAttribute("Garage") == 0
+		and (ch.HumanoidRootPart.Position - PLAZA).Magnitude < 0.01)
+	walkTo(W, p, 3)
+	hold(W, p, 3)
+	W.run(3)
+	check("early joiner, claim on: their claim works, with one load", H.plotOwners[3] == p and H.playerData[p] and H.playerData[p].ready and W.reads == 1)
+	noCrash(W, "early joiner, claim on")
+end
+-- Claim OFF: the same account rejoins while its old garage is still Closing (the leave save runs)
+do
+	local W = newWorld({ claim = false, save = { player_150 = { cash = 10, owned = {}, lastSeen = 0 } } })
+	W.boot()
+	local H = W.H
+	local old = W.join("Vic", 150, PLAZA)
+	W.run(3)
+	setCash(old, 5555)
+	W.writeDelay = 8
+	W.leave(old)
+	W.run(0.5)
+	local again = W.join("Vic", 150, PLAZA)
+	W.run(3)
+	check("claim off, rejoin while Closing: the account waits on the plaza (no garage, nothing read, not kicked) while its leave save runs",
+		H.inPlaza[again] == true and H.playerData[again] == nil and W.kicks[again] == nil and W.reads == 1 and stateOf(W, 1) == "Closing")
+	W.run(20) -- the leave save returns, the garage is claimed, then the fresh save is read twice (REREAD_WAIT_SECONDS)
+	local data = H.playerData[again]
+	check("claim off, rejoin while Closing: once the leave save returns it gets a garage and its read sees that save (Cash 5555)",
+		data and data.ready and cashOf(again) >= 5555 and W.kicks[again] == nil and W.reads >= 2, data and cashOf(again))
+	noCrash(W, "claim off, rejoin while closing")
+end
+-- One player pressing two prompts in the same moment (both in reach): one garage, one load
+do
+	local W = newWorld({ claim = true })
+	W.boot()
+	local H = W.H
+	W.LobbyConfig.ClaimDistance = 1e6 -- both posts in reach, so only the claim itself can refuse the second
+	local p = W.join("Wes", 160, PLAZA)
+	W.run(0.2)
+	hold(W, p, 2)
+	hold(W, p, 3)
+	W.run(3)
+	local owned = 0
+	for s = 1, 6 do if H.plotOwners[s] == p then owned += 1 end end
+	check("two prompts in one moment: the player gets one garage (the first), one load, and the other stays Free with its prompt on",
+		owned == 1 and H.plotOwners[2] == p and H.claims[160] ~= nil and H.claims[160].slot == 2 and W.reads == 1 and stateOf(W, 3) == "Free" and promptOf(W, 3).Enabled == true,
+		owned .. " " .. W.reads)
+	noCrash(W, "two prompts")
+end
+-- A plaza player who leaves is no longer on the plaza; passive income waits for data.ready
+do
+	local W = newWorld({ claim = true, save = { player_170 = { cash = 100, owned = { "Desk" }, lastSeen = 0 } } })
+	W.boot()
+	local H = W.H
+	local gone = W.join("Xan", 171, PLAZA)
+	W.run(0.5)
+	W.leave(gone)
+	W.run(0.5)
+	check("leave: a player who leaves from the plaza is no longer on the plaza (inPlaza cleared)", H.inPlaza[gone] == nil)
+	local p = W.join("Yul", 170, PLAZA)
+	W.run(0.2)
+	walkTo(W, p, 5)
+	hold(W, p, 5)
+	W.run(3)
+	local data = H.playerData[p]
+	local income = (stat(p, "Income") and stat(p, "Income").Value or -1)
+	data.ready = false -- what loading or an IPO save does while it runs
+	local before = cashOf(p)
+	W.run(5)
+	local paused = cashOf(p)
+	data.ready = true
+	W.run(3)
+	check("income: while data.ready is off (loading, or an IPO being saved) no Cash is paid; once ready it pays again",
+		income >= 1 and paused == before and cashOf(p) >= before + 2 * income, string.format("%d %d %d", before, paused, cashOf(p)))
+	noCrash(W, "plaza leave and income")
+end
+-- A broken building warns once per server, not every second
+do
+	local W = newWorld({ claim = false, brokenBuilding = true })
+	W.boot()
+	W.join("Zed", 180, PLAZA)
+	W.run(12)
+	local n = 0
+	for _, w in ipairs(W.warns) do if string.find(w, "the building failed", 1, true) then n += 1 end end
+	check("building: a broken building warns once per server (not every second, not once per garage)", n == 1, n)
+	noCrash(W, "broken building")
 end
 
 print_real(string.format("%d passed, %d failed", passed, failed))

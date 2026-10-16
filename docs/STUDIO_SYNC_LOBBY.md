@@ -277,13 +277,13 @@ Paste each one the same way: open the `.lua` file, select all, copy; in Studio d
 
 | Script | Class, place | State | SHA-256 | Bytes |
 |---|---|---|---|---|
-| `TycoonCore` | Script, ServerScriptService | changed | `3874158c053e0a54ec49c6c82cb453001800122504a9a40c5da61b210111e400` | 52831 |
+| `TycoonCore` | Script, ServerScriptService | changed | `b617d872b16aa3c073f41d38ae5464607d7c96cf279d2dca95226fbea963b640` | 53534 |
 | `ShopClient` | LocalScript, StarterPlayerScripts | changed | `14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8` | 60314 |
-| `PlotBuilding` | ModuleScript, ServerScriptService | new | `f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1` | 34099 |
-| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `0f24751a37a961e682a1475957162db3661337ac130cc472ca0c647605b8eedd` | 25169 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | new | `157b5540c1f97a6b989005bd08d63194c3ff91f658b0aee7a7fb6fa54ec444c1` | 35156 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `939316f1cbc7899b3e3d3c2ec6d9b30638fe8893b81a011806248aff6ca293a9` | 26927 |
 | `BuildingClient` | LocalScript, StarterPlayerScripts | new | `450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec` | 9408 |
 | `LobbyConfig` | ModuleScript, ReplicatedStorage | new | `3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e` | 6184 |
-| `LobbyClient` | LocalScript, StarterPlayerScripts | new | `4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a` | 4391 |
+| `LobbyClient` | LocalScript, StarterPlayerScripts | new | `ba722814b5b58948ae92a9aa6a2d4e26d38707bc774e16f222639152050d67fd` | 4776 |
 | `ShopServer` | ModuleScript, ServerScriptService | changed | `c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48` | 33640 |
 | `IpoClient` | LocalScript, StarterPlayerScripts | changed | `ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da` | 42081 |
 | `WorldArt` | ModuleScript, ServerScriptService | changed | `0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558` | 15266 |
@@ -295,7 +295,7 @@ Paste each one the same way: open the `.lua` file, select all, copy; in Studio d
 
 "as on main" = unchanged since lobby L1; if the hash block says `DIFFERENT` for one of them, paste `main`'s file (docs/STUDIO_SYNC_LOBBY.md section L1).
 
-If the place uses Team Create: **View > Drafts**, commit every draft before the hash block (an uncommitted draft is not saved). Never commit a draft of `LobbyConfig` with `ClaimEnabled = true` (section 9 b).
+If the place uses Team Create: **View > Drafts**, commit every draft before the hash block (an uncommitted draft is not saved). Never commit a draft of `LobbyConfig` with `ClaimEnabled = true` (section 9 b): after that playtest, revert the draft or paste `LobbyConfig.lua` again from the repo.
 
 ### 4. Hash check (command bar)
 
@@ -351,13 +351,13 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	{ "TycoonCore", "Script", "ServerScriptService", "3874158c053e0a54ec49c6c82cb453001800122504a9a40c5da61b210111e400", 52831 },
+	{ "TycoonCore", "Script", "ServerScriptService", "b617d872b16aa3c073f41d38ae5464607d7c96cf279d2dca95226fbea963b640", 53534 },
 	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8", 60314 },
-	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1", 34099 },
-	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "0f24751a37a961e682a1475957162db3661337ac130cc472ca0c647605b8eedd", 25169 },
+	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "157b5540c1f97a6b989005bd08d63194c3ff91f658b0aee7a7fb6fa54ec444c1", 35156 },
+	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "939316f1cbc7899b3e3d3c2ec6d9b30638fe8893b81a011806248aff6ca293a9", 26927 },
 	{ "BuildingClient", "LocalScript", "StarterPlayerScripts", "450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec", 9408 },
 	{ "LobbyConfig", "ModuleScript", "ReplicatedStorage", "3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e", 6184 },
-	{ "LobbyClient", "LocalScript", "StarterPlayerScripts", "4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a", 4391 },
+	{ "LobbyClient", "LocalScript", "StarterPlayerScripts", "ba722814b5b58948ae92a9aa6a2d4e26d38707bc774e16f222639152050d67fd", 4776 },
 	{ "ShopServer", "ModuleScript", "ServerScriptService", "c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48", 33640 },
 	{ "IpoClient", "LocalScript", "StarterPlayerScripts", "ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da", 42081 },
 	{ "WorldArt", "ModuleScript", "ServerScriptService", "0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558", 15266 },
@@ -396,7 +396,7 @@ print(#problems == 0 and ("ALL OK: the " .. #WANT .. " scripts match the repo (l
 
 ### 5. KitModels check (command bar)
 
-Checks **ReplicatedStorage.KitModels** against the manifest in `PlotBuilding` (copied from docs/KIT_MODELS.md): the 36 keys, each a Model, its `KitSize` within 0.05 of the manifest's size, its MeshParts' `Role` attributes exactly the manifest's roles, nothing but MeshParts inside. Paste PlotBuilding and PlotBuildingVisuals first. It changes nothing.
+Checks **ReplicatedStorage.KitModels** against the manifest in `PlotBuilding` (copied from docs/KIT_MODELS.md): the 36 keys, each a Model, its `KitSize` within 0.05 of the manifest's size, its MeshParts' `Role` attributes exactly the manifest's roles with one MeshPart per role (two with the same role are named), its `WorldPivot` the bottom-center of its MeshParts within 0.05 (the builder stands every piece on it), nothing but MeshParts inside. Paste PlotBuilding and PlotBuildingVisuals first. It changes nothing.
 
 ```lua
 -- STUDIO_SYNC_LOBBY kit check: ReplicatedStorage.KitModels against PlotBuilding.KitManifest. Changes nothing.
@@ -413,7 +413,7 @@ else
 	for _, text in ipairs(problems) do
 		print("WRONG: " .. text)
 	end
-	print(#problems == 0 and ("KIT OK: " .. count .. " models, sizes within 0.05, roles as in docs/KIT_MODELS.md")
+	print(#problems == 0 and ("KIT OK: " .. count .. " models, sizes within 0.05, one MeshPart per role as in docs/KIT_MODELS.md, pivots at the bottom-center")
 		or ("KIT NOT OK: " .. #problems .. " problem(s) above"))
 end
 ```
@@ -447,11 +447,14 @@ pad.Parent = folder
 folder.Parent = workspace
 print(string.format("Built KIT_FRONT_CHECK (Chair from the kit: %s, Computer from the kit: %s), KIT_FRONT_TURN = %d.",
 	tostring(chairKit), tostring(computerKit), PB.KIT_FRONT_TURN))
-print("Look from the red STAND HERE pad: the Chair's seat and the Computer's screen must face you. Then delete Workspace.KIT_FRONT_CHECK.")
+print("Look from the red STAND HERE pad: the chair's backrest must be on the far side and the computer screen must face you. Then delete Workspace.KIT_FRONT_CHECK.")
 ```
 
-- **Both face the pad:** `KIT_FRONT_TURN` is right. Write "kit front: checked, KIT_FRONT_TURN = 0" in docs/LOBBY_ALL_PROGRESS.md.
-- **Both face away:** the importer turned the models around. In the repo, on a branch, set `PlotBuilding.KIT_FRONT_TURN = 180` (tools/building_test.py tests both values), paste PlotBuilding, run the hash block and this check again.
+Stand on the pad and look at the two pieces. **The chair's backrest is on the far side** (you see its seat, the back behind it) **and the computer screen faces you** (you see the screen, not its dark back):
+
+- **Both right** (backrest far, screen facing you): `KIT_FRONT_TURN` is right. Write "kit front: checked, KIT_FRONT_TURN = 0" in docs/LOBBY_ALL_PROGRESS.md.
+- **Both turned around** (the backrest on your side, the screen's back toward you): the importer turned the models around. In the repo, on a branch that claims `PlotBuilding`: set `PlotBuilding.KIT_FRONT_TURN = 180` (tools/building_test.py tests both values) and run `python3 tools/building_test.py` and `python3 tools/lobby_test.py`. lobby_test then fails on PlotBuilding and prints `PlotBuilding.lua`'s new SHA-256 and size: put them in **this section's PlotBuilding row** (section 3's table) and in **the hash block's PlotBuilding line** (section 4), run lobby_test again until it passes, commit. Then paste PlotBuilding, run the hash block (`ALL OK`) and this check again; write "kit front: checked, KIT_FRONT_TURN = 180" in docs/LOBBY_ALL_PROGRESS.md.
+- **Mixed or sideways** (one piece right and the other turned around, or either one facing left or right): **stop, change nothing, report it** to the owner (write what you saw in docs/LOBBY_ALL_PROGRESS.md). `KIT_FRONT_TURN` only turns every model by 0 or 180: it can't fix a model imported sideways or two models imported differently.
 - **"from the kit: false":** the kit is missing (section 5); this check then only shows the Parts versions, which always face the right way.
 - **Delete `Workspace.KIT_FRONT_CHECK`** afterwards (select it, Delete), before any save.
 
@@ -475,27 +478,27 @@ end
 
 ### 8. Before the playtest
 
-1. The hash block (section 4) says `ALL OK`. 2. The kit check (section 5) says `KIT OK` (or you know the buildings will be Parts). 3. `Workspace.KIT_FRONT_CHECK` is deleted. 4. `LobbyConfig.ClaimEnabled` is `false` in Studio.
+1. The hash block (section 4) says `ALL OK`. 2. The kit check (section 5) says `KIT OK` (or you know the buildings will be Parts). 3. `Workspace.KIT_FRONT_CHECK` is deleted. 4. `LobbyConfig` is the repo's file, untouched (`ClaimEnabled = false`).
 
 ### 9. Playtests
 
 **(a) One player, the claim off (as it ships).** Press **F5**.
 1. The Output shows no red error. At most one warning that starts with `Plot buildings:` (only if KitModels is missing or a model is wrong).
 2. You land in your garage, as before, inside the closed building of your funding stage (a new save: the Garage, brick with the orange roll-up door overhead). Same Cash, upgrades, employees and room as before.
-3. **Walk every doorway at every stage:** open the shop's **Debug** tab, press **"Building: next stage"** (Studio only, never saved): the room and the building change to the next stage. For each of the five: walk out through the door to the plaza side and back in; the shell fades when you step on the 3.5-stud apron in front of the door and comes back outside; the doorway never blocks you (the solid opening is at least 9 x 9); walk around the furniture band (stages 2 to 5) and see the furniture while inside.
+3. **Walk every doorway at every stage:** open the shop's **Debug** tab, press **"Building: next stage"** (Studio only, never saved): the room and the building change to the next stage. For each of the five: walk out through the door to the plaza side and back in; the shell fades when you step on the 3.5-stud apron in front of the door (as wide as the 9-stud lane) and comes back outside; standing beside the door, where the claim post is (x 7), it stays solid; the doorway never blocks you (the solid opening is at least 9 x 9); at the Small and Big Office the WallDoor's opening is exactly 9 wide, its frame on the edges of the walk, with no frame to walk through; walk around the furniture band (stages 2 to 5) and see the furniture while inside.
 4. **The camera never pulls in:** with the default camera, stand inside facing each wall, and outside close to each wall, and walk in and out of the door. If the camera jumps in front of you anywhere, stop and note where (the solid walls are invisible and should never stop it).
 5. **Reset** (Esc > Reset Character) inside and outside the building: you respawn in your garage (OWNER DEFAULT), never stuck in a wall.
 6. Leave the playtest. In a second F5 the building is your real stage again (the Debug stage is not saved).
 
 **(b) The claim on, in Studio only, with 2 and then 3 players.** In Studio, open **ReplicatedStorage > LobbyConfig**, set `LobbyConfig.ClaimEnabled = true` (do **not** commit this draft and do not save the place with it). Then **Test > Clients and Servers**, **2** players, Start:
-1. Each player spawns on the plaza (the fallback moves them there if the SpawnLocation was not moved): a banner says "Walk to a free garage to start your company", a green "▼ FREE" marker floats over the nearest free garage's claim post. No `Infinite yield` warning in either client's Output.
+1. Each player spawns on the plaza (the fallback moves them there if the SpawnLocation was not moved): a banner says "Walk to a free garage to start your company", a green "▼ FREE" marker floats over the nearest free garage's claim post. No `Infinite yield` warning in either client's Output. Standing at a claim post, the building does not fade.
 2. Player 1 walks to a garage's claim post and holds **Claim garage** (0.5 s): the garage shows "Moving in...", then their name; the banner goes; their save loads (Cash, upgrades). The Robux buttons in the shop said "Claim garage" before and now show prices.
 3. Player 2 holds the same garage's prompt: no prompt (it is off for a taken garage). Player 2 claims another garage.
 4. Close player 1's window (they leave): their garage shows "Closing..." while their save runs, then the Free room and the FREE sign come back. (Studio's test players can't rejoin as the same account; that case, "Your last visit is still saving", is tested by tools/lobby_test.py.)
 5. Again with **3** players: a third joins while a garage is closing; everyone gets a garage; the garages around the plaza face it (west, north and east).
 6. Walk every doorway of a west, a north and an east garage with "Building: next stage" (turned garages exist only with the claim on).
 7. **Test > Device**, a phone (for example iPhone SE, then a landscape phone): the banner sits under the HUD and the valuation bar, readable, not covering a button.
-8. Stop. Set `ClaimEnabled` back to **false**, then run the hash block: `LobbyConfig` must say `OK` again.
+8. Stop. **Undo the switch, don't retype it:** in **View > Drafts**, right-click `LobbyConfig` and revert it (discard the draft); without Team Create, paste `LobbyConfig.lua` from the repo over the whole script. Don't rely on the hash block alone to prove `ClaimEnabled` is `false` again: revert or re-paste first, then run the hash block (`LobbyConfig` says `OK`), and run it once more right before **File > Save to Roblox** (section 12).
 
 **(c) Phone sizes.** Test > Device with the claim off: the HUD, the valuation bar and the shop as before.
 
@@ -517,9 +520,9 @@ docs/PUBLISH_RULES.md section 1. Nothing in the code reads Max Players; a server
 
 ### 12. Saving
 
-Delete `Workspace.KIT_FRONT_CHECK` if it is still there. Commit every draft (Team Create). **File > Save to Roblox.** Never Publish in this session.
+Delete `Workspace.KIT_FRONT_CHECK` if it is still there. Make sure `LobbyConfig` was reverted or pasted again from the repo after any claim-on playtest (section 9 b, step 8). Commit every draft (Team Create). **Run the hash block (section 4) right before saving:** it must say `ALL OK`. Then **File > Save to Roblox.** Never Publish in this session.
 
 ### 13. What was checked, and what wasn't
 
-- **Checked outside Studio** (Luau 0.742, the real files in fake Roblox): every suite (docs/LOBBY_ALL_PROGRESS.md has the counts): the five buildings at four turns with the kit, with the kit imported turned around and with no kit; the real BuildingClient; the whole real TycoonCore with the claim on and off (joins, claims, leaves, rejoins during a save, failed loads, the cap, receipts); the real LobbyClient; the ring world. This section's hash block, kit check and kit front check were run in Luau against fakes (tools/lobby_test.py and tools/building_test.py).
+- **Checked outside Studio** (Luau 0.742, the real files in fake Roblox): every suite (docs/LOBBY_ALL_PROGRESS.md has the counts): the five buildings at four turns with the kit, with the kit imported turned around and with no kit; the real BuildingClient; the whole real TycoonCore with the claim on and off (joins, claims, leaves, rejoins during a save, failed loads, the cap, an early joiner, two prompts at once); Robux receipts through the real ShopServer wired to the real TycoonCore (before the claim, after it, repeated, a failed save, a player who leaves, a session that never loaded); the real LobbyClient; the ring world. This section's hash block, kit check and kit front check were run in Luau against fakes (tools/lobby_test.py and tools/building_test.py).
 - **Not checked (Studio only):** anything on a screen; the kit's real front direction (section 6); that MeshParts stretch as computed; Roblox's camera with invisible solid walls; ProximityPrompt's own distance check; StreamingEnabled and `Persistent` from a script; whether Roblox limits a `ProcessReceipt` that waits for a claim; frame rate on a phone; Max Players in Creator Hub.

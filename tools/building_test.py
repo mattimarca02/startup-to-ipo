@@ -291,6 +291,7 @@ function Methods.IsDescendantOf(t, ancestor)
 	return false
 end
 function Methods.Clone(t)
+	if t.Archivable == false then return nil end -- like Roblox: an Instance with Archivable off is not copied
 	local c = newInstance(t.ClassName)
 	for k, v in pairs(t) do
 		if k ~= "_children" and k ~= "_attrs" and k ~= "_props" and k ~= "_parent" and k ~= "_descAdded" then rawset(c, k, v) end
@@ -298,7 +299,10 @@ function Methods.Clone(t)
 	local from, to = rawget(t, "_props"), rawget(c, "_props")
 	if from and to then for k, v in pairs(from) do to[k] = v end end
 	for k, v in pairs(t._attrs) do c._attrs[k] = v end
-	for _, child in ipairs(t._children) do child:Clone().Parent = c end
+	for _, child in ipairs(t._children) do
+		local copy = child:Clone()
+		if copy then copy.Parent = c end
+	end
 	return c
 end
 
@@ -363,8 +367,10 @@ local function overlaps(a, b, m) return PBV.overlaps(a, b, m or 0.01) end
 
 -- A fake ReplicatedStorage.KitModels: one Model per key, its MeshParts from the fallback boxes (same sizes and roles), the
 -- whole model turned by `importTurn` about +Y (what Studio's importer may have done), its WorldPivot the bottom-center,
--- its KitSize the box. Parts get Roblox-like names (main2, trim11), only the Role attribute names them.
-local function makeKit(importTurn, skip)
+-- its KitSize the box. Parts get Roblox-like names (main2, trim11), only the Role attribute names them. The builder's
+-- tests use one MeshPart per fallback box (a jamb is its own part); onePerRole = true makes one MeshPart per role, the
+-- union of that role's boxes, as in the real kit (checkKit wants exactly that).
+local function makeKit(importTurn, skip, onePerRole)
 	local folder = Instance.new("Folder")
 	folder.Name = "KitModels"
 	local i = 0
@@ -380,7 +386,26 @@ local function makeKit(importTurn, skip)
 			local pivot = CFrame.new(400 + i * 40, 7, -300 - i * 3) -- anywhere: the importer leaves them somewhere
 			m.WorldPivot = pivot
 			m:SetAttribute("KitSize", Vector3.new(entry.size[1], entry.size[2], entry.size[3]))
-			for j, b in ipairs(PB.fallbackOf(key)) do
+			local boxes = PB.fallbackOf(key)
+			if onePerRole then
+				local byRole, order = {}, {}
+				for _, b in ipairs(boxes) do
+					local box = { b.at[1] - b.size[1] / 2, b.at[1] + b.size[1] / 2, b.at[2] - b.size[2] / 2, b.at[2] + b.size[2] / 2, b.at[3] - b.size[3] / 2, b.at[3] + b.size[3] / 2 }
+					local u = byRole[b.role]
+					if not u then
+						byRole[b.role] = box
+						table.insert(order, b.role)
+					else
+						for k = 1, 5, 2 do u[k] = math.min(u[k], box[k]); u[k + 1] = math.max(u[k + 1], box[k + 1]) end
+					end
+				end
+				boxes = {}
+				for _, role in ipairs(order) do
+					local u = byRole[role]
+					table.insert(boxes, { role = role, size = { u[2] - u[1], u[4] - u[3], u[6] - u[5] }, at = { (u[1] + u[2]) / 2, (u[3] + u[4]) / 2, (u[5] + u[6]) / 2 } })
+				end
+			end
+			for j, b in ipairs(boxes) do
 				local p = Instance.new("MeshPart")
 				p.Name = b.role .. (j * 3 + 1)
 				p:SetAttribute("Role", b.role)
@@ -531,7 +556,7 @@ for s = 1, 5 do
 		if (p.sx ~= 1 and not (allowed and allowed.x)) or (p.sz ~= 1 and not (allowed and allowed.z)) then stretched = stretched or p.name end
 	end
 	check("kit: every key stage " .. s .. " uses is in the KitManifest", unknown == nil, unknown)
-	check("stretch: at stage " .. s .. " only Wall and RoofEdge (along X) and Floor (X and Z) are stretched", stretched == nil, stretched)
+	check("stretch: at stage " .. s .. " only Wall, RoofEdge, WallDoor and DoorLeaf (along X) and Floor (X and Z) are stretched", stretched == nil, stretched)
 	-- the doorway
 	local bx = {}
 	for _, b in ipairs(L.boxes) do bx[b.name] = b.box end
@@ -551,6 +576,20 @@ for s = 1, 5 do
 	check("lane: at stage " .. s .. " no solid box stands in the doorway lane (9 wide, 9 high, room to the end of the apron)", inLane == nil, inLane)
 	check("floor: at stage " .. s .. " every solid box is outside the 60 x 60 floor, or above " .. PB.CLEAR_ABOVE .. " (the roof)", overFloor == nil, overFloor)
 	check("lot: at stage " .. s .. " every solid box is inside the lot", outLot == nil, outLot)
+	check("roof: at stage " .. s .. " the roof's solid box starts at 12.5 or higher (a jump reaches about 12.3)", bx.Roof and bx.Roof[3] >= 12.5 - EPS, bx.Roof and bx.Roof[3])
+	-- the fade's inside check: standing at the claim post (x 6 to 10, z 34.2 to 36.2), coming from outside or from inside
+	local atPost = nil
+	for _, x in ipairs({ PB.ClaimPost.x0, LOBBY_POST.x, (PB.ClaimPost.x0 + PB.ClaimPost.x1) / 2, PB.ClaimPost.x1 }) do
+		for _, z in ipairs({ PB.ClaimPost.z0, LOBBY_POST.z, PB.ClaimPost.z1 }) do
+			for _, y in ipairs({ PB.GROUND, 2, 5 }) do
+				for _, was in ipairs({ false, true }) do
+					if PBV.isInside(L.inside, x, y, z, was) then atPost = atPost or string.format("%g, %g, %g (was inside: %s)", x, y, z, tostring(was)) end
+				end
+			end
+		end
+	end
+	check("claim post: standing at the claim post is outside at stage " .. s .. " (the apron is only as wide as the lane, " .. PB.Lane.half .. " each side)",
+		atPost == nil and L.inside.doorMinX == -PB.Lane.half and L.inside.doorMaxX == PB.Lane.half, atPost)
 	-- pieces: in front only to OUTSIDE_TO, never past the lot's sides and back; the shell's walls on the lot's front line
 	local far = nil
 	for _, p in ipairs(L.pieces) do
@@ -611,6 +650,16 @@ for s = 1, 5 do
 	check("furniture: at stage " .. s .. " no two pieces overlap, none is in a reserved zone or the lane", clash == nil and zone == nil, clash or zone)
 	check("furniture: stage " .. s .. "'s footprints are listed for customize PR 2 (PlotBuilding.furnitureFootprints)", #PB.furnitureFootprints(s) == #def.furniture)
 end
+-- the offices' door: the WallDoor and its DoorLeaf stretched 1.5 along X (24 and 9 wide): the opening is the lane
+for s = 2, 3 do
+	local door, leaf = nil, nil
+	for _, p in ipairs(LAYOUTS[s].pieces) do
+		if p.key == "WallDoor" then door = p elseif p.key == "DoorLeaf" then leaf = p end
+	end
+	check("door: at stage " .. s .. " the WallDoor is stretched 1.5 (24 wide) in the middle of the facade and its DoorLeaf too (9 wide), the leaf beside the lane",
+		door ~= nil and leaf ~= nil and near(door.sx, 1.5) and near(door.x, 0) and near(door.z, PB.FRONT_OUT - PB.WALL / 2) and near(leaf.sx, 1.5)
+		and pieceBox(leaf)[2] <= -PB.Lane.half + EPS, door and door.sx)
+end
 -- the furniture each stage adds (the owner's list)
 do
 	local function keys(s) local t = {} for _, f in ipairs(PB.Stages[s].furniture) do t[f.key] = (t[f.key] or 0) + 1 end return t end
@@ -629,17 +678,22 @@ do
 	check("look: Small Office: one story, WallDoor with a DoorLeaf, WallWindow, Plants, RoofEdge",
 		stories(2) == 1 and has(2, "WallDoor") and has(2, "DoorLeaf") and has(2, "WallWindow") and has(2, "Plant") and has(2, "RoofEdge"))
 	check("look: Big Office: two stories, WallWindow and WallGlass, RoofEdge", stories(3) == 2 and has(3, "WallWindow") and has(3, "WallGlass") and has(3, "WallDoor"))
-	check("look: Small Corporate: four stories, WallGlass, a RevolvingDoor on the lane, two pillars", stories(4) == 4 and has(4, "WallGlass") and has(4, "RevolvingDoor"))
+	check("look: Small Corporate: four stories, WallGlass, an open entrance between two pillars (no RevolvingDoor: players walked through its post)",
+		stories(4) == 4 and has(4, "WallGlass") and has(4, "Corner") and not has(4, "RevolvingDoor"))
 	check("look: Big Corporate: the tallest (six stories), Columns, a RoofCrown", stories(5) == 6 and has(5, "Column") and has(5, "RoofCrown")
 		and stories(5) > stories(4))
 	local mats = {}
 	for s = 1, 5 do mats[s] = PB.styleOf(s, "Wall", "main").material end
 	check("look: Brick for the garage, SmoothPlastic for the office, Glass for the tower, Marble for the headquarters",
 		mats[1] == "Brick" and mats[2] == "SmoothPlastic" and mats[4] == "Glass" and mats[5] == "Marble" and PB.styleOf(5, "Column", "accent").color[1] == 255)
-	local lanes = {}
-	for s = 1, 5 do for _, p in ipairs(LAYOUTS[s].pieces) do if p.lane then lanes[p.key] = true end end end
-	check("lane: only door pieces may stand in the lane (WallGarage, WallDoor, RevolvingDoor), never solid",
-		(function() for k in pairs(lanes) do if k ~= "WallGarage" and k ~= "WallDoor" and k ~= "RevolvingDoor" then return false end end return true end)())
+	local want = { "WallGarage", "WallDoor", "WallDoor", "none", "none" }
+	local wrong = nil
+	for s = 1, 5 do
+		for _, p in ipairs(LAYOUTS[s].pieces) do
+			if p.lane and p.key ~= want[s] then wrong = wrong or (s .. " " .. p.name) end
+		end
+	end
+	check("lane: only the door piece may stand in the lane (stage 1 the WallGarage, 2 and 3 the WallDoor, none at 4 and 5), never solid", wrong == nil, wrong)
 end
 """
 
@@ -718,6 +772,20 @@ for s = 1, 5 do
 			check("fade: " .. tag .. ": at full fade every shell part and every box is at least 0.25 transparent", hidden == nil, hidden)
 			check("budget: " .. tag .. ": " .. count .. " parts, at most " .. PB.Budget.parts, count <= PB.Budget.parts, count)
 			check("materials: " .. tag .. ": allowed materials only", mats == nil, mats)
+			if s == 2 or s == 3 then
+				local inLane, left, right = nil, -math.huge, math.huge
+				for _, d in ipairs(m:GetDescendants()) do
+					if d:IsA("BasePart") and d:GetAttribute("Key") == "WallDoor" then
+						local b = inFrame(origin, d)
+						if overlaps(b, laneBox) then inLane = inLane or d.Name end
+						if b[3] < PB.Lane.top - 0.01 then -- the jambs (below the opening's top)
+							if b[2] <= 0 then left = math.max(left, b[2]) else right = math.min(right, b[1]) end
+						end
+					end
+				end
+				check("door: " .. tag .. ": no part of the WallDoor's frame stands inside the 9-wide lane; the opening is exactly 9, its jambs on the lane's edges",
+					inLane == nil and near(left, -PB.Lane.half, 1e-4) and near(right, PB.Lane.half, 1e-4), inLane or (left .. " " .. right))
+			end
 			check("attributes: " .. tag .. ": the Frame and the inside box the client reads",
 				m:GetAttribute("Frame") == nil and false or (function()
 					local fr = m:GetAttribute("Frame")
@@ -824,19 +892,70 @@ do
 	check("stretch: a Floor may stretch along X and Z", fx == 2 and fz == 3)
 end
 do
-	local ok = PBV.checkKit(makeKit(0), PB.KitManifest)
-	check("checkKit: the fake KitModels (36 keys, right sizes and roles) is OK", #ok == 0, ok[1])
+	-- a MeshPart with Archivable off: Clone gives nil, so that piece is built from Parts (never an error)
+	PBV.resetWarnings()
+	WARNED = {}
+	local kit = makeKit(0)
+	local wallPart = kit:FindFirstChild("Wall") and kit.Wall:FindFirstChildOfClass("MeshPart")
+	if wallPart then wallPart.Archivable = false end
+	local walls = 0
+	for _, p in ipairs(PB.layout(2).pieces) do if p.key == "Wall" then walls += 1 end end
+	local ok, m = pcall(PBV.build, nil, frameAt(0), PB, 2, kit)
+	local warnings = 0
+	for _, w in ipairs(WARNED) do if string.find(w, "Archivable", 1, true) then warnings += 1 end end
+	local okPiece, piece, fromKit = pcall(PBV.buildPiece, nil, frameAt(0), PB, 2, { name = "W", key = "Wall", x = 0, y = -1, z = 0, turn = 0, sx = 1, sz = 1 }, kit)
+	check("kit: a MeshPart with Archivable off (Clone gives nil): its pieces are built from Parts, with one warning, never an error",
+		wallPart ~= nil and ok and m:GetAttribute("PartPieces") == walls and m:GetAttribute("KitPieces") == #PB.layout(2).pieces - walls and warnings == 1
+		and okPiece and fromKit == false and #piece:GetChildren() > 0, ok and (tostring(m:GetAttribute("PartPieces")) .. " " .. warnings) or m)
+end
+do
+	-- float noise: a KitSize of 3.0004 is no stretch, so a part turned in its model (not square to it) still comes from the kit
+	PBV.resetWarnings()
+	WARNED = {}
+	local kit = makeKit(0)
+	local plant = kit:FindFirstChild("Plant")
+	plant:SetAttribute("KitSize", Vector3.new(3.0004, 5, 3))
+	local leaves = nil
+	for _, d in ipairs(plant:GetChildren()) do if d:GetAttribute("Role") == "main" then leaves = d end end
+	leaves.CFrame = leaves.CFrame * CFrame.Angles(0, math.rad(30), 0)
+	local m = PBV.build(nil, frameAt(0), PB, 2, kit)
+	local warned = 0
+	for _, w in ipairs(WARNED) do if string.find(w, "Plant", 1, true) then warned += 1 end end
+	check("stretch: float noise in KitSize (3.0004 for 3) is no stretch: a Plant with a turned part is still built from the kit",
+		m:GetAttribute("PartPieces") == 0 and m:GetAttribute("KitPieces") == #PB.layout(2).pieces and warned == 0, tostring(m:GetAttribute("PartPieces")) .. " " .. warned)
+end
+do
+	local ok = PBV.checkKit(makeKit(0, nil, true), PB.KitManifest)
+	check("checkKit: the fake KitModels (36 keys, right sizes and roles, one MeshPart per role, pivots at the bottom-center) is OK", #ok == 0, ok[1])
+	local turned = PBV.checkKit(makeKit(180, nil, true), PB.KitManifest)
+	check("checkKit: a kit imported turned around is OK too (the pivot is still the bottom-center)", #turned == 0, turned[1])
 	check("checkKit: no KitModels folder", #PBV.checkKit(nil, PB.KitManifest) == 1)
-	local kit = makeKit(0, { Bell = true })
+	local kit = makeKit(0, { Bell = true }, true)
 	local p1 = PBV.checkKit(kit, PB.KitManifest)
 	check("checkKit: a missing key is named", #p1 == 1 and string.find(p1[1], "Bell", 1, true) ~= nil, p1[1])
-	kit = makeKit(0)
+	kit = makeKit(0, nil, true)
+	kit:FindFirstChild("Sofa").WorldPivot = kit:FindFirstChild("Sofa").WorldPivot * CFrame.new(0.5, 0, 0)
+	kit:FindFirstChild("Shelf").WorldPivot = kit:FindFirstChild("Shelf").WorldPivot * CFrame.new(0, -0.3, 0)
+	kit:FindFirstChild("Rug").WorldPivot = kit:FindFirstChild("Rug").WorldPivot * CFrame.new(0.04, 0.04, -0.04)
+	local pv = PBV.checkKit(kit, PB.KitManifest)
+	local joined = table.concat(pv, "|")
+	check("checkKit: a WorldPivot off the bottom-center is named (0.5 to the side, 0.3 too low); 0.04 off is OK",
+		#pv == 2 and string.find(joined, "Sofa: WorldPivot", 1, true) ~= nil and string.find(joined, "Shelf: WorldPivot", 1, true) ~= nil, joined)
+	kit = makeKit(0, nil, true)
+	local desk = kit:FindFirstChild("Desk")
+	local copy = desk:FindFirstChildOfClass("MeshPart"):Clone()
+	copy.Name = "main99"
+	copy:SetAttribute("Role", "main")
+	copy.Parent = desk
+	local dup = PBV.checkKit(kit, PB.KitManifest)
+	check("checkKit: two MeshParts with the same role are named (the kit has one per role)", #dup == 1 and string.find(dup[1], "a second MeshPart with role main", 1, true) ~= nil, dup[1])
+	kit = makeKit(0, nil, true)
 	kit:FindFirstChild("Sofa"):SetAttribute("KitSize", Vector3.new(8, 4.2, 4))
 	kit:FindFirstChild("Desk"):FindFirstChildOfClass("MeshPart"):SetAttribute("Role", "mian")
 	local p2 = PBV.checkKit(kit, PB.KitManifest)
 	local joined = table.concat(p2, "|")
 	check("checkKit: a size off by 0.2 and a wrong role are both named", string.find(joined, "Sofa: KitSize", 1, true) ~= nil and string.find(joined, "mian", 1, true) ~= nil, joined)
-	kit = makeKit(0)
+	kit = makeKit(0, nil, true)
 	kit:FindFirstChild("Rug"):SetAttribute("KitSize", Vector3.new(12.04, 0.2, 7.96))
 	check("checkKit: a size within 0.05 is OK", #PBV.checkKit(kit, PB.KitManifest) == 0)
 end
@@ -866,6 +985,14 @@ check("streaming: every building Model is Persistent (its shell never streams ou
 	local moved = PBV.unstick(m5, { root, safe }, landing)
 	check("unstick: a character standing where the new building's wall is goes to the landing; one in the room stays",
 		moved == 1 and near((root.Position - landing.Position).Magnitude, 0) and near((safe.Position - (origin * Vector3.new(0, 3, 0))).Magnitude, 0))
+	-- the top of a jump under the Garage's roof (the roof box from 12.5; this body reaches 12.6): never moved
+	local jumper = Instance.new("Part")
+	jumper.CFrame = origin * CFrame.new(5, 10.6, -5)
+	local m6 = PBV.sync(garage, frame, PB, 3, nil)
+	local m7 = PBV.sync(garage, frame, PB, 1, nil)
+	local movedJump = PBV.unstick(m7, { jumper }, landing)
+	check("unstick: a player mid-jump under the roof (overlapping the roof box) is not moved: only walls and floors count",
+		m6 ~= m7 and movedJump == 0 and near((jumper.Position - (origin * Vector3.new(5, 10.6, -5))).Magnitude, 0), movedJump)
 end
 
 -- 7. Six garages at the biggest stage, and the plaza: under 3,000 parts -------------------------------------------------
@@ -903,7 +1030,7 @@ check("inside: 0.01 past the front wall, away from the door, is outside", not in
 check("inside: in the doorway (inside the front wall's thickness) is inside", inside(cx, fy + 3, b.maxZ + 1) == true)
 check("inside: on the apron in front of the door is inside, up to its end (the wall's 2 plus 3.5)", inside(cx, fy + 3, b.maxZ + 3) and inside(cx, fy + 3, b.maxZ + b.doorDepth))
 check("inside: 0.01 past the end of the apron is outside", not inside(cx, fy + 3, b.maxZ + b.doorDepth + 0.01))
-check("inside: the apron is as wide as the door (edges inclusive), not wider", inside(b.doorMaxX, fy + 3, b.maxZ + 2) and inside(b.doorMinX, fy + 3, b.maxZ + 2)
+check("inside: the apron is as wide as the lane (edges inclusive), not wider", inside(b.doorMaxX, fy + 3, b.maxZ + 2) and inside(b.doorMinX, fy + 3, b.maxZ + 2)
 	and not inside(b.doorMaxX + 0.01, fy + 3, b.maxZ + 2) and not inside(b.doorMinX - 0.01, fy + 3, b.maxZ + 2))
 check("inside: there is no door at the back or the sides (no apron there)", not inside(cx, fy + 3, b.minZ - 1) and not inside(b.maxX + 1, fy + 3, cz) and not inside(b.minX - 1, fy + 3, cz))
 check("inside: behind the back wall, where the apron would be if it were on the wrong side, is outside", not inside(cx, fy + 3, b.minZ - 2) and not inside(cx, fy + 3, b.minZ - b.doorDepth))
@@ -1165,6 +1292,24 @@ do
 	frames(60)
 	check("client: and goes back to its own 0.3 with the rest", math.abs(late.Transparency - 0.3) < 1e-9 and allAt(fade, 0))
 end
+-- 4. Standing at the claim post (x 7, 3 in front of the wall): the shell stays solid at every stage and turn
+do
+	local faded = nil
+	for s = 1, 5 do
+		for _, turn in ipairs({ 0, 90, 180, 270 }) do
+			fresh()
+			local fr = frameAt(turn, -135, 150)
+			local o = PBV.originOf(fr, PB)
+			WORLD.root.Position = o * Vector3.new(0, 3, 12) -- inside first (the margin is on)
+			local _, fade = addBuilding(WORLD, s, fr)
+			frames(40)
+			WORLD.root.Position = o * Vector3.new(LOBBY_POST.x, 2, LOBBY_POST.z) -- walked out to the post, on the ground
+			frames(60)
+			if not allAt(fade, 0) then faded = faded or ("stage " .. s .. " at " .. turn) end
+		end
+	end
+	check("claim post: standing at the claim post the shell is solid (not faded) at every stage and turn, coming from inside", faded == nil, faded)
+end
 do
 	fresh()
 	check("client: the script listens to Heartbeat, the tag added and the tag removed (and nothing else)", #WORLD.heartbeat.handlers == 1 and #WORLD.added.handlers == 1 and #WORLD.removed.handlers == 1)
@@ -1211,14 +1356,17 @@ for slot = 1, 6 do
 	if g:GetAttribute("Slot") ~= slot then bad = bad or ("slot " .. slot) end
 end
 check("garages: each has its Floor (60 x 1 x 60, solid, at plotFrame), its building at stage 1 in its turned frame, a hidden sign", bad == nil, bad)
-check("free: every garage starts Free with today's new-player room (stage 1, no props) and its claim post; the prompt is off while the claim is off",
+check("free: every garage starts Free with today's new-player room (stage 1, no props) and its claim post and lamp in a Persistent ClaimSpot; the prompt is off while the claim is off",
 	(function()
 		for slot = 1, 6 do
 			local g = root:FindFirstChild("Garage" .. slot)
 			local room = g:FindFirstChild("FreeRoom") and g.FreeRoom:FindFirstChild("PlotRoom")
-			local prompt = g:FindFirstChild("ClaimPost") and g.ClaimPost:FindFirstChildOfClass("ProximityPrompt")
+			local spot = g:FindFirstChild("ClaimSpot")
+			local post = spot and spot:FindFirstChild("ClaimPost")
+			local prompt = post and post:FindFirstChildOfClass("ProximityPrompt")
 			if g:GetAttribute("State") ~= "Free" or not room or room:GetAttribute("Stage") ~= 1 or #room.UpgradeProps:GetChildren() ~= 0 then return false end
-			if not prompt or prompt.Enabled ~= LobbyConfig.ClaimEnabled or g.ClaimPost.CanCollide or g.ClaimPost.CanTouch then return false end
+			if not prompt or prompt.Enabled ~= LobbyConfig.ClaimEnabled or post.CanCollide or post.CanTouch then return false end
+			if spot.ModelStreamingMode ~= Enum.ModelStreamingMode.Persistent or not spot:FindFirstChild("FreeLamp") then return false end
 		end
 		return true
 	end)())
@@ -1243,7 +1391,7 @@ local landing = plotFrame(2) * Vector3.new(0, 4, 12)
 check("reset: a visitor standing where the Garage's wall now is goes to the landing (a stage change never traps a player)",
 	near((visitor.Position - landing).Magnitude, 0), tostring(visitor.Position))
 local guis = 0
-for _, d in ipairs(root.Garage2:GetDescendants()) do if d.ClassName == "BillboardGui" and not d:IsDescendantOf(root.Garage2.ClaimPost) then guis += 1 end end
+for _, d in ipairs(root.Garage2:GetDescendants()) do if d.ClassName == "BillboardGui" and not d:IsDescendantOf(root.Garage2.ClaimSpot) then guis += 1 end end
 check("sign: one name label per garage, whatever happened (no label per owner; the claim post's FREE sign aside)", guis == 1, guis)
 -- the leave handler: the save first, then the folder, the reset, the slot
 local events = {}
@@ -1291,10 +1439,10 @@ local function useKit(kit) clearKit() kit.Parent = RS end
 local ok = runBlock("kit")
 check("studio: the kit check without PlotBuilding says NOT YET", ok and string.find(last(), "NOT YET", 1, true) == 1, last())
 local pbScript, pbvScript = module(SSS, "PlotBuilding", PB), module(SSS, "PlotBuildingVisuals", PBV)
-useKit(makeKit(0))
+useKit(makeKit(0, nil, true))
 ok = runBlock("kit")
 check("studio: the kit check on a right KitModels says KIT OK: 36 models", ok and string.find(last(), "KIT OK: 36 models", 1, true) == 1, last())
-local broken = makeKit(0, { Bell = true })
+local broken = makeKit(0, { Bell = true }, true)
 broken:FindFirstChild("Sofa"):SetAttribute("KitSize", Vector3.new(8, 4.3, 4))
 useKit(broken)
 ok = runBlock("kit")
@@ -1378,7 +1526,8 @@ def kit_doc_table():
     return "local EXPECTED_KIT = { " + ", ".join(out) + " }\n"
 
 
-STRETCH_ALLOWED = 'local STRETCH_ALLOWED = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true } }\n'
+STRETCH_ALLOWED = ('local STRETCH_ALLOWED = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true }, WallDoor = { x = true }, '
+                   'DoorLeaf = { x = true } }\n')
 
 
 # The plaza's share of the 3,000 parts: six garages at their biggest stage take about 2,470, so the ring plaza (PR L4) may
@@ -1430,7 +1579,9 @@ def program(part, sources):
     """One Luau program: the fake, the modules and one test part."""
     mods = (MODULES.replace("__PLOTART__", sources["PlotArt.lua"]).replace("__PLOTVISUALS__", sources["PlotVisuals.lua"])
             .replace("__PLOTBUILDING__", sources["PlotBuilding.lua"]).replace("__PBV__", sources["PlotBuildingVisuals.lua"]))
-    head = PRELUDE + mods + kit_doc_table() + STRETCH_ALLOWED + ("local PLAZA_BUDGET = %d\n" % plaza_budget()) + HELPERS
+    post = re.search(r"LobbyConfig\.Post = \{ x = ([\d.]+), z = ([\d.]+) \}", sources["LobbyConfig.lua"])
+    head = (PRELUDE + mods + kit_doc_table() + STRETCH_ALLOWED + ("local PLAZA_BUDGET = %d\n" % plaza_budget())
+            + ("local LOBBY_POST = { x = %s, z = %s }\n" % (post.group(1), post.group(2)) if post else 'error("LobbyConfig.Post not found")\n') + HELPERS)
     if part == "data":
         body = DATA_TESTS
     elif part == "build":
@@ -1565,8 +1716,9 @@ MUTANTS = [
     ("the kit front turn ignored", PBV, "local target = pieceFrame(origin, piece) * CFrame.Angles(0, math.rad(building.KIT_FRONT_TURN), 0)", "local target = pieceFrame(origin, piece)", "kit front:", ("build",)),
     ("the client checks in world axes (no garage frame)", CLIENT, "local p = state.frame:PointToObjectSpace(root.Position) -- the character in the garage's frame", "local p = root.Position - state.frame.Position", "client: at 90 degrees", ("client",)),
     ("the apron on the wrong side (behind the back wall)", PBV, "return z > b.maxZ and z <= b.maxZ + b.doorDepth + m", "return z < b.minZ and z >= b.minZ - b.doorDepth - m", "inside:", ("math",)),
-    ("a door jamb in the lane (a Corner at x 3 in front of the Small Office's door)", PB, '\t\t\t{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },\n\t\t\t{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
-     '\t\t\t{ key = "DoorLeaf", x = -7.6, y = -1, z = 32.45, turn = 0 },\n\t\t\t{ key = "Plant", x = -12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Plant", x = 12.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
+    ("a door jamb in the lane (a Corner at x 3 in front of the Small Office's door)", PB,
+     '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
+     '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
     ("an inner part solid (the fallback's Parts collide)", PBV, "\t\tlookFlags(part)\n\t\tpaint(part, building, stage, piece, b.role)", "\t\tlookFlags(part)\n\t\tpart.CanCollide = true\n\t\tpaint(part, building, stage, piece, b.role)", "solid:", ("build",)),
     ("the fade capped at 0.2", PBV, "\treturn clamp01(b + (1 - b) * clamp01(level / n))", "\treturn math.min(0.2, clamp01(b + (1 - b) * clamp01(level / n)))", "fade:", ("build", "math")),
     ("the roof left unfaded (in Static)", PB, '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof" })',
@@ -1577,7 +1729,7 @@ MUTANTS = [
     ("a stage change may trap a player (unstick does nothing)", PBV, "\t\t\t\troot.CFrame = landing\n\t\t\t\tmoved += 1", "\t\t\t\tmoved += 1", "unstick:", ("build",)),
     ("a solid box left visible (Transparency 0)", PBV, "\tpart.Transparency = 1\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "\tpart.Transparency = 0\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "flags:", ("build",)),
     ("the builder keeps every BasePart of a kit model (not only MeshParts)", PBV, "\t\tif d:IsA(\"MeshPart\") then\n\t\t\tlocal rel = pivot:ToObjectSpace(d.CFrame)", "\t\tif d:IsA(\"BasePart\") then\n\t\t\tlocal rel = pivot:ToObjectSpace(d.CFrame)", "kit: only MeshParts", ("build",)),
-    ("the builder stretches anything it is asked to (no refusal)", PBV, "\tif (sx ~= 1 and not (allowed and allowed.x)) or (sz ~= 1 and not (allowed and allowed.z)) then", "\tif false then", "stretch:", ("build",)),
+    ("the builder stretches anything it is asked to (no refusal)", PBV, "\tif (stretched(sx) and not (allowed and allowed.x)) or (stretched(sz) and not (allowed and allowed.z)) then", "\tif false then", "stretch:", ("build",)),
     ("a missing key warns on every build", PBV, "\tif not warned[kind] then\n\t\twarned[kind] = true", "\tif true then\n\t\twarned[kind] = true", "fallback:", ("build",)),
     ("the style table loses a role (stage 3 has no glass)", PB, '\t\t\tglass = S(rgb(170, 210, 232), "Glass", GLASS), dark = S(rgb(44, 52, 66), "Metal"),', '\t\t\tdark = S(rgb(44, 52, 66), "Metal"),', "style:", ("data",)),
     ("the manifest's Sofa size drifts from docs/KIT_MODELS.md", PB, "\tSofa = kit(8, 4, 4,", "\tSofa = kit(8, 4.5, 4,", "manifest:", ("data",)),
@@ -1587,6 +1739,29 @@ MUTANTS = [
     ("the building streams like any model (not Persistent)", PBV, "\t\tmodel.ModelStreamingMode = Enum.ModelStreamingMode.Persistent", "\t\tmodel.ModelStreamingMode = Enum.ModelStreamingMode.Default",
      "streaming:", ("build",)),
     ("the lintel box starts at 5 (the doorway only 6 high)", PB, 'solid("Lintel", -door.half, door.half, door.top, top1,', 'solid("Lintel", -door.half, door.half, 5, top1,', "doorway:", ("data",)),
+    # PR #32 review fixes
+    ("the apron as wide as the door again (the Garage's 20: the shell fades at the claim post)", PB,
+     "doorMinX = -PlotBuilding.Lane.half, doorMaxX = PlotBuilding.Lane.half,", "doorMinX = -door.half, doorMaxX = door.half,", "claim post:", ("data", "client")),
+    ("the Small Office's WallDoor at its kit size (its jambs 1.5 into the lane)", PB,
+     '\t\t\t{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },\n\t\t\t{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open',
+     '\t\t\t{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, lane = true },\n\t\t\t{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open',
+     "door:", ("data", "build")),
+    ("WallDoor may not stretch (the builder keeps its 6-wide opening)", PB, "Floor = { x = true, z = true }, WallDoor = { x = true },", "Floor = { x = true, z = true },",
+     "door:", ("build",)),
+    ("the roof box back at 12 (a jumping head reaches it)", PB, "top1 - PlotBuilding.ROOF, top1,", "top1 - 1, top1,", "roof:", ("data",)),
+    ("unstick counts the roof (a player mid-jump under it is teleported)", PBV, '\t\tif part:IsA("BasePart") and part:GetAttribute("Piece") ~= "Roof" then',
+     '\t\tif part:IsA("BasePart") then', "unstick: a player mid-jump", ("build",)),
+    ("Clone's nil not handled (a MeshPart with Archivable off errors the build)", PBV, "\t\t\tlocal part = d:Clone()\n\t\t\tif not part then",
+     "\t\t\tlocal part = d:Clone()\n\t\t\tif false then", "kit: a MeshPart with Archivable off", ("build",)),
+    ("the stretch test exact again (float noise in KitSize stretches, a turned part falls back to Parts)", PBV, "\treturn math.abs(s - 1) > STRETCH_EPS",
+     "\treturn s ~= 1", "stretch: float noise", ("build",)),
+    ("checkKit skips the WorldPivot check", PBV, "\t\t\tif bounds[1] <= bounds[2] then", "\t\t\tif false then", "checkKit: a WorldPivot off", ("build",)),
+    ("checkKit lets two MeshParts share a role", PBV, "\t\t\t\t\telseif seen[role] then", "\t\t\t\t\telseif false then", "checkKit: two MeshParts", ("build",)),
+    ("the RevolvingDoor back on Small Corporate's lane", PB, '\t\textras = {\n\t\t\t{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 },',
+     '\t\textras = {\n\t\t\t{ key = "RevolvingDoor", x = 0, y = -1, z = 35, turn = 0, lane = true },\n\t\t\t{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 },',
+     "lane: only the door piece", ("data",)),
+    ("the claim post outside its ClaimSpot (in the garage itself: it streams out on far clients)", CORE,
+     '\t\tlocal post = makePart(spot, "ClaimPost",', '\t\tlocal post = makePart(garage, "ClaimPost",', "free:", ("core",)),
 ]
 
 
@@ -1645,7 +1820,7 @@ def main():
                 crash = crash or crashed
         failed_names += [n for n, ok, _ in static_checks(mutated) if not ok]
         hit = [n for n in failed_names if n.startswith(want)]
-        if crash and not hit:
+        if crash:  # a crash is never a catch, even after a named check failed
             print("NOT CAUGHT: %s -- it crashed: %s" % (label, crash[:200]))
         elif hit:
             caught += 1

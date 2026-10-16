@@ -1,5 +1,7 @@
--- The real LobbyClient.lua against a fake client (lobby L3): garages with claim posts and State attributes, the player's
--- Garage attribute, a Heartbeat the test fires. It must show the banner and the marker only on the plaza, with the claim on.
+-- The real LobbyClient.lua against a fake client (lobby L3): garages with claim posts (in each garage's ClaimSpot model)
+-- and State attributes, the player's Garage attribute, a Heartbeat the test fires. It must show the banner and the marker
+-- only on the plaza, with the claim on. Each scenario has its own "ran without an error" check, and no other check reads
+-- the error: a mutant counts only when a check about what the client shows fails (tools/lobby_test.py).
 local print_real = print
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -66,10 +68,13 @@ local function world(claimOn, garageAttr)
 		local g = new("Model")
 		g.Name = "Garage" .. slot
 		g:SetAttribute("State", slot == 1 and "Taken" or "Free")
+		local claimSpot = new("Model")
+		claimSpot.Name = "ClaimSpot"
+		claimSpot.Parent = g
 		local post = new("Part")
 		post.Name = "ClaimPost"
 		post.Position = vec(spot[1], 0, spot[2])
-		post.Parent = g
+		post.Parent = claimSpot
 		g.Parent = garages
 		W["post" .. slot] = post
 		W["garage" .. slot] = g
@@ -102,38 +107,52 @@ local function start(W)
 	local ok, err = pcall(CLIENT, W.game, W.workspace, Instance, W.require, UDim2, UDim, Color3, Enum, Vector3)
 	W.err = not ok and err or nil
 	W.gui = W.player.PlayerGui:FindFirstChild("LobbyGui")
-	W.marker = W.gui and W.gui:FindFirstChild("FreeGarageMarker")
+	W.marker = W.player.PlayerGui:FindFirstChild("FreeGarageMarker")
 	return W
 end
-local function frames(W, n) for _ = 1, n do W.heartbeat:Fire(0.1) end end
+-- A Heartbeat handler that errors is caught here, like Roblox does (the frame goes on, the error is noted)
+local function frames(W, n)
+	for _ = 1, n do
+		local ok, err = pcall(W.heartbeat.Fire, W.heartbeat, 0.1)
+		if not ok and not W.err then W.err = err end
+	end
+end
+local function ranClean(W, label) check("client: ran without an error (" .. label .. ")", W.err == nil, W.err) end
+local function shown(x) return x ~= nil and x.Enabled == true end
 
 do
 	local W = start(world(true, 0))
 	frames(W, 6)
-	check("client: on the plaza with the claim on, the banner shows the plaza text", W.err == nil and W.gui and W.gui.Enabled == true
-		and W.gui.Banner.Text == "Walk to a free garage to start your company", W.err)
-	check("client: the marker is over the nearest FREE garage's post (garage 1 is nearer but Taken)", W.marker and W.marker.Enabled == true and W.marker.Adornee == W.post2)
+	local banner = W.gui and W.gui:FindFirstChild("Banner")
+	check("client: on the plaza with the claim on, the banner shows the plaza text", shown(W.gui) and banner ~= nil
+		and banner.Text == "Walk to a free garage to start your company")
+	check("client: the marker is a BillboardGui straight in PlayerGui (a BillboardGui inside a ScreenGui never shows), kept on respawn",
+		W.marker ~= nil and W.marker.ClassName == "BillboardGui" and W.marker.Parent == W.player.PlayerGui and W.marker.ResetOnSpawn == false)
+	check("client: the marker is over the nearest FREE garage's post (garage 1 is nearer but Taken)", shown(W.marker) and W.marker.Adornee == W.post2)
 	W.root.Position = vec(79, 0, 0)
 	frames(W, 6)
-	check("client: walking on, the marker moves to the garage now nearest", W.marker.Adornee == W.post3)
+	check("client: walking on, the marker moves to the garage now nearest", W.marker ~= nil and W.marker.Adornee == W.post3)
 	W.garage3:SetAttribute("State", "MovingIn")
 	frames(W, 6)
-	check("client: a garage someone is moving into is no longer marked", W.marker.Adornee == W.post2)
+	check("client: a garage someone is moving into is no longer marked", W.marker ~= nil and W.marker.Adornee == W.post2)
 	W.player:SetAttribute("Garage", 2)
-	check("client: with a garage the banner and the marker go at once", W.gui.Enabled == false and W.marker.Enabled == false)
+	check("client: with a garage the banner and the marker go at once", W.gui ~= nil and W.gui.Enabled == false and W.marker ~= nil and W.marker.Enabled == false)
 	check("client: it makes no remote and sends nothing", REMOTES == 0)
+	ranClean(W, "on the plaza, then a garage")
 end
 do
 	local W = start(world(false, 0))
 	frames(W, 6)
-	check("client: with the claim off it shows nothing (no LobbyGui at all)", W.err == nil and W.gui == nil, W.err)
+	check("client: with the claim off it shows nothing (no LobbyGui, no marker)", W.gui == nil and W.marker == nil)
+	ranClean(W, "the claim off")
 end
 do
 	local W = start(world(true, 0))
 	W.garage2:SetAttribute("State", "Taken")
 	W.garage3:SetAttribute("State", "Closing")
 	frames(W, 6)
-	check("client: no Free garage: the banner stays, no marker", W.gui.Enabled == true and W.marker.Enabled == false)
+	check("client: no Free garage: the banner stays, no marker", shown(W.gui) and W.marker ~= nil and W.marker.Enabled == false)
+	ranClean(W, "no Free garage")
 end
 print_real(string.format("%d passed, %d failed", passed, failed))
 print_real("DONE")

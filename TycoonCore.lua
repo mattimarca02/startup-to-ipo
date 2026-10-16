@@ -232,6 +232,12 @@ local lastClaimAsk = {} -- UserId -> os.clock() of their last claim request (one
 local garageState = {} -- slot -> "Free", "MovingIn", "Taken" or "Closing"
 local requestClaim -- a prompt's handler (the claim, below onPlayerAdded's helpers)
 
+-- A part of a garage's claim spot (its "ClaimPost" or its "FreeLamp"), or nil
+local function claimPart(slot, name)
+	local spot = garages[slot] and garages[slot]:FindFirstChild("ClaimSpot")
+	return spot and spot:FindFirstChild(name)
+end
+
 -- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
 -- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
 local function setGarageState(slot, state, ownerName)
@@ -241,7 +247,7 @@ local function setGarageState(slot, state, ownerName)
 	garage:SetAttribute("State", state)
 	garage:SetAttribute("OwnerName", ownerName or "")
 	local free = state == "Free" and LobbyConfig.ClaimEnabled
-	local post = garage:FindFirstChild("ClaimPost")
+	local post = claimPart(slot, "ClaimPost")
 	if post then
 		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
 		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
@@ -252,7 +258,7 @@ local function setGarageState(slot, state, ownerName)
 			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
 		end
 	end
-	local lamp = garage:FindFirstChild("FreeLamp")
+	local lamp = claimPart(slot, "FreeLamp")
 	if lamp then lamp.Transparency = free and 0 or 1 end
 end
 
@@ -272,12 +278,16 @@ end
 
 -- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never
 -- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.
+local buildingWarned = false -- it runs every second: a broken building is told once per server, not every second
 local function syncBuilding(slot, stage)
 	if not (PlotBuildingVisuals and garages[slot]) then return end
 	local kit = ReplicatedStorage:FindFirstChild(PlotBuilding.KIT_FOLDER)
 	local ok, model, changed = pcall(PlotBuildingVisuals.sync, garages[slot], plotFrame(slot), PlotBuilding, stage, kit)
 	if not ok then
-		warn("Plot buildings: the building failed: " .. tostring(model))
+		if not buildingWarned then
+			buildingWarned = true
+			warn("Plot buildings: the building failed: " .. tostring(model))
+		end
 	elseif changed then
 		local roots = {}
 		for _, other in ipairs(Players:GetPlayers()) do
@@ -324,11 +334,18 @@ local function buildGarages()
 		sign.Transparency, sign.CanCollide, sign.CanTouch, sign.CanQuery = 1, false, false, false
 		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
 		-- The claim post beside the door (lobby L3): the "Claim garage" prompt, the FREE sign and a lamp (Neon, no light).
-		-- Never solid, never touched; only shown while the claim is on.
+		-- Never solid, never touched; only shown while the claim is on. Both stand in the garage's ClaimSpot, a Persistent
+		-- model: with streaming on, every client has every post (and its prompt) from the start, however far away.
+		local spot = Instance.new("Model")
+		spot.Name = "ClaimSpot"
+		pcall(function()
+			spot.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+		end)
+		spot.Parent = garage
 		local postAt = plotFrame(slot) * CFrame.new(LobbyConfig.Post.x, 1.5, LobbyConfig.Post.z)
-		local post = makePart(garage, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+		local post = makePart(spot, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
 		post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
-		local lamp = makePart(garage, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
+		local lamp = makePart(spot, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
 		lamp.CanCollide, lamp.CanTouch, lamp.CanQuery = false, false, false
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = LobbyConfig.Texts.Prompt
@@ -1101,7 +1118,7 @@ requestClaim = function(player, slot)
 	if not inPlaza[player] then return end -- already moving in or playing, or gone
 	local now = os.clock()
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	local post = garages[slot] and garages[slot]:FindFirstChild("ClaimPost")
+	local post = claimPart(slot, "ClaimPost")
 	local distance = root and post and (root.Position - post.Position).Magnitude or nil
 	local ok, reason = LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, distance = distance, now = now })
 	lastClaimAsk[player.UserId] = now
