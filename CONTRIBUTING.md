@@ -88,7 +88,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
@@ -118,12 +118,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| CLAUDE.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
-| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
@@ -149,30 +149,30 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/previews/*.svg | (repo only) | free | | |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
 | docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_WORLD.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
 | ShopLayout | ReplicatedStorage | free | | |
 | tools/shop_ux_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_MASTER.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | free | | |
-| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
-| PlotBuilding | ServerScriptService | free | | |
-| PlotBuildingVisuals | ServerScriptService | free | | |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| PlotBuilding | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| PlotBuildingVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | BuildingClient | StarterPlayerScripts | free | | |
-| tools/building_test.py | (repo only) | free | | |
+| tools/building_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/BUILDING_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
 | LobbyConfig | ReplicatedStorage | free | | |
-| LobbyClient | StarterPlayerScripts | free | | |
+| LobbyClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/KIT_MODELS.md | (repo only) | free | | |
-| tools/lobby_runtime.luau | (repo only) | free | | |
-| tools/lobby_client_test.luau | (repo only) | free | | |
+| tools/lobby_runtime.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/lobby_client_test.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
