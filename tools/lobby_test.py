@@ -49,7 +49,8 @@ ALL_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService", "changed"), ("Sho
                ("PlotBuilding", "ModuleScript", "ServerScriptService", "new"),
                ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"),
                ("LobbyConfig", "ModuleScript", "ReplicatedStorage", "new"), ("LobbyClient", "LocalScript", "StarterPlayerScripts", "new"),
-               ("ShopServer", "ModuleScript", "ServerScriptService", "changed"), ("IpoClient", "LocalScript", "StarterPlayerScripts", "changed"))
+               ("ShopServer", "ModuleScript", "ServerScriptService", "changed"), ("IpoClient", "LocalScript", "StarterPlayerScripts", "changed"),
+               ("WorldArt", "ModuleScript", "ServerScriptService", "changed"), ("WorldVisuals", "ModuleScript", "ServerScriptService", "changed"))
 # The five scripts PR L1 changes: (file, Studio class, Studio place)
 L1_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService"), ("EmployeeServer", "ModuleScript", "ServerScriptService"),
               ("IpoServer", "ModuleScript", "ServerScriptService"), ("PlotVisuals", "ModuleScript", "ServerScriptService"),
@@ -530,10 +531,71 @@ end)
 )
 
 
+# PR L4's edits outside the CLAIMLOAD markers (the ring and the plaza, only with ClaimEnabled on), applied after L3_EDITS
+L4_EDITS = (
+    # the garages' turns: the ring's while the claim is on
+    ('''local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }
+''',
+     '''local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }
+if LobbyConfig.ClaimEnabled then -- the ring (lobby L4): each garage turned to face the plaza (LobbyConfig.Ring)
+	for slot, g in ipairs(LobbyConfig.Garages) do
+		GARAGE_TURNS[slot] = g.turn
+	end
+end
+'''),
+    # plotCenter: the ring's centers while the claim is on (the row otherwise)
+    ('''local function plotCenter(slot)
+	local startX = -((MAX_PLOTS - 1) * PLOT_SPACING) / 2
+''',
+     '''local function plotCenter(slot)
+	if LobbyConfig.ClaimEnabled then -- the ring around the plaza (lobby L4); with the claim off, the row as always
+		local g = LobbyConfig.Garages[slot]
+		return Vector3.new(g.x, 0.5, g.z)
+	end
+	local startX = -((MAX_PLOTS - 1) * PLOT_SPACING) / 2
+'''),
+    # the landing asks streaming for the garage first
+    ('''	local signPos = plotFrame(slot) * Vector3.new(0, 4, 24)
+	root.CFrame = CFrame.lookAt(spawnPos, signPos)
+''',
+     '''	local signPos = plotFrame(slot) * Vector3.new(0, 4, 24)
+	local player = Players:GetPlayerFromCharacter(character)
+	if player then
+		pcall(player.RequestStreamAroundAsync, player, spawnPos) -- streaming: the garage is there before they land (lobby L4)
+	end
+	root.CFrame = CFrame.lookAt(spawnPos, signPos)
+'''),
+    # the plaza world, built once at server start, only with the claim on
+    ('''buildGarages()
+
+''',
+     '''buildGarages()
+
+-- The plaza and the decor around the ring (lobby L4): WorldVisuals draws it once from WorldArt, only with the claim on
+-- (with it off the garages stand in the row, as always, and there is no world). Looks only, inside pcall.
+if LobbyConfig.ClaimEnabled then
+	local worldOk, WorldVisuals = pcall(require, script.Parent:WaitForChild("WorldVisuals", 5))
+	local worldArtOk, WorldArt = pcall(require, script.Parent:WaitForChild("WorldArt", 5))
+	local drawn, problem = false, tostring(worldOk and WorldArt or WorldVisuals)
+	if worldOk and worldArtOk then
+		drawn, problem = pcall(function()
+			local site = WorldVisuals.ringSite(WorldArt, LobbyConfig.Garages)
+			return WorldVisuals.build(workspace, WorldArt, site)
+		end)
+	end
+	if not drawn then
+		warn("The plaza is off: " .. tostring(problem))
+	end
+end
+
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS, L2_EDITS and L3_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L4_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
@@ -1000,6 +1062,11 @@ L3_MUTANTS = [
     ("no plaza fallback (a far first spawn stays where it is)", "TycoonCore.lua", "\tif math.sqrt(dx * dx + dz * dz) > LobbyConfig.PlazaRadius then", "\tif false then", "plaza: a first spawn far"),
     ("the claim does not write plotOwners before the load (the garage looks free while moving in)", "TycoonCore.lua",
      "\tclaims[player.UserId] = { slot = slot }\n\tplotOwners[slot] = player\n", "\tclaims[player.UserId] = { slot = slot }\n", "two claims in one moment"),
+    ("L4: the ring used while the claim is off (live players' garages would move)", "LobbyConfig.lua", "\treturn claimEnabled and LobbyConfig.Ring or LobbyConfig.Row",
+     "\treturn LobbyConfig.Ring", "config: with the claim off the server uses the row"),
+    ("L4: the ring's turns ignored (every garage facing +Z)", "TycoonCore.lua", "\t\tGARAGE_TURNS[slot] = g.turn\n", "", "load: the claim's player lands in their garage"),
+    ("L4: plotCenter ignores the ring (the room in the row, the building in the ring)", "TycoonCore.lua",
+     "\t\tlocal g = LobbyConfig.Garages[slot]\n\t\treturn Vector3.new(g.x, 0.5, g.z)\n", "\t\tlocal _ = LobbyConfig.Garages[slot]\n", "load: the claim's player lands in their garage"),
     ("the claim's rate check gone", "LobbyConfig.lua", "\t\tif last and finite(request.now) and request.now - last < LobbyConfig.ClaimInterval then", "\t\tif false then", "rate:"),
 ]
 

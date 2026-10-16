@@ -1,5 +1,7 @@
 # Studio sync: the world and icons pass
 
+> **Lobby-all (2026-10-16):** `WorldArt` and `WorldVisuals` changed on branch `lobby-all` (the ring around the plaza, lobby L4). The rows and the hash block below give their current files. TycoonCore now builds the ring world itself when `LobbyConfig.ClaimEnabled` is on; the row patch (docs/world_pass_integration.patch) is superseded and never applied. The full list for that branch is docs/STUDIO_SYNC_LOBBY.md, section "Lobby all".
+
 Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. Written at the end of the work; the SHA-256 and sizes below are the files as they are on the branch (`tools/world_test.py` fails if this table or the hash block stops matching the files).
 
 **What changes in the game:** nothing, until you approve the integration. The four new ModuleScripts only build something when a script requires them: the world needs the TycoonCore edit in `docs/world_pass_integration.patch`; the icons need the shop pull requests of `docs/SHOP_UX_PROPOSAL.md` (section 5). Until then they can sit in Studio safely, and the two command-bar previews below let you look at everything in edit mode.
@@ -8,8 +10,8 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `WorldArt` | ModuleScript, ServerScriptService | new | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 |
-| `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
+| `WorldArt` | ModuleScript, ServerScriptService | new | `0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558` | 15266 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | new | `0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05` | 55999 |
 | `IconArt` | ModuleScript, ReplicatedStorage | new | `83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915` | 30741 |
 | `IconVisuals` | ModuleScript, ReplicatedStorage | new | `f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4` | 55083 |
 | `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at e3c9e67) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
@@ -89,8 +91,8 @@ local function sha256(msg)
 end
 
 local WANT = {
-	WorldArt = { "972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9", 13042, "ServerScriptService" },
-	WorldVisuals = { "81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343", 48782, "ServerScriptService" },
+	WorldArt = { "0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558", 15266, "ServerScriptService" },
+	WorldVisuals = { "0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05", 55999, "ServerScriptService" },
 	IconArt = { "83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915", 30741, "ReplicatedStorage" },
 	IconVisuals = { "f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4", 55083, "ReplicatedStorage" },
 }

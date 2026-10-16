@@ -362,6 +362,11 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 	end
 	model:SetAttribute("KitPieces", fromKit)
 	model:SetAttribute("PartPieces", fromParts)
+	-- Streaming: the whole building is always there, even far away (lobby L4: the shells are seen across the plaza).
+	-- Some versions may not allow it from a script: then it simply stays the default.
+	pcall(function()
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+	end)
 	-- Tag it before it enters the game, so the client sees it the moment it arrives
 	local ok, service = pcall(function()
 		return game:GetService("CollectionService")

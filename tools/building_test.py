@@ -854,6 +854,7 @@ do
 	check("sync: a new stage replaces the building (one Model, the old one destroyed)", c3 and m3 ~= m1 and count == 1 and rawget(m1, "destroyed") == true)
 	local m4 = PBV.sync(garage, frame, PB, 12, nil)
 	check("sync: a stage past the last shows the last", m4:GetAttribute("Stage") == 5)
+check("streaming: every building Model is Persistent (its shell never streams out across the plaza)", m4.ModelStreamingMode == Enum.ModelStreamingMode.Persistent)
 	-- a visitor stands in Big Corporate's band; an IPO brings back the Garage, whose wall stands there
 	local origin = PBV.originOf(frame, PB)
 	local root = Instance.new("Part")
@@ -1480,6 +1481,8 @@ MUTANTS = [
     ("the building is built in world axes (the Frame ignored)", PBV, "\treturn frame * CFrame.new(0, building.FLOOR_TOP, 0)", "\treturn CFrame.new(frame.Position) * CFrame.new(0, building.FLOOR_TOP, 0)", "turn:", ("build",)),
     ("the stage Debug button added on live servers too (no Studio check)", CORE, "if RunService:IsStudio() then\n\tShopServer.addDebugAction(\"BuildingNextStage\"",
      "if true then\n\tShopServer.addDebugAction(\"BuildingNextStage\"", "debug:", ()),
+    ("the building streams like any model (not Persistent)", PBV, "\t\tmodel.ModelStreamingMode = Enum.ModelStreamingMode.Persistent", "\t\tmodel.ModelStreamingMode = Enum.ModelStreamingMode.Default",
+     "streaming:", ("build",)),
     ("the lintel box starts at 5 (the doorway only 6 high)", PB, 'solid("Lintel", -door.half, door.half, door.top, top1,', 'solid("Lintel", -door.half, door.half, 5, top1,', "doorway:", ("data",)),
 ]
 

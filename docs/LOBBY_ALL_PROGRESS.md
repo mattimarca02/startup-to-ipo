@@ -7,8 +7,8 @@ Branch `lobby-all`, from `main` `f6a546f` (the latest `origin/main` on 2026-10-1
 | setup | `origin/kit-models` merged first, then `origin/building-pass` (CONTRIBUTING conflict: both sides' rows kept); claim rows for every file this branch edits | done |
 | L2 | permanent closed building: `buildGarages`, the Floor in the garage, the garage sign, reset on leave; the five kit buildings (PlotBuilding, PlotBuildingVisuals), `BuildingClient` at the root, `tools/building_test.py` | done |
 | L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | done |
-| L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | next |
-| L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | to do |
+| L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | done |
+| L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | next |
 
 ## Before this session (what was there, and what happened to it)
 
@@ -63,6 +63,19 @@ Next: L3.
 - Not verified (Studio only): Roblox's own prompt-distance check, whether `ProcessReceipt` may wait that long, the claim with 2 and 3 real clients.
 
 Next: L4.
+
+## L4: done (what it built)
+
+- **Decision:** the ring is used **only while `ClaimEnabled` is on** (`LobbyConfig.garages(claimEnabled)`): with the switch off (as it ships) the garages stay in today's row and no world is built, so a publish with the switch off moves nothing for live players. Turning the claim on brings the plaza, the ring and the claim together (one switch).
+- **LobbyConfig.Ring:** the six garages of docs/LOBBY_GARAGE_PROPOSAL.md 4.2 (west facing +X, north facing -Z, east facing -X), each floor's front-center 95 from the plaza's center, lots 7.4 apart (6.4 per axis at the corners).
+- **TycoonCore** (4 edits, `L4_EDITS`): with the claim on, `plotCenter` and the garages' turns come from the ring; the landing asks `RequestStreamAroundAsync` (in pcall) first; at server start, with the claim on, the plaza world is built once from WorldArt and WorldVisuals (in pcall: a broken world never stops the game).
+- **WorldVisuals:** `ringSite` (turned garages, the moved spawn pad), `ringLayout` (the plaza around the spawn pad, a walk from each door, the forecourt to the lounge, a number sign, a lamp and two bushes per garage, four lit lamps, benches, planters, the arch, trees), keep-outs turned with each garage (its whole lot; in front of its facade, flat paving only), the "connected" check for turned fronts, the ring's own budget (480 parts). **WorldArt.Ring:** the numbers, some copied from PlotBuilding and LobbyConfig (compared by the tests). **PlotBuildingVisuals:** each building Model is Persistent (in pcall).
+- **Pictures:** docs/previews/ring_topdown.svg (tools/render_previews.py): the ring with lots, floors, doors and the stage 1 and stage 5 footprints.
+- Tests: world_test's ring program (16 checks: copied numbers, lots apart and on the Baseplate, every garage facing the plaza, the front line at 95, every named world check, the budget and lights, no tall part in any doorway lane, a part dropped in a lot is reported) and group R (11 mutants); lobby_test's runtime follows the ring with the claim on (3 more mutants: the ring with the claim off, the turns ignored, plotCenter ignoring the ring); daily_test and world_test's patch tests get a row stub for `LobbyConfig`; building_test checks the Persistent mode.
+- Counts after L4: daily 2,813 / 281; hud 1,073 / 95; world 366 / 93; icon 371 / 68; shop_ux 6,306 / 103; lobby 112 / 55; building 1,220 / 29. All pass.
+- Not verified (Studio only): StreamingEnabled and its radii, `ModelStreamingMode = Persistent` from a script, how the plaza looks, the walk from the spawn to each door on a phone.
+
+Next: L5.
 
 ## How to continue
 

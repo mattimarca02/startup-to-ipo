@@ -246,15 +246,17 @@ Branch `lobby-all` (docs/LOBBY_ALL_PROGRESS.md has the stages). This section is 
 
 | Script | Class, place | State | SHA-256 | Bytes |
 |---|---|---|---|---|
-| `TycoonCore` | Script, ServerScriptService | changed | `65dc512da0d340558d37b7642595b051cfb537f8dbd7dac1ad40fa1420d51b24` | 51437 |
+| `TycoonCore` | Script, ServerScriptService | changed | `3874158c053e0a54ec49c6c82cb453001800122504a9a40c5da61b210111e400` | 52831 |
 | `ShopClient` | LocalScript, StarterPlayerScripts | changed | `14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8` | 60314 |
 | `PlotBuilding` | ModuleScript, ServerScriptService | new | `f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1` | 34099 |
-| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a` | 24058 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `ba268fef62d13e96268111870785d92b790d97c1da934d082c17880194bd7f48` | 24345 |
 | `BuildingClient` | LocalScript, StarterPlayerScripts | new | `450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec` | 9408 |
 | `LobbyConfig` | ModuleScript, ReplicatedStorage | new | `3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e` | 6184 |
 | `LobbyClient` | LocalScript, StarterPlayerScripts | new | `4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a` | 4391 |
 | `ShopServer` | ModuleScript, ServerScriptService | changed | `c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48` | 33640 |
 | `IpoClient` | LocalScript, StarterPlayerScripts | changed | `ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da` | 42081 |
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558` | 15266 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05` | 55999 |
 
 ### Steps so far (L2 and L3; L5 replaces this with the full list)
 
@@ -317,15 +319,17 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	{ "TycoonCore", "Script", "ServerScriptService", "65dc512da0d340558d37b7642595b051cfb537f8dbd7dac1ad40fa1420d51b24", 51437 },
+	{ "TycoonCore", "Script", "ServerScriptService", "3874158c053e0a54ec49c6c82cb453001800122504a9a40c5da61b210111e400", 52831 },
 	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8", 60314 },
 	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1", 34099 },
-	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a", 24058 },
+	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "ba268fef62d13e96268111870785d92b790d97c1da934d082c17880194bd7f48", 24345 },
 	{ "BuildingClient", "LocalScript", "StarterPlayerScripts", "450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec", 9408 },
 	{ "LobbyConfig", "ModuleScript", "ReplicatedStorage", "3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e", 6184 },
 	{ "LobbyClient", "LocalScript", "StarterPlayerScripts", "4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a", 4391 },
 	{ "ShopServer", "ModuleScript", "ServerScriptService", "c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48", 33640 },
 	{ "IpoClient", "LocalScript", "StarterPlayerScripts", "ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da", 42081 },
+	{ "WorldArt", "ModuleScript", "ServerScriptService", "0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558", 15266 },
+	{ "WorldVisuals", "ModuleScript", "ServerScriptService", "0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05", 55999 },
 }
 local problems = {}
 for _, w in ipairs(WANT) do

@@ -12,6 +12,8 @@
 -- command bar (the preview) and in tools/world_test.py.
 --   WorldVisuals.site(art, spacing, count, centerOf)  -> the site's numbers (pure). centerOf(slot) is TycoonCore's
 --                                                       plotCenter when wired; without it, the same formula
+--   WorldVisuals.ringSite(art, garages)               -> the ring's site (lobby L4): garages = LobbyConfig.Ring, each
+--                                                       { x, z, turn }; layout, build and the checks then draw the ring
 --   WorldVisuals.layout(art, site)                    -> every path, kerb, lawn, decor item and hill, placed (pure)
 --   WorldVisuals.build(parent, art, site, palette)    -> Model "World" (palette: optional, another palette table)
 --   WorldVisuals.ghosts(parent, site)                 -> see-through boxes where the plots and the lounge stand (preview only)
@@ -200,6 +202,42 @@ function WorldVisuals.site(art, spacing, count, centerOf)
 	return site
 end
 
+-- A garage's own frame on the ground: where a point (x across its front, z out from its floor's center) lands in the
+-- world, for a quarter turn (90 turns the front, +Z, to world +X: TycoonCore's plotFrame)
+local QUARTER = { [0] = { 1, 0 }, [90] = { 0, 1 }, [180] = { -1, 0 }, [270] = { 0, -1 } }
+local function toWorld(p, x, z)
+	local q = QUARTER[p.turn or 0]
+	return p.x + q[1] * x + q[2] * z, p.z - q[2] * x + q[1] * z
+end
+WorldVisuals.toWorld = toWorld
+
+-- A box in a garage's frame { x0, x1, z0, z1 } as a world box { x0, x1, z0, z1 } (quarter turns keep it a box)
+local function boxToWorld(p, x0, x1, z0, z1)
+	local ax, az = toWorld(p, x0, z0)
+	local bx, bz = toWorld(p, x1, z1)
+	return math.min(ax, bx), math.max(ax, bx), math.min(az, bz), math.max(az, bz)
+end
+WorldVisuals.boxToWorld = boxToWorld
+
+-- The ring's site (lobby L4): the lounge, the Baseplate and the floor as in site(); the six garages from LobbyConfig.Ring,
+-- each turned to face the plaza; the spawn pad where it is moved for the ring (WorldArt.Ring.spawn)
+function WorldVisuals.ringSite(art, garages)
+	local site = WorldVisuals.site(art, nil, #garages, function(slot)
+		local g = garages[slot]
+		return { X = g.x, Y = art.Site.plotY, Z = g.z }
+	end)
+	for slot, g in ipairs(garages) do
+		site.plots[slot].turn = g.turn
+	end
+	local R = art.Ring
+	local sp, ss = R.spawn.position, R.spawn.size
+	site.spawn = { x = sp[1], z = sp[3], halfX = ss[1] / 2, halfZ = ss[3] / 2, top = sp[2] + ss[2] / 2 }
+	site.spawnFact = { position = sp, size = ss }
+	site.ring = R
+	site.preview = nil -- the preview rooms stand far west of the ring, and are deleted before publishing
+	return site
+end
+
 -- The layout (pure) -----------------------------------------------------------------
 
 -- Gap lines: halfway between two plots, plus one half a spacing beyond each end of the row
@@ -216,6 +254,9 @@ end
 -- Every rectangle and placement of the world. Rectangles are { name, x0, x1, z0, z1, color }; items are
 -- { piece, name, x, z, yaw, lit, slot }; hills are WorldArt.Hills entries.
 function WorldVisuals.layout(art, site)
+	if site.ring then
+		return WorldVisuals.ringLayout(art, site)
+	end
 	local L = art.Layout
 	local plan = { paths = {}, kerbs = {}, ground = {}, items = {}, hills = {} }
 	local half, kw = L.pathWidth / 2, L.kerbWidth
@@ -357,6 +398,79 @@ function WorldVisuals.layout(art, site)
 		table.insert(plan.hills, hill)
 	end
 	plan.frontZ0, plan.backZ1, plan.floorFront = frontZ0, backZ1, floorFront
+	return plan
+end
+
+-- The ring's layout (lobby L4): the plaza around the spawn pad, a walk from each garage's door to the plaza, the forecourt
+-- to the lounge's door, and the decor. Same plan as layout(): paths, kerbs, ground, items, hills.
+function WorldVisuals.ringLayout(art, site)
+	local R, L = art.Ring, art.Layout
+	local plan = { paths = {}, kerbs = {}, ground = {}, items = {}, hills = {} }
+	local function rect(list, name, x0, x1, z0, z1, color)
+		if x1 > x0 and z1 > z0 then
+			table.insert(list, { name = name, x0 = x0, x1 = x1, z0 = z0, z1 = z1, color = color })
+		end
+	end
+	local function item(piece, name, x, z, yaw, extra)
+		local it = { piece = piece, name = name, x = x, z = z, yaw = yaw or 0 }
+		for k, v in pairs(extra or {}) do
+			it[k] = v
+		end
+		table.insert(plan.items, it)
+	end
+	local trees = { "TreeA", "TreeB", "TreeC" }
+	-- The plaza: four slabs around the spawn pad and its bare margin
+	local pz, sp = R.plaza, site.spawn
+	local x0, x1, z0, z1 = pz.x - pz.half, pz.x + pz.half, pz.z - pz.half, pz.z + pz.half
+	local hx, hz = sp.halfX + L.spawnMargin, sp.halfZ + L.spawnMargin
+	rect(plan.paths, "PlazaSouth", x0, x1, z0, sp.z - hz, "Plaza")
+	rect(plan.paths, "PlazaNorth", x0, x1, sp.z + hz, z1, "Plaza")
+	rect(plan.paths, "PlazaWest", x0, sp.x - hx, sp.z - hz, sp.z + hz, "Plaza")
+	rect(plan.paths, "PlazaEast", sp.x + hx, x1, sp.z - hz, sp.z + hz, "Plaza")
+	-- The forecourt: from the lounge's front (and its margin) to the plaza
+	local lg = site.lounge
+	rect(plan.paths, "Forecourt", lg.x - R.forecourt.half, lg.x + R.forecourt.half, lg.front + L.loungeMargin, z0, "Plaza")
+	-- Each garage: its walk from the front wall to the plaza's edge, its number, a lamp, two bushes
+	for i, p in ipairs(site.plots) do
+		local w = R.walkWidth / 2
+		local far = 0
+		-- how far out the walk goes: to the plaza's edge on this garage's side
+		local fx, fz = toWorld(p, 0, R.frontLine)
+		if p.turn == 90 then far = x0 - fx elseif p.turn == 270 then far = fx - x1 elseif p.turn == 180 then far = fz - z1 else far = z0 - fz end
+		local wx0, wx1, wz0, wz1 = boxToWorld(p, -w, w, R.frontLine, R.frontLine + math.max(far, 0))
+		rect(plan.paths, "Walk" .. i, wx0, wx1, wz0, wz1, "Walk")
+		local yaw = p.turn or 0
+		local sx, sz = toWorld(p, R.sign.x, R.sign.z)
+		item("Sign", "GarageSign" .. i, sx, sz, yaw, { slot = i })
+		local lx, lz = toWorld(p, R.lamp.x, R.lamp.z)
+		item("Lamp", "WalkLamp" .. i, lx, lz, 0)
+		for k, b in ipairs(R.bushes) do
+			local bx, bz = toWorld(p, b[1], b[2])
+			item("Bush", "FacadeBush" .. i .. "_" .. k, bx, bz, yaw)
+		end
+	end
+	-- On the plaza: four lit lamps around the spawn pad, benches facing it, planters, the arch, trees at its corners
+	local d = R.litLamps
+	for i, c in ipairs({ { -d, -d }, { d, -d }, { -d, d }, { d, d } }) do
+		item("Lamp", "PlazaLamp" .. i, sp.x + c[1], sp.z + c[2], 0, { lit = true })
+	end
+	for i, b in ipairs(R.benches) do
+		item("Bench", "PlazaBench" .. i, sp.x + b[1], sp.z + b[2], b[3])
+	end
+	for i, c in ipairs(R.planters) do
+		item("Planter", "PlazaPlanter" .. i, sp.x + c[1], sp.z + c[2])
+	end
+	item("Arch", "WelcomeArch", sp.x + R.arch.x, sp.z + R.arch.z)
+	for i, c in ipairs(R.trees) do
+		item(trees[(i - 1) % #trees + 1], "PlazaTree" .. i, pz.x + c[1], pz.z + c[2])
+	end
+	for i, c in ipairs(R.gapTrees) do
+		item("TreeB", "GapTree" .. i, c[1], c[2]) -- the smallest crown (6): the gap between two lots is 7.4
+	end
+	for _, hill in ipairs(art.Hills) do
+		table.insert(plan.hills, hill)
+	end
+	plan.frontZ0, plan.backZ1, plan.floorFront = z1, z0, z1
 	return plan
 end
 
@@ -742,7 +856,24 @@ function WorldVisuals.zones(art, site)
 	end
 	local fx, fy, fz = site.floor[1] / 2, site.floor[2], site.floor[3] / 2
 	local r = site.reach
-	for i, p in ipairs(site.plots) do
+	if site.ring then
+		-- The ring: each garage's whole lot (its building at every stage, its room, its yard) in its own frame, turned;
+		-- only its own flat walk may enter it. In front of the facade, the strip of its outside pieces: flat paving only.
+		local R = site.ring
+		for i, p in ipairs(site.plots) do
+			local floorTop = p.y + fy / 2
+			local a0, a1, b0, b1 = boxToWorld(p, -fx, fx, -fz, fz)
+			add("plot floor", "Plot" .. i, { a0, a1, 0, floorTop, b0, b1 }, false)
+			local walk = "Walk" .. i
+			a0, a1, b0, b1 = boxToWorld(p, -R.lot.half, R.lot.half, R.lot.back, R.lot.front)
+			add("lot", "Lot" .. i, { a0, a1, 0, R.lot.top, b0, b1 }, false, function(part)
+				return part.Name == walk and part.flat
+			end)
+			a0, a1, b0, b1 = boxToWorld(p, -R.outside.half, R.outside.half, R.lot.front, R.outside.to)
+			add("facade strip", "Front" .. i, { a0, a1, 0, R.lot.top, b0, b1 }, true)
+		end
+	end
+	for i, p in ipairs(site.ring and {} or site.plots) do
 		local floorTop = p.y + fy / 2
 		add("plot floor", "Plot" .. i, { p.x - fx, p.x + fx, 0, floorTop, p.z - fz, p.z + fz }, false)
 		local walk = "Walk" .. i
@@ -842,8 +973,9 @@ function WorldVisuals.checks(world, art, site, options)
 	end)
 
 	run("budget", function(problem)
-		if #parts > art.Budget.parts then
-			problem(string.format("%d parts (budget %d)", #parts, art.Budget.parts))
+		local budget = site.ring and art.Budget.ringParts or art.Budget.parts -- the ring's own (lobby L4)
+		if #parts > budget then
+			problem(string.format("%d parts (budget %d)", #parts, budget))
 		end
 		if lights > art.Budget.lights then
 			problem(string.format("%d lights (budget %d)", lights, art.Budget.lights))
@@ -1049,6 +1181,22 @@ function WorldVisuals.checks(world, art, site, options)
 			for j, r in ipairs(rects) do
 				if reached[j] and math.abs(r.z0 - edge.z0) <= eps and along(r.x0, r.x1, edge.x0, edge.x1) >= need then
 					ok = true
+				end
+			end
+			if site.ring then
+				-- the ring: a reached path starts at the garage's front wall, across its doorway, whichever way it faces
+				ok = false
+				local half, line = site.ring.walkWidth / 2, site.ring.frontLine
+				local ax, az = toWorld(p, -half, line)
+				local bx, bz = toWorld(p, half, line)
+				for j, r in ipairs(rects) do
+					if reached[j] then
+						if ax == bx and (math.abs(r.x0 - ax) <= eps or math.abs(r.x1 - ax) <= eps) and along(r.z0, r.z1, math.min(az, bz), math.max(az, bz)) >= need then
+							ok = true
+						elseif az == bz and (math.abs(r.z0 - az) <= eps or math.abs(r.z1 - az) <= eps) and along(r.x0, r.x1, math.min(ax, bx), math.max(ax, bx)) >= need then
+							ok = true
+						end
+					end
 				end
 			end
 			if not ok then

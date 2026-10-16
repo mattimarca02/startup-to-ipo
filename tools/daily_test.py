@@ -7540,6 +7540,8 @@ local CompanyConfig = MODULES.CompanyConfig
 -- The real TycoonCore code, with the garages turned by TURNS (its own GARAGE_TURNS line is read separately below)
 local function coreAt(TURNS)
 	local playerData = {}
+	local LobbyConfig = { ClaimEnabled = false } -- the row: plotCenter reads the ring only with the claim on (lobby L4, tested in tools/lobby_test.py and world_test.py)
+	local Players = { GetPlayerFromCharacter = function() return nil end } -- the landing asks streaming for a player (lobby L4)
 __CORE_CONSTANTS__
 	local GARAGE_TURNS = TURNS
 __UPGRADES__

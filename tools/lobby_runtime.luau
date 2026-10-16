@@ -322,7 +322,8 @@ do
 		ana.Character = ch
 		ana.CharacterAdded:Fire(ch)
 		W.run(0.5)
-		local land = Vector3.new(-45, 4.5, 162) -- garage 3's landing (0, 4, 12 in its frame: the row, facing +Z)
+		local g = W.LobbyConfig.Garages[3] -- the claim is on: the ring (garage 3 faces -Z, toward the plaza)
+		local land = Vector3.new(g.x, 4.5, g.z - 12) -- its landing: (0, 4, 12) in its frame, turned 180
 		return (r.Position - land).Magnitude < 0.01
 	end)())
 	-- a second hold from the same player (on another garage) does nothing: one garage per account
@@ -526,7 +527,13 @@ do
 	check("early joiner: a player already in the server when the script starts is set up once (one garage, one load, never kicked)",
 		owned == 1 and W.reads == 1 and W.kicks[p] == nil and p.Parent == W.Players, owned .. " " .. W.reads .. " " .. tostring(W.kicks[p]))
 end
-check("config: LobbyConfig has one garage per slot (#Garages == MAX_PLOTS == 6)", #(LOBBY_SOURCE)().Garages == 6 and #(LOBBY_SOURCE)().Row == 6)
+check("config: LobbyConfig has one garage per slot (#Garages == MAX_PLOTS == 6), in the row and in the ring",
+	#(LOBBY_SOURCE)().Garages == 6 and #(LOBBY_SOURCE)().Row == 6 and #(LOBBY_SOURCE)().Ring == 6)
+do
+	local L = (LOBBY_SOURCE)()
+	check("config: with the claim off the server uses the row, with it on the ring", L.garages(false) == L.Row and L.garages(true) == L.Ring
+		and L.Garages == (L.ClaimEnabled and L.Ring or L.Row))
+end
 
 -- 7. A Robux receipt before the claim (ShopServer's real waitForData, cut out of ShopServer.lua) ----------------------------
 do

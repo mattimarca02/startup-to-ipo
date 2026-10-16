@@ -81,6 +81,11 @@ local MAX_PLOTS = 6
 -- its own frame (+X right, +Z the front, toward the signs), so they turn with it (plotFrame). All 0 for now: every
 -- garage stands as it always has (docs/LOBBY_GARAGE_PROPOSAL.md, PR L1; the ring of PR L4 turns them).
 local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }
+if LobbyConfig.ClaimEnabled then -- the ring (lobby L4): each garage turned to face the plaza (LobbyConfig.Ring)
+	for slot, g in ipairs(LobbyConfig.Garages) do
+		GARAGE_TURNS[slot] = g.turn
+	end
+end
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
 local LOAD_TRIES = 3 -- reads of a joining player's save before giving up and kicking them
@@ -132,6 +137,10 @@ local function addLabel(part, text, height)
 end
 
 local function plotCenter(slot)
+	if LobbyConfig.ClaimEnabled then -- the ring around the plaza (lobby L4); with the claim off, the row as always
+		local g = LobbyConfig.Garages[slot]
+		return Vector3.new(g.x, 0.5, g.z)
+	end
 	local startX = -((MAX_PLOTS - 1) * PLOT_SPACING) / 2
 	return Vector3.new(startX + (slot - 1) * PLOT_SPACING, 0.5, 150)
 end
@@ -347,6 +356,23 @@ local function buildGarages()
 	end
 end
 buildGarages()
+
+-- The plaza and the decor around the ring (lobby L4): WorldVisuals draws it once from WorldArt, only with the claim on
+-- (with it off the garages stand in the row, as always, and there is no world). Looks only, inside pcall.
+if LobbyConfig.ClaimEnabled then
+	local worldOk, WorldVisuals = pcall(require, script.Parent:WaitForChild("WorldVisuals", 5))
+	local worldArtOk, WorldArt = pcall(require, script.Parent:WaitForChild("WorldArt", 5))
+	local drawn, problem = false, tostring(worldOk and WorldArt or WorldVisuals)
+	if worldOk and worldArtOk then
+		drawn, problem = pcall(function()
+			local site = WorldVisuals.ringSite(WorldArt, LobbyConfig.Garages)
+			return WorldVisuals.build(workspace, WorldArt, site)
+		end)
+	end
+	if not drawn then
+		warn("The plaza is off: " .. tostring(problem))
+	end
+end
 
 -- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
 -- swaps the room with a quick flash (the bought props move along) and the building around it.
@@ -912,6 +938,10 @@ local function teleportToPlot(character, slot)
 	-- Land in the middle of the garage, facing the front sign (both in the garage's frame)
 	local spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)
 	local signPos = plotFrame(slot) * Vector3.new(0, 4, 24)
+	local player = Players:GetPlayerFromCharacter(character)
+	if player then
+		pcall(player.RequestStreamAroundAsync, player, spawnPos) -- streaming: the garage is there before they land (lobby L4)
+	end
 	root.CFrame = CFrame.lookAt(spawnPos, signPos)
 end
 

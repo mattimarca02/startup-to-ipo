@@ -404,6 +404,7 @@ end
 
 -- The real code of the game, run in the fake: TycoonCore's plotCenter and makePart, ShopServer's lounge
 local function realPlotCenter(PLOT_SPACING, MAX_PLOTS)
+	local LobbyConfig = { ClaimEnabled = false } -- the row (lobby L4: with the claim on, the ring, tested on its own)
 __PLOTCENTER__
 	return plotCenter
 end
@@ -989,6 +990,7 @@ local function runPatch(present)
 	local ok, err = pcall(function()
 __E1__
 __CONSTANTS__
+		local LobbyConfig = { ClaimEnabled = false } -- the row (lobby L4: plotCenter reads the ring only with the claim on)
 __PLOTCENTER__
 __E2__
 	end)
@@ -1736,7 +1738,8 @@ def block_order(text, hunks=None):
     if not (text.index("local function plotCenter(") < text.index("local function onPlayerAdded(") < e2
             < text.index("Players.PlayerAdded:Connect(onPlayerAdded)")):
         problems.append("the build block is not after onPlayerAdded and before Players.PlayerAdded:Connect")
-    if not (text.index("WorldVisuals.build(") > e2 and text.count(PATCH_MARKERS[0]) == 1 and text.count(PATCH_MARKERS[1]) == 1):
+    # the patch's own build call, after its marker (lobby L4's ring hook has a build call of its own, earlier in the file)
+    if not (text.find("WorldVisuals.build(", e2) > e2 and text.count(PATCH_MARKERS[0]) == 1 and text.count(PATCH_MARKERS[1]) == 1):
         problems.append("a block is there twice, or the build call is outside its block")
     hunks = hunks if hunks is not None else patch_hunks()
     if len(hunks) == 2 and E1_ANCHOR + hunks[0] + "\n" not in text:
@@ -2000,7 +2003,7 @@ MUTANTS_A = [
     ("the keep-out zones are never looked at", V, "if overlaps(p.above, zone.box, WorldVisuals.OVERLAP) and", "if false and overlaps(p.above, zone.box, WorldVisuals.OVERLAP) and",
      "negative keepouts"),
     ("the Baseplate's edge is never looked at", V, "if b[1] < g.x0 or b[2] > g.x1 or b[5] < g.z0 or b[6] > g.z1 then", "if false then", "negative baseplate"),
-    ("the parts budget is never looked at", V, "if #parts > art.Budget.parts then", "if false then", "negative budget: 668 parts"),
+    ("the parts budget is never looked at", V, "if #parts > budget then", "if false then", "negative budget: 668 parts"),
     ("the texts check allows any word", V, "if not allowed[label.Text] then", "if false then", "negative texts: a word"),
     ("a sunk ball measured as a whole sphere", V, "local a = cy >= 0 and r or math.sqrt(math.max(r * r - cy * cy, 0))", "local a = r", "aboveGround: a sunk ball"),
     ("two paths join without touching", V, "return ox >= need and oz >= need", "return true", "negative connected"),
@@ -2016,8 +2019,8 @@ MUTANTS_B = [
     ("a squashed bush ball", A, 'P("BushBig", "Ball", { 3, 3, 3 }', 'P("BushBig", "Ball", { 3, 2, 3 }', "default site: check data"),
     ("every upright cylinder tilted 10 degrees", A, "color, material, { rot = { 0, 0, 90 } })", "color, material, { rot = { 0, 0, 80 } })",
      "default site: check flags"),
-    ("a parts budget too small for the world", A, "Budget = { parts = 600, lights = 8 }", "Budget = { parts = 200, lights = 8 }", "default site: check budget"),
-    ("a lights budget too small for the world", A, "Budget = { parts = 600, lights = 8 }", "Budget = { parts = 600, lights = 5 }", "default site: check budget"),
+    ("a parts budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 480 }", "Budget = { parts = 200, lights = 8, ringParts = 480 }", "default site: check budget"),
+    ("a lights budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 480 }", "Budget = { parts = 600, lights = 5, ringParts = 480 }", "default site: check budget"),
     ("the plaza reaching over the spawn pad", A, "spawnMargin = 1,", "spawnMargin = -1,", "default site: check keepouts"),
     ("paths on the lawn layer", A, "pathTop = 0.16,", "pathTop = 0.04,", "default site: check data"),
     ("lawns on the Baseplate's top plane", A, "groundTop = 0.04,", "groundTop = 0.001,", "default site: check zfighting"),
@@ -2378,6 +2381,177 @@ def run_mutants(luau, mutants, group):
     return len(mutants) - len(problems), problems
 
 
+# --- Lobby L4: the ring around the plaza ------------------------------------------------------------------------------
+RING_TESTS = r'''-- Tests: the ring around the plaza (lobby L4), from the real WorldArt, WorldVisuals and LobbyConfig ------------------------
+local WorldArt = (function()
+__WORLDART__
+end)()
+local WorldVisuals = (function()
+__WORLDVISUALS__
+end)()
+local LobbyConfig = (function()
+__LOBBYCONFIG__
+end)()
+local PB = __PBNUMBERS__
+local function section(name, fn)
+	local ok, err = pcall(fn)
+	if not ok then check(name .. ": this part of the tests could not finish", false, err) end
+end
+local R, ring = WorldArt.Ring, LobbyConfig.Ring
+local site, world
+
+section("ring copied", function()
+	check("ring copied: WorldArt.Ring.lot is PlotBuilding.Lot (82.6 x 86.6, 2.3 in front of the floor's front edge)",
+		R.lot.half == PB.lotHalf and R.lot.front == PB.lotFront and R.lot.back == PB.lotBack)
+	check("ring copied: the facade strip ends at PlotBuilding.OUTSIDE_TO and each walk starts at PlotBuilding.FRONT_OUT",
+		R.outside.to == PB.outsideTo and R.frontLine == PB.frontOut)
+	check("ring copied: the plaza's center is LobbyConfig.PlazaCenter", R.plaza.x == LobbyConfig.PlazaCenter.x and R.plaza.z == LobbyConfig.PlazaCenter.z)
+	check("ring copied: one garage per slot (6, TycoonCore MAX_PLOTS)", #ring == 6 and #ring == WorldArt.Site.plotCount)
+	check("ring copied: the moved SpawnLocation is on the plaza's center", R.spawn.position[1] == R.plaza.x and R.spawn.position[3] == R.plaza.z)
+end)
+
+section("ring lots", function()
+	site = WorldVisuals.ringSite(WorldArt, ring)
+	local lots = {}
+	for i, p in ipairs(site.plots) do
+		local x0, x1, z0, z1 = WorldVisuals.boxToWorld(p, -R.lot.half, R.lot.half, R.lot.back, R.lot.front)
+		lots[i] = { x0, x1, z0, z1 }
+	end
+	local overlap, near, off, away, anchor = nil, nil, nil, nil, nil
+	for i = 1, #lots do
+		for j = i + 1, #lots do
+			local a, b = lots[i], lots[j]
+			local gx = math.max(b[1] - a[2], a[1] - b[2])
+			local gz = math.max(b[3] - a[4], a[3] - b[4])
+			if gx < 0 and gz < 0 then overlap = overlap or (i .. "/" .. j) end
+			local dist = (gx > 0 and gz > 0) and math.sqrt(gx * gx + gz * gz) or math.max(gx, gz) -- the real distance (a corner: diagonal)
+			if dist < 6 - 1e-9 then near = near or (i .. "/" .. j .. " " .. string.format("%.1f", dist)) end
+		end
+		local g = site.ground
+		if lots[i][1] < g.x0 or lots[i][2] > g.x1 or lots[i][3] < g.z0 or lots[i][4] > g.z1 then off = off or i end
+		-- the front (+Z of the garage's frame) points at the plaza's center, the way it is nearest to
+		local p = site.plots[i]
+		local fx, fz = WorldVisuals.toWorld(p, 0, 1)
+		local dx, dz = fx - p.x, fz - p.z
+		local cx, cz = R.plaza.x - p.x, R.plaza.z - p.z
+		local best = math.max(math.abs(cx), math.abs(cz))
+		if not (dx * cx + dz * cz > 0 and ((math.abs(cx) == best and dx ~= 0) or (math.abs(cz) == best and dz ~= 0))) then away = away or i end
+		local ax, az = WorldVisuals.toWorld(p, 0, PB.floorHalf)
+		if math.abs(math.max(math.abs(ax - R.plaza.x), math.abs(az - R.plaza.z)) - 95) > 1e-9 then anchor = anchor or i end
+	end
+	check("ring: no two lots overlap", overlap == nil, overlap)
+	check("ring: every lot is 6 or more from the next (6.4 at the corners)", near == nil, near)
+	check("ring: every lot is on the Baseplate", off == nil, off)
+	check("ring: every garage faces the plaza (its front turned toward the plaza's center)", away == nil, away)
+	check("ring: every floor's front-center is 95 studs from the plaza's center (the front line)", anchor == nil, anchor)
+end)
+
+section("ring world", function()
+	site = site or WorldVisuals.ringSite(WorldArt, ring)
+	world = WorldVisuals.build(nil, WorldArt, site)
+	local problems = WorldVisuals.check(world, WorldArt, site)
+	check("ring world: every named check passes (data, budget, flags, keepouts, floating, zfighting, baseplate, connected, palette, texts)", #problems == 0, problems[1])
+	local parts, lights = 0, 0
+	for _, d in ipairs(world:GetDescendants()) do
+		if d:IsA("BasePart") then parts += 1 elseif d.ClassName == "PointLight" then lights += 1 end
+	end
+	check("ring world: at most " .. WorldArt.Budget.ringParts .. " parts (" .. parts .. ") and 6 lights (" .. lights .. ")", parts <= WorldArt.Budget.ringParts and lights <= 6)
+	-- nothing taller than the paving in any garage's doorway lane (9 wide, from inside the floor to past the apron)
+	local inLane = nil
+	for i, p in ipairs(site.plots) do
+		local x0, x1, z0, z1 = WorldVisuals.boxToWorld(p, -4.5, 4.5, 26, 40)
+		for _, d in ipairs(world:GetDescendants()) do
+			if d:IsA("BasePart") and d.Parent.Name ~= "Hills" then -- the far hills: huge spheres sunk in the ground, hundreds of studs away
+				local b = WorldVisuals.boxOf(d.CFrame, d.Size)
+				if b and b[1] < x1 - 0.01 and x0 < b[2] - 0.01 and b[5] < z1 - 0.01 and z0 < b[6] - 0.01 and b[4] > 0.25 then inLane = inLane or (d.Name .. " at garage " .. i) end
+			end
+		end
+	end
+	check("ring: no world part stands in a doorway lane (flat paving only)", inLane == nil, inLane)
+	local signs = 0
+	for i = 1, 6 do if world:FindFirstChild("GarageSign" .. i, true) then signs += 1 end end
+	check("ring world: one number sign per garage, beside its walk", signs == 6)
+	do -- a negative test: a ball dropped inside garage 1's lot must be reported by the keepouts check
+		local p = site.plots[1]
+		local bx, bz = WorldVisuals.toWorld(p, 0, -40)
+		local ball = newInstance("Part")
+		ball.Name = "StrayBall"
+		ball.Shape = Enum.PartType.Ball
+		ball.Size = vec(3, 3, 3)
+		ball.CFrame = cf(bx, 1.5, bz)
+		ball.Anchored, ball.CanCollide, ball.CanTouch, ball.CanQuery, ball.CastShadow = true, false, false, false, true
+		ball.Parent = world:FindFirstChild("Decor")
+		local found = false
+		for _, r in ipairs(WorldVisuals.checks(world, WorldArt, site)) do
+			if r.name == "keepouts" then for _, text in ipairs(r.problems) do if string.find(text, "lot zone Lot1", 1, true) then found = true end end end
+		end
+		check("ring world: a part dropped inside a garage's lot is reported (the lots are keep-outs)", found)
+		ball.Parent = nil
+	end
+	check("ring world: the lounge, its door, the drop spot and the moved spawn pad are kept clear (the keepouts check)",
+		(function() for _, r in ipairs(WorldVisuals.checks(world, WorldArt, site)) do if r.name == "keepouts" then return #r.problems == 0 end end return false end)())
+end)
+print_real(string.format("%d passed, %d failed", passed, failed))
+'''
+
+RING_MUTANTS = [
+    # (what, file, old, new, the start of the named check that must fail)
+    ("two lots overlapping (garage 2 moved onto garage 1)", "LobbyConfig.lua", "{ x = -125, z = 220, turn = 90 }", "{ x = -125, z = 200, turn = 90 }", "ring: no two lots overlap"),
+    ("a corner gap under 6 (garage 3 moved 3 studs toward garage 2 on both axes)", "LobbyConfig.lua", "{ x = -45, z = 300, turn = 180 }", "{ x = -48, z = 297, turn = 180 }", "ring: every lot is 6 or more"),
+    ("a lot off the Baseplate (garage 6 at x 1000)", "LobbyConfig.lua", "{ x = 125, z = 130, turn = 270 }", "{ x = 1000, z = 130, turn = 270 }", "ring: every lot is on the Baseplate"),
+    ("a garage facing away from the plaza", "LobbyConfig.lua", "{ x = -125, z = 130, turn = 90 }", "{ x = -125, z = 130, turn = 270 }", "ring: every garage faces the plaza"),
+    ("a lamp standing in a doorway (the walk lamps at x 0)", "WorldArt.lua", "lamp = { x = -18, z = 42 }", "lamp = { x = 0, z = 38 }", "ring: no world part stands in a doorway lane"),
+    ("the spawn pad covered (a bench on it)", "WorldArt.lua", "benches = { { -18, 0, 90 },", "benches = { { 0, 0, 0 }, { -18, 0, 90 },", "ring world: the lounge, its door"),
+    ("the ring's lot smaller than PlotBuilding's", "WorldArt.lua", "lot = { half = 41.3, front = 32.3, back = -54.3, top = 120 },", "lot = { half = 36, front = 32.3, back = -54.3, top = 120 },", "ring copied: WorldArt.Ring.lot"),
+    ("the walks start at the floor's edge, not the front wall", "WorldArt.lua", "frontLine = 32.2,", "frontLine = 30,", "ring copied: the facade strip"),
+    ("a tree inside a lot (the gap trees moved)", "WorldArt.lua", "gapTrees = { { -140, 175 }, { 140, 175 } },", "gapTrees = { { -140, 160 }, { 140, 175 } },", "ring world: every named check passes"),
+    ("the ring world over its budget (the ring budget lowered to 100)", "WorldArt.lua", "ringParts = 480", "ringParts = 100", "ring world: every named check passes"),
+    ("the zones forget the ring's lots (only the row's plots)", "WorldVisuals.lua", "\tif site.ring then\n\t\t-- The ring: each garage's whole lot", "\tif false then\n\t\t-- The ring: each garage's whole lot", "ring world: a part dropped inside a garage's lot"),
+]
+
+
+def pb_numbers():
+    pb = read("PlotBuilding.lua")
+    lot = re.search(r"PlotBuilding\.Lot = \{ half = ([\d.]+), front = ([\d.]+), back = (-?[\d.]+) \}", pb)
+    out = re.search(r"PlotBuilding\.OUTSIDE_TO = ([\d.]+)", pb)
+    front = re.search(r"PlotBuilding\.FRONT_OUT = ([\d.]+)", pb)
+    if not (lot and out and front):
+        return "{}"
+    return "{ lotHalf = %s, lotFront = %s, lotBack = %s, outsideTo = %s, frontOut = %s, floorHalf = 30 }" % (lot.group(1), lot.group(2), lot.group(3), out.group(1), front.group(1))
+
+
+def ring_source(texts=None):
+    texts = texts or {}
+    body = (RING_TESTS.replace("__WORLDART__", texts.get("WorldArt.lua", read("WorldArt.lua")))
+            .replace("__WORLDVISUALS__", texts.get("WorldVisuals.lua", read("WorldVisuals.lua")))
+            .replace("__LOBBYCONFIG__", texts.get("LobbyConfig.lua", read("LobbyConfig.lua"))).replace("__PBNUMBERS__", pb_numbers()))
+    return PRELUDE + body
+
+
+def ring_run(luau, texts=None):
+    """(passed, failed names, crashed)"""
+    result = run_luau(luau, ring_source(texts))
+    names = [line[len("FAIL: "):].split(" -- ")[0] for line in result.stdout.splitlines() if line.startswith("FAIL: ")]
+    m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
+    return (int(m.group(1)) if m else 0), names, (result.returncode != 0 or not m), result
+
+
+def ring_mutants(luau):
+    caught, lines = 0, []
+    for label, name, old, new, want in RING_MUTANTS:
+        text = read(name)
+        if text.count(old) != 1:
+            lines.append("NOT CAUGHT (group R): %s -- not applied" % label)
+            continue
+        _, names, crashed, result = ring_run(luau, {name: text.replace(old, new)})
+        hit = [n for n in names if n.startswith(want)]
+        if hit:
+            caught += 1
+        else:
+            lines.append("NOT CAUGHT (group R): %s -- no failing check starts with \"%s\" (failed: %s%s)" % (label, want, names[:3], ", crashed" if crashed else ""))
+    return caught, lines
+
+
 def main():
     if "--regen-patch" in sys.argv:
         return regen_command()
@@ -2428,7 +2602,24 @@ def main():
         total += patch_passed
         if patch_failed:
             code = 1
+    ring_passed, ring_failed, ring_crashed, ring_result = ring_run(luau)
+    for name in ring_failed:
+        print("FAIL: " + name)
+    if ring_crashed:
+        print("FAIL: the ring tests crashed: " + (ring_result.stderr or ring_result.stdout)[-300:])
+    print("The ring around the plaza (lobby L4): %d passed, %d failed" % (ring_passed, len(ring_failed)))
+    total += ring_passed
+    if ring_failed or ring_crashed:
+        code = 1
     runs = caught = 0
+    ring_caught, ring_lines = ring_mutants(luau)
+    for line in ring_lines:
+        print(line)
+    print("World mutations, group R (the ring): %d of %d caught, each by its named check" % (ring_caught, len(RING_MUTANTS)))
+    runs += len(RING_MUTANTS)
+    caught += ring_caught
+    if ring_caught != len(RING_MUTANTS):
+        code = 1
     for group, mutants in (("A", MUTANTS_A), ("B", MUTANTS_B), ("C", MUTANTS_C), ("D", MUTANTS_D), ("E", MUTANTS_E), ("F", MUTANTS_F)):
         if group == "D":
             got, problems = run_regen_mutants(mutants, group)

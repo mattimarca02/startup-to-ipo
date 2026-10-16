@@ -1,5 +1,7 @@
 # World pass proposal: from a green field to a startup street
 
+> **Lobby L4 (2026-10-16, branch `lobby-all`):** the world is now built as a **ring** around a plaza in front of the VIP Lounge (docs/LOBBY_GARAGE_PROPOSAL.md section 4), only while `LobbyConfig.ClaimEnabled` is on: `WorldVisuals.ringSite` and `ringLayout`, wired in TycoonCore. The row layout below and docs/world_pass_integration.patch are **superseded** (the patch is never applied). The pieces, palette, materials, rules and named checks are reused. Picture: docs/previews/ring_topdown.svg.
+
 Design (2026-10-06, branch `world-icons-pass`, from `main` `e3c9e67`; numbers updated after the build). Line numbers are `main` `e3c9e67`. Built as new files only: `WorldArt.lua` (data), `WorldVisuals.lua` (builder and checks), `tools/world_test.py`. Nothing is wired into the game: the one edit that would build it is `docs/world_pass_integration.patch`, not applied. **Studio fact** = placed by hand in Studio and measured by the owner (no script makes it). **(unverified)** = not checked in Studio.
 
 Looks only, like the plot visuals: nothing is saved, sent through a remote or read back; nothing collides, is touched or stops a ray; no gameplay position moves; no `Touched` handler; no script inside the built models; nothing random; no asset.

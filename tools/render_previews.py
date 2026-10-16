@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draws two pictures of the world and icons pass for the owner to look at on GitHub, before Studio.
 
-Run:   python3 tools/render_previews.py           (writes docs/previews/world_topdown.svg and docs/previews/icons_sheet.svg)
+Run:   python3 tools/render_previews.py           (writes docs/previews/world_topdown.svg, icons_sheet.svg and ring_topdown.svg)
        python3 tools/render_previews.py --check   (only says whether the two files are up to date with the data)
 
 It needs the free Luau command-line tool, like tools/world_test.py (LUAU=/path/to/luau). Plain Python otherwise, standard
@@ -12,6 +12,8 @@ then draws what it gets:
     the spawn pad), a scale bar, labels, and a small map of the whole Baseplate with the hills;
   - icons_sheet.svg: every icon at 96 px: the drawn icons from their shapes (outline, plate, light from the top-left),
     the 3D icons as a front view through each icon's own camera (box faces shaded by the same light), with a caption.
+  - ring_topdown.svg (lobby L4): the ring around the plaza, with each garage's lot, floor, door and its building's
+    footprint at stage 1 and 5.
 These are APPROXIMATIONS: boxes and flat shading, no materials, no real fonts. Only Studio shows the real thing.
 """
 
@@ -518,8 +520,121 @@ def icons_svg():
     return "\n".join(out) + "\n"
 
 
+RING_SVG = os.path.join(OUT_DIR, "ring_topdown.svg")
+
+RING_DUMP = r"""
+local PB = (function()
+__PLOTBUILDING__
+end)()
+local function out(...)
+	local t = {}
+	for i = 1, select("#", ...) do
+		local v = select(i, ...)
+		t[i] = type(v) == "number" and string.format("%.3f", v) or tostring(v)
+	end
+	print_real(table.concat(t, "\t"))
+end
+local site = WorldVisuals.ringSite(WorldArt, LobbyConfig.Ring)
+local world = WorldVisuals.build(nil, WorldArt, site)
+for _, d in ipairs(world:GetDescendants()) do
+	if d:IsA("BasePart") and d.Parent.Name ~= "Hills" then
+		local b = WorldVisuals.boxOf(d.CFrame, d.Size)
+		local c = d.Color.rgb
+		local group = d.Parent.Parent == world and d.Parent.Name or d.Parent.Parent.Name
+		out("W", group, d.Name, d.Shape.Name, b[1], b[2], b[5], b[6], c[1], c[2], c[3])
+	end
+end
+for i, p in ipairs(site.plots) do
+	local R = WorldArt.Ring
+	local a, b, c, d = WorldVisuals.boxToWorld(p, -R.lot.half, R.lot.half, R.lot.back, R.lot.front)
+	out("LOT", i, a, b, c, d)
+	a, b, c, d = WorldVisuals.boxToWorld(p, -30, 30, -30, 30)
+	out("FLOOR", i, a, b, c, d)
+	for _, s in ipairs({ 1, 5 }) do
+		local f = PB.layout(s).footprint
+		a, b, c, d = WorldVisuals.boxToWorld(p, f.x0, f.x1, f.z0, f.z1)
+		out("BUILDING", i, s, a, b, c, d)
+	end
+	a, b, c, d = WorldVisuals.boxToWorld(p, -4.5, 4.5, 30.2, 32.2)
+	out("DOOR", i, a, b, c, d)
+	local nx, nz = WorldVisuals.toWorld(p, 0, -10)
+	out("LABEL", i, nx, nz)
+end
+local lg = site.lounge
+out("LOUNGE", lg.x - lg.halfX, lg.x + lg.halfX, lg.back, lg.front)
+local sp = site.spawn
+out("SPAWN", sp.x - sp.halfX, sp.x + sp.halfX, sp.z - sp.halfZ, sp.z + sp.halfZ)
+"""
+
+
+def ring_svg():
+    source = world_test.ring_source()
+    head = source[:source.index("local function section(name, fn)")]
+    rows = run(head + RING_DUMP.replace("__PLOTBUILDING__", world_test.read("PlotBuilding.lua")))
+    lots = [r for r in rows if r[0] == "LOT"]
+    xs = [float(v) for r in lots for v in (r[2], r[3])]
+    zs = [float(v) for r in lots for v in (r[4], r[5])]
+    lounge = next(r for r in rows if r[0] == "LOUNGE")
+    zs.append(float(lounge[3]))
+    x0, x1, z0, z1 = min(xs) - 10, max(xs) + 10, min(zs) - 10, max(zs) + 10
+    scale = 1.6
+    pad_side, pad_top, pad_bottom = 24, 76, 56
+    width = int((x1 - x0) * scale + 2 * pad_side)
+    height = int((z1 - z0) * scale + pad_top + pad_bottom)
+
+    def px(x):
+        return pad_side + (x - x0) * scale
+
+    def pz(z):  # +Z (the north garages) is up on the page
+        return pad_top + (z1 - z) * scale
+
+    def label(x, y, size, text, anchor="start"):
+        return '<text x="%s" y="%s" font-size="%d" text-anchor="%s" fill="#1c1e26">%s</text>' % (n(x), n(y), size, anchor, esc(text))
+
+    def box(a, b, c, d, fill, stroke="none", extra=""):
+        return '<rect x="%s" y="%s" width="%s" height="%s" fill="%s" stroke="%s"%s/>' % (
+            n(px(a)), n(pz(d)), n((b - a) * scale), n((d - c) * scale), fill, stroke, extra)
+
+    out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" font-family="Helvetica, Arial, sans-serif">' % (width, height, width, height)]
+    out.append('<rect width="100%%" height="100%%" fill="%s"/>' % "#e9f0e2")
+    out.append('<text x="%d" y="28" font-size="20" font-weight="bold" fill="#1c1e26">The ring around the plaza, seen from above (lobby L4, claim on)</text>' % pad_side)
+    out.append('<text x="%d" y="48" font-size="12" fill="#4a4e5a">From the real WorldArt, WorldVisuals, LobbyConfig and PlotBuilding. Dashed: each lot (82.6 x 86.6).</text>' % pad_side)
+    out.append('<text x="%d" y="63" font-size="12" fill="#4a4e5a">Grey: the Floor. Thin: the Garage (stage 1); thick: Big Corporate (stage 5). Red: the door. Up is +Z.</text>' % pad_side)
+    for r in rows:
+        if r[0] == "W" and r[1] in ("Paths", "Ground", "Kerbs"):
+            out.append(box(float(r[4]), float(r[5]), float(r[6]), float(r[7]), hexc(int(float(r[8])), int(float(r[9])), int(float(r[10])))))
+    for r in rows:
+        if r[0] == "LOT":
+            out.append(box(float(r[2]), float(r[3]), float(r[4]), float(r[5]), "none", "#5a6070", ' stroke-dasharray="6 4" stroke-width="1"'))
+        elif r[0] == "FLOOR":
+            out.append(box(float(r[2]), float(r[3]), float(r[4]), float(r[5]), "#9a9aa4"))
+    for r in rows:
+        if r[0] == "BUILDING":
+            out.append(box(float(r[3]), float(r[4]), float(r[5]), float(r[6]), "none", "#2b2f3a", ' stroke-width="%s"' % ("1" if r[2] == "1" else "2.5")))
+        elif r[0] == "DOOR":
+            out.append(box(float(r[2]), float(r[3]), float(r[4]), float(r[5]), "#d84a3a"))
+    for r in rows:
+        if r[0] == "W" and r[1] not in ("Paths", "Ground", "Kerbs"):
+            a, b, c, d = float(r[4]), float(r[5]), float(r[6]), float(r[7])
+            color = hexc(int(float(r[8])), int(float(r[9])), int(float(r[10])))
+            if r[3] == "Ball" or (b - a) < 2.5:
+                out.append('<circle class="decor" cx="%s" cy="%s" r="%s" fill="%s"/>' % (n(px((a + b) / 2)), n(pz((c + d) / 2)), n(max(1.2, (b - a) * scale / 2)), color))
+            else:
+                out.append(box(a, b, c, d, color))
+    out.append(box(float(lounge[1]), float(lounge[2]), float(lounge[3]), float(lounge[4]), "#c9b27a", "#5a4a2a"))
+    out.append(label(px((float(lounge[1]) + float(lounge[2])) / 2), pz(float(lounge[3])) + 16, 12, "VIP Lounge", "middle"))
+    spawn = next(r for r in rows if r[0] == "SPAWN")
+    out.append(box(float(spawn[1]), float(spawn[2]), float(spawn[3]), float(spawn[4]), "#4c9be8", "#1c4f86"))
+    for r in rows:
+        if r[0] == "LABEL":
+            out.append(label(px(float(r[2])), pz(float(r[3])), 16, "Garage %d" % int(float(r[1])), "middle"))
+    out.append(label(pad_side, height - 20, 12, "Blue: the SpawnLocation, moved by hand to the plaza's center (0, 0.5, 175). 20 studs = %s px." % n(20 * scale)))
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
+
+
 def main():
-    pictures = ((WORLD_SVG, world_svg()), (ICONS_SVG, icons_svg()))
+    pictures = ((WORLD_SVG, world_svg()), (ICONS_SVG, icons_svg()), (RING_SVG, ring_svg()))
     if "--check" in sys.argv:
         stale = []
         for path, text in pictures:
