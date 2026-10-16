@@ -8,7 +8,7 @@ Branch `lobby-all`, from `main` `f6a546f` (the latest `origin/main` on 2026-10-1
 | L2 | permanent closed building: `buildGarages`, the Floor in the garage, the garage sign, reset on leave; the five kit buildings (PlotBuilding, PlotBuildingVisuals), `BuildingClient` at the root, `tools/building_test.py` | done |
 | L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | done |
 | L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | done |
-| L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | next |
+| L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | done |
 
 ## Before this session (what was there, and what happened to it)
 
@@ -76,6 +76,17 @@ Next: L4.
 - Not verified (Studio only): StreamingEnabled and its radii, `ModelStreamingMode = Persistent` from a script, how the plaza looks, the walk from the spawn to each door on a phone.
 
 Next: L5.
+
+## L5: done
+
+- docs/STUDIO_SYNC_LOBBY.md, section "Lobby all": for a local Claude Code session with the Studio MCP on the published place (File > Open from Roblox, Save to Roblox, never Publish): the scripts to create, the list with SHA-256 and sizes (11 changed or new, plus the 4 L1 scripts), the hash block, the KitModels check, the kit front check (`KIT_FRONT_TURN`), the SpawnLocation (moved only when the claim is turned on: with the claim off (0, 175) is between garages 3 and 4), the playtests (one player; 2 and 3 players with the claim on in Studio only; every doorway at every stage with the Debug button; the camera; Test > Device), turning the claim on later, Max Players 6. The hash, kit, front and spawn blocks run in Luau fakes (lobby_test, building_test).
+- `PlotBuildingVisuals.buildPiece` (for the kit front check). CLAUDE.md (the garages and buildings, the kit rules, the lobby and the claim, LobbyConfig, the two new clients), ROADMAP.md Status, README (6 scripts, 2 tools, the kit), docs/PUBLISH_RULES.md section 1 (6 = the garage count, Social Slots, the claim's publish), the plan's open question 1 marked decided.
+- **Final counts (every suite passes, Luau 0.742):** daily_test 2,813 checks, 281 of 281 mutants; hud_test 1,073 / 95; world_test 366 / 93; icon_test 371 / 68; shop_ux_test 6,306 / 103; lobby_test 120 / 55; building_test 1,235 / 29. `render_previews.py --check`: up to date.
+- Claims released (rows kept, set to free). Pull request into `main` opened, not merged.
+
+## Still to do by hand (Studio and Creator Hub)
+
+docs/STUDIO_SYNC_LOBBY.md, section "Lobby all", in order: create the 5 scripts, paste the 11, hash block ALL OK, KitModels check KIT OK, kit front check (then write its result here), playtests 9 (a) to (c), File > Save to Roblox. Later, when the owner decides: section 10 (turn the claim on, move the SpawnLocation, publish with Shut down all servers) and section 11 (Max Players 6).
 
 ## How to continue
 

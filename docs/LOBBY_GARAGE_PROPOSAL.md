@@ -270,7 +270,7 @@ Each PR starts from the latest `main`, claims its files in CONTRIBUTING.md and l
 
 ## 6. Open question for the owner
 
-1. **Respawn after a reset: plaza or own garage door?** *Recommended: own door* (today's hook, less walking).
+1. **Respawn after a reset: plaza or own garage door?** *Recommended: own door* (today's hook, less walking). **Decided (2026-10-16, OWNER DEFAULT): own garage, today's hook (`teleportToPlot`), built on branch `lobby-all`.**
 
 The first draft's questions 2 to 7 are decided (top of this file).
 

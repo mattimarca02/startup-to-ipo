@@ -32,7 +32,12 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings (not before the player owns the Desk, or has done an IPO), grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
 | `CompanyServer.lua` | ServerScriptService | ModuleScript | The company and its Pokedex (customize PR 1, invisible): the `pokedex` save section on join and save, and the Studio-only office requests Place, Store and Sync. Never touches Cash or the valuation |
 | `PlotVisuals.lua` | ServerScriptService | ModuleScript | Builds each player's plot room and the upgrade props from `PlotArt` (looks only), and checks a room against the reserved gameplay zones, part and light budgets |
+| `PlotBuilding.lua` | ServerScriptService | ModuleScript | The closed building around each garage, one per funding stage (Garage to Big Corporate), as data and pure layout: the 3D kit's manifest, Parts fallbacks, styles, layouts, the solid boxes, the furniture |
+| `PlotBuildingVisuals.lua` | ServerScriptService | ModuleScript | Builds a garage's building from the kit in `ReplicatedStorage.KitModels` (Parts where a model is missing), its invisible solid walls, and checks it |
+| `WorldArt.lua` | ServerScriptService | ModuleScript | The plaza and the decor around the ring of garages, as data (used only with `LobbyConfig.ClaimEnabled` on) |
+| `WorldVisuals.lua` | ServerScriptService | ModuleScript | Builds the ring's plaza from `WorldArt` and checks it (TycoonCore calls it in pcall, only with the claim on) |
 | `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, built from Parts on the same 60 x 60 plot), the hire desks, the six upgrade props |
+| `LobbyConfig.lua` | ReplicatedStorage | ModuleScript | The lobby: the claim switch `ClaimEnabled` (off), the garages (today's row; the ring around the plaza with the claim on), the claim rule `canClaim`, the texts. Create it before pasting TycoonCore |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
@@ -51,6 +56,8 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `DailyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Gift chip next to the valuation bar, Daily Rewards window (7-day calendar, Claim button) |
 | `TaskClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | The phone tray: up to 3 waiting calls with an Answer button each, "Tap to resume". Shows nothing until the Desk is owned (or after the first IPO). Does nothing outside Studio in PR 1 |
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
+| `BuildingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Fades the shell of a garage's building while you are inside it (looks only) |
+| `LobbyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | With the claim on: the plaza's banner and a marker over the nearest free garage (shows nothing with it off) |
 
 Other files:
 
@@ -61,6 +68,10 @@ Other files:
 | `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |
 | `tools/daily_test.py` | Logic tests (daily calendar, saves, shop, eggs, IPO, the task engine and its tray layout, the Pokedex rules and CompanyServer, source checks on the money paths, and mutation runs that prove the tests can fail): runs the real server code with a fake Roblox. Needs the free `luau` tool (instructions inside) |
 | `tools/shop_ux_test.py` | Shop window tests: runs the real `ShopLayout` and `ShopClient` in a fake Roblox at five phone sizes and three top bars (the layout, the names the tutorial uses, the Office ladder, what the shop sends, the odds words), plus mutation runs. Needs the free `luau` tool |
+| `tools/building_test.py` | The garages' buildings: the five kit buildings at four turns, with the kit, turned around and with no kit, the fade client, TycoonCore's garage code, the Studio blocks, plus mutation runs. Needs `luau` |
+| `tools/lobby_test.py` | The lobby: TycoonCore's CLAIMLOAD block byte for byte, its listed edits, the whole TycoonCore run in a fake Roblox (`tools/lobby_runtime.luau`), LobbyClient, the Studio sync doc's hashes, plus mutation runs. Needs `luau` |
+| `assets/kit/`, `docs/KIT_MODELS.md` | The 3D kit (36 models) the buildings are made of, and how it was imported into `ReplicatedStorage.KitModels` |
+| `docs/STUDIO_SYNC_LOBBY.md` | The Studio steps of the lobby and garages (section "Lobby all": every script, the hash, kit and front checks, the playtests, turning the claim on) |
 | `docs/PLOT_VISUALS.md` | The five plot rooms, the rules every room keeps and how to add one |
 | `docs/STUDIO_SYNC.md` | What exists only in Studio (script hashes, Lighting and Baseplate settings) and the Mac steps to sync it |
 | `CONTRIBUTING.md` | How we work together, plus the **Ownership** table (who is editing which script) |

@@ -88,22 +88,22 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| ShopServer | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| TycoonCore | ServerScriptService | free | | |
+| ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| ShopClient | StarterPlayerScripts | free | | |
 | EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/daily_test.py | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
@@ -112,18 +112,18 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| CLAUDE.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/PLOT_VISUALS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| README.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
@@ -137,42 +137,42 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_HUD.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| WorldArt | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| WorldVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/hud_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
+| WorldArt | ServerScriptService | free | | |
+| WorldVisuals | ServerScriptService | free | | |
 | IconArt | ReplicatedStorage | free | | |
 | IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/icon_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/render_previews.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/previews/*.svg | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/world_test.py | (repo only) | free | | |
+| tools/icon_test.py | (repo only) | free | | |
+| tools/render_previews.py | (repo only) | free | | |
+| docs/previews/*.svg | (repo only) | free | | |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
-| docs/WORLD_PASS_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_WORLD.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
 | ShopLayout | ReplicatedStorage | free | | |
-| tools/shop_ux_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_SHOP.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/shop_ux_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
-| docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/lobby_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_LOBBY.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/MODEL_ASSETS_PLAN.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| PlotBuilding | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| PlotBuildingVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| BuildingClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/building_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/BUILDING_PASS_PROPOSAL.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/BUILDING_PASS_NOTES.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_BUILDING.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | free | | |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
+| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
+| docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
+| PlotBuilding | ServerScriptService | free | | |
+| PlotBuildingVisuals | ServerScriptService | free | | |
+| BuildingClient | StarterPlayerScripts | free | | |
+| tools/building_test.py | (repo only) | free | | |
+| docs/BUILDING_PASS_PROPOSAL.md | (repo only) | free | | |
+| docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
-| LobbyConfig | ReplicatedStorage | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| LobbyClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/KIT_MODELS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/lobby_runtime.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| tools/lobby_client_test.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| LobbyConfig | ReplicatedStorage | free | | |
+| LobbyClient | StarterPlayerScripts | free | | |
+| docs/KIT_MODELS.md | (repo only) | free | | |
+| tools/lobby_runtime.luau | (repo only) | free | | |
+| tools/lobby_client_test.luau | (repo only) | free | | |

@@ -4,11 +4,13 @@ The rules for every publish of place `86395856666175` (universe `10768772528`), 
 
 ## 1. Server size: Max Players = 6 (set by hand)
 
-The game has 6 plots (`MAX_PLOTS = 6` in TycoonCore) and kicks the 7th player with "This server is full". Roblox fills servers up to the place's Max Players, so it must be **6**:
+The game has 6 garages (`MAX_PLOTS = 6` in TycoonCore, `#LobbyConfig.Garages`: **6 = the garage count**) and kicks a 7th player with "This server is full" (lobby L3: only when there are more players than garages; with the claim off a joiner waits up to 60 s for a garage that is closing). Roblox fills servers up to the place's Max Players, so it must be **6**. TycoonCore warns at startup when it is higher:
 
 - Creator Hub > Creations > Build your Startup! > **Places** > the place > **Max Players: 6** (or Studio: **Game Settings > Places**). Save.
 - Check it again after every publish: the setting belongs to the place, not to the scripts.
 - If the plot count ever changes, change Max Players in the same release.
+- Same tab, **Social Slots**: Roblox optimized; if live servers log cap kicks, switch to the option that fills to the maximum. Other places in the universe that players can reach get the same value (docs/LOBBY_GARAGE_PROPOSAL.md section 4.4).
+- **The lobby (branch `lobby-all`):** no new save section and no rollback change. `LobbyConfig.ClaimEnabled` ships **false** (nothing moves for live players). Turning it on later is a publish with **Shut down all servers** (old servers keep the old flow until they restart), with the SpawnLocation moved to the plaza first (docs/STUDIO_SYNC_LOBBY.md, section "Lobby all" 10).
 
 ## 2. Rollback floor: never restore a version older than M4
 

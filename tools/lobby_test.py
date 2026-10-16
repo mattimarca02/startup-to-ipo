@@ -50,7 +50,10 @@ ALL_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService", "changed"), ("Sho
                ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"),
                ("LobbyConfig", "ModuleScript", "ReplicatedStorage", "new"), ("LobbyClient", "LocalScript", "StarterPlayerScripts", "new"),
                ("ShopServer", "ModuleScript", "ServerScriptService", "changed"), ("IpoClient", "LocalScript", "StarterPlayerScripts", "changed"),
-               ("WorldArt", "ModuleScript", "ServerScriptService", "changed"), ("WorldVisuals", "ModuleScript", "ServerScriptService", "changed"))
+               ("WorldArt", "ModuleScript", "ServerScriptService", "changed"), ("WorldVisuals", "ModuleScript", "ServerScriptService", "changed"),
+               # unchanged since main (lobby L1): the hash block checks them too, so one run covers every lobby script
+               ("EmployeeServer", "ModuleScript", "ServerScriptService", "as on main"), ("IpoServer", "ModuleScript", "ServerScriptService", "as on main"),
+               ("PlotVisuals", "ModuleScript", "ServerScriptService", "as on main"), ("EmployeeClient", "LocalScript", "StarterPlayerScripts", "as on main"))
 # The five scripts PR L1 changes: (file, Studio class, Studio place)
 L1_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService"), ("EmployeeServer", "ModuleScript", "ServerScriptService"),
               ("IpoServer", "ModuleScript", "ServerScriptService"), ("PlotVisuals", "ModuleScript", "ServerScriptService"),
@@ -822,7 +825,7 @@ def hash_block_checks(luau, core, doc):
                     result.returncode == 0 and last.startswith(want), last))
 
     # The Lobby all block, on the real files (TycoonCore as given), then with one byte changed, then with one missing
-    block = lua_block(doc_section(doc, ALL_HEADING), "### Hash check (command bar)")
+    block = lua_block(doc_section(doc, ALL_HEADING), "### 4. Hash check (command bar)")
     mine = fn.search(block)
     out.append(("doc: the Lobby all hash block's sha256 is docs/STUDIO_SYNC_MASTER.md section 6's, character for character",
                 bool(mine and theirs and mine.group(0) == theirs.group(0)), None))

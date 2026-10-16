@@ -1262,6 +1262,90 @@ check("leave: the leave save runs, then the owner's folder is destroyed, the gar
 	and root.Garage4.GarageSign:FindFirstChildOfClass("BillboardGui").Enabled == false and plotOwners[4] == nil and playerData[player] == nil)
 """
 
+STUDIO_TESTS = r"""
+-- docs/STUDIO_SYNC_LOBBY.md's kit check, kit front check and spawn check, run as they are, in a fake place
+local OUT = {}
+local SSS, RS = game:GetService("ServerScriptService"), game:GetService("ReplicatedStorage")
+local function module(parent, name, value)
+	local m = Instance.new("ModuleScript")
+	m.Name = name
+	rawset(m, "_module", value)
+	m.Parent = parent
+	return m
+end
+local function require(m) return rawget(m, "_module") end
+local function runBlock(source)
+	OUT = {}
+	local print = function(...) local t = {} for i = 1, select("#", ...) do t[i] = tostring(select(i, ...)) end table.insert(OUT, table.concat(t, " ")) end
+	local ok, err = pcall(function()
+		BLOCK(source, print)
+	end)
+	if not ok then table.insert(OUT, "ERROR: " .. tostring(err)) end
+	return ok, err
+end
+local function last() return OUT[#OUT] or "" end
+local function clearKit() local k = RS:FindFirstChild("KitModels") if k then k.Parent = nil end end
+local function useKit(kit) clearKit() kit.Parent = RS end
+
+-- kit check
+local ok = runBlock("kit")
+check("studio: the kit check without PlotBuilding says NOT YET", ok and string.find(last(), "NOT YET", 1, true) == 1, last())
+local pbScript, pbvScript = module(SSS, "PlotBuilding", PB), module(SSS, "PlotBuildingVisuals", PBV)
+useKit(makeKit(0))
+ok = runBlock("kit")
+check("studio: the kit check on a right KitModels says KIT OK: 36 models", ok and string.find(last(), "KIT OK: 36 models", 1, true) == 1, last())
+local broken = makeKit(0, { Bell = true })
+broken:FindFirstChild("Sofa"):SetAttribute("KitSize", Vector3.new(8, 4.3, 4))
+useKit(broken)
+ok = runBlock("kit")
+local joined = table.concat(OUT, "|")
+check("studio: the kit check names what is wrong (a missing Bell, a Sofa 0.3 too tall) and says KIT NOT OK", ok and string.find(last(), "KIT NOT OK", 1, true) == 1
+	and string.find(joined, "WRONG: Bell: missing", 1, true) ~= nil and string.find(joined, "WRONG: Sofa: KitSize", 1, true) ~= nil, joined)
+clearKit()
+ok = runBlock("kit")
+check("studio: the kit check with no KitModels says so", ok and string.find(table.concat(OUT, "|"), "KitModels is missing", 1, true) ~= nil and string.find(last(), "KIT NOT OK", 1, true) == 1)
+
+-- kit front check: the Chair's back (its trim) is away from the STAND HERE pad when the turn is right
+local function chairFacesPad()
+	local folder = workspace:FindFirstChild("KIT_FRONT_CHECK")
+	local chair = folder and folder:FindFirstChild("FrontChair")
+	local pad = folder and folder:FindFirstChild("STAND_HERE")
+	if not (chair and pad) then return nil end
+	local seat, back
+	for _, d in ipairs(chair:GetDescendants()) do
+		if d:IsA("BasePart") then
+			if d:GetAttribute("Role") == "main" then seat = d elseif d:GetAttribute("Role") == "trim" then back = d end
+		end
+	end
+	return (pad.Position.Z - seat.Position.Z) > 0 and back.Position.Z < seat.Position.Z, pad.Position.Y
+end
+for _, case in ipairs({ { 0, 0, true }, { 180, 180, true }, { 180, 0, false } }) do
+	useKit(makeKit(case[1]))
+	PB.KIT_FRONT_TURN = case[2]
+	ok = runBlock("front")
+	local faces, padY = chairFacesPad()
+	check(string.format("studio: the kit front check, a kit imported turned %d with KIT_FRONT_TURN %d: the chair %s the pad", case[1], case[2], case[3] and "faces" or "turns its back to"),
+		ok and faces == case[3] and string.find(table.concat(OUT, "|"), "Chair from the kit: true", 1, true) ~= nil, table.concat(OUT, "|"))
+	check("studio: the kit front check's pad lies on the ground (y 0 to 0.2), visible", ok and padY and math.abs(padY - 0.1) < 1e-6, padY)
+end
+PB.KIT_FRONT_TURN = 0
+ok = runBlock("front")
+check("studio: running the kit front check twice leaves one KIT_FRONT_CHECK", ok and #(function() local n = {} for _, c in ipairs(workspace:GetChildren()) do if c.Name == "KIT_FRONT_CHECK" then table.insert(n, c) end end return n end)() == 1)
+
+-- spawn check
+local spawn = Instance.new("SpawnLocation")
+spawn.Name = "SpawnLocation"
+spawn.Parent = workspace
+for _, case in ipairs({ { vec(0, 0.5, 175), "ON THE PLAZA" }, { vec(-1, 0.5, -1), "WHERE IT ALWAYS WAS" }, { vec(3, 0.5, 175), "SOMEWHERE ELSE" } }) do
+	spawn.Position = case[1]
+	ok = runBlock("spawn")
+	check("studio: the spawn check at " .. tostring(case[1]) .. " says " .. case[2], ok and string.find(last(), case[2], 1, true) ~= nil, last())
+end
+spawn.Parent = nil
+ok = runBlock("spawn")
+check("studio: the spawn check with no SpawnLocation says so", ok and last() == "NO SpawnLocation in the Workspace", last())
+"""
+
 TAIL = r"""
 print_real(string.format("%d passed, %d failed", passed, failed))
 print_real("DONE")
@@ -1353,6 +1437,9 @@ def program(part, sources):
         body = BUILD_TESTS
     elif part == "math":
         body = MATH_TESTS.replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B)
+    elif part == "studio":
+        body = STUDIO_TESTS.replace("local function runBlock(source)", "__BLOCKS__\nlocal function runBlock(source)", 1)
+        body = body.replace("__BLOCKS__", doc_blocks())
     elif part == "client":
         body = CLIENT_TESTS.replace("__CLIENT__", sources["BuildingClient.lua"]).replace("__MATH_A__", MATH_A).replace("__MATH_B__", MATH_B)
     else:
@@ -1366,7 +1453,23 @@ def program(part, sources):
     return head + body + TAIL
 
 
-PARTS = ("data", "build", "math", "client", "core")
+PARTS = ("data", "build", "math", "client", "core", "studio")
+SYNC_DOC = os.path.join("docs", "STUDIO_SYNC_LOBBY.md")
+
+
+def doc_blocks():
+    """The kit check, the kit front check and the spawn check from docs/STUDIO_SYNC_LOBBY.md, as Luau functions."""
+    doc = read(SYNC_DOC)
+    out = {}
+    for key, heading in (("kit", "### 5. KitModels check (command bar)"), ("front", "### 6. Kit front check (command bar)"),
+                         ("spawn", "### 7. The SpawnLocation")):
+        at = doc.find(heading)
+        m = re.search(r"```lua\n(.*?)```", doc[at:], re.S) if at >= 0 else None
+        out[key] = m.group(1) if m else 'error("block missing in the sync doc")\n'
+    body = "local BLOCKS = {}\n"
+    for key, text in out.items():
+        body += "BLOCKS.%s = function(print, require)\n%s\nend\n" % (key, text)
+    return body + "local function BLOCK(name, print) return BLOCKS[name](print, require) end\n"
 
 
 def run_parts(luau, sources, parts=PARTS):

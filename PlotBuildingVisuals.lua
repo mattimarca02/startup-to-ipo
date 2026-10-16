@@ -11,6 +11,7 @@
 --   PlotBuildingVisuals.build(parent, frame, building, stage, kit) -> Model "PlotBuilding": Fade, Static, Solid
 --   PlotBuildingVisuals.sync(garage, frame, building, stage, kit)  -> the Model of that stage in the garage, changed
 --   PlotBuildingVisuals.unstick(model, roots, landing)             -> moves a character found inside a solid box
+--   PlotBuildingVisuals.buildPiece(parent, frame, building, stage, piece, kit) -> one piece alone (the kit front check)
 --   PlotBuildingVisuals.checkKit(folder, manifest)                 -> problems of ReplicatedStorage.KitModels (empty = fine)
 --   PlotBuildingVisuals.check(model, frame, building, opts)        -> problems of a built Model (budget, flags, lane...)
 --   Pure maths, the same text as BuildingClient (a test compares them):
@@ -302,6 +303,21 @@ local function buildBox(parent, origin, b)
 	part:SetAttribute("Piece", b.name)
 	part.Parent = parent
 	return part
+end
+
+-- One piece on its own, the way build places it (the Studio kit front check uses it): a Model holding its parts, from
+-- the kit when kit has the key, else from Parts. Returns the Model and true when it came from the kit.
+function PlotBuildingVisuals.buildPiece(parent, frame, building, stage, piece, kit)
+	local model = Instance.new("Model")
+	model.Name = piece.name
+	local origin = originOf(frame, building)
+	local template = kit and kit:FindFirstChild(piece.key)
+	local made = template and buildKit(model, origin, building, stage, piece, template)
+	if not made then
+		buildFallback(model, origin, building, stage, piece)
+	end
+	model.Parent = parent
+	return model, made ~= nil and made ~= false
 end
 
 -- The attribute names the client reads (the inside box, in the garage's frame) and the frame itself
