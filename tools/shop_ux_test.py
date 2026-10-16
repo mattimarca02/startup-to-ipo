@@ -2102,6 +2102,30 @@ do
 	noErrors(label)
 end
 
+-- Lobby L3: on the plaza with no garage yet (attribute Garage = 0) the Robux buttons wait for the garage ---------------
+do
+	local label = "No garage yet"
+	local w = startShop({ w = 667, h = 375, bar = 36, attrs = { Garage = 0 } })
+	local ShopConfig = w.module("ShopConfig")
+	openShop(w, label)
+	run(1.1)
+	local window = win(w)
+	tap(window:FindFirstChild("TabPasses", true), label .. ": Passes")
+	local doubleBuy = kid(find(window, "DoubleCash"), "BuyButton")
+	tap(doubleBuy, label .. ": 2x Cash")
+	check(label .. ": a pass is never prompted before a garage, its button says Claim garage", #w.prompts == 0 and prop(doubleBuy, "Text") == "Claim garage", prop(doubleBuy, "Text"))
+	tap(window:FindFirstChild("TabCash", true), label .. ": Cash")
+	local packBuy = kid(find(window, "CashSmall"), "BuyButton")
+	tap(packBuy, label .. ": a Cash pack")
+	check(label .. ": a product is never prompted before a garage, its button says Claim garage", #w.prompts == 0 and prop(packBuy, "Text") == "Claim garage", prop(packBuy, "Text"))
+	w.player:SetAttribute("Garage", 3)
+	run(1.1)
+	check(label .. ": with a garage the buttons are for sale again", prop(packBuy, "Text") == "R$ " .. ShopConfig.getProduct("CashSmall").price, prop(packBuy, "Text"))
+	tap(packBuy, label .. ": a Cash pack with a garage")
+	check(label .. ": with a garage a product is prompted", #w.prompts == 1 and w.prompts[1].id == ShopConfig.getProduct("CashSmall").id)
+	noErrors(label)
+end
+
 -- Luck Boost: hidden while RandomRestricted is not false (D9 option B), its luckText line on the card face -----------
 for _, case in ipairs({ { "unknown", false }, { true, false }, { false, true } }) do
 	local restricted, visible = case[1], case[2]
@@ -2781,6 +2805,17 @@ def toast_texts():
             rows.append((where, "%s: +%d min of Poach Shield" % (name, number("shieldMinutes"))))
     vip = 'notify(player, "The VIP Lounge is for VIP pass holders only.")'
     rows.append((at("ShopServer.lua", server, vip), "The VIP Lounge is for VIP pass holders only."))
+    # lobby L3: the lounge door for a player with no garage yet, and the claim's refusals (TycoonCore sends LobbyConfig's)
+    door = 'notify(player, "Claim a garage first: your passes load with your company")'
+    rows.append((at("ShopServer.lua", server, door), "Claim a garage first: your passes load with your company"))
+    lobby = read("LobbyConfig.lua")
+    where = at("TycoonCore.lua", core, "ShopServer.notify(player, reason)")
+    for key in ("Off", "Unknown", "Mine", "Saving", "Taken", "ClosingNow", "Far", "TooFast"):
+        m = re.search(r'^\t%s = "([^"]*)",' % key, lobby, re.M)
+        if not m:
+            problems.append("LobbyConfig.lua no longer has Texts.%s" % key)
+            continue
+        rows.append((where, m.group(1).replace("%s", "W" * 20)))  # a display name is at most 20 characters
     for const in ("SAVE_TROUBLE_TEXT", "SAVE_BACK_TEXT"):
         m = re.search(r'^local %s = "([^"]*)"' % const, core, re.M)
         if not m:
@@ -2804,12 +2839,13 @@ def toast_texts():
     # every ShopNotify call is one of the above
     known = server.count('notify(player, pass.name .. " unlocked!")') + server.count('notify(player, "Roblox is slow to confirm ')
     known += server.count('notify(player, "Confirming ') + server.count('notify(player, product.name .. ": " .. gained)') + server.count(vip)
+    known += server.count(door)
     calls = len(re.findall(r"^\s*notify\(player,", code_only(server), re.M))
     calls -= len(re.findall(r"^function ShopServer\.notify\(player, text\)\n\tnotify\(player, text\)\nend", server, re.M))
     if calls != known:
         problems.append("ShopServer.lua has %d notify(player, ...) calls, the toast tests know %d" % (calls, known))
     outside = sorted(set(re.findall(r"(?<!function )ShopServer\.notify\(player, (\w+)\)", "".join(code_only(read(f)) for f in sorted(os.listdir(ROOT)) if f.endswith(".lua")))))
-    if outside != ["SAVE_BACK_TEXT", "SAVE_TROUBLE_TEXT"]:
+    if outside != ["SAVE_BACK_TEXT", "SAVE_TROUBLE_TEXT", "reason"]:
         problems.append("ShopServer.notify is called with %r" % outside)
     return rows, problems
 
@@ -3019,10 +3055,14 @@ MUTANTS = [
      "C.button = rect(cardW - 8 - 72, 8 + math.floor((top - buttonH) / 2), 40, buttonH)", "every tap target at least 44 x 44"),
     ("wide cards' description under the button", L, "return math.max(0, nameW), math.max(0, cardW - 208)",
      "return math.max(0, nameW), math.max(0, cardW - 68)", "every piece inside its card, none on another"),
-    ("prompts without the isForSale check", C, "if pending[item.key] or not ShopConfig.isForSale(item, randomRestricted()) then return end",
-     "if pending[item.key] then return end", "is never prompted"),
+    ("prompts without the isForSale check", C, "if pending[item.key] or noGarage() or not ShopConfig.isForSale(item, randomRestricted()) then return end",
+     "if pending[item.key] or noGarage() then return end", "is never prompted"),
     ("Luck Boost shown to a restricted player", C, "desc.Parent.Visible = not (product.changesOdds and randomRestricted())",
      "desc.Parent.Visible = true", "Luck Boost hidden while RandomRestricted is not false"),
+    ("lobby L3: a Robux purchase prompted before the player has a garage", C, "\tif pending[item.key] or noGarage() or not ShopConfig.isForSale(item, randomRestricted()) then return end",
+     "\tif pending[item.key] or not ShopConfig.isForSale(item, randomRestricted()) then return end", "No garage yet: a pass is never prompted before a garage"),
+    ("lobby L3: a product's button shows its price before the player has a garage", C, "\t\t\telseif noGarage() then\n\t\t\t\tsetButton(button, \"Claim garage\", COLORS.disabled, false)\n\t\t\telseif not ShopConfig.isForSale(product) then",
+     "\t\t\telseif not ShopConfig.isForSale(product) then", "No garage yet: a product is never prompted before a garage"),
     ("an unknown RandomRestricted counted as not restricted", C, 'return player:GetAttribute("RandomRestricted") ~= false',
      'return player:GetAttribute("RandomRestricted") == true', "Luck Boost hidden while RandomRestricted is not false"),
     ("a price sent from the client", C, 'actionRemote:InvokeServer("BuyUpgrade", index)', 'actionRemote:InvokeServer("BuyUpgrade", index, 25)',

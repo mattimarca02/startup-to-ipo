@@ -35,9 +35,10 @@ local MONEY_SIZES = { 16, 14 } -- top row (Cash and Income): the biggest size th
 local INFO_SIZE = 14 -- bottom row (stage and valuation)
 local MONEY_INTERVAL = 0.25 -- seconds: the top row redraws at most 4 times a second, however fast the values change
 local MONEY_CAP = 999e12 -- above this the bar shows $999T, so the text stays short
--- While the server loads a returning player's save, leaderstats already exist with Cash and Income at 0: the saved
--- Cash, the income and the offline earnings are written only after the DataStore read (and a 7 s re-read of a fresh
--- save). So the top row stays empty until the server says it has finished. The signal is the Upgrade1 attribute
+-- leaderstats are made when the player gets a garage (lobby L3: at the claim, or at the join while ClaimEnabled is off);
+-- before that, on the plaza, there are none and the top row stays empty. While the server then loads a returning player's
+-- save, leaderstats exist with Cash and Income at 0: the saved Cash, the income and the offline earnings are written only
+-- after the DataStore read (and a 7 s re-read of a fresh save). So the top row stays empty until the server says it has finished. The signal is the Upgrade1 attribute
 -- (TycoonCore refreshSign -> publishUpgrades): it is set for every player (true or false), after the saved Cash, the
 -- income and the offline earnings are written, right before the server's data.ready. It is never set before.
 local LOADED_ATTRIBUTE = "Upgrade1"
@@ -691,8 +692,19 @@ local function renderConfirm()
 		joinList(resets), warning, #keeps > 0 and (table.concat(keeps, ", ") .. ", ") or "", daily)
 end
 
+-- leaderstats come only with a garage (a player can stand on the plaza for minutes): wait for them without
+-- WaitForChild's "infinite yield" warning
+local function quietChild(parent, name)
+	local child = parent:FindFirstChild(name)
+	while not child do
+		parent.ChildAdded:Wait()
+		child = parent:FindFirstChild(name)
+	end
+	return child
+end
+
 task.spawn(function()
-	local cash = player:WaitForChild("leaderstats"):WaitForChild("Cash")
+	local cash = quietChild(quietChild(player, "leaderstats"), "Cash")
 	cash.Changed:Connect(function()
 		if confirm.Visible then
 			renderConfirm()

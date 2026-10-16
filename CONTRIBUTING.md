@@ -138,7 +138,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
 | tools/hud_test.py | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
-| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_HUD.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | WorldArt | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | WorldVisuals | ServerScriptService | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | IconArt | ReplicatedStorage | free | | |
@@ -174,3 +174,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | LobbyConfig | ReplicatedStorage | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | LobbyClient | StarterPlayerScripts | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
 | docs/KIT_MODELS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/lobby_runtime.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |
+| tools/lobby_client_test.luau | (repo only) | @mattimarca02 (Claude Code) | lobby-all | 2026-10-16 |

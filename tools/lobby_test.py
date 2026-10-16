@@ -47,7 +47,9 @@ ALL_HEADING = "## Lobby all (L2 to L5)"
 # "Lobby all" section's table and hash block must give each one's real SHA-256 and size (the files in the folder).
 ALL_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService", "changed"), ("ShopClient", "LocalScript", "StarterPlayerScripts", "changed"),
                ("PlotBuilding", "ModuleScript", "ServerScriptService", "new"),
-               ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"))
+               ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"),
+               ("LobbyConfig", "ModuleScript", "ReplicatedStorage", "new"), ("LobbyClient", "LocalScript", "StarterPlayerScripts", "new"),
+               ("ShopServer", "ModuleScript", "ServerScriptService", "changed"), ("IpoClient", "LocalScript", "StarterPlayerScripts", "changed"))
 # The five scripts PR L1 changes: (file, Studio class, Studio place)
 L1_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService"), ("EmployeeServer", "ModuleScript", "ServerScriptService"),
               ("IpoServer", "ModuleScript", "ServerScriptService"), ("PlotVisuals", "ModuleScript", "ServerScriptService"),
@@ -219,10 +221,319 @@ L2_EDITS = (
      "\t\tdata.folder:Destroy()\n\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n\t\tplotOwners[data.slot] = nil\n"),
 )
 
+# PR L3's edits outside the CLAIMLOAD markers (the claim behind LobbyConfig.ClaimEnabled), applied after L2_EDITS, each
+# old text found exactly once. The block itself does not move in the file: onPlayerAdded's head becomes claimGarage's
+# head (edit 6) and its tail claimGarage's tail plus the new join (edit 7), so the block's lines are claimGarage's.
+# Written with real tabs (the file's), in triple quotes.
+L3_EDITS = (
+    # the LobbyConfig require, next to IpoConfig
+    ('''local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
+''',
+     '''local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
+local LobbyConfig = require(ReplicatedStorage:WaitForChild("LobbyConfig")) -- the garages, the plaza and the claim (ClaimEnabled)
+'''),
+    # the claim's tables, the garage states and the Free room (in the garages block)
+    ('''local garages = {} -- slot -> the garage Model
+
+''',
+     '''local garages = {} -- slot -> the garage Model
+
+-- The claim (lobby L3). A joining player stands on the plaza (inPlaza) until they claim a garage. plotOwners[slot] stays
+-- the only truth of who has a garage; garageState is only what the garage shows (Free, MovingIn, Taken, Closing).
+local inPlaza = {} -- player -> true: joined, no garage yet (written before the join's first yield)
+local claims = {} -- UserId -> { slot, leaving }: one garage per account, held until that account's leave save has returned
+local claimedAt = {} -- player -> os.clock() of their claim (a Robux receipt waits for the save from then)
+local lastClaimAsk = {} -- UserId -> os.clock() of their last claim request (one a second)
+local garageState = {} -- slot -> "Free", "MovingIn", "Taken" or "Closing"
+local requestClaim -- a prompt's handler (the claim, below onPlayerAdded's helpers)
+
+-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
+-- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
+local function setGarageState(slot, state, ownerName)
+	garageState[slot] = state
+	local garage = garages[slot]
+	if not garage then return end
+	garage:SetAttribute("State", state)
+	garage:SetAttribute("OwnerName", ownerName or "")
+	local free = state == "Free" and LobbyConfig.ClaimEnabled
+	local post = garage:FindFirstChild("ClaimPost")
+	if post then
+		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
+		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then prompt.Enabled = free end
+		local gui = post:FindFirstChildOfClass("BillboardGui")
+		if gui then
+			gui.Enabled = LobbyConfig.ClaimEnabled and state ~= "Taken"
+			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+		end
+	end
+	local lamp = garage:FindFirstChild("FreeLamp")
+	if lamp then lamp.Transparency = free and 0 or 1 end
+end
+
+-- A Free garage shows today's new-player room: the stage 1 room, with no props (nobody owns any). Looks only.
+local function buildFreeRoom(slot)
+	local garage = garages[slot]
+	if not (garage and PlotVisuals) or garage:FindFirstChild("FreeRoom") then return end
+	local folder = Instance.new("Folder")
+	folder.Name = "FreeRoom"
+	folder.Parent = garage
+	looks("free room", PlotVisuals.newPlot, folder, plotFrame(slot).Position, PlotArt, garage.Floor, 1)
+end
+local function clearFreeRoom(slot)
+	local room = garages[slot] and garages[slot]:FindFirstChild("FreeRoom")
+	if room then room:Destroy() end
+end
+
+'''),
+    # the reset builds the Free room and shows the garage Free
+    ('''	syncBuilding(slot, 1)
+	setGarageSign(slot, "")
+end
+''',
+     '''	syncBuilding(slot, 1)
+	setGarageSign(slot, "")
+	buildFreeRoom(slot)
+	setGarageState(slot, "Free")
+end
+'''),
+    # the claim post, its prompt, the FREE sign and lamp; the Max Players warning
+    ('''		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
+		garage.Parent = root
+		garages[slot] = garage
+	end
+	root.Parent = workspace
+''',
+     '''		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
+		-- The claim post beside the door (lobby L3): the "Claim garage" prompt, the FREE sign and a lamp (Neon, no light).
+		-- Never solid, never touched; only shown while the claim is on.
+		local postAt = plotFrame(slot) * CFrame.new(LobbyConfig.Post.x, 1.5, LobbyConfig.Post.z)
+		local post = makePart(garage, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+		post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
+		local lamp = makePart(garage, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
+		lamp.CanCollide, lamp.CanTouch, lamp.CanQuery = false, false, false
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = LobbyConfig.Texts.Prompt
+		prompt.ObjectText = "Garage " .. slot
+		prompt.HoldDuration = LobbyConfig.HoldSeconds
+		prompt.MaxActivationDistance = LobbyConfig.PromptDistance
+		prompt.RequiresLineOfSight = false
+		prompt.Enabled = false
+		prompt.Parent = post
+		prompt.Triggered:Connect(function(player)
+			requestClaim(player, slot)
+		end)
+		local freeSign = addLabel(post, LobbyConfig.Texts.Free, 4)
+		freeSign.TextColor3 = Color3.fromRGB(90, 230, 120)
+		freeSign.Parent.Enabled = false
+		garage.Parent = root
+		garages[slot] = garage
+	end
+	root.Parent = workspace
+	if Players.MaxPlayers > MAX_PLOTS then -- nothing reads Max Players: a 7th player is only kicked (docs/PUBLISH_RULES.md)
+		warn(string.format("Max Players is %d but there are %d garages: set it to %d in Creator Hub", Players.MaxPlayers, MAX_PLOTS, MAX_PLOTS))
+	end
+'''),
+    # ShopServer's core gets claimedAt (a receipt waits for the save from the claim)
+    ('''	buyUpgrade = buyUpgrade, -- the Office tab
+	upgradeList = upgradeList,
+})
+''',
+     '''	buyUpgrade = buyUpgrade, -- the Office tab
+	upgradeList = upgradeList,
+	claimedAt = function(player) -- when they claimed their garage (nil: not yet): a Robux receipt waits for the save from then
+		return claimedAt[player]
+	end,
+})
+'''),
+    # onPlayerAdded's slot picking becomes claimGarage's head (the claim written before any yield)
+    ('''local function onPlayerAdded(player)
+	local slot
+	for s = 1, MAX_PLOTS do
+		if not plotOwners[s] then
+			slot = s
+			break
+		end
+	end
+	if not slot then
+		player:Kick("This server is full, please join another one.")
+		return
+	end
+	plotOwners[slot] = player
+
+''',
+     '''-- Moves a player into a garage: the claim (a prompt, or the server itself while ClaimEnabled is off). The caller asked
+-- LobbyConfig.canClaim with no yield since: this writes the claim before anything here can yield, then loads the save
+-- exactly as the join always did (the marked block below). The garage is never saved: only the company is.
+local function claimGarage(player, slot)
+	claims[player.UserId] = { slot = slot }
+	plotOwners[slot] = player
+	inPlaza[player] = nil
+	claimedAt[player] = os.clock()
+	player:SetAttribute("Garage", slot)
+	setGarageState(slot, "MovingIn", player.DisplayName)
+	clearFreeRoom(slot)
+
+'''),
+    # claimGarage's tail (Taken), the prompt's request, the auto-claim, the plaza, the new join and the leave handler
+    ('''	data.ready = true -- the shop waits for this before granting purchases
+
+	player.CharacterAdded:Connect(function(character)
+		teleportToPlot(character, slot)
+	end)
+	if player.Character then
+		task.spawn(teleportToPlot, player.Character, slot)
+	end
+end
+Players.PlayerAdded:Connect(onPlayerAdded)
+-- Players already in the server (they joined while this script was still starting) are set up too
+for _, existing in ipairs(Players:GetPlayers()) do
+	if not playerData[existing] then
+		task.spawn(onPlayerAdded, existing)
+	end
+end
+
+Players.PlayerRemoving:Connect(function(player)
+	saveOnLeave(player)
+	local data = playerData[player]
+	if data then
+		data.folder:Destroy()
+		resetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it
+		plotOwners[data.slot] = nil
+		playerData[player] = nil
+	end
+end)
+''',
+     '''	data.ready = true -- the shop waits for this before granting purchases
+
+	setGarageState(slot, "Taken", player.DisplayName)
+	player.CharacterAdded:Connect(function(character)
+		teleportToPlot(character, slot)
+	end)
+	if player.Character then
+		task.spawn(teleportToPlot, player.Character, slot)
+	end
+end
+
+-- What LobbyConfig.canClaim needs, read from the server's own tables as they are now
+local function claimState()
+	local owners = {}
+	for slot, owner in pairs(plotOwners) do
+		owners[slot] = { name = owner.DisplayName, closing = garageState[slot] == "Closing" }
+	end
+	return { enabled = LobbyConfig.ClaimEnabled, count = MAX_PLOTS, owners = owners, claims = claims, lastAsk = lastClaimAsk }
+end
+
+-- A claim from a garage's prompt. The client only holds the prompt: the garage is the prompt's own and the distance is
+-- measured here. The check and the claim run with no yield in between, so of two requests at once the first wins.
+requestClaim = function(player, slot)
+	if not inPlaza[player] then return end -- already moving in or playing, or gone
+	local now = os.clock()
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local post = garages[slot] and garages[slot]:FindFirstChild("ClaimPost")
+	local distance = root and post and (root.Position - post.Position).Magnitude or nil
+	local ok, reason = LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, distance = distance, now = now })
+	lastClaimAsk[player.UserId] = now
+	if not ok then
+		ShopServer.notify(player, reason)
+		return
+	end
+	claimGarage(player, slot)
+end
+
+-- ClaimEnabled off: the server claims the first free garage for a joining player and sends them in, as before. With none
+-- free (one is closing: its leave save still runs) or this account's last visit still saving, they wait on the plaza
+-- and it tries every second; after LobbyConfig.AutoClaimWait seconds, the old "server is full" kick.
+local function autoClaim(player)
+	local waited = 0
+	while player.Parent and inPlaza[player] do
+		for slot = 1, MAX_PLOTS do
+			if LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, auto = true }) then
+				claimGarage(player, slot)
+				return
+			end
+		end
+		if waited >= LobbyConfig.AutoClaimWait then
+			player:Kick(LobbyConfig.Texts.Full)
+			return
+		end
+		task.wait(1)
+		waited += 1
+	end
+end
+
+-- The claim on: a spawn far from the plaza (the SpawnLocation was not moved there) is put on the plaza
+local function toPlaza(player, character)
+	if not (LobbyConfig.ClaimEnabled and inPlaza[player]) then return end
+	local root = character:WaitForChild("HumanoidRootPart", 5)
+	if not (root and inPlaza[player]) then return end
+	local c = LobbyConfig.PlazaCenter
+	local dx, dz = root.Position.X - c.x, root.Position.Z - c.z
+	if math.sqrt(dx * dx + dz * dz) > LobbyConfig.PlazaRadius then
+		local s = LobbyConfig.PlazaSpawn
+		root.CFrame = CFrame.new(s.x, s.y, s.z)
+	end
+end
+
+-- Joining: the player only enters the plaza. inPlaza is written before anything can yield, so the check below for players
+-- who joined while this script was starting never sets anyone up twice. Nothing is read or saved before a claim.
+local function onPlayerAdded(player)
+	if inPlaza[player] or playerData[player] then return end -- already here: the startup loop and PlayerAdded both called
+	inPlaza[player] = true
+	player:SetAttribute("Garage", 0) -- 0 = no garage yet (LobbyClient, the shop's Robux buttons)
+	if #Players:GetPlayers() > MAX_PLOTS then
+		player:Kick(LobbyConfig.Texts.Full) -- more players than garages (Max Players above 6)
+		return
+	end
+	player.CharacterAdded:Connect(function(character)
+		toPlaza(player, character)
+	end)
+	if player.Character then
+		task.spawn(toPlaza, player, player.Character)
+	end
+	if not LobbyConfig.ClaimEnabled then
+		autoClaim(player)
+	end
+end
+Players.PlayerAdded:Connect(onPlayerAdded)
+-- Players already in the server (they joined while this script was still starting) are set up too
+for _, existing in ipairs(Players:GetPlayers()) do
+	if not inPlaza[existing] and not playerData[existing] then
+		task.spawn(onPlayerAdded, existing)
+	end
+end
+
+-- Leaving: the garage shows Closing while the leave save runs (the slot stays taken, FR-3). When it returns, the owner's
+-- things go, the garage is a new Garage again (Free), and only then may this account claim again: a rejoin from another
+-- device waits for it, so its load reads this save.
+Players.PlayerRemoving:Connect(function(player)
+	inPlaza[player] = nil
+	local data = playerData[player]
+	local held = claims[player.UserId]
+	if data then
+		setGarageState(data.slot, "Closing", player.DisplayName)
+		if held then held.leaving = true end
+	end
+	saveOnLeave(player)
+	if data then
+		data.folder:Destroy()
+		resetGarage(data.slot) -- the garage stays: back to a new Garage, Free, with no name on it
+		plotOwners[data.slot] = nil
+		playerData[player] = nil
+		claimedAt[player] = nil
+		if claims[player.UserId] == held then
+			claims[player.UserId] = nil
+		end
+	end
+end)
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS then L2_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS, L2_EDITS and L3_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
@@ -300,9 +611,9 @@ def checks(core, base, doc, others=None):
         len(starts) == 1 and len(ends) == 1 and starts[0] < ends[0], (len(starts), len(ends)))
     add("markers: each marker line is a tab and the marker, nothing else",
         all(lines[i] == b"\t" + START.encode() for i in starts) and all(lines[i] == b"\t" + END.encode() for i in ends))
-    head = next((i for i, line in enumerate(lines) if line == b"local function onPlayerAdded(player)"), None)
-    tail = next((i for i, line in enumerate(lines) if line == b"Players.PlayerAdded:Connect(onPlayerAdded)"), None)
-    add("markers: both are inside onPlayerAdded (after its first line, before Players.PlayerAdded:Connect)",
+    head = next((i for i, line in enumerate(lines) if line == b"local function claimGarage(player, slot)"), None)
+    tail = next((i for i, line in enumerate(lines) if line == b"local function claimState()"), None)
+    add("markers: both are inside claimGarage (after its first line, before the next function, claimState; PR L3 made the join's load the claim's)",
         head is not None and tail is not None and starts and ends and all(head < i < tail for i in starts + ends))
 
     block = marked_block(lines)
@@ -401,10 +712,12 @@ def lua_block(doc, heading):
 FAKE_STUDIO = """
 local function folder(scripts) return { FindFirstChild = function(_, name) return scripts[name] end } end
 local server = folder({ __SERVER__ })
+local shared = folder({ __SHARED__ })
 local playerScripts = folder({ __CLIENT__ })
 local starterPlayer = { FindFirstChild = function(_, name) if name == "StarterPlayerScripts" then return playerScripts end return nil end }
 game = { GetService = function(_, name)
-	if name == "ServerScriptService" then return server elseif name == "StarterPlayer" then return starterPlayer end
+	if name == "ServerScriptService" then return server elseif name == "StarterPlayer" then return starterPlayer
+	elseif name == "ReplicatedStorage" then return shared end
 	return nil
 end }
 """
@@ -412,13 +725,13 @@ end }
 
 def fake_studio(sources, scripts=None):
     """The fake Studio holding scripts ({name: source text}) with their classes and places (default: L1's five)."""
-    server, client = [], []
+    server, client, shared = [], [], []
     for name, cls, place in (scripts or L1_SCRIPTS):
         if name not in sources:
             continue
         entry = "%s = { ClassName = \"%s\", Source = %s }" % (name, cls, lua_long_string(sources[name]))
-        (client if place == "StarterPlayerScripts" else server).append(entry)
-    return FAKE_STUDIO.replace("__SERVER__", ", ".join(server)).replace("__CLIENT__", ", ".join(client))
+        (client if place == "StarterPlayerScripts" else shared if place == "ReplicatedStorage" else server).append(entry)
+    return FAKE_STUDIO.replace("__SERVER__", ", ".join(server)).replace("__CLIENT__", ", ".join(client)).replace("__SHARED__", ", ".join(shared))
 
 
 def hash_block_checks(luau, core, doc):
@@ -504,7 +817,7 @@ OUTSIDE_CHECK = "outside: TycoonCore.lua without its CLAIMLOAD comment lines is 
 EDITS_CHECK = "outside: L1's %d plot-frame edits and L2's %d building edits each apply once" % (len(L1_EDITS), len(L2_EDITS))
 COUNT_CHECK = "markers: exactly one CLAIMLOAD-START line and one CLAIMLOAD-END line, START first"
 SHAPE_CHECK = "markers: each marker line is a tab and the marker, nothing else"
-PLACE_CHECK = "markers: both are inside onPlayerAdded (after its first line, before Players.PlayerAdded:Connect)"
+PLACE_CHECK = "markers: both are inside claimGarage"
 COMMENT_CHECK = "outside: every line that names CLAIMLOAD is a comment line (no code hides on one)"
 DOC_ROW_CHECK = "doc: %s's Lobby all table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
 
@@ -547,6 +860,8 @@ MUTANTS = [
     ("text after the START marker on its line", swap("\t" + START + "\n", "\t" + START + " (the join load)\n"), SHAPE_CHECK),
     ("the END marker moved below Players.PlayerAdded:Connect",
      move("\t" + END + "\n", "for _, existing in ipairs(Players:GetPlayers()) do\n"), PLACE_CHECK),
+    ("the END marker moved into requestClaim (after claimGarage)",
+     move("\t" + END + "\n", "\tlastClaimAsk[player.UserId] = now\n"), PLACE_CHECK),
     # Outside the block
     ("code hidden on a CLAIMLOAD line outside the block (data.loaded = true -- CLAIMLOAD)",
      ins_after("\t" + END + "\n", "\tdata.loaded = true -- CLAIMLOAD\n"), COMMENT_CHECK),
@@ -570,7 +885,7 @@ MUTANTS = [
      ins_after("	data.looks = PlotVisuals and looks(\"room\", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))\n",
                "	syncBuilding(slot, stageOf(data))\n"), BLOCK_CHECK),
     ("L2: no reset on leave (the garage keeps the old owner's building and name)",
-     swap("\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n", ""), OUTSIDE_CHECK),
+     swap("\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, Free, with no name on it\n", ""), OUTSIDE_CHECK),
     ("L2: a label per owner (the join adds a billboard on the Floor again)",
      swap("\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n"), OUTSIDE_CHECK),
     ("L2: the building required without pcall (a broken building module would stop the game)",
@@ -616,6 +931,130 @@ def run_mutants(core_text, base, doc, mutants=MUTANTS):
     return caught, lines
 
 
+# --- PR L3: the whole TycoonCore run in a fake Roblox (tools/lobby_runtime.luau) -----------------------------------------
+RUNTIME_FILE = os.path.join("tools", "lobby_runtime.luau")
+HOOKS = ("\n\treturn { playerData = playerData, plotOwners = plotOwners, claims = claims, inPlaza = inPlaza, garageState = garageState, "
+         "claimedAt = claimedAt }\nend\n")
+
+
+def runtime_program(sources):
+    """The runtime test program for {file: text} (TycoonCore.lua, LobbyConfig.lua, IpoConfig.lua, ShopServer.lua)."""
+    body = read(RUNTIME_FILE)
+    boot = ("local function BOOT_CORE(game, script, workspace, task, os, warn, require, newInstance, Enum, Vector3, CFrame, Color3, UDim2, typeof)\n"
+            "\tlocal Instance = { new = newInstance }\n" + sources["TycoonCore.lua"] + HOOKS)
+    mods = ("local LOBBY_SOURCE = function()\n" + sources["LobbyConfig.lua"] + "\nend\n"
+            "local IPOCONFIG_SOURCE = function()\n" + sources["IpoConfig.lua"] + "\nend\n")
+    m = re.search(r"local function waitForData\(player\)\n.*?\nend\n", sources["ShopServer.lua"], re.S)
+    wait = m.group(0).replace("local function waitForData(player)", "function waitForData(player)", 1) if m else 'error("waitForData not found in ShopServer.lua")\n'
+    at = body.index("-- One world:")
+    return body[:at] + boot + mods + body[at:].replace("__WAITFORDATA__", wait)
+
+
+def runtime_checks(luau, sources):
+    """[(name, ok, extra)] of the runtime program; a crash or a missing DONE is one failed check of its own."""
+    result = run_luau(luau, runtime_program(sources))
+    out = []
+    for line in result.stdout.splitlines():
+        if line.startswith("FAIL: "):
+            name, _, extra = line[len("FAIL: "):].partition(" -- ")
+            out.append((name, False, extra or None))
+    m = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+    for _ in range(int(m.group(1)) if m else 0):
+        out.append(("runtime", True, None))
+    if result.returncode != 0 or "DONE" not in result.stdout.splitlines():
+        out.append(("runtime: the program ran to the end (it crashed: a crash is never a catch)", False, (result.stderr or result.stdout)[-300:]))
+    return out
+
+
+def runtime_sources():
+    return {name: read(name) for name in ("TycoonCore.lua", "LobbyConfig.lua", "IpoConfig.lua", "ShopServer.lua")}
+
+
+# (what is broken, file, old, new, the start of the named runtime check that must fail)
+L3_MUTANTS = [
+    ("no one-claim check (canClaim forgets the account's held claim)", "LobbyConfig.lua", "\tlocal held = state.claims[request.userId]\n\tif held then",
+     "\tlocal held = state.claims[request.userId]\n\tif false then", "rejoin: while the old visit is still saving"),
+    ("the claim keyed on the Player, not the UserId", "TycoonCore.lua", "\tclaims[player.UserId] = { slot = slot }\n", "\tclaims[player] = { slot = slot }\n", "rejoin: while the old visit"),
+    ("the claim released before the leave save returns", "TycoonCore.lua", "\tinPlaza[player] = nil\n\tlocal data = playerData[player]\n\tlocal held = claims[player.UserId]\n",
+     "\tinPlaza[player] = nil\n\tlocal data = playerData[player]\n\tlocal held = claims[player.UserId]\n\tclaims[player.UserId] = nil\n", "rejoin: while the old visit"),
+    ("a yield between the check and the claim", "TycoonCore.lua", "\tif not ok then\n\t\tShopServer.notify(player, reason)\n\t\treturn\n\tend\n\tclaimGarage(player, slot)\n",
+     "\tif not ok then\n\t\tShopServer.notify(player, reason)\n\t\treturn\n\tend\n\ttask.wait()\n\tclaimGarage(player, slot)\n", "two claims in one moment"),
+    ("the plaza marker written after a yield (and no already-here check: the plan's own case)", "TycoonCore.lua",
+     "\tif inPlaza[player] or playerData[player] then return end -- already here: the startup loop and PlayerAdded both called\n\tinPlaza[player] = true\n",
+     "\ttask.wait()\n\tinPlaza[player] = true\n", "early joiner"),
+    ("onPlayerAdded runs twice for one player (no already-here check)", "TycoonCore.lua", "\tif inPlaza[player] or playerData[player] then return end -- already here: the startup loop and PlayerAdded both called\n",
+     "", "early joiner"),
+    ("leaderstats made on the join (before the claim)", "TycoonCore.lua", "\tplayer:SetAttribute(\"Garage\", 0) -- 0 = no garage yet (LobbyClient, the shop's Robux buttons)\n",
+     "\tplayer:SetAttribute(\"Garage\", 0) -- 0 = no garage yet (LobbyClient, the shop's Robux buttons)\n\tlocal early = Instance.new(\"Folder\")\n\tearly.Name = \"leaderstats\"\n\tearly.Parent = player\n",
+     "plaza: a joining player gets no garage"),
+    ("no distance check", "LobbyConfig.lua", "\t\tif not finite(d) or d < 0 or d > LobbyConfig.ClaimDistance then", "\t\tif false then", "distance:"),
+    ("the prompt left on for a Taken garage", "TycoonCore.lua", "\t\tif prompt then prompt.Enabled = free end\n", "\t\tif prompt then prompt.Enabled = LobbyConfig.ClaimEnabled end\n", "claim: the prompt goes off"),
+    ("no reset on leave (the garage never Free again)", "TycoonCore.lua", "\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, Free, with no name on it\n", "", "leave: when the save returns"),
+    ("the kill-switch path without the teleport", "TycoonCore.lua", "\tif player.Character then\n\t\ttask.spawn(teleportToPlot, player.Character, slot)\n\tend\nend\n\n-- What LobbyConfig.canClaim",
+     "end\n\n-- What LobbyConfig.canClaim", "claim off: the player is sent into their garage"),
+    ("the cap kicks at 6 players", "TycoonCore.lua", "\tif #Players:GetPlayers() > MAX_PLOTS then", "\tif #Players:GetPlayers() >= MAX_PLOTS then", "cap: six players"),
+    ("the receipt deadline counted from the join", "ShopServer.lua", "\t\tif core.claimedAt then\n\t\t\tlocal claimed = core.claimedAt(player)\n\t\t\tif claimed and os.clock() >= claimed + DATA_WAIT_SECONDS then",
+     "\t\tif core.claimedAt then\n\t\t\tlocal claimed = core.claimedAt(player)\n\t\t\tif os.clock() >= deadline then", "receipt: a player on the plaza"),
+    ("the auto-claim kicks at once when every garage is taken (no wait for a closing one)", "TycoonCore.lua", "\t\tif waited >= LobbyConfig.AutoClaimWait then",
+     "\t\tif waited >= 0 then", "claim off, all taken"),
+    ("no plaza fallback (a far first spawn stays where it is)", "TycoonCore.lua", "\tif math.sqrt(dx * dx + dz * dz) > LobbyConfig.PlazaRadius then", "\tif false then", "plaza: a first spawn far"),
+    ("the claim does not write plotOwners before the load (the garage looks free while moving in)", "TycoonCore.lua",
+     "\tclaims[player.UserId] = { slot = slot }\n\tplotOwners[slot] = player\n", "\tclaims[player.UserId] = { slot = slot }\n", "two claims in one moment"),
+    ("the claim's rate check gone", "LobbyConfig.lua", "\t\tif last and finite(request.now) and request.now - last < LobbyConfig.ClaimInterval then", "\t\tif false then", "rate:"),
+]
+
+
+def run_l3_mutants(luau):
+    base = runtime_sources()
+    caught, lines = 0, []
+    for label, file, old, new, want in L3_MUTANTS:
+        if base[file].count(old) != 1:
+            lines.append("NOT CAUGHT: %s -- not applied (its anchor is missing or there twice)" % label)
+            continue
+        mutated = dict(base)
+        mutated[file] = base[file].replace(old, new)
+        failed = [name for name, ok, _ in runtime_checks(luau, mutated) if not ok]
+        hit = [n for n in failed if n.startswith(want)]
+        if hit:
+            caught += 1
+            lines.append("caught: %s -- by \"%s\"" % (label, hit[0]))
+        else:
+            lines.append("NOT CAUGHT: %s -- no failing check starts with \"%s\" (failed: %s)" % (label, want, failed[:3]))
+    return caught, lines
+
+
+CLIENT_TEST_FILE = os.path.join("tools", "lobby_client_test.luau")
+
+
+def client_checks(luau, client_text=None, lobby_text=None):
+    """[(name, ok, extra)] of the real LobbyClient.lua in a fake client (tools/lobby_client_test.luau)."""
+    client = client_text if client_text is not None else read("LobbyClient.lua")
+    lobby = lobby_text if lobby_text is not None else read("LobbyConfig.lua")
+    head = ("local LOBBY_SOURCE = function()\n" + lobby + "\nend\n"
+            "local CLIENT = function(game, workspace, Instance, require, UDim2, UDim, Color3, Enum, Vector3)\n" + client + "\nend\n")
+    body = read(CLIENT_TEST_FILE)
+    at = body.index("local function world(")
+    result = run_luau(luau, body[:at] + head + body[at:])
+    out = []
+    for line in result.stdout.splitlines():
+        if line.startswith("FAIL: "):
+            name, _, extra = line[len("FAIL: "):].partition(" -- ")
+            out.append((name, False, extra or None))
+    m = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+    out += [("client", True, None)] * (int(m.group(1)) if m else 0)
+    if result.returncode != 0 or "DONE" not in result.stdout.splitlines():
+        out.append(("client: the program ran to the end (it crashed: a crash is never a catch)", False, (result.stderr or result.stdout)[-300:]))
+    return out
+
+
+CLIENT_MUTANTS = [
+    ("LobbyClient shows the banner with the claim off", "if not LobbyConfig.ClaimEnabled then\n\treturn -- the claim is off", "if false then\n\treturn -- the claim is off",
+     "client: with the claim off"),
+    ("LobbyClient marks a garage that is not Free", 'if post and garage:GetAttribute("State") == "Free" then', "if post then", "client: the marker is over the nearest FREE"),
+    ("LobbyClient keeps the banner after the claim", "local show = onPlaza()", "local show = true", "client: with a garage the banner"),
+]
+
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -653,7 +1092,44 @@ def main():
         print("FAIL: the mutation harness counted a mutant that crashed the checks as caught")
         code = 1
 
-    print("lobby_test.py: %d checks passed, %d of %d mutation runs caught" % (len(results) - len(failed), caught, len(MUTANTS)))
+    runtime = runtime_checks(luau, runtime_sources())
+    rfail = [(n, e) for n, ok, e in runtime if not ok]
+    for name, extra in rfail:
+        print("FAIL: " + name + (" -- " + str(extra) if extra is not None else ""))
+    print("The claim (PR L3), the whole TycoonCore in a fake Roblox: %d passed, %d failed" % (len(runtime) - len(rfail), len(rfail)))
+    if rfail:
+        code = 1
+    l3_caught, l3_lines = run_l3_mutants(luau)
+    for line in l3_lines:
+        if line.startswith("NOT CAUGHT"):
+            print(line)
+    print("Claim mutations (PR L3): %d of %d caught, each by its named check" % (l3_caught, len(L3_MUTANTS)))
+    if l3_caught != len(L3_MUTANTS):
+        code = 1
+    client = client_checks(luau)
+    cfail = [(n, e) for n, ok, e in client if not ok]
+    for name, extra in cfail:
+        print("FAIL: " + name + (" -- " + str(extra) if extra is not None else ""))
+    print("LobbyClient (PR L3) in a fake client: %d passed, %d failed" % (len(client) - len(cfail), len(cfail)))
+    if cfail:
+        code = 1
+    c_caught = 0
+    source = read("LobbyClient.lua")
+    for label, old, new, want in CLIENT_MUTANTS:
+        if source.count(old) != 1:
+            print("NOT CAUGHT: %s -- not applied" % label)
+            continue
+        hit = [n for n, ok, _ in client_checks(luau, source.replace(old, new)) if not ok and n.startswith(want)]
+        if hit:
+            c_caught += 1
+        else:
+            print("NOT CAUGHT: %s -- no failing check starts with \"%s\"" % (label, want))
+    print("LobbyClient mutations: %d of %d caught, each by its named check" % (c_caught, len(CLIENT_MUTANTS)))
+    if c_caught != len(CLIENT_MUTANTS):
+        code = 1
+    total_checks = len(results) - len(failed) + len(runtime) - len(rfail) + len(client) - len(cfail)
+    print("lobby_test.py: %d checks passed, %d of %d mutation runs caught" % (total_checks, caught + l3_caught + c_caught,
+                                                                              len(MUTANTS) + len(L3_MUTANTS) + len(CLIENT_MUTANTS)))
     return code
 
 

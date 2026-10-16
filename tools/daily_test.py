@@ -8041,7 +8041,9 @@ FRAME_SITES = {
     ("TycoonCore.lua", "teleportToPlot"): 2,
     # lobby L2: the Floor and the garage sign are made once, in buildGarages; syncBuilding builds the building in the
     # garage's frame and gives unstick its landing (the join no longer makes a Floor)
-    ("TycoonCore.lua", "buildGarages"): 2, ("TycoonCore.lua", "syncBuilding"): 2,
+    ("TycoonCore.lua", "buildGarages"): 3, ("TycoonCore.lua", "syncBuilding"): 2,
+    # lobby L3: the claim post (buildGarages) and the Free garage's room (buildFreeRoom, from the frame's position)
+    ("TycoonCore.lua", "buildFreeRoom"): 1,
     ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 1, ("IpoServer.lua", "buildSign"): 1,
 }
 # WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
@@ -8086,7 +8088,7 @@ def frame_static_checks(texts=None):
         not offsets, offsets[:3])
     add("center plus offset: no module computes from core.plotCenter (IpoServer and EmployeeServer get core.plotFrame)", not core_center, core_center[:3])
     want = {k: v for k, v in FRAME_SITES.items() if v}
-    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, buildGarages x2, syncBuilding x2, two core tables; "
+    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, buildGarages x3, syncBuilding x2, buildFreeRoom, two core tables; "
         "EmployeeServer: placeEmployees, buildIncubator; IpoServer: buildSign)", sites == want,
         sorted(set(sites.items()) ^ set(want.items())))
     core = code_only(texts.get("TycoonCore.lua", ""))
@@ -8094,7 +8096,7 @@ def frame_static_checks(texts=None):
     where = sorted(frame_enclosing(core, i) for i in calls)
     room = "looks(\"room\", PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt, floor, stageOf(data))"
     add("center plus offset: plotCenter is called only by plotFrame and on the room line (newPlot takes the turn from the Floor)",
-        where == ["onPlayerAdded", "plotFrame"] and core.count(room) == 1, where)
+        where == ["claimGarage", "plotFrame"] and core.count(room) == 1, where)  # lobby L3: the join's load is the claim's
     client = texts.get("EmployeeClient.lua", "")
     beat_at = client.find("RunService.Heartbeat:Connect(function(dt)")
     beat = client[beat_at:client.find("\nend)\n", beat_at)] if beat_at >= 0 else ""

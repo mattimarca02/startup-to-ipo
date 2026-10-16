@@ -6,8 +6,8 @@ Branch `lobby-all`, from `main` `f6a546f` (the latest `origin/main` on 2026-10-1
 |---|---|---|
 | setup | `origin/kit-models` merged first, then `origin/building-pass` (CONTRIBUTING conflict: both sides' rows kept); claim rows for every file this branch edits | done |
 | L2 | permanent closed building: `buildGarages`, the Floor in the garage, the garage sign, reset on leave; the five kit buildings (PlotBuilding, PlotBuildingVisuals), `BuildingClient` at the root, `tools/building_test.py` | done |
-| L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | next |
-| L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | to do |
+| L3 | the claim behind `LobbyConfig.ClaimEnabled` (ships false): `claimGarage` with the moved CLAIMLOAD block, states, prompts, `UserId` hold, Free room, receipts, `LobbyClient`, `tools/lobby_test.py` | done |
+| L4 | the ring and the plaza (`LobbyConfig.Garages`, WorldVisuals ring layout), persistent shells | next |
 | L5 | docs (CLAUDE.md, ROADMAP.md, README, PUBLISH_RULES), docs/STUDIO_SYNC_LOBBY.md (the one Studio list), claims released, pull request | to do |
 
 ## Before this session (what was there, and what happened to it)
@@ -51,6 +51,18 @@ daily_test 2,746 checks, 281 mutants; hud_test 1,072 / 94; world_test 350 / 82; 
 - Not verified (Studio only): the kit's real front direction (`KIT_FRONT_TURN`), that MeshPart sizes stretch as computed, the look of the five buildings, Roblox's camera with the invisible boxes, phone frame rate.
 
 Next: L3.
+
+## L3: done (what it built)
+
+- **LobbyConfig** (new, ReplicatedStorage): `ClaimEnabled = false`, the row of garages (today's numbers), the plaza numbers, the claim post spot, distances, timings, the texts, and the one pure rule `canClaim(state, request)` (switch, rate, one claim per account and "still saving", slot, owner and Closing, distance).
+- **TycoonCore** (7 edits, `L3_EDITS` in tools/lobby_test.py; the file is regenerated from `99eed7b` plus every edit, then the three marker comment lines): the join only enters the plaza (`inPlaza` before any yield; an already-here check, so the startup loop and PlayerAdded can never set one player up twice); `claimGarage` writes the claim (keyed on the UserId, held until that account's leave save returns), `plotOwners`, the state and the `Garage` attribute before anything yields, then the CLAIMLOAD block, untouched and still in place; the prompt's `requestClaim` (no yield between check and claim); `autoClaim` while the switch is off (today's behaviour; with no free garage it waits on the plaza, then the old kick after 60 s); the plaza fallback for a far spawn (claim on); the cap kicks only above 6 players; a startup warning when Max Players is above 6; states Free / MovingIn / Taken / Closing (attributes); the claim post (prompt, FREE sign, lamp; only with the claim on); the Free room (today's new-player room) in every free garage; `claimedAt` for ShopServer.
+- **ShopServer:** a receipt waits with no deadline while the player has no garage, 30 s from the claim; the lounge door tells a player with no garage "Claim a garage first: your passes load with your company" and prompts nothing.
+- **IpoClient, ShopClient:** a quiet wait for leaderstats (no "infinite yield"); ShopClient's Robux buttons say "Claim garage" and never prompt while `Garage` is 0. **LobbyClient** (new): the banner and a marker over the nearest Free garage, only with the claim on and no garage.
+- Tests: `tools/lobby_test.py` now runs the **whole real TycoonCore** in a fake Roblox (`tools/lobby_runtime.luau`: a coroutine scheduler with simulated time, a DataStore with delays and failures, players who join, leave, rejoin and get kicked) for every case of the plan's L3 list, and the real LobbyClient (`tools/lobby_client_test.luau`); 17 claim mutants and 3 client mutants. hud_test follows the load into `claimGarage` (plus "leaderstats made at the claim"), shop_ux_test knows the new toast texts and tests the "Claim garage" buttons, daily_test and building_test follow the new plotFrame sites and the Free garage.
+- Found while building: if the startup loop and PlayerAdded both called the join for one player, the second call would have waited in the auto-claim and kicked them after 60 s; the join now returns at once for a player it already has (tested).
+- Not verified (Studio only): Roblox's own prompt-distance check, whether `ProcessReceipt` may wait that long, the claim with 2 and 3 real clients.
+
+Next: L4.
 
 ## How to continue
 

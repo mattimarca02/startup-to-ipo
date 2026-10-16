@@ -43,6 +43,7 @@ if not getStore() then
 end
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
+local LobbyConfig = require(ReplicatedStorage:WaitForChild("LobbyConfig")) -- the garages, the plaza and the claim (ClaimEnabled)
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
@@ -213,6 +214,53 @@ end
 -- employees, incubators, signs) stands in it while they play; when they leave, the garage goes back to a new Garage.
 local garages = {} -- slot -> the garage Model
 
+-- The claim (lobby L3). A joining player stands on the plaza (inPlaza) until they claim a garage. plotOwners[slot] stays
+-- the only truth of who has a garage; garageState is only what the garage shows (Free, MovingIn, Taken, Closing).
+local inPlaza = {} -- player -> true: joined, no garage yet (written before the join's first yield)
+local claims = {} -- UserId -> { slot, leaving }: one garage per account, held until that account's leave save has returned
+local claimedAt = {} -- player -> os.clock() of their claim (a Robux receipt waits for the save from then)
+local lastClaimAsk = {} -- UserId -> os.clock() of their last claim request (one a second)
+local garageState = {} -- slot -> "Free", "MovingIn", "Taken" or "Closing"
+local requestClaim -- a prompt's handler (the claim, below onPlayerAdded's helpers)
+
+-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
+-- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
+local function setGarageState(slot, state, ownerName)
+	garageState[slot] = state
+	local garage = garages[slot]
+	if not garage then return end
+	garage:SetAttribute("State", state)
+	garage:SetAttribute("OwnerName", ownerName or "")
+	local free = state == "Free" and LobbyConfig.ClaimEnabled
+	local post = garage:FindFirstChild("ClaimPost")
+	if post then
+		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
+		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
+		if prompt then prompt.Enabled = free end
+		local gui = post:FindFirstChildOfClass("BillboardGui")
+		if gui then
+			gui.Enabled = LobbyConfig.ClaimEnabled and state ~= "Taken"
+			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+		end
+	end
+	local lamp = garage:FindFirstChild("FreeLamp")
+	if lamp then lamp.Transparency = free and 0 or 1 end
+end
+
+-- A Free garage shows today's new-player room: the stage 1 room, with no props (nobody owns any). Looks only.
+local function buildFreeRoom(slot)
+	local garage = garages[slot]
+	if not (garage and PlotVisuals) or garage:FindFirstChild("FreeRoom") then return end
+	local folder = Instance.new("Folder")
+	folder.Name = "FreeRoom"
+	folder.Parent = garage
+	looks("free room", PlotVisuals.newPlot, folder, plotFrame(slot).Position, PlotArt, garage.Floor, 1)
+end
+local function clearFreeRoom(slot)
+	local room = garages[slot] and garages[slot]:FindFirstChild("FreeRoom")
+	if room then room:Destroy() end
+end
+
 -- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never
 -- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.
 local function syncBuilding(slot, stage)
@@ -250,6 +298,8 @@ local function resetGarage(slot)
 	end
 	syncBuilding(slot, 1)
 	setGarageSign(slot, "")
+	buildFreeRoom(slot)
+	setGarageState(slot, "Free")
 end
 
 -- Builds the six garages once, when the server starts, before anyone is set up
@@ -264,10 +314,34 @@ local function buildGarages()
 		local sign = makePart(garage, "GarageSign", Vector3.new(1, 1, 1), plotFrame(slot), Color3.fromRGB(90, 90, 100))
 		sign.Transparency, sign.CanCollide, sign.CanTouch, sign.CanQuery = 1, false, false, false
 		addLabel(sign, "", 12).Parent.Enabled = false -- the owner's name, over the garage
+		-- The claim post beside the door (lobby L3): the "Claim garage" prompt, the FREE sign and a lamp (Neon, no light).
+		-- Never solid, never touched; only shown while the claim is on.
+		local postAt = plotFrame(slot) * CFrame.new(LobbyConfig.Post.x, 1.5, LobbyConfig.Post.z)
+		local post = makePart(garage, "ClaimPost", Vector3.new(0.6, 4, 0.6), postAt, Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+		post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
+		local lamp = makePart(garage, "FreeLamp", Vector3.new(1, 1, 1), postAt * CFrame.new(0, 2.5, 0), Color3.fromRGB(90, 230, 120), Enum.Material.Neon)
+		lamp.CanCollide, lamp.CanTouch, lamp.CanQuery = false, false, false
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.ActionText = LobbyConfig.Texts.Prompt
+		prompt.ObjectText = "Garage " .. slot
+		prompt.HoldDuration = LobbyConfig.HoldSeconds
+		prompt.MaxActivationDistance = LobbyConfig.PromptDistance
+		prompt.RequiresLineOfSight = false
+		prompt.Enabled = false
+		prompt.Parent = post
+		prompt.Triggered:Connect(function(player)
+			requestClaim(player, slot)
+		end)
+		local freeSign = addLabel(post, LobbyConfig.Texts.Free, 4)
+		freeSign.TextColor3 = Color3.fromRGB(90, 230, 120)
+		freeSign.Parent.Enabled = false
 		garage.Parent = root
 		garages[slot] = garage
 	end
 	root.Parent = workspace
+	if Players.MaxPlayers > MAX_PLOTS then -- nothing reads Max Players: a 7th player is only kicked (docs/PUBLISH_RULES.md)
+		warn(string.format("Max Players is %d but there are %d garages: set it to %d in Creator Hub", Players.MaxPlayers, MAX_PLOTS, MAX_PLOTS))
+	end
 	for slot = 1, MAX_PLOTS do
 		resetGarage(slot)
 	end
@@ -740,6 +814,9 @@ ShopServer.init({
 	addEarnings = addEarnings,
 	buyUpgrade = buyUpgrade, -- the Office tab
 	upgradeList = upgradeList,
+	claimedAt = function(player) -- when they claimed their garage (nil: not yet): a Robux receipt waits for the save from then
+		return claimedAt[player]
+	end,
 })
 
 -- Studio only (the Debug tab exists only in Studio): shows the next funding stage's room and building, to walk every
@@ -838,19 +915,17 @@ local function teleportToPlot(character, slot)
 	root.CFrame = CFrame.lookAt(spawnPos, signPos)
 end
 
-local function onPlayerAdded(player)
-	local slot
-	for s = 1, MAX_PLOTS do
-		if not plotOwners[s] then
-			slot = s
-			break
-		end
-	end
-	if not slot then
-		player:Kick("This server is full, please join another one.")
-		return
-	end
+-- Moves a player into a garage: the claim (a prompt, or the server itself while ClaimEnabled is off). The caller asked
+-- LobbyConfig.canClaim with no yield since: this writes the claim before anything here can yield, then loads the save
+-- exactly as the join always did (the marked block below). The garage is never saved: only the company is.
+local function claimGarage(player, slot)
+	claims[player.UserId] = { slot = slot }
 	plotOwners[slot] = player
+	inPlaza[player] = nil
+	claimedAt[player] = os.clock()
+	player:SetAttribute("Garage", slot)
+	setGarageState(slot, "MovingIn", player.DisplayName)
+	clearFreeRoom(slot)
 
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
@@ -972,6 +1047,7 @@ local function onPlayerAdded(player)
 	data.ready = true -- the shop waits for this before granting purchases
 	-- CLAIMLOAD-END
 
+	setGarageState(slot, "Taken", player.DisplayName)
 	player.CharacterAdded:Connect(function(character)
 		teleportToPlot(character, slot)
 	end)
@@ -979,22 +1055,116 @@ local function onPlayerAdded(player)
 		task.spawn(teleportToPlot, player.Character, slot)
 	end
 end
+
+-- What LobbyConfig.canClaim needs, read from the server's own tables as they are now
+local function claimState()
+	local owners = {}
+	for slot, owner in pairs(plotOwners) do
+		owners[slot] = { name = owner.DisplayName, closing = garageState[slot] == "Closing" }
+	end
+	return { enabled = LobbyConfig.ClaimEnabled, count = MAX_PLOTS, owners = owners, claims = claims, lastAsk = lastClaimAsk }
+end
+
+-- A claim from a garage's prompt. The client only holds the prompt: the garage is the prompt's own and the distance is
+-- measured here. The check and the claim run with no yield in between, so of two requests at once the first wins.
+requestClaim = function(player, slot)
+	if not inPlaza[player] then return end -- already moving in or playing, or gone
+	local now = os.clock()
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local post = garages[slot] and garages[slot]:FindFirstChild("ClaimPost")
+	local distance = root and post and (root.Position - post.Position).Magnitude or nil
+	local ok, reason = LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, distance = distance, now = now })
+	lastClaimAsk[player.UserId] = now
+	if not ok then
+		ShopServer.notify(player, reason)
+		return
+	end
+	claimGarage(player, slot)
+end
+
+-- ClaimEnabled off: the server claims the first free garage for a joining player and sends them in, as before. With none
+-- free (one is closing: its leave save still runs) or this account's last visit still saving, they wait on the plaza
+-- and it tries every second; after LobbyConfig.AutoClaimWait seconds, the old "server is full" kick.
+local function autoClaim(player)
+	local waited = 0
+	while player.Parent and inPlaza[player] do
+		for slot = 1, MAX_PLOTS do
+			if LobbyConfig.canClaim(claimState(), { userId = player.UserId, slot = slot, auto = true }) then
+				claimGarage(player, slot)
+				return
+			end
+		end
+		if waited >= LobbyConfig.AutoClaimWait then
+			player:Kick(LobbyConfig.Texts.Full)
+			return
+		end
+		task.wait(1)
+		waited += 1
+	end
+end
+
+-- The claim on: a spawn far from the plaza (the SpawnLocation was not moved there) is put on the plaza
+local function toPlaza(player, character)
+	if not (LobbyConfig.ClaimEnabled and inPlaza[player]) then return end
+	local root = character:WaitForChild("HumanoidRootPart", 5)
+	if not (root and inPlaza[player]) then return end
+	local c = LobbyConfig.PlazaCenter
+	local dx, dz = root.Position.X - c.x, root.Position.Z - c.z
+	if math.sqrt(dx * dx + dz * dz) > LobbyConfig.PlazaRadius then
+		local s = LobbyConfig.PlazaSpawn
+		root.CFrame = CFrame.new(s.x, s.y, s.z)
+	end
+end
+
+-- Joining: the player only enters the plaza. inPlaza is written before anything can yield, so the check below for players
+-- who joined while this script was starting never sets anyone up twice. Nothing is read or saved before a claim.
+local function onPlayerAdded(player)
+	if inPlaza[player] or playerData[player] then return end -- already here: the startup loop and PlayerAdded both called
+	inPlaza[player] = true
+	player:SetAttribute("Garage", 0) -- 0 = no garage yet (LobbyClient, the shop's Robux buttons)
+	if #Players:GetPlayers() > MAX_PLOTS then
+		player:Kick(LobbyConfig.Texts.Full) -- more players than garages (Max Players above 6)
+		return
+	end
+	player.CharacterAdded:Connect(function(character)
+		toPlaza(player, character)
+	end)
+	if player.Character then
+		task.spawn(toPlaza, player, player.Character)
+	end
+	if not LobbyConfig.ClaimEnabled then
+		autoClaim(player)
+	end
+end
 Players.PlayerAdded:Connect(onPlayerAdded)
 -- Players already in the server (they joined while this script was still starting) are set up too
 for _, existing in ipairs(Players:GetPlayers()) do
-	if not playerData[existing] then
+	if not inPlaza[existing] and not playerData[existing] then
 		task.spawn(onPlayerAdded, existing)
 	end
 end
 
+-- Leaving: the garage shows Closing while the leave save runs (the slot stays taken, FR-3). When it returns, the owner's
+-- things go, the garage is a new Garage again (Free), and only then may this account claim again: a rejoin from another
+-- device waits for it, so its load reads this save.
 Players.PlayerRemoving:Connect(function(player)
-	saveOnLeave(player)
+	inPlaza[player] = nil
 	local data = playerData[player]
+	local held = claims[player.UserId]
+	if data then
+		setGarageState(data.slot, "Closing", player.DisplayName)
+		if held then held.leaving = true end
+	end
+	saveOnLeave(player)
 	if data then
 		data.folder:Destroy()
-		resetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it
+		resetGarage(data.slot) -- the garage stays: back to a new Garage, Free, with no name on it
 		plotOwners[data.slot] = nil
 		playerData[player] = nil
+		claimedAt[player] = nil
+		if claims[player.UserId] == held then
+			claims[player.UserId] = nil
+		end
 	end
 end)
 

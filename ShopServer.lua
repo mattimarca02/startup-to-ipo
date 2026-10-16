@@ -29,7 +29,7 @@ local PolicyService = game:GetService("PolicyService")
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 
 local MAX_RECEIPTS = 100 -- PurchaseIds remembered per player, so a repeated receipt never pays twice
-local DATA_WAIT_SECONDS = 30 -- how long a receipt waits for a joining player's save to load
+local DATA_WAIT_SECONDS = 30 -- how long a receipt waits for a player's save to load, from their garage claim (lobby L3)
 local PASS_RECHECK_SECONDS = 120 -- re-ask Roblox about passes (catches passes bought on the website mid-game)
 local PASS_CHECK_TIMEOUT = 10 -- loading waits at most this long for the pass check on join
 local LOUNGE_CENTER = Vector3.new(0, 0.5, 70) -- between the spawn and the garage plots
@@ -44,7 +44,7 @@ local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 local ShopServer = {}
 
-local core -- { getData, save, updateIncome, addEarnings, buyUpgrade, upgradeList }, given by TycoonCore
+local core -- { getData, save, updateIncome, addEarnings, buyUpgrade, upgradeList, claimedAt }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
@@ -513,12 +513,23 @@ end
 
 -- Developer products ----------------------------------------------------
 
+-- A receipt waits for the player's save. A player on the plaza with no garage yet has no save loaded (it loads when they
+-- claim one): then there is no deadline, they may claim at any time, and leaving ends the wait. From the claim (or the
+-- join, with ClaimEnabled off) it waits DATA_WAIT_SECONDS (lobby L3). The receipt list still prevents a double grant.
 local function waitForData(player)
-	local deadline = os.clock() + DATA_WAIT_SECONDS
-	while player.Parent and os.clock() < deadline do
+	local deadline = os.clock() + DATA_WAIT_SECONDS -- only for a TycoonCore that doesn't give claimedAt
+	while player.Parent do
 		local data = core.getData(player)
 		if data and data.ready then
 			return data
+		end
+		if core.claimedAt then
+			local claimed = core.claimedAt(player)
+			if claimed and os.clock() >= claimed + DATA_WAIT_SECONDS then
+				break
+			end
+		elseif os.clock() >= deadline then
+			break
 		end
 		task.wait(0.25)
 	end
@@ -685,6 +696,10 @@ local function buildVipLounge()
 		if not player or hasEffect(player, "vipLounge") or passCheckPending[player] then return end -- still asking Roblox about their passes
 		if doorCooldown[player] and os.clock() - doorCooldown[player] < 10 then return end
 		doorCooldown[player] = os.clock()
+		if not core.getData(player) then -- on the plaza with no garage: their passes load with their company (lobby L3)
+			notify(player, "Claim a garage first: your passes load with your company")
+			return
+		end
 		local vipPass = findVipPass()
 		if vipPass and ShopConfig.isForSale(vipPass, ShopServer.isRandomRestricted(player)) then
 			MarketplaceService:PromptGamePassPurchase(player, vipPass.id)

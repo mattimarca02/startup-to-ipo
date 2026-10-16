@@ -246,18 +246,22 @@ Branch `lobby-all` (docs/LOBBY_ALL_PROGRESS.md has the stages). This section is 
 
 | Script | Class, place | State | SHA-256 | Bytes |
 |---|---|---|---|---|
-| `TycoonCore` | Script, ServerScriptService | changed | `d652849c344623cc26a0b327b24eac1fac17ec087ebc98407d3916dbdf9e2859` | 42494 |
-| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `fe613ef07803ce0d9002b3af4c1e99d32fd5ec4594ccb2530721210d73d21124` | 59523 |
+| `TycoonCore` | Script, ServerScriptService | changed | `65dc512da0d340558d37b7642595b051cfb537f8dbd7dac1ad40fa1420d51b24` | 51437 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8` | 60314 |
 | `PlotBuilding` | ModuleScript, ServerScriptService | new | `f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1` | 34099 |
 | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a` | 24058 |
 | `BuildingClient` | LocalScript, StarterPlayerScripts | new | `450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec` | 9408 |
+| `LobbyConfig` | ModuleScript, ReplicatedStorage | new | `3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e` | 6184 |
+| `LobbyClient` | LocalScript, StarterPlayerScripts | new | `4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a` | 4391 |
+| `ShopServer` | ModuleScript, ServerScriptService | changed | `c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48` | 33640 |
+| `IpoClient` | LocalScript, StarterPlayerScripts | changed | `ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da` | 42081 |
 
-### Steps so far (L2; L5 replaces this with the full list)
+### Steps so far (L2 and L3; L5 replaces this with the full list)
 
-1. **ServerScriptService:** create two ModuleScripts named exactly `PlotBuilding` and `PlotBuildingVisuals` and paste the files of the same names. **StarterPlayer > StarterPlayerScripts:** create a LocalScript named exactly `BuildingClient` and paste `BuildingClient.lua` (it moved from docs/studio_scripts to the repo root).
-2. Paste `TycoonCore.lua` and `ShopClient.lua` over their scripts. **View > Drafts**: commit every draft. Run the hash block below until it says `ALL OK`.
+1. **ReplicatedStorage:** create a ModuleScript named exactly `LobbyConfig` and paste `LobbyConfig.lua` (TycoonCore and LobbyClient wait for it with no time limit: create it first). **ServerScriptService:** create two ModuleScripts named exactly `PlotBuilding` and `PlotBuildingVisuals` and paste the files of the same names. **StarterPlayer > StarterPlayerScripts:** create two LocalScripts named exactly `BuildingClient` and `LobbyClient` and paste their files (`BuildingClient.lua` moved from docs/studio_scripts to the repo root).
+2. Paste `TycoonCore.lua`, `ShopServer.lua`, `ShopClient.lua` and `IpoClient.lua` over their scripts. **View > Drafts**: commit every draft. Run the hash block below until it says `ALL OK`.
 3. `ReplicatedStorage.KitModels` must already hold the 36 kit models (docs/KIT_MODELS.md). Without it every building is built from Parts (one warning in the Output), which also works.
-4. Playtest (F5): your garage stands in a closed building; walk in and out of the door; the shell fades when you are inside; the Debug tab's "Building: next stage" shows the five buildings in turn.
+4. Playtest (F5) with `LobbyConfig.ClaimEnabled = false` (as it ships): you are sent into your garage as before; walk in and out of the door; the shell fades when you are inside; the Debug tab's "Building: next stage" shows the five buildings in turn.
 
 ### Hash check (command bar)
 
@@ -313,11 +317,15 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	{ "TycoonCore", "Script", "ServerScriptService", "d652849c344623cc26a0b327b24eac1fac17ec087ebc98407d3916dbdf9e2859", 42494 },
-	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "fe613ef07803ce0d9002b3af4c1e99d32fd5ec4594ccb2530721210d73d21124", 59523 },
+	{ "TycoonCore", "Script", "ServerScriptService", "65dc512da0d340558d37b7642595b051cfb537f8dbd7dac1ad40fa1420d51b24", 51437 },
+	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8", 60314 },
 	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f4097e603565fa438d63afbcb95928e9c95e3e0c74e84d5110f2aa12fc5deed1", 34099 },
 	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "a9a6c414d4d256b4c3bd14866a5a4c9e42c6a92d9ac3abe843a974ba55beb37a", 24058 },
 	{ "BuildingClient", "LocalScript", "StarterPlayerScripts", "450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec", 9408 },
+	{ "LobbyConfig", "ModuleScript", "ReplicatedStorage", "3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e", 6184 },
+	{ "LobbyClient", "LocalScript", "StarterPlayerScripts", "4e96b6650a686c6dfc1ae9670f5c51ef36512e32e2f8a7459305c069830a2c6a", 4391 },
+	{ "ShopServer", "ModuleScript", "ServerScriptService", "c254a6894e187b0bcbae3a1d5621ba02264e2ad28b1e7b3e4715bfdab74f3a48", 33640 },
+	{ "IpoClient", "LocalScript", "StarterPlayerScripts", "ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da", 42081 },
 }
 local problems = {}
 for _, w in ipairs(WANT) do

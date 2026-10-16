@@ -247,6 +247,9 @@ local function newInstance(class)
 		rawset(i, "Text", "")
 	elseif class == "SurfaceGui" or class == "BillboardGui" then
 		rawset(i, "Enabled", true)
+	elseif class == "ProximityPrompt" then
+		rawset(i, "Enabled", true)
+		rawset(i, "Triggered", newSignal())
 	elseif class == "Decal" or class == "Texture" then
 		rawset(i, "Transparency", 0)
 	end
@@ -278,6 +281,14 @@ function Methods.GetPivot(t)
 	local props = rawget(t, "_props")
 	if props and props.CFrame then return props.CFrame end
 	return (props and props.WorldPivot) or cf(0, 0, 0)
+end
+function Methods.IsDescendantOf(t, ancestor)
+	local p = t.Parent
+	while p do
+		if p == ancestor then return true end
+		p = p.Parent
+	end
+	return false
 end
 function Methods.Clone(t)
 	local c = newInstance(t.ClassName)
@@ -1168,7 +1179,10 @@ end
 CORE_TESTS = r"""
 -- TycoonCore's real garage functions (buildGarages, syncBuilding, setGarageSign, resetGarage) and its leave handler,
 -- run with the real PlotArt, PlotVisuals, PlotBuilding and PlotBuildingVisuals.
-local Players = { list = {}, removing = newSignal() }
+local Players = { list = {}, removing = newSignal(), MaxPlayers = 6 }
+local LobbyConfig = (function()
+__LOBBYCONFIG__
+end)()
 function Players.GetPlayers() return Players.list end
 Players.PlayerRemoving = Players.removing
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1196,6 +1210,17 @@ for slot = 1, 6 do
 	if g:GetAttribute("Slot") ~= slot then bad = bad or ("slot " .. slot) end
 end
 check("garages: each has its Floor (60 x 1 x 60, solid, at plotFrame), its building at stage 1 in its turned frame, a hidden sign", bad == nil, bad)
+check("free: every garage starts Free with today's new-player room (stage 1, no props) and its claim post; the prompt is off while the claim is off",
+	(function()
+		for slot = 1, 6 do
+			local g = root:FindFirstChild("Garage" .. slot)
+			local room = g:FindFirstChild("FreeRoom") and g.FreeRoom:FindFirstChild("PlotRoom")
+			local prompt = g:FindFirstChild("ClaimPost") and g.ClaimPost:FindFirstChildOfClass("ProximityPrompt")
+			if g:GetAttribute("State") ~= "Free" or not room or room:GetAttribute("Stage") ~= 1 or #room.UpgradeProps:GetChildren() ~= 0 then return false end
+			if not prompt or prompt.Enabled ~= LobbyConfig.ClaimEnabled or g.ClaimPost.CanCollide or g.ClaimPost.CanTouch then return false end
+		end
+		return true
+	end)())
 setGarageSign(2, "Ana's Startup")
 local gui = root.Garage2.GarageSign:FindFirstChildOfClass("BillboardGui")
 check("sign: setGarageSign shows the owner's name over their garage", gui.Enabled == true and gui.TextLabel.Text == "Ana's Startup")
@@ -1217,13 +1242,13 @@ local landing = plotFrame(2) * Vector3.new(0, 4, 12)
 check("reset: a visitor standing where the Garage's wall now is goes to the landing (a stage change never traps a player)",
 	near((visitor.Position - landing).Magnitude, 0), tostring(visitor.Position))
 local guis = 0
-for _, d in ipairs(root.Garage2:GetDescendants()) do if d.ClassName == "BillboardGui" then guis += 1 end end
-check("sign: one name label per garage, whatever happened (no label per owner)", guis == 1, guis)
+for _, d in ipairs(root.Garage2:GetDescendants()) do if d.ClassName == "BillboardGui" and not d:IsDescendantOf(root.Garage2.ClaimPost) then guis += 1 end end
+check("sign: one name label per garage, whatever happened (no label per owner; the claim post's FREE sign aside)", guis == 1, guis)
 -- the leave handler: the save first, then the folder, the reset, the slot
 local events = {}
 local function saveOnLeave(player) table.insert(events, "save") end
 local plotOwners, playerData = { [4] = "someone" }, {}
-local player = { Name = "Ana" }
+local player = { Name = "Ana", DisplayName = "Ana", UserId = 7 }
 local folder = Instance.new("Folder")
 folder.Parent = root.Garage4
 playerData[player] = { folder = folder, slot = 4 }
@@ -1334,7 +1359,7 @@ def program(part, sources):
         if snips is None:
             body = 'check("core: TycoonCore\'s garage code (makePart, plotFrame, looks, the garages block, the leave handler) can be cut out", false)\n'
         else:
-            body = CORE_TESTS.replace("__KIT_SETUP__", "")
+            body = CORE_TESTS.replace("__KIT_SETUP__", "").replace("__LOBBYCONFIG__", sources["LobbyConfig.lua"])
             for k, v in snips.items():
                 body = body.replace(k, v)
     return head + body + TAIL
@@ -1393,11 +1418,11 @@ def static_checks(sources):
         and "PlotBuildingVisuals, PlotBuilding = nil, nil" in core)
     floors = re.findall(r'makePart\((\w+), "Floor"', core)
     add("core: the Floor is made once, in buildGarages (the garage), never in the join", floors == ["garage"], floors)
-    m = re.search(r"local function onPlayerAdded\(player\)\n(.*?)\n\t-- CLAIMLOAD-START", core, re.S)
+    m = re.search(r"local function claimGarage\(player, slot\)\n(.*?)\n\t-- CLAIMLOAD-START", core, re.S)  # lobby L3: the join's load is the claim's
     join = m.group(1) if m else ""
-    add("core: the join puts the owner's folder in their garage and takes the garage's Floor",
+    add("core: the claim (the join's load) puts the owner's folder in their garage and takes the garage's Floor",
         "\tfolder.Parent = garages[slot]" in join and "\tlocal floor = garages[slot].Floor" in join)
-    add("core: the join names the garage once (setGarageSign) and adds no label of its own (no label per owner)",
+    add("core: the claim names the garage once (setGarageSign) and adds no label of its own (no label per owner)",
         join.count("setGarageSign(slot, ") == 1 and "addLabel(" not in code_only(join))
     block = between(core, "-- CLAIMLOAD-START", "-- CLAIMLOAD-END") or ""
     add("core: nothing of the building is called inside the CLAIMLOAD block (building-pass's third edit is dropped)",
@@ -1442,8 +1467,8 @@ MUTANTS = [
     ("the fade capped at 0.2", PBV, "\treturn clamp01(b + (1 - b) * clamp01(level / n))", "\treturn math.min(0.2, clamp01(b + (1 - b) * clamp01(level / n)))", "fade:", ("build", "math")),
     ("the roof left unfaded (in Static)", PB, '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof" })',
      '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof", group = "Static" })', "fade:", ("data",)),
-    ("a label per owner (the join adds a billboard again)", CORE, "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n", "core: the join names the garage once", ()),
-    ("no reset on leave", CORE, "\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, with no name on it\n", "", "leave:", ("core",)),
+    ("a label per owner (the join adds a billboard again)", CORE, "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n", "core: the claim names the garage once", ()),
+    ("no reset on leave", CORE, "\t\tresetGarage(data.slot) -- the garage stays: back to a new Garage, Free, with no name on it\n", "", "leave:", ("core",)),
     ("the reset does not rebuild the Garage", CORE, "\tsyncBuilding(slot, 1)\n\tsetGarageSign(slot, \"\")\n", "\tsetGarageSign(slot, \"\")\n", "reset:", ("core",)),
     ("a stage change may trap a player (unstick does nothing)", PBV, "\t\t\t\troot.CFrame = landing\n\t\t\t\tmoved += 1", "\t\t\t\tmoved += 1", "unstick:", ("build",)),
     ("a solid box left visible (Transparency 0)", PBV, "\tpart.Transparency = 1\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "\tpart.Transparency = 0\n\tpart.Color = Color3.fromRGB(128, 128, 128)", "flags:", ("build",)),
@@ -1473,7 +1498,7 @@ def main():
     if not luau:
         print("Luau not found. Download it from https://github.com/luau-lang/luau/releases and set LUAU=/path/to/luau")
         return 2
-    names = ("PlotArt.lua", "PlotVisuals.lua", "PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua", "TycoonCore.lua", "ShopClient.lua")
+    names = ("PlotArt.lua", "PlotVisuals.lua", "PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua", "TycoonCore.lua", "ShopClient.lua", "LobbyConfig.lua")
     sources = {n: read(n) for n in names}
     code = 0
     total_pass = total_fail = 0

@@ -147,6 +147,19 @@ function Signal:Fire(...)
 			if not ok then table.insert(W.errors, tostring(err)) end
 		end
 	end
+	local waiting = self.waiting or {}
+	self.waiting = {}
+	for _, thread in ipairs(waiting) do
+		local ok, err = coroutine.resume(thread, ...)
+		if not ok and not tostring(err):find(STOP, 1, true) then table.insert(W.errors, tostring(err)) end
+	end
+end
+-- Wait: the running task stops until the next Fire (lobby L3: IpoClient waits for leaderstats with ChildAdded:Wait)
+function Signal:Wait()
+	if not coroutine.isyieldable() then error(STOP) end
+	self.waiting = self.waiting or {}
+	table.insert(self.waiting, coroutine.running())
+	return coroutine.yield()
 end
 function Signal:Count()
 	local n = 0
@@ -1362,7 +1375,7 @@ REVIEW_HINT = "re-review the HUD loading rule (IpoClient LOADED_ATTRIBUTE, docs/
 # Where TycoonCore may call refreshSign today: the load (onPlayerAdded, right before data.ready), a purchase (buyUpgrade,
 # after checkUpgradePurchase's data.ready guard) and the IPO commit (commitIpo, which only runs from IpoServer's
 # data.ready-guarded onAction). A new call site fails the check "refreshSign is called from exactly ...".
-REFRESH_SIGN_SITES = ["buyUpgrade", "commitIpo", "onPlayerAdded"]
+REFRESH_SIGN_SITES = ["buyUpgrade", "claimGarage", "commitIpo"]  # lobby L3: the join's load is the claim's (claimGarage)
 # MONEY_WAIT must cover the waits the server script adds to a join (a read's retries, the re-read wait, the second read's
 # retries) plus this many seconds for Roblox's own DataStore answers: the owner default's worst case is about 29 s, and
 # TycoonCore's own waits are 19 s today.
@@ -1507,7 +1520,7 @@ def coupling_checks(core_text, client_text, others):
 
     keep, blank = lua_views(core_text)
     spans, open_blocks, stray = lua_functions(blank)
-    need = ["onPlayerAdded", "refreshSign", "publishUpgrades", "buyUpgrade", "checkUpgradePurchase", "commitIpo", "load"]
+    need = ["claimGarage", "onPlayerAdded", "refreshSign", "publishUpgrades", "buyUpgrade", "checkUpgradePurchase", "commitIpo", "load"]
     missing = [n for n in need if function_span(spans, n) is None]
     add("TycoonCore.lua has the functions the loading rule is checked on (%s)" % ", ".join(need), not missing, "missing: %s. %s" % (missing, REVIEW_HINT))
     add("TycoonCore.lua's function/if/do/end blocks balance (the checks below read them)", open_blocks == 0 and stray == 0, "%d open, %d stray ends" % (open_blocks, stray))
@@ -1517,7 +1530,7 @@ def coupling_checks(core_text, client_text, others):
     # who calls refreshSign (and so, through it, publishUpgrades, which sets Upgrade1 .. Upgrade6)
     uses = identifier_uses(blank, "refreshSign")
     sites = sorted("%s%s" % (enclosing_function(spans, p) or "(top level)", "" if re.match(r"\s*\(", blank[p + len("refreshSign"):]) else " (not a call)") for p in uses)
-    add("refreshSign is called from exactly the load (onPlayerAdded), a purchase (buyUpgrade) and the IPO commit (commitIpo), once each", sites == REFRESH_SIGN_SITES,
+    add("refreshSign is called from exactly the load (claimGarage), a purchase (buyUpgrade) and the IPO commit (commitIpo), once each", sites == REFRESH_SIGN_SITES,
         "found %s, allowed %s. A new call site: %s" % (sites, REFRESH_SIGN_SITES, REVIEW_HINT))
     publish_sites = [enclosing_function(spans, p) for p in identifier_uses(blank, "publishUpgrades")]
     add("publishUpgrades is used once, by refreshSign, and nowhere else", publish_sites == ["refreshSign"], "%s. %s" % (publish_sites, REVIEW_HINT))
@@ -1540,8 +1553,14 @@ def coupling_checks(core_text, client_text, others):
             elsewhere[fname] = hits
     add("no other script sets Upgrade1 .. UpgradeN", not elsewhere, "%d scripts looked at: %s. %s" % (len(others), elsewhere or "none", REVIEW_HINT))
 
-    # the order inside the load (onPlayerAdded): saved Cash, income, offline earnings, THEN refreshSign, THEN data.ready
-    s, e = function_span(spans, "onPlayerAdded")
+    # lobby L3: leaderstats (Cash and Income at 0) are made by the claim, right before the load, never at the join
+    js, je = function_span(spans, "onPlayerAdded")
+    cs, ce = function_span(spans, "claimGarage")
+    add("leaderstats are made in claimGarage (the claim, right before the load), not in onPlayerAdded (the join)",
+        '"leaderstats"' not in keep[js:je] and keep.count('Name = "leaderstats"') == 1 and 'Name = "leaderstats"' in keep[cs:ce], REVIEW_HINT)
+
+    # the order inside the load (claimGarage): saved Cash, income, offline earnings, THEN refreshSign, THEN data.ready
+    s, e = function_span(spans, "claimGarage")
     body = blank[s:e]
 
     def first(pattern):
@@ -1560,16 +1579,16 @@ def coupling_checks(core_text, client_text, others):
              "the offline earnings (cash.Value += ...)": p_offline, "addEarnings(player, ...)": p_earnings, "data.ready = true": p_ready,
              "refreshSign(player) (exactly once)": p_refresh}
     absent = sorted(k for k, v in found.items() if v is None)
-    add("onPlayerAdded contains load, the saved Cash write, updateIncome, the offline earnings, addEarnings, data.ready = true and one refreshSign", not absent,
+    add("claimGarage contains load, the saved Cash write, updateIncome, the offline earnings, addEarnings, data.ready = true and one refreshSign", not absent,
         "not found: %s. %s" % (absent, REVIEW_HINT))
     if not absent:
-        add("onPlayerAdded: the saved Cash is written after the save is read (load)", p_load < p_cash, REVIEW_HINT)
-        add("onPlayerAdded: refreshSign runs after the saved Cash is written", p_cash < p_refresh, REVIEW_HINT)
-        add("onPlayerAdded: refreshSign runs after the income is worked out (updateIncome)", p_income < p_refresh, REVIEW_HINT)
-        add("onPlayerAdded: refreshSign runs after the offline earnings are added to Cash", p_offline < p_refresh, REVIEW_HINT)
-        add("onPlayerAdded: refreshSign runs after the offline earnings are counted (addEarnings)", p_earnings < p_refresh, REVIEW_HINT)
-        add("onPlayerAdded: refreshSign runs before data.ready is set", p_refresh < p_ready, REVIEW_HINT)
-        add("onPlayerAdded: data.ready is not set before the saved Cash and the offline earnings are written", p_ready > p_cash and p_ready > p_offline, REVIEW_HINT)
+        add("claimGarage: the saved Cash is written after the save is read (load)", p_load < p_cash, REVIEW_HINT)
+        add("claimGarage: refreshSign runs after the saved Cash is written", p_cash < p_refresh, REVIEW_HINT)
+        add("claimGarage: refreshSign runs after the income is worked out (updateIncome)", p_income < p_refresh, REVIEW_HINT)
+        add("claimGarage: refreshSign runs after the offline earnings are added to Cash", p_offline < p_refresh, REVIEW_HINT)
+        add("claimGarage: refreshSign runs after the offline earnings are counted (addEarnings)", p_earnings < p_refresh, REVIEW_HINT)
+        add("claimGarage: refreshSign runs before data.ready is set", p_refresh < p_ready, REVIEW_HINT)
+        add("claimGarage: data.ready is not set before the saved Cash and the offline earnings are written", p_ready > p_cash and p_ready > p_offline, REVIEW_HINT)
 
     # a purchase: buyUpgrade asks checkUpgradePurchase, returns on a refusal, and only then calls refreshSign
     bs, be = function_span(spans, "buyUpgrade")
@@ -1626,7 +1645,7 @@ def coupling_checks(core_text, client_text, others):
             scripted + DATASTORE_ALLOWANCE <= money_wait,
             "MONEY_WAIT %g s; waits %g s (two reads x %g s of retries + the %g s re-read wait) + %d s. %s" % (money_wait, scripted, per_read, float(reread.group(1)), DATASTORE_ALLOWANCE, REVIEW_HINT))
     else:
-        add("the waits TycoonCore adds to a join can be read (LOAD_TRIES, task.wait(attempt * 2) in load, REREAD_WAIT_SECONDS in onPlayerAdded)", False, REVIEW_HINT)
+        add("the waits TycoonCore adds to a join can be read (LOAD_TRIES, task.wait(attempt * 2) in load, REREAD_WAIT_SECONDS in claimGarage)", False, REVIEW_HINT)
     return out
 
 
@@ -1798,7 +1817,8 @@ COUPLING_MUTATIONS = [
     ("publishUpgrades called directly before the offline earnings", CORE, [(BEFORE_OFFLINE, "\tpublishUpgrades(player)\n" + BEFORE_OFFLINE)]),
     ("publishUpgrades called directly after data.ready", CORE, [(REFRESH_THEN_READY, REFRESH_THEN_READY + "\tpublishUpgrades(player)\n")]),
     ("data.ready set at the start of the join, before the saved Cash", CORE, [(AFTER_PLAYERDATA, "\tdata.ready = true\n\n\tlocal floor = ")]),
-    ("refreshSign called from the PlayerRemoving handler", CORE, [("\tsaveOnLeave(player)\n\tlocal data = playerData[player]\n", "\tsaveOnLeave(player)\n\trefreshSign(player)\n\tlocal data = playerData[player]\n")]),
+    ("refreshSign called from the PlayerRemoving handler", CORE, [("\tsaveOnLeave(player)\n\tif data then\n", "\tsaveOnLeave(player)\n\trefreshSign(player)\n\tif data then\n")]),
+    ("leaderstats made at the join (lobby L3: before the claim)", CORE, [("\tinPlaza[player] = true\n", "\tinPlaza[player] = true\n\tlocal early = Instance.new(\"Folder\")\n\tearly.Name = \"leaderstats\"\n\tearly.Parent = player\n")]),
     ("refreshSign called from the income loop", CORE, [("\t\t\t\tsyncRoom(data)\n", "\t\t\t\tsyncRoom(data)\n\t\t\t\trefreshSign(player)\n")]),
     ("refreshSign handed to a module through core", CORE, [("OnboardingServer.init({\n", "OnboardingServer.init({\n\trefreshSign = refreshSign,\n")]),
     ("checkUpgradePurchase's data.ready guard removed (a purchase could publish before the load)", CORE, [(READY_GUARD, "")]),
