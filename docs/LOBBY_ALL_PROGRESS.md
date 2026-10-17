@@ -111,6 +111,16 @@ TycoonCore's changes are in lobby_test's edit lists (L2: `buildingWarned`; L3: `
 
 docs/STUDIO_SYNC_LOBBY.md, section "Lobby all", in order: create the 5 scripts, paste the 11 (TycoonCore, PlotBuilding, PlotBuildingVisuals and LobbyClient again if they were pasted before the review fixes), hash block ALL OK, KitModels check KIT OK, kit front check (then write its result here), playtests 9 (a) to (c), File > Save to Roblox. Later, when the owner decides: section 10 (turn the claim on, move the SpawnLocation, publish with Shut down all servers) and section 11 (Max Players 6).
 
+## Studio sync of 2026-10-17 (published place, Claude Code with the Studio MCP)
+
+Done, on the published place (PlaceId 86395856666175), from `main` at 2df1410 plus PR #34 (`kit-front-180`):
+- The 7 new scripts created by the MCP (LobbyConfig, PlotBuilding, PlotBuildingVisuals, WorldArt, WorldVisuals, BuildingClient, LobbyClient; WorldArt and WorldVisuals were missing), the other 8 brought from 99eed7b to main. Hash block: `ALL OK: the 15 scripts match the repo (lobby-all)`.
+- KitModels check: `KIT OK: 36 models, sizes within 0.05, one MeshPart per role as in docs/KIT_MODELS.md, pivots at the bottom-center`.
+- kit front: checked, KIT_FRONT_TURN = 180. At 0 both the chair and the computer were turned around (the backrest and the computer's back toward the STAND HERE pad), so `PlotBuilding.KIT_FRONT_TURN` is 180 (PR #34, merged, with PlotBuilding's new SHA-256 and size in docs/STUDIO_SYNC_LOBBY.md). The check was built again at 180 (both pieces from the kit); nobody looked at it before it was deleted.
+- `Workspace.KIT_FRONT_CHECK` deleted, `LobbyConfig.ClaimEnabled = false`, the last hash block ALL OK; then the owner was asked to do File > Save to Roblox (never Publish).
+
+Still to do: playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (one player through all five stages with the Debug button; 2 and 3 players with `ClaimEnabled` on in Studio only, reverted after; Test > Device on a phone). Not run: the owner had no time.
+
 ## How to continue
 
 ```

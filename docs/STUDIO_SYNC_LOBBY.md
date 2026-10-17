@@ -279,7 +279,7 @@ Paste each one the same way: open the `.lua` file, select all, copy; in Studio d
 |---|---|---|---|---|
 | `TycoonCore` | Script, ServerScriptService | changed | `b617d872b16aa3c073f41d38ae5464607d7c96cf279d2dca95226fbea963b640` | 53534 |
 | `ShopClient` | LocalScript, StarterPlayerScripts | changed | `14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8` | 60314 |
-| `PlotBuilding` | ModuleScript, ServerScriptService | new | `157b5540c1f97a6b989005bd08d63194c3ff91f658b0aee7a7fb6fa54ec444c1` | 35156 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | new | `0c8b2af622b50e808548a7f03e36c86b98816622fdcd3e2a3ea2c13145549f58` | 35158 |
 | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | new | `939316f1cbc7899b3e3d3c2ec6d9b30638fe8893b81a011806248aff6ca293a9` | 26927 |
 | `BuildingClient` | LocalScript, StarterPlayerScripts | new | `450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec` | 9408 |
 | `LobbyConfig` | ModuleScript, ReplicatedStorage | new | `3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e` | 6184 |
@@ -353,7 +353,7 @@ end
 local WANT = {
 	{ "TycoonCore", "Script", "ServerScriptService", "b617d872b16aa3c073f41d38ae5464607d7c96cf279d2dca95226fbea963b640", 53534 },
 	{ "ShopClient", "LocalScript", "StarterPlayerScripts", "14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8", 60314 },
-	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "157b5540c1f97a6b989005bd08d63194c3ff91f658b0aee7a7fb6fa54ec444c1", 35156 },
+	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "0c8b2af622b50e808548a7f03e36c86b98816622fdcd3e2a3ea2c13145549f58", 35158 },
 	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "939316f1cbc7899b3e3d3c2ec6d9b30638fe8893b81a011806248aff6ca293a9", 26927 },
 	{ "BuildingClient", "LocalScript", "StarterPlayerScripts", "450068cb37007a70e0a7ba828a06503690c8f71b896141c79874be3d92ee94ec", 9408 },
 	{ "LobbyConfig", "ModuleScript", "ReplicatedStorage", "3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e", 6184 },

@@ -11,20 +11,26 @@ Goal: the outside of the five buildings looks better, with every PlotBuilding ru
 3. **Big Office: a sign band and floor lines.** A band between the two stories on all four sides, the sign over the entrance, pilasters between the window bays.
 4. **Small Corporate: a real entrance.** A portico (a flat canopy over the 10-wide entrance on its two pillars, never solid, nothing in the lane), the sign on the crown band, vertical fins on the glass so the four stories don't read as one flat box.
 5. **Big Corporate: the podium sign and tower details.** A sign on the podium over the entrance, a band on the podium's roof edge. Its budget is tight (152 of 160; six garages at 160 parts still stay under 3,000 with today's room and plaza).
-6. **The company name on the sign** (needs other lanes: the name is CompanyServer's data, which the building does not read; a request to gameplay first, and only once the company is visible to players).
+6. **(Owner request, high priority) the building cinematic** (docs/lanes/owner.md, 2026-10-17): crane and wrecking ball knock down the old building, the new one rises; client only, 5 to 7 s, skippable, never after an IPO, Blender preview frames in docs/previews/building/. Next after item 1.
+7. **The company name on the sign** (needs other lanes: the name is CompanyServer's data, which the building does not read; a request to gameplay first, and only once the company is visible to players).
 
 ## Doing now
 
-building-garage-roof - started 2026-10-17 15:40 UTC
+waiting for review of PR #36
 
 ## Last PR
 
-none
+#36 `building-garage-roof`: https://github.com/mattimarca02/startup-to-ipo/pull/36
+
+## Last report
+
+(2026-10-17) PR #36 gives the Garage a rusty pitched roof between brick gables stepped front and back, a sign board over the roll-up door (a growth-chart emblem made of Parts, no text), two front windows with sills, a plinth, gutters and downpipes. To do it the builder learned "Blocks": plain Parts styled by role with the same flags as fallback Parts, never a kit model. Solid boxes, lane, fade, lot and the other four stages are unchanged; the Garage is 88 parts. A before/after picture is in docs/previews/building/garage_roof.png. Tests: building 1407 passed with 46 of 46 mutants; daily, hud, world, icon and shop_ux all green; lobby_test has 6 expected failures (the STUDIO_SYNC_LOBBY.md hash checks for PlotBuilding and PlotBuildingVisuals), fixed by the ux lane's request R1 that the gameplay lane has claimed. Next: the owner's cinematic request (backlog item 6, done before items 2 to 5). Later run (2026-10-17, manual fire asking for the first item): the backlog and item 1 were already done in PR #36, and a lane keeps one PR open at a time, so nothing new was built. I rebased #36 on main 45cd4f6 (only lane files had changed on main; KIT_FRONT_TURN is still 0, so the two hashes and the test counts are unchanged). No requests to the building lane and no review verdict yet. Check-in 17:05 UTC: PR #34 put KIT_FRONT_TURN = 180 on main, so I rebased #36 on c1adc21 (clean, no conflict); building_test 1407 passed with 46 of 46 mutants (it builds at turn 0 and 180), lobby_test the same 6 expected failures, which gameplay's PR #38 fixes (it covers B1). New PlotBuilding hash below.
 
 ## Requests to other lanes
 
-none
+- **B1, to gameplay (tools/lobby_test.py):** the same as the ux lane's R1 (handled by gameplay's PR #38, open). PR #36 changes PlotBuilding.lua and PlotBuildingVisuals.lua, so the "Lobby all" hash checks against docs/STUDIO_SYNC_LOBBY.md fail (6 checks). Please pin that section to the lobby-all merge commit as R1 asks.
+- **B2, to quality (CLAUDE.md, after #36 merges):** in the "garages and their buildings" rules, add one sentence: Blocks (PlotBuilding.BLOCK) are plain Parts for details the kit lacks (roofs, signs, sills, pipes), painted by role, with the same flags as fallback Parts; signs are Parts only, no text.
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none
+none merged yet. When #36 merges: paste `PlotBuilding` (sha256 f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788, 42603 bytes, with KIT_FRONT_TURN = 180) and `PlotBuildingVisuals` (sha256 2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043, 27493 bytes) into ServerScriptService, then F5: the garage shows the roof and sign, walking in fades the whole shell, no new warnings. (If a Studio sync changes KIT_FRONT_TURN on main first, I rebase and give new hashes.)
