@@ -4,7 +4,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Backlog (in order)
 
-1. **"Claim garage" button on phones** (branch `ux-claim-button`). A new display-only LocalScript `ClaimButtonClient`: while the server's "Claim garage" prompt is shown on a phone (touch input) and the player has no garage, a big button (at least 240 x 60) sits at the bottom center, above the pop-ups. Tapping it presses the prompt itself (`InputHoldBegin`, then `InputHoldEnd` after the hold time), so the server checks everything as it does today (distance, rate, the garage's state): no new remote, no server change. It hides while a window is open (`OpenPanel`) and with the claim off (`LobbyConfig.ClaimEnabled`, which ships off: nothing changes for live players until the owner turns it on). New file because `LobbyClient.lua` is hash-pinned by tools/lobby_test.py (request R1 below).
+1. **DONE (PR #35, merged 2026-10-17 22:25 UTC).** **"Claim garage" button on phones** (branch `ux-claim-button`). A new display-only LocalScript `ClaimButtonClient`: while the server's "Claim garage" prompt is shown on a phone (touch input) and the player has no garage, a big button (at least 240 x 60) sits at the bottom center, above the pop-ups. Tapping it presses the prompt itself (`InputHoldBegin`, then `InputHoldEnd` after the hold time), so the server checks everything as it does today (distance, rate, the garage's state): no new remote, no server change. It hides while a window is open (`OpenPanel`) and with the claim off (`LobbyConfig.ClaimEnabled`, which ships off: nothing changes for live players until the owner turns it on). New file because `LobbyClient.lua` is hash-pinned by tools/lobby_test.py (request R1 below).
 2. **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). Needs `activeGoals` and `ShowAtOnce` on main first (they are on `gameplay-goal-chain`, not merged yet). Item 4's X fix goes in the same file, so it waits until this one is done.
 3. **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
 4. **Tap targets at least 40 x 40 everywhere.** The Goals tracker's X (OnboardingClient, 30 x 26 today) gets a 44 x 44 hit area without moving the card; a static check in tools/hud_test.py that every TextButton/ImageButton with a fixed size in the clients is at least 40 px on each side.
@@ -15,11 +15,11 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-waiting for review of PR #35
+idle (PR #35 merged; next: backlog item 2, U1, once `OnboardingConfig.activeGoals` is on main, else item 3)
 
 ## Last PR
 
-PR #35 (`ux-claim-button`): https://github.com/mattimarca02/startup-to-ipo/pull/35
+PR #35 (`ux-claim-button`), merged 2026-10-17: https://github.com/mattimarca02/startup-to-ipo/pull/35
 
 ## Last report
 
@@ -33,9 +33,11 @@ Check-in 2026-10-17 17:05 UTC: PR #35 still has no review (the quality lane is r
 
 Check-in 2026-10-17 21:05 UTC: the quality lane's verdict on PR #35 is MERGE, after #38 and once #35 is up to date with main. I merged main into `ux-claim-button` (merge commit 0d6be20, no force-push), so it's up to date now. ClaimButtonClient.lua didn't change (sha256 `494d14bd…`, 7525 bytes). On that head, hud passes (1073 checks + 117 claim-button checks; 69/69 and 21/21 mutants) and daily passes. Run alone, lobby still fails on the old doc pins until #38 merges, as the verdict expects. I added the verdict's two non-blocking notes to the backlog as item 3. Waiting for the owner: merge #38, then #35. If #38 lands first, I bring main in again and re-run the suites.
 
+2026-10-17 22:25 UTC: the owner merged #38, #36 and then #35. I released my three claim rows (ClaimButtonClient, tools/claim_button_test.luau, tools/hud_test.py) and stopped the check-ins. The Studio steps below stay until the owner runs the quality lane's batch. The next run starts backlog item 2 (U1) if `OnboardingConfig.activeGoals` is on main by then. It isn't yet: the goal chain is still on `gameplay-goal-chain`. Otherwise it starts item 3.
+
 ## Requests to other lanes
 
-- **R1, to gameplay (tools/lobby_test.py):** its "Lobby all" doc checks (`ALL_SCRIPTS`) compare docs/STUDIO_SYNC_LOBBY.md with today's bytes of ShopClient, IpoClient, LobbyClient, EmployeeClient, BuildingClient (and TycoonCore, ShopServer, WorldArt, WorldVisuals, PlotVisuals, ...). That doc is history now (lobby-all is merged; new Studio steps go to docs/STUDIO_SYNC_BATCH.md), so any later edit of one of those files fails lobby_test, in every lane. Please check that section against the files at the lobby-all merge commit `2df1410`, the way the L1 section uses `L1_COMMIT = "f6a546f"`. Until then the ux lane does not edit IpoClient, ShopClient, EmployeeClient or LobbyClient.
+- **R1, to gameplay (tools/lobby_test.py): DONE (PR #38, merged).** its "Lobby all" doc checks (`ALL_SCRIPTS`) compare docs/STUDIO_SYNC_LOBBY.md with today's bytes of ShopClient, IpoClient, LobbyClient, EmployeeClient, BuildingClient (and TycoonCore, ShopServer, WorldArt, WorldVisuals, PlotVisuals, ...). That doc is history now (lobby-all is merged; new Studio steps go to docs/STUDIO_SYNC_BATCH.md), so any later edit of one of those files fails lobby_test, in every lane. Please check that section against the files at the lobby-all merge commit `2df1410`, the way the L1 section uses `L1_COMMIT = "f6a546f"`. 
 - **R2, to gameplay (later, item 6):** a place to save which HUD hints a player has seen (a list of short keys). Rule A10 says a new top-level section; it needs the owner's written OK. Not needed yet (item 8).
 - **To quality:** when PR `ux-claim-button` is merged, README.md and CLAUDE.md need the new LocalScript `ClaimButtonClient` (StarterPlayer > StarterPlayerScripts, display only, no remote; it presses the server's own claim prompt) and its Studio step goes in the batch.
 
