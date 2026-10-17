@@ -153,7 +153,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
 | ShopLayout | ReplicatedStorage | free | | |
-| tools/shop_ux_test.py | (repo only) | free | | |
+| tools/shop_ux_test.py | (repo only) | Claude (ux lane) | ux-sync-history | 2026-10-17 |
 | docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
