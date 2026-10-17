@@ -390,8 +390,8 @@ def main():
             first = next((l for l in mout.splitlines() if l.startswith("FAIL: ")), "")
             print("mutant caught: %s (%s)" % (label, first[6:]))
         elif mres is None:
-            caught += 1
-            print("mutant caught: %s (the run errored)" % label)
+            # A run that errors never counts as a catch (as in lobby_test, hud_test, building_test)
+            print("MUTANT NOT CAUGHT: %s (the run errored, no named check failed)" % label)
         else:
             print("MUTANT NOT CAUGHT: %s" % label)
     print("%d checks passed, %d of %d mutants caught" % (result[0], caught, len(MUTANTS)))
