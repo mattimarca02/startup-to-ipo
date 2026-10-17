@@ -158,7 +158,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | gameplay lane | gameplay-lobby-test-history | 2026-10-17 |
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
