@@ -17,7 +17,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-2026-10-17 22:45 UTC (woken by the merge of PR #41; the manager's quality starts were denied): releasing #41's claims; reviewing #37 (new head ef1a50d), #42, #43 and #40's state; then the batch doc and CLAUDE.md/README/ROADMAP for the merged #35, #36, #38 on branch `quality-batch-1`.
+2026-10-17 22:55 UTC (scheduled run): reviewing PR #43 (gameplay, goal chain) and #40's state against today's `main`; then the batch doc and CLAUDE.md/README/ROADMAP for the merged #35, #36, #37, #38 on branch `quality-batch-1` (claims already on main at c4f1bfc).
 
 ## Last PR
 
