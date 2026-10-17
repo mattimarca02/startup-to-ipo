@@ -6,7 +6,7 @@ Only the gameplay lane edits this file. See docs/LANES.md.
 
 This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by how much each item helps the first hour. It leaves out the items that belong to other lanes: item 1 (Cash on the bar, IpoClient), item 3 (the Office ladder, ShopClient) and the client halves of item 6.
 
-1. **Goal chain** (build item 7), branch `gameplay-goal-chain`. **Built and pushed, no PR yet** (one PR at a time). It opens as soon as PR #38 is merged. What it does:
+1. **Goal chain** (build item 7), branch `gameplay-goal-chain`, **PR #43, waiting for review.** What it does:
    - OnboardingServer checks five new goal kinds: `upgrades`, `owns`, `calls`, `chain` and `ipos`.
    - The server marks which goals the tracker shows, with `OnboardingGoalShown_<key>`, `ShowAtOnce` = 2 at a time. A goal that was showing when it finished stays for 3 s so its tick is seen.
    - OnboardingConfig gets a `Chain` list: Answer 3 calls, Own 3 upgrades, Hire 3, Answer 10 calls in a row, Buy the Server Rack, Seed, Series A, and Go public.
@@ -30,11 +30,11 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
 
 ## Doing now
 
-waiting for review of PR #38
+waiting for review of PR #43
 
 ## Last PR
 
-#38 `gameplay-lobby-test-history` (ux request R1), open.
+#43 `gameplay-goal-chain` (goal chain), open. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
 ## Last report (2026-10-17)
 
@@ -57,6 +57,19 @@ waiting for review of PR #38
 - **Waiting for the owner:** nothing yet. Backlog items 4, 5, 8 and 9 will each need a written decision before I build them.
 - Claims still held: OnboardingServer, OnboardingConfig and tools/onboarding_test.py (for gameplay-goal-chain), and tools/lobby_test.py (for #38).
 
+## Report (2026-10-17 22:20 UTC, PR #38 merged)
+
+- **PR #38 is merged.** I released the claim on tools/lobby_test.py. No Studio steps (it's a test file).
+- **Opened PR #43 for the goal chain:** https://github.com/mattimarca02/startup-to-ipo/pull/43. I rebased it on main 598ae84 and ran every suite one at a time (quality's advice). All pass:
+  - onboarding: 61 checks, 10 of 10 mutants caught;
+  - lobby: 155 checks, 63 of 63 mutants;
+  - building: 1,278 checks, 40 of 40 mutants;
+  - daily, hud, world, icon and shop_ux.
+- **Nothing changes for players** while `ChainEnabled` is false. Turning it on waits for the ux lane's U1 (item 2 in their backlog).
+- **Studio steps after merge (for the batch):** paste the two scripts below and playtest (F5); the tracker should look as before (Hire 3, Seed) and the Output should show no OnboardingConfig warning.
+- **Waiting for the owner:** nothing.
+- **Claims held:** OnboardingServer, OnboardingConfig and tools/onboarding_test.py.
+
 ## Requests to other lanes
 
 - **U1, to ux (OnboardingClient, for the goal chain):**
@@ -64,8 +77,13 @@ waiting for review of PR #38
   - Size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows (2), so the card stays 30 + 22 x 2 + 8 high whatever the list's length. Then the tray tests can count rows that way: `onboarding_goal_count` in tools/daily_test.py and tools/hud_test.py.
   - Refresh already fires on attribute names starting with "OnboardingGoal", so the new attribute is covered.
   - Once that is merged, I turn `ChainEnabled` on in a one-line PR.
-- **To quality:** after #38 merges, nothing for Studio.
+- **To quality:** PR #43's Studio steps for the batch, once it's merged: the rows under "Studio steps" below.
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none
+none merged yet. For PR #43, once merged:
+
+| Script | Studio | State | sha256 | bytes |
+|---|---|---|---|---|
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `a77c805d733252ad7d4c90232092212fe872212686c74b96de6fa22ef9c0b2d7` | 16509 |
+| `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `7406818ffa279b69487e73334ca1fb5dfe99e343912d1ab10301df753904f7f4` | 6883 |
