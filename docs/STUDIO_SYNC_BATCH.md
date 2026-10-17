@@ -18,13 +18,13 @@ The older sync docs (docs/STUDIO_SYNC_MASTER.md, docs/STUDIO_SYNC_LOBBY.md, docs
 
 ## Batch 1 (open: nothing merged yet)
 
-Opened 2026-10-17 by the quality lane. **No lane pull request is merged yet**, so this batch has no script to paste today. The table below is what will enter it once the owner merges the open PRs, with the SHA-256 each lane file gives for the PR's head at review time (checked against the PR's head by the quality lane on 2026-10-17: all seven match). **A hash here is provisional until the PR is merged:** a rebase that changes the file (PR #36 will: see docs/lanes/quality.md, Verdicts) changes it, and the quality lane rewrites the row and the hash block from `main` after each merge. Never paste from this table while a row says "open".
+Opened 2026-10-17 by the quality lane. **No lane pull request is merged yet**, so this batch has no script to paste today. The table below is what will enter it once the owner merges the open PRs, with the SHA-256 each lane file gives for the PR's head at review time (checked against the PR's head by the quality lane on 2026-10-17: all seven match; #36's PlotBuilding is the hash after its rebase on `KIT_FRONT_TURN = 180`). **A hash here is provisional until the PR is merged:** a rebase that changes the file changes it, and the quality lane rewrites the row and the hash block from `main` after each merge. Never paste from this table while a row says "open".
 
 | PR | Lane | Script | Class, place | State | SHA-256 (PR head, provisional) | Bytes | Merged? |
 |---|---|---|---|---|---|---|---|
 | #38 | gameplay | (none: `tools/lobby_test.py` only) | | | | | open |
 | #35 | ux | `ClaimButtonClient` | LocalScript, StarterPlayer > StarterPlayerScripts | new | `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00` | 7525 | open |
-| #36 | building | `PlotBuilding` | ModuleScript, ServerScriptService | changed | `179825d759e85fce52554ead5dd0a1181f968338ecc6aef9d3bf6deeebb18e28` (at `KIT_FRONT_TURN = 0`: changes when #36 is rebased on main, where it is 180) | 42601 | open |
+| #36 | building | `PlotBuilding` | ModuleScript, ServerScriptService | changed | `f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788` (head `57085b7`, rebased on main: `KIT_FRONT_TURN = 180`) | 42603 | open |
 | #36 | building | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043` | 27493 | open |
 | #37 | world | `WorldArt` | ModuleScript, ServerScriptService | changed | `7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f` | 17648 | open |
 | #37 | world | `WorldVisuals` | ModuleScript, ServerScriptService | changed | `3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90` | 59866 | open |
