@@ -18,7 +18,10 @@ markers and none inside: every garage position goes through plotFrame, all turns
 - TycoonCore.lua without its CLAIMLOAD comment lines is the file at 99eed7b with L1's ten plot-frame edits (L1_EDITS,
   each old text found once and replaced once), byte for byte: any other change outside the markers fails;
 - docs/STUDIO_SYNC_LOBBY.md's L1 section gives the real SHA-256 and size of the five scripts L1 changes, and its hash
-  block (run in Luau against a fake Studio) says ALL OK for the real files and NOT YET for a changed one.
+  block (run in Luau against a fake Studio) says ALL OK for the real files and NOT YET for a changed one;
+- its "Lobby all" section does the same for every script lobby-all created or changed. Both sections are history:
+  they are checked against the files as merged (L1_COMMIT, ALL_COMMIT, read with git show), never the folder, so a
+  later edit of one of those scripts never fails this test. New Studio steps go to docs/STUDIO_SYNC_BATCH.md.
 Then it breaks TycoonCore.lua on purpose, in memory (mutation runs): each must be caught by its named check, never
 by a crash. Running the marked block with fakes (a DataStore, the modules, a player leaving at each yield) is PR L3's.
 The plot frame's own tests (turns 0, 90, 180, 270; every "center + offset"; the mutants) are in tools/daily_test.py.
@@ -43,8 +46,10 @@ SYNC_DOC = "docs/STUDIO_SYNC_LOBBY.md"
 L1_HEADING = "## L1. Plot frame (nothing visible)"
 L1_COMMIT = "f6a546f"       # main with L1 merged: the L1 section's table is history, checked against the files of this commit
 ALL_HEADING = "## Lobby all (L2 to L5)"
-# Every script this branch (lobby-all) creates or changes: (file, Studio class, Studio place, "new" or "changed"). The
-# "Lobby all" section's table and hash block must give each one's real SHA-256 and size (the files in the folder).
+ALL_COMMIT = "fb8c057"      # main with lobby-all (PR #32) and the kit front turn (PR #34, which updated the section last): the Lobby all section is history, checked against the files of this commit
+# Every script lobby-all creates or changes: (file, Studio class, Studio place, "new" or "changed"). The "Lobby all"
+# section's table and hash block must give each one's SHA-256 and size as lobby-all merged it (ALL_COMMIT), so a later
+# edit of one of these files never fails this test: new Studio steps go to docs/STUDIO_SYNC_BATCH.md.
 ALL_SCRIPTS = (("TycoonCore", "Script", "ServerScriptService", "changed"), ("ShopClient", "LocalScript", "StarterPlayerScripts", "changed"),
                ("PlotBuilding", "ModuleScript", "ServerScriptService", "new"),
                ("PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "new"), ("BuildingClient", "LocalScript", "StarterPlayerScripts", "new"),
@@ -728,11 +733,13 @@ def checks(core, base, doc, others=None):
         add("doc: %s's L1 hash block expects %s.lua's real SHA-256 and size" % (SYNC_DOC, name),
             ('{ "%s", "%s", "%s", "%s", %d },' % (name, cls, place, digest, size)) in section)
 
-    # The current section: every script lobby-all creates or changes, at its real hash (the files in the folder)
+    # The Lobby all section (history): every script lobby-all creates or changes, at its hash when lobby-all merged
     current = doc_section(doc, ALL_HEADING)
     add("doc: %s has the section %s" % (SYNC_DOC, ALL_HEADING), bool(current))
     now = all_files()
-    now["TycoonCore"] = core
+    lacking = [name for name, _, _, _ in ALL_SCRIPTS if name not in now]
+    add("git: lobby-all's scripts can be read at %s (git show; a copy without the git history or a shallow clone lacks them)" % ALL_COMMIT,
+        not lacking, ", ".join(lacking) or None)
     for name, cls, place, state in ALL_SCRIPTS:
         body = now.get(name)
         digest = hashlib.sha256(body).hexdigest() if body is not None else "missing"
@@ -754,12 +761,13 @@ def doc_section(doc, heading):
 
 
 def all_files():
-    """{name: bytes} of the scripts lobby-all creates or changes, as they are in the folder (missing ones left out)."""
+    """{name: bytes} of the scripts lobby-all creates or changes, as lobby-all merged them into main (ALL_COMMIT; missing
+    ones left out): the Lobby all section is history, like the L1 section."""
     out = {}
     for name, _, _, _ in ALL_SCRIPTS:
-        path = os.path.join(ROOT, name + ".lua")
-        if os.path.exists(path):
-            out[name] = read_bytes(name + ".lua")
+        body = git_show(ALL_COMMIT, name + ".lua")
+        if body is not None:
+            out[name] = body
     return out
 
 
@@ -853,7 +861,6 @@ def hash_block_checks(luau, core, doc):
                 bool(mine and theirs and mine.group(0) == theirs.group(0)), None))
     scripts = [(name, cls, place) for name, cls, place, _ in ALL_SCRIPTS]
     now = {name: body.decode("utf-8") for name, body in all_files().items()}
-    now["TycoonCore"] = core.decode("utf-8")
     changed = dict(now)
     changed["BuildingClient"] = changed["BuildingClient"].replace("local TAG = ", "local  TAG = ", 1)
     missing = {name: text for name, text in now.items() if name != "PlotBuilding"}
@@ -906,7 +913,6 @@ COUNT_CHECK = "markers: exactly one CLAIMLOAD-START line and one CLAIMLOAD-END l
 SHAPE_CHECK = "markers: each marker line is a tab and the marker, nothing else"
 PLACE_CHECK = "markers: both are inside claimGarage"
 COMMENT_CHECK = "outside: every line that names CLAIMLOAD is a comment line (no code hides on one)"
-DOC_ROW_CHECK = "doc: %s's Lobby all table row has TycoonCore.lua's real SHA-256" % SYNC_DOC
 
 # (what is broken, how, the start of the named check that must fail)
 MUTANTS = [
@@ -954,8 +960,8 @@ MUTANTS = [
      ins_after("\t" + END + "\n", "\tdata.loaded = true -- CLAIMLOAD\n"), COMMENT_CHECK),
     ("an edit outside the markers (REREAD_WAIT_SECONDS = 7 becomes 0)",
      swap("local REREAD_WAIT_SECONDS = 7\n", "local REREAD_WAIT_SECONDS = 0\n"), OUTSIDE_CHECK),
-    ("the CLAIMLOAD note above the markers reworded (comments only: the doc's hash goes stale)",
-     swap("byte for byte.)\n\t" + START, "byte by byte.)\n\t" + START), DOC_ROW_CHECK),
+    # (No mutant for a comment-only edit of TycoonCore any more: the Lobby all section is history, checked against
+    # ALL_COMMIT, so a later edit of TycoonCore never makes its hash stale. Ux lane request R1, 2026-10-17.)
     # PR L1: only its listed plot-frame edits outside the markers, and none inside
     ("L1: the room line inside the block given the frame (plotFrame(slot) instead of plotCenter(slot))",
      swap("PlotVisuals.newPlot, folder, plotCenter(slot), PlotArt", "PlotVisuals.newPlot, folder, plotFrame(slot), PlotArt"), BLOCK_CHECK),
