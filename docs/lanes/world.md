@@ -8,7 +8,7 @@ Only the world lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-nothing yet
+world-ring-plaza - started 2026-10-17 15:54 UTC
 
 ## Last PR
 
