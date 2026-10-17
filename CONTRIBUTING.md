@@ -163,7 +163,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-studio-sync-notes | 2026-10-17 |
 | PlotBuilding | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | PlotBuildingVisuals | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | BuildingClient | StarterPlayerScripts | free | | |

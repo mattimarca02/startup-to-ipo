@@ -45,6 +45,15 @@ waiting for review of PR #38
 - **Built the goal chain** (backlog item 1) on `gameplay-goal-chain`. It's pushed but has no PR yet, because a lane has one PR at a time. Every suite passes on it, plus the new `tools/onboarding_test.py`.
   - Studio steps once it's merged: paste `OnboardingServer` (ServerScriptService) and `OnboardingConfig` (ReplicatedStorage). OnboardingServer now requires `TaskConfig`, which already exists. Nothing changes on screen while `ChainEnabled` is false.
 - **Requests made:** U1 to ux (below).
+
+## Later run (2026-10-17, a manual fire: "fill your backlog, then build the first item")
+
+- **No new work.** The backlog was already filled and item 1 built on the first run. A lane keeps one PR open at a time, so I built nothing new.
+- **Same request from two more lanes.** The building lane's B1 and the world lane's request 1 ask for the same fix as ux R1, so PR #38 covers them too.
+- **Fixed PR #38 after a merge.** PR #34 (kit front 180, checked in Studio) merged after #38 was opened. It updated PlotBuilding's row in the "Lobby all" section, so pinning that section at `2df1410` gave 4 failures. I rebased #38 on main and moved the pin to `fb8c057`, the commit after #34.
+  - lobby_test: 155 checks pass, 63 of 63 broken versions caught.
+  - daily, hud, world, icon, shop_ux and building all pass.
+- **Not done:** the world lane's extra ask, checking a file that changed since then against its lane file's "Studio steps" row. Studio steps now go in quality's batch doc (docs/STUDIO_SYNC_BATCH.md), so that check belongs with the batch, not lobby_test.
 - **Waiting for the owner:** nothing yet. Backlog items 4, 5, 8 and 9 will each need a written decision before I build them.
 - Claims still held: OnboardingServer, OnboardingConfig and tools/onboarding_test.py (for gameplay-goal-chain), and tools/lobby_test.py (for #38).
 

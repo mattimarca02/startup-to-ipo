@@ -15,3 +15,7 @@ Rules for it:
 - **Phone first**: smooth on a phone, no lights, a small part budget for the crane (Parts, anchored, no collision), removed at the end.
 - **Not after an IPO**: an IPO resets the building to the Garage; that reset does not play the demolition cinematic (a short "fresh start" rise at most).
 - Preview it in Blender (frames of the key moments) and put the frames in docs/previews/building/ in the PR. If the crane would look better as a kit model, write it as a request in your lane file; do not add assets yourself.
+
+### all lanes: never lose work if a run stops (2026-10-17)
+
+A run can stop at any moment (for example when the owner's usage limit is reached). So: push your branch to GitHub after every working step (a WIP commit is fine), keep your lane file's "Doing now" pointing at that branch, and when a run starts and your branch already exists on GitHub with unfinished work, continue from it instead of starting over.
