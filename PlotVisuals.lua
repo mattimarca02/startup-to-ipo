@@ -12,12 +12,19 @@
 --   PlotVisuals.buildRoom(parent, center, art, stage)         -> Model "PlotRoom": Shell, Decor, UpgradeProps
 --   PlotVisuals.buildProp(parent, center, art, upgrade, slot)  -> Model named after the upgrade, or nil (no art)
 --   PlotVisuals.styleFloor(floor, art, stage)                   -> color and material only (name and size stay)
+--   PlotVisuals.buildRoom(parent, center, art, stage, kit)    -> the same room with its furniture from the 3D kit
+-- Furniture ("kit pieces" in the art: a kit key instead of a shape) comes from the 3D kit, kit = the folder
+-- ReplicatedStorage.KitModels (docs/KIT_MODELS.md): copies of a model's MeshParts, recolored per role, scaled, turned.
+-- Without the kit, or for a model that is missing or can't be used, the piece is built from Parts (PlotArt.Kit's
+-- fallback boxes, the same colors): the game looks right with no kit at all.
 -- TycoonCore keeps one plot table per player (in memory, never saved):
---   PlotVisuals.newPlot(folder, center, art, floor, stage)      -> plot, with the room of that stage
+--   PlotVisuals.newPlot(folder, center, art, floor, stage, kit) -> plot, with the room of that stage (kit: the folder,
+--                                                                   or nil = PlotVisuals.findKit(art))
 --   PlotVisuals.setStage(plot, stage, flash)                    -> swaps the room (quick flash), keeps the props
 --   PlotVisuals.addProp(plot, upgrade, slot, popIn)             -> the prop Model (pops in), or nil
 -- Checks (tools/daily_test.py and the Studio preview run them):
 --   PlotVisuals.validate(art)             -> list of problems in the data (empty = fine)
+--   PlotVisuals.kitBox(art, spec)         -> the box a kit piece may fill, from its spot (kit or Parts: never bigger)
 --   PlotVisuals.check(room, center, art)  -> list of problems in a built room (zones, floating parts, walls, budget),
 --                                            measured in the garage's frame
 --
@@ -47,6 +54,8 @@ PlotVisuals.BACK_WALL_MAX = 12 -- behind the incubators (z <= BACK_BAND)
 PlotVisuals.BACK_BAND = -29
 PlotVisuals.BACKDROP_Z = -43 -- the skyline ("Skyline" parts) stands behind this line only
 PlotVisuals.BACKDROP_MAX = 30
+PlotVisuals.TURNS = { [0] = true, [90] = true, [180] = true, [270] = true } -- a kit piece turns by quarter turns only
+PlotVisuals.KIT_FIT = 0.02 -- a fallback box may stick out of its kit size by this much (float noise), never more
 
 local TOUCH = 0.06 -- parts closer than this touch (floating check)
 local OVERLAP = 0.01 -- parts must go this far into a zone to count as inside it
@@ -79,6 +88,15 @@ local function overlaps(a, b, margin)
 	return a[1] < b[2] - margin and b[1] < a[2] - margin
 		and a[3] < b[4] - margin and b[3] < a[4] - margin
 		and a[5] < b[6] - margin and b[5] < a[6] - margin
+end
+
+-- One warning per kind per server (a room is rebuilt at every stage change: the same problem is told once)
+local warned = {}
+local function warnOnce(kind, text)
+	if not warned[kind] then
+		warned[kind] = true
+		warn("Plot visuals: " .. text)
+	end
 end
 
 local function isLightName(name)
@@ -173,12 +191,200 @@ function PlotVisuals.buildPart(parent, base, spec)
 	return part
 end
 
--- A Model with one part per spec, all placed from the same base CFrame
-function PlotVisuals.buildGroup(parent, name, base, specs)
+-- Kit pieces (furniture from the 3D kit) ------------------------------------------------
+
+-- The kit folder (ReplicatedStorage.<art.KIT_FOLDER>), or nil. The only service PlotVisuals reads, inside pcall: outside
+-- Roblox (the tests) there is no game, and the rooms are built from Parts.
+function PlotVisuals.findKit(art)
+	if type(art) ~= "table" or type(art.KIT_FOLDER) ~= "string" then
+		return nil
+	end
+	local ok, folder = pcall(function()
+		return game:GetService("ReplicatedStorage"):FindFirstChild(art.KIT_FOLDER)
+	end)
+	return ok and folder or nil
+end
+
+-- A piece's scale: a number (all three sides) or { x, y, z }; nil is 1
+local function scaleOf(spec)
+	local s = spec.scale
+	if type(s) == "number" then
+		return s, s, s
+	elseif type(s) == "table" then
+		return s[1], s[2], s[3]
+	end
+	return 1, 1, 1
+end
+
+-- The box a kit piece may fill, from its base (the room's floor-top center, or a hire desk's spot): its kit size times
+-- its scale, standing on its offset, turned by quarter turns. { minX, maxX, minY, maxY, minZ, maxZ }
+function PlotVisuals.kitBox(art, spec)
+	local entry = art.Kit[spec.kit]
+	local sx, sy, sz = scaleOf(spec)
+	local w, h, d = entry.size[1] * sx, entry.size[2] * sy, entry.size[3] * sz
+	if (spec.turn or 0) % 180 == 90 then
+		w, d = d, w
+	end
+	local o = spec.offset
+	return { o[1] - w / 2, o[1] + w / 2, o[2], o[2] + h, o[3] - d / 2, o[3] + d / 2 }
+end
+
+-- Where a piece stands: its spot on the base, turned (the fallback's front, +Z, then faces the turn)
+local function pieceFrame(base, spec)
+	return base * CFrame.new(spec.offset[1], spec.offset[2], spec.offset[3]) * CFrame.Angles(0, math.rad(spec.turn or 0), 0)
+end
+
+-- The part's name: the piece's name and the role (a second part with the same role gets a number)
+local function roleName(spec, role, seen)
+	local n = (seen[role] or 0) + 1
+	seen[role] = n
+	return spec.name .. "_" .. role .. (n > 1 and tostring(n) or "")
+end
+
+-- The Parts version of a kit piece: its fallback boxes, scaled from the piece's bottom-center, in the role's color
+local function buildFallback(parent, base, spec, entry)
+	local sx, sy, sz = scaleOf(spec)
+	local target = pieceFrame(base, spec)
+	local seen, made = {}, {}
+	for _, b in ipairs(entry.fallback) do
+		local look = spec.roles[b.role]
+		local name = roleName(spec, b.role, seen)
+		local lit = spec.light and b.role == spec.lightRole and seen[b.role] == 1
+		table.insert(made, PlotVisuals.buildPart(parent, target, {
+			name = name, shape = b.shape or "Block",
+			size = { b.size[1] * sx, b.size[2] * sy, b.size[3] * sz },
+			offset = { b.at[1] * sx, b.at[2] * sy, b.at[3] * sz },
+			color = look[1], material = look[2], transparency = look[3],
+			light = lit and spec.light or nil,
+		}))
+	end
+	return made
+end
+
+-- The axis of a part (1 X, 2 Y, 3 Z) that lies along the model's axis (1 X, 2 Y, 3 Z), or nil when it is turned otherwise
+local function alignedAxis(rel, axis)
+	local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = rel:GetComponents()
+	local row = ({ { r00, r01, r02 }, { r10, r11, r12 }, { r20, r21, r22 } })[axis]
+	for i = 1, 3 do
+		if math.abs(math.abs(row[i]) - 1) < 1e-4 then
+			return i
+		end
+	end
+	return nil
+end
+
+-- The kit version of a piece: a copy of each MeshPart of KitModels.<key>, fitted to the manifest size (KitSize), scaled,
+-- turned (and by art.KIT_FRONT_TURN, the importer's turn), placed by the model's WorldPivot (its bottom-center), recolored
+-- by its Role. Returns the parts, or nil and why (the Parts version is built then).
+local function buildFromKit(parent, base, spec, entry, template, frontTurn)
+	if not template:IsA("Model") then
+		return nil, "it is not a Model"
+	end
+	local real = template:GetAttribute("KitSize")
+	local ok = typeof(real) == "Vector3" and real.X > 0 and real.Y > 0 and real.Z > 0
+	local sx, sy, sz = scaleOf(spec)
+	local f = {
+		sx * entry.size[1] / (ok and real.X or entry.size[1]),
+		sy * entry.size[2] / (ok and real.Y or entry.size[2]),
+		sz * entry.size[3] / (ok and real.Z or entry.size[3]),
+	}
+	local uniform = math.abs(f[1] - f[2]) < 1e-6 and math.abs(f[2] - f[3]) < 1e-6
+	local pivot = template.WorldPivot
+	local target = pieceFrame(base, spec) * CFrame.Angles(0, math.rad(frontTurn), 0)
+	local made, seen = {}, {}
+	local function fail(why)
+		for _, p in ipairs(made) do
+			p:Destroy()
+		end
+		return nil, why
+	end
+	for _, d in ipairs(template:GetDescendants()) do
+		if d:IsA("MeshPart") then
+			local role = d:GetAttribute("Role") or (string.gsub(d.Name, "%d+$", ""))
+			local look = spec.roles[role]
+			if not look then
+				return fail("a MeshPart has a role the piece has no color for (" .. tostring(role) .. ")")
+			end
+			local rel = pivot:ToObjectSpace(d.CFrame)
+			local size = { d.Size.X, d.Size.Y, d.Size.Z }
+			local out = { size[1] * f[1], size[2] * f[2], size[3] * f[3] }
+			if not uniform then -- each model axis scales the part's side that lies along it: the part must be square to the model
+				for axis = 1, 3 do
+					local a = alignedAxis(rel, axis)
+					if not a then
+						return fail("a part is not square to the model, so it can't be scaled unevenly")
+					end
+					out[a] = size[a] * f[axis]
+				end
+			end
+			local x, y, z = rel:GetComponents()
+			rel = CFrame.new(x * f[1], y * f[2], z * f[3]) * rel.Rotation
+			local part = d:Clone()
+			if not part then -- Roblox's Clone gives nil when Archivable is off
+				return fail("a MeshPart can't be copied (" .. d.Name .. ")")
+			end
+			for _, child in ipairs(part:GetChildren()) do
+				child:Destroy() -- only the MeshPart itself
+			end
+			part.Name = roleName(spec, role, seen)
+			part.Size = Vector3.new(out[1], out[2], out[3])
+			part.CFrame = target * rel
+			part.Color = rgb(look[1])
+			part.Material = Enum.Material[look[2]]
+			part.Transparency = look[3] or 0
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+			local longest = math.max(out[1], out[2], out[3])
+			part.CastShadow = longest >= PlotVisuals.TINY and out[2] > PlotVisuals.FLAT and look[2] ~= "Neon" and (look[3] or 0) < 0.5
+			if spec.light and role == spec.lightRole and seen[role] == 1 then
+				local point = Instance.new("PointLight")
+				point.Name = "Light"
+				point.Color = rgb(spec.light.color)
+				point.Brightness = spec.light.brightness
+				point.Range = spec.light.range
+				point.Shadows = false
+				point.Parent = part
+			end
+			part.Parent = parent
+			table.insert(made, part)
+		elseif not d:IsA("Model") and not d:IsA("Folder") then
+			warnOnce("kit extras " .. spec.kit, "KitModels." .. spec.kit .. ": " .. d.Name .. " is not a MeshPart, so it is left out of the room")
+		end
+	end
+	if #made == 0 then
+		return fail("it has no MeshPart")
+	end
+	return made
+end
+
+-- One kit piece: from the kit when it has the model, else from Parts (one warning per model per server)
+function PlotVisuals.buildKitPiece(parent, base, spec, art, kit)
+	local entry = art.Kit[spec.kit]
+	local template = kit and kit:FindFirstChild(spec.kit)
+	if template then
+		local made, why = buildFromKit(parent, base, spec, entry, template, art.KIT_FRONT_TURN or 0)
+		if made then
+			return made
+		end
+		warnOnce("kit " .. spec.kit, "KitModels." .. spec.kit .. " can't be used in the rooms (" .. tostring(why) .. "): built from Parts")
+	elseif kit then
+		warnOnce("kit " .. spec.kit, "KitModels." .. spec.kit .. " is missing: the rooms build it from Parts")
+	end
+	return buildFallback(parent, base, spec, entry)
+end
+
+-- A Model with one part per spec, all placed from the same base CFrame (a kit piece is built from the kit or from Parts)
+function PlotVisuals.buildGroup(parent, name, base, specs, art, kit)
 	local model = Instance.new("Model")
 	model.Name = name
 	for _, spec in ipairs(specs) do
-		PlotVisuals.buildPart(model, base, spec)
+		if spec.kit then
+			PlotVisuals.buildKitPiece(model, base, spec, art, kit)
+		else
+			PlotVisuals.buildPart(model, base, spec)
+		end
 	end
 	model.Parent = parent
 	return model
@@ -192,21 +398,21 @@ local function floorOrigin(center, art)
 end
 
 -- The room of one funding stage: its shell, its decor (with a desk for every hire spot) and an
--- empty UpgradeProps model for the props of the upgrades bought
-function PlotVisuals.buildRoom(parent, center, art, stage)
+-- empty UpgradeProps model for the props of the upgrades bought. kit = ReplicatedStorage.KitModels or nil (Parts only).
+function PlotVisuals.buildRoom(parent, center, art, stage, kit)
 	local look = art.Stages[stage]
 	local origin = floorOrigin(center, art)
 	local room = Instance.new("Model")
 	room.Name = "PlotRoom"
 	room:SetAttribute("Stage", stage)
 	room:SetAttribute("StageKey", look.key)
-	PlotVisuals.buildGroup(room, "Shell", origin, look.shell)
-	local decor = PlotVisuals.buildGroup(room, "Decor", origin, look.decor)
+	PlotVisuals.buildGroup(room, "Shell", origin, look.shell, art, kit)
+	local decor = PlotVisuals.buildGroup(room, "Decor", origin, look.decor, art, kit)
 	-- Every hire stands at one of these (EmployeeServer's EMPLOYEE_SPOTS, copied in PlotArt.Layout)
 	for i, spot in ipairs(art.Layout.employeeSpots) do
 		local desk = art.Layout.desks[i]
 		local base = origin * CFrame.new(spot[1] + desk[1], 0, spot[2] + desk[2]) * CFrame.Angles(0, math.rad(desk[3]), 0)
-		PlotVisuals.buildGroup(decor, "HireDesk" .. i, base, look.desk)
+		PlotVisuals.buildGroup(decor, "HireDesk" .. i, base, look.desk, art, kit)
 	end
 	local props = Instance.new("Model")
 	props.Name = "UpgradeProps"
@@ -239,9 +445,13 @@ end
 
 -- One player's plot ---------------------------------------------------------
 
-function PlotVisuals.newPlot(folder, center, art, floor, stage)
+function PlotVisuals.newPlot(folder, center, art, floor, stage, kit)
 	local frame = floor and CFrame.new(center) * floor.CFrame.Rotation or center -- the garage's turn comes from its Floor
-	local plot = { folder = folder, center = center, frame = frame, art = art, floor = floor, room = nil, stage = nil }
+	kit = kit or PlotVisuals.findKit(art)
+	if not kit then
+		warnOnce("no kit", "ReplicatedStorage." .. tostring(art.KIT_FOLDER) .. " is missing: the room furniture is built from Parts")
+	end
+	local plot = { folder = folder, center = center, frame = frame, art = art, floor = floor, kit = kit, room = nil, stage = nil }
 	PlotVisuals.setStage(plot, stage, false)
 	return plot
 end
@@ -254,7 +464,7 @@ function PlotVisuals.setStage(plot, stage, flash)
 	local art = plot.art
 	local shown = math.clamp(stage, 1, #art.Stages)
 	local old = plot.room
-	local room = PlotVisuals.buildRoom(nil, plot.frame, art, shown)
+	local room = PlotVisuals.buildRoom(nil, plot.frame, art, shown, plot.kit)
 	local props = room:FindFirstChild("UpgradeProps")
 	local oldProps = old and old:FindFirstChild("UpgradeProps")
 	if oldProps then
@@ -363,6 +573,68 @@ function PlotVisuals.validate(art)
 		end
 		return true
 	end
+	local function lightOk(l)
+		return type(l) == "table" and colorOk(l.color) and finite(l.brightness) and l.brightness > 0 and finite(l.range) and l.range > 0 and l.range <= 60
+	end
+	-- A kit piece: a key of art.Kit, a spot, a quarter turn, a scale above 0, a color and an allowed material for each of
+	-- the model's roles (Neon only when the piece's name says it is a light), a light only on one of its roles
+	local function kitSpec(where, s)
+		local entry = type(art.Kit) == "table" and art.Kit[s.kit]
+		if type(entry) ~= "table" then
+			problem(where .. ": unknown kit key " .. tostring(s.kit) .. " (add it to PlotArt.Kit)")
+			return
+		end
+		if s.shape ~= nil or s.size ~= nil or s.rot ~= nil or s.text ~= nil or s.particles ~= nil or s.collide ~= nil then
+			problem(where .. ": a kit piece has no shape, size, rot, text, particles or collide (its model gives them)")
+		end
+		if not triple(s.offset) then
+			problem(where .. ": offset must be 3 numbers")
+		end
+		if s.turn ~= nil and not PlotVisuals.TURNS[s.turn] then
+			problem(where .. ": turn must be 0, 90, 180 or 270")
+		end
+		local sc = s.scale
+		if sc ~= nil and not ((type(sc) == "number" and finite(sc) and sc > 0) or triple(sc, true)) then
+			problem(where .. ": scale must be a number above 0 or 3 of them")
+		end
+		if type(sc) == "table" and type(entry.fallback) == "table" then
+			for _, b in ipairs(entry.fallback) do
+				if b.shape == "Ball" and not (sc[1] == sc[2] and sc[2] == sc[3]) then
+					problem(where .. ": " .. s.kit .. "'s Parts version has a Ball, so it scales evenly only")
+					break
+				end
+			end
+		end
+		if type(s.roles) ~= "table" then
+			problem(where .. ": roles missing (a color and a material for each role of " .. s.kit .. ")")
+			return
+		end
+		for _, role in ipairs(entry.roles or {}) do
+			local look = s.roles[role]
+			if type(look) ~= "table" or not colorOk(look[1]) then
+				problem(where .. ": role " .. role .. " needs a color")
+			elseif not PlotVisuals.MATERIALS[look[2]] then
+				problem(where .. ": material not allowed: " .. tostring(look[2]))
+			elseif look[2] == "Neon" and not isLightName(s.name) then
+				problem(where .. ": Neon is only for lights and signs (name it Bulb, Lamp, Light, Screen, LED, Sign, Logo...)")
+			elseif look[3] ~= nil and not (finite(look[3]) and look[3] >= 0 and look[3] <= 1) then
+				problem(where .. ": role " .. role .. ": transparency must be 0-1")
+			end
+		end
+		for role in pairs(s.roles) do
+			if not table.find(entry.roles or {}, role) then
+				problem(where .. ": " .. s.kit .. " has no role " .. tostring(role))
+			end
+		end
+		if s.light ~= nil then
+			if not lightOk(s.light) then
+				problem(where .. ": light needs color, brightness > 0 and range 0-60")
+			end
+			if not table.find(entry.roles or {}, s.lightRole) then
+				problem(where .. ": a light needs lightRole, one of " .. s.kit .. "'s roles")
+			end
+		end
+	end
 	local function spec(where, s)
 		local name = type(s) == "table" and s.name
 		if type(name) ~= "string" or name == "" then
@@ -370,6 +642,10 @@ function PlotVisuals.validate(art)
 			return
 		end
 		where = where .. "." .. name
+		if s.kit ~= nil then
+			kitSpec(where, s)
+			return
+		end
 		if not PlotVisuals.SHAPES[s.shape] then
 			problem(where .. ": unknown shape " .. tostring(s.shape))
 		end
@@ -400,11 +676,8 @@ function PlotVisuals.validate(art)
 		if s.collide ~= nil and s.collide ~= true then
 			problem(where .. ": collide is true or left out")
 		end
-		if s.light then
-			local l = s.light
-			if not (colorOk(l.color) and finite(l.brightness) and l.brightness > 0 and finite(l.range) and l.range > 0 and l.range <= 60) then
-				problem(where .. ": light needs color, brightness > 0 and range 0-60")
-			end
+		if s.light and not lightOk(s.light) then
+			problem(where .. ": light needs color, brightness > 0 and range 0-60")
 		end
 		if s.text then
 			local t = s.text
@@ -436,6 +709,48 @@ function PlotVisuals.validate(art)
 					problem(where .. ": two parts named " .. s.name)
 				end
 				names[s.name] = true
+			end
+		end
+	end
+
+	-- The kit models the rooms use: a size, its roles, and a Parts version (boxes inside the size, each role at least once)
+	if type(art.Kit) ~= "table" or type(art.KIT_FOLDER) ~= "string" or not PlotVisuals.TURNS[art.KIT_FRONT_TURN] then
+		problem("Kit: needs Kit, KIT_FOLDER and KIT_FRONT_TURN (0 or 180)")
+	else
+		for key, entry in pairs(art.Kit) do
+			local where = "Kit." .. tostring(key)
+			if type(entry) ~= "table" or not triple(entry.size, true) or type(entry.roles) ~= "table" or #entry.roles == 0 or type(entry.fallback) ~= "table" then
+				problem(where .. ": needs size (3 numbers above 0), roles and fallback")
+			else
+				local used = {}
+				local w, h, d = entry.size[1], entry.size[2], entry.size[3]
+				local fit = PlotVisuals.KIT_FIT
+				for i, b in ipairs(entry.fallback) do
+					if not table.find(entry.roles, b.role) then
+						problem(where .. ".fallback[" .. i .. "]: unknown role " .. tostring(b.role))
+					end
+					used[b.role] = true
+					if not (triple(b.size, true) and triple(b.at)) then
+						problem(where .. ".fallback[" .. i .. "]: size and at must be 3 numbers")
+					else
+						if b.shape ~= nil and b.shape ~= "Block" and b.shape ~= "Ball" then
+							problem(where .. ".fallback[" .. i .. "]: a box is a Block or a Ball")
+						elseif b.shape == "Ball" and not (b.size[1] == b.size[2] and b.size[2] == b.size[3]) then
+							problem(where .. ".fallback[" .. i .. "]: a Ball needs 3 equal sides")
+						end
+						local x0, x1 = b.at[1] - b.size[1] / 2, b.at[1] + b.size[1] / 2
+						local y0, y1 = b.at[2] - b.size[2] / 2, b.at[2] + b.size[2] / 2
+						local z0, z1 = b.at[3] - b.size[3] / 2, b.at[3] + b.size[3] / 2
+						if x0 < -w / 2 - fit or x1 > w / 2 + fit or y0 < -fit or y1 > h + fit or z0 < -d / 2 - fit or z1 > d / 2 + fit then
+							problem(where .. ".fallback[" .. i .. "]: the box sticks out of the model's size")
+						end
+					end
+				end
+				for _, role in ipairs(entry.roles) do
+					if not used[role] then
+						problem(where .. ": the Parts version has no box for role " .. role)
+					end
+				end
 			end
 		end
 	end
