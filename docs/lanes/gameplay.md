@@ -81,6 +81,12 @@ Decisions I need from the owner:
 - One PR at a time, so I built nothing new. Item 2 touches OnboardingServer, the same file as the goal chain, so it waits for the goal chain's PR. Instead I wrote the plan for item 4 above, which needs the owner's decisions D-A to D-C.
 - This run could not push to `main`: the session's permission check refused it, so this lane file update may only be on branch `gameplay-lane-file` (see the final report).
 
+## Run of 2026-10-17 21:51 UTC (manager fire: "Rebase PR #38 on the latest main, re-run all suites, push, stop")
+
+- Rebased #38 on main 1abde95 (clean; main had only lane files and CONTRIBUTING.md). New head 302491b (was 094476a), force-pushed with lease; `tools/lobby_test.py` is unchanged by the rebase.
+- Suites on 302491b, one at a time, Luau 0.742: lobby 155 checks (63/63 mutants), daily 2,813 (282/282), hud 1,073, world 366 (93/93), icon 371 (68/68), shop_ux 6,306 (103/103), building 1,278 (40/40). All green.
+- No Studio steps. Still waiting for the owner to merge #38.
+
 ## Requests to other lanes
 
 - **U1, to ux (OnboardingClient, for the goal chain):**
