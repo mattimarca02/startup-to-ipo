@@ -1,5 +1,7 @@
 # Studio sync: Cash and Income on the valuation bar (D4)
 
+> **Lobby-all (2026-10-16):** `IpoClient` changed again on branch `lobby-all` (it waits quietly for leaderstats, which now come with a garage). The row and the hash block below give its current file; the full list for that branch is docs/STUDIO_SYNC_LOBBY.md, section "Lobby all".
+
 Branch `hud-cash`. One script changed: **IpoClient**. Nothing else. Written without Studio: nothing here was seen on a screen (see "What only your eyes can judge"). Updated after the independent review of `727c5ef` (the review's blocker, the rounding, the new hash); updated again after the review of `9c15e20` (section (h): what the loading rule depends on, and the test that ties it to TycoonCore).
 
 What changed: the valuation bar (top left, next to the IPO button) now has three rows. **Top:** your Cash and Income, for example `$4,630 · +$18/s`. **Middle:** the progress bar, exactly as before. **Bottom:** the stage and the valuation, for example `🏚️ Garage → Seed · $0 / $1.8K` (a shorter form when the bar is too narrow, see section (d)). While the save loads, the top row stays **empty** (see section (a)), so a returning player never sees `$0 · +$0/s`. Until now the Cash was only in Roblox's player list, which a new player doesn't see. It is the owner's decision D4 (docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md, sections 0 and 5.1, on the `gameplay-design` branch).
@@ -8,7 +10,7 @@ What changed: the valuation bar (top left, next to the IPO button) now has three
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `IpoClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `e7937d8785ee5451154b6b99e2b80c37dff050e5aaf5a64fc5e64e25a1a09511` | 41550 |
+| `IpoClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da` | 42081 |
 
 Exact Explorer path: **StarterPlayer > StarterPlayerScripts > IpoClient**. Hash and size are of the repo file `IpoClient.lua` at commit `c89e57e` (the last commit that touches it; later commits on this branch are only this doc). The block in section (c) was run in Luau on the real file and says `OK`, and the hash matches `shasum -a 256`. The earlier hash (`15de6cd4...`, 38612 bytes) is the file before the review: if your Studio script says `DIFFERENT`, paste the file again. The file uses `\n` line endings and ends with one newline; Studio may drop that last newline, so the block prints both cases as OK.
 
@@ -72,7 +74,7 @@ end
 
 local SPS = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
 local WANT = {
-	IpoClient = { "e7937d8785ee5451154b6b99e2b80c37dff050e5aaf5a64fc5e64e25a1a09511", 41550 },
+	IpoClient = { "ddc1d9614a203207fbd3fd0bc2d8d493b6289bf18f29ce7c78b765d6bd9c21da", 42081 },
 }
 for name, want in pairs(WANT) do
 	local script = SPS:FindFirstChild(name)

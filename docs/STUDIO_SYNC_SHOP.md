@@ -1,5 +1,7 @@
 # Studio sync: the shop, S1 and S2
 
+> **Lobby-all (2026-10-16):** `ShopClient` changed again on branch `lobby-all` (a Studio Debug row, and in L3 the plaza waits). The row and hash block below give its current file; the full list for that branch is docs/STUDIO_SYNC_LOBBY.md, section "Lobby all".
+
 Branch `shop-build` (from `world-icons-pass` at `6bc827c`, merged with its tip `4c052c7`; the review fixes of 2026-10-07 are in, see (h)): PR **S1** and **S2** of docs/SHOP_UX_PROPOSAL.md (section 5). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. The SHA-256 and sizes below are the files as they are on the branch (`tools/shop_ux_test.py` fails if this table or the hash block stops matching them).
 
 **What changes in the game:** only the shop window. One new ModuleScript, `ShopLayout` (the window's sizes and the Office ladder, as pure functions), and one changed LocalScript, `ShopClient`. No server script, no config, no remote, no save change. The item icons are still emoji (S3 replaces them later). `ShopClient` now makes two ScreenGuis by itself when the game runs (nothing to create in Studio): `ShopHudGui` (DisplayOrder -1) for the SHOP button, with the other HUD buttons, and `ShopGui` (DisplayOrder 5) for the shop window and its pop-up, above every HUD button, like the Poach and IPO windows.
@@ -9,7 +11,7 @@ Branch `shop-build` (from `world-icons-pass` at `6bc827c`, merged with its tip `
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
 | `ShopLayout` | ModuleScript, ReplicatedStorage | new | `73c4ddd5279025fbd32f2a19029af8d621c84816ffbb51c010ac701e8ed24fdf` | 24458 |
-| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `ff29fe44e9f7b79a1da40aead7190bb4c7c95ee14bede4998323fe7ed9af883a` | 59330 |
+| `ShopClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8` | 60314 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as it is.
 
@@ -93,7 +95,7 @@ local function folderOf(place)
 end
 local WANT = {
 	ShopLayout = { "73c4ddd5279025fbd32f2a19029af8d621c84816ffbb51c010ac701e8ed24fdf", 24458, "ReplicatedStorage" },
-	ShopClient = { "ff29fe44e9f7b79a1da40aead7190bb4c7c95ee14bede4998323fe7ed9af883a", 59330, "StarterPlayerScripts" },
+	ShopClient = { "14561889351652525f07050b9ee4c7101ec9bccd296b1be7498b8fae81028cf8", 60314, "StarterPlayerScripts" },
 }
 for name, want in pairs(WANT) do
 	local folder = folderOf(want[3])

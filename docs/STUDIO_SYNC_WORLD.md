@@ -1,5 +1,7 @@
 # Studio sync: the world and icons pass
 
+> **Lobby-all (2026-10-16):** `WorldArt` and `WorldVisuals` changed on branch `lobby-all` (the ring around the plaza, lobby L4). The rows and the hash block below give their current files. TycoonCore now builds the ring world itself when `LobbyConfig.ClaimEnabled` is on; the row patch (docs/world_pass_integration.patch) is superseded and never applied. The full list for that branch is docs/STUDIO_SYNC_LOBBY.md, section "Lobby all".
+
 Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox by itself: it is the list of what the owner does in Studio, by hand. Written at the end of the work; the SHA-256 and sizes below are the files as they are on the branch (`tools/world_test.py` fails if this table or the hash block stops matching the files).
 
 **What changes in the game:** nothing, until you approve the integration. The four new ModuleScripts only build something when a script requires them: the world needs the TycoonCore edit in `docs/world_pass_integration.patch`; the icons need the shop pull requests of `docs/SHOP_UX_PROPOSAL.md` (section 5). Until then they can sit in Studio safely, and the two command-bar previews below let you look at everything in edit mode.
@@ -8,8 +10,8 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|
-| `WorldArt` | ModuleScript, ServerScriptService | new | `972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9` | 13042 |
-| `WorldVisuals` | ModuleScript, ServerScriptService | new | `81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343` | 48782 |
+| `WorldArt` | ModuleScript, ServerScriptService | new | `0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558` | 15266 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | new | `0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05` | 55999 |
 | `IconArt` | ModuleScript, ReplicatedStorage | new | `83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915` | 30741 |
 | `IconVisuals` | ModuleScript, ReplicatedStorage | new | `f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4` | 55083 |
 | `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at e3c9e67) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `5a984905708e32e611f3d84c3f22cb91e21eba11421deb12282e3e1316ce38fb` | 35508 |
@@ -39,6 +41,8 @@ Nothing new. The Baseplate's grass color, the Lighting values and `StreamingEnab
 4. **Look at the world:** paste the world preview block, press Enter. Every line must say `OK` (a `NOTE` line names a hand-placed part the world would overlap). Then look around with the checklist in (f).
 5. **Look at the icons:** paste the icon preview block, press Enter. Every line must say `OK`. Then the light test block (one lit cube, on top of the icon sheet) and the checklist in (f). To hide the sheet for a moment without deleting it, untick `Enabled` on `StarterGui.PREVIEW_ICONS`.
 6. **Before any playtest:** paste the **cleanup block** (e), press Enter, then the **check block** (e): it must print `OK`.
+> **Out of date (lobby-all, 2026-10-16): steps 7 and 8 are superseded.** The row patch (docs/world_pass_integration.patch) is never applied: with lobby-all, TycoonCore builds the world itself (the ring around the plaza, only with `LobbyConfig.ClaimEnabled` on). And a Studio session never presses **Publish**: it saves with **File > Save to Roblox**; publishing is the owner's own step (docs/PUBLISH_RULES.md). Follow docs/STUDIO_SYNC_LOBBY.md, section "Lobby all", instead of steps 7 and 8.
+
 7. **Only after you approve the integration:** claim `TycoonCore` in CONTRIBUTING.md on a branch. The patch's hash and line numbers are valid for `main` at `e3c9e67` only (its "Made for:" line). If `main`'s `TycoonCore.lua` changed since, first regenerate them on that branch: `python3 tools/world_test.py --regen-patch` (it rewrites the patch and the TycoonCore row in (a), and prints the new hash). Then, at merge time, run `python3 tools/world_test.py --integration --review --strict-patch`: it must pass. `--strict-patch` fails ("patch needs regenerating") if the patch applies only with an offset or fuzz, or if its Made for / Result lines, its line numbers, its hunk headers or the TycoonCore row in (a) are not what `--regen-patch` writes; without the flag the same findings are only a `NOTE`. Then `git apply docs/world_pass_integration.patch`, check that the file's hash is the one in (a), paste it into the Script `TycoonCore`, F5. The world is built when the server starts (the Output shows no `World visuals` warning). Test > Device at 320 x 568 and 667 x 375.
 8. **Before publishing:** paste the check block (e) again: it must print `OK` (if it prints `FAIL`, run the cleanup block). Then **View > Drafts:** commit every draft. Publish with **Shut down all servers**, as always (docs/PUBLISH_RULES.md). No save section, no remote, no Max Players change: the rollback floor stays the same.
 
@@ -89,8 +93,8 @@ local function sha256(msg)
 end
 
 local WANT = {
-	WorldArt = { "972e799cb429b2b9afee9d446b59b1fe22db36e7cd6f2d030499ed8cb627b5a9", 13042, "ServerScriptService" },
-	WorldVisuals = { "81adef34a9f769faa060523f2d03719efdc7fab1ee9fae476446fbf48bebd343", 48782, "ServerScriptService" },
+	WorldArt = { "0a9690736ed8a7e60cc4824f12d6d78a04e686b633f976e17a22517c2fc8f558", 15266, "ServerScriptService" },
+	WorldVisuals = { "0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05", 55999, "ServerScriptService" },
 	IconArt = { "83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915", 30741, "ReplicatedStorage" },
 	IconVisuals = { "f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4", 55083, "ReplicatedStorage" },
 }

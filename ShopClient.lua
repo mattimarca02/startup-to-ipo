@@ -707,11 +707,17 @@ local function randomRestricted()
 	return player:GetAttribute("RandomRestricted") ~= false
 end
 
+-- On the plaza with no garage yet (lobby L3: attribute Garage = 0)? Robux buttons wait for the garage: the save, the
+-- passes and every purchase load with the company.
+local function noGarage()
+	return player:GetAttribute("Garage") == 0
+end
+
 -- Opens Roblox's purchase prompt. Nothing is granted here: the server does that
 -- after Roblox confirms the purchase.
 local promptToken = 0
 local function promptPurchase(item, isPass)
-	if pending[item.key] or not ShopConfig.isForSale(item, randomRestricted()) then return end
+	if pending[item.key] or noGarage() or not ShopConfig.isForSale(item, randomRestricted()) then return end
 	if isPass and player:GetAttribute("Pass_" .. item.key) then return end
 
 	promptToken += 1
@@ -815,6 +821,8 @@ for i, pass in ipairs(ShopConfig.Passes) do
 			setButton(button, "Owned", COLORS.owned, false)
 		elseif pending[pass.key] then
 			setButton(button, "...", COLORS.disabled, false)
+		elseif noGarage() then
+			setButton(button, "Claim garage", COLORS.disabled, false)
 		elseif not ShopConfig.isForSale(pass) then
 			setButton(button, "Coming soon", COLORS.disabled, false)
 		else
@@ -844,6 +852,8 @@ for i, product in ipairs(ShopConfig.Products) do
 			desc.Text = productText(product)
 			if pending[product.key] then
 				setButton(button, "...", COLORS.disabled, false)
+			elseif noGarage() then
+				setButton(button, "Claim garage", COLORS.disabled, false)
 			elseif not ShopConfig.isForSale(product) then
 				setButton(button, "Coming soon", COLORS.disabled, false)
 			else
@@ -1443,6 +1453,7 @@ if debugRemote then
 	debugRow("📜", "Give 50 Shares", "Shares to try the IPO shop.", "Give", "IpoGrantShares", "50")
 	debugRow("💥", "Next IPO save fails", "The next IPO pretends its save failed. Nothing should change, and you're told.", "Set", "IpoFailNextSave")
 	debugRow("♻️", "Reset IPO progress", "0 IPOs, 0 Shares, no perks, valuation 0. Eggs in extra incubators are removed.", "Reset", "IpoReset")
+	debugRow("🏗️", "Building: next stage", "Shows the next funding stage's room and building, to walk every doorway. Not saved: a rejoin shows your real stage.", "Next", "BuildingNextStage")
 
 	-- First minute (milestone 5)
 	debugRow("🐣", "Restart tutorial", "Gives the free egg again and brings back the arrow and goal tracker, on any save.", "Restart", "OnboardingRestart")
@@ -1585,8 +1596,16 @@ end)
 
 notifyEvent.OnClientEvent:Connect(showMessage)
 
+player:GetAttributeChangedSignal("Garage"):Connect(refreshAll) -- the Robux buttons wake up with the garage
+
 task.spawn(function()
-	local stats = player:WaitForChild("leaderstats")
+	-- leaderstats come only with a garage (lobby L3: a player can stand on the plaza for minutes): no WaitForChild, so
+	-- no "infinite yield" warning
+	local stats = player:FindFirstChild("leaderstats")
+	while not stats do
+		player.ChildAdded:Wait()
+		stats = player:FindFirstChild("leaderstats")
+	end
 	incomeValue = stats:WaitForChild("Income")
 	cashValue = stats:WaitForChild("Cash")
 	refreshAll()

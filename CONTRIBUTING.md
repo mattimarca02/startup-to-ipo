@@ -160,3 +160,19 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
 | tools/lobby_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
+| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
+| docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
+| PlotBuilding | ServerScriptService | free | | |
+| PlotBuildingVisuals | ServerScriptService | free | | |
+| BuildingClient | StarterPlayerScripts | free | | |
+| tools/building_test.py | (repo only) | free | | |
+| docs/BUILDING_PASS_PROPOSAL.md | (repo only) | free | | |
+| docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
+| docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
+| docs/building_pass_integration.patch | (repo only) | free | | |
+| LobbyConfig | ReplicatedStorage | free | | |
+| LobbyClient | StarterPlayerScripts | free | | |
+| docs/KIT_MODELS.md | (repo only) | free | | |
+| tools/lobby_runtime.luau | (repo only) | free | | |
+| tools/lobby_client_test.luau | (repo only) | free | | |

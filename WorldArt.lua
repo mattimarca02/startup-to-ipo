@@ -219,7 +219,36 @@ WorldArt.Hills = {
 -- The only words the world shows (the street signs show their plot's number: 1, 2, 3...). No odds text (D9).
 WorldArt.Texts = { "BUILD YOUR STARTUP" }
 
--- For the whole world (placeholders until a phone test)
-WorldArt.Budget = { parts = 600, lights = 8 }
+-- The ring (lobby L4, only with LobbyConfig.ClaimEnabled on): the plaza in front of the lounge's door and the six garages
+-- around it. The garages' places come from LobbyConfig.Ring; the numbers marked "copied" are compared with the real
+-- files by tools/world_test.py.
+WorldArt.Ring = {
+	plaza = { x = 0, z = 175, half = 90 }, -- 180 x 180 (LobbyConfig.PlazaCenter, copied)
+	-- The SpawnLocation, moved there by hand (docs/STUDIO_SYNC_LOBBY.md): the world never covers it
+	spawn = { position = { 0, 0.5, 175 }, size = { 12, 1, 12 } },
+	-- Each garage's lot, in its own frame (studs from its floor's center, +Z its front): PlotBuilding.Lot, copied. Nothing of the
+	-- world stands in it but its own flat walk.
+	lot = { half = 41.3, front = 32.3, back = -54.3, top = 120 },
+	-- In front of each facade, the strip where its plants, columns, revolving door and claim post stand (PlotBuilding.OUTSIDE_TO,
+	-- copied): flat paving only
+	outside = { half = 15, to = 40 },
+	frontLine = 32.2, -- each garage's front wall (PlotBuilding.FRONT_OUT, copied): its walk starts there
+	walkWidth = 9, -- as wide as the doorway lane
+	forecourt = { half = 12 }, -- the paving between the lounge's door and the plaza
+	-- Decor, in each garage's frame (x across its front, z out from its floor's center): its number sign and a lamp beside
+	-- the walk, two bushes at the facade's corners
+	sign = { x = 18, z = 42 }, lamp = { x = -18, z = 42 }, bushes = { { -24, 36 }, { 24, 36 } },
+	-- On the plaza (from its center): four lit lamps around the spawn pad, benches facing it, planters, the arch, trees
+	litLamps = 10, -- the four lit lamps stand this far from the pad's center on both axes
+	benches = { { -18, 0, 90 }, { 18, 0, -90 }, { 0, -18, 0 } },
+	planters = { { -14, -14 }, { 14, -14 }, { -14, 14 }, { 14, 14 } },
+	arch = { x = 0, z = -15 }, -- over the way from the lounge to the spawn
+	trees = { { -75, -75 }, { 75, -75 }, { -75, 75 }, { 75, 75 } },
+	gapTrees = { { -140, 175 }, { 140, 175 } }, -- in the gaps between the two west and the two east garages (world x, z)
+}
+
+-- For the whole world (placeholders until a phone test). ringParts: the ring world's own budget, so six garages at their
+-- biggest stage plus the plaza stay under 3,000 parts (tools/building_test.py).
+WorldArt.Budget = { parts = 600, lights = 8, ringParts = 480 }
 
 return WorldArt
