@@ -139,14 +139,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
 | tools/hud_test.py | (repo only) | ux lane (Claude) | ux-claim-button | 2026-10-17 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
-| WorldArt | ServerScriptService | free | | |
-| WorldVisuals | ServerScriptService | free | | |
+| WorldArt | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| WorldVisuals | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
 | IconArt | ReplicatedStorage | free | | |
 | IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | free | | |
+| tools/world_test.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
 | tools/icon_test.py | (repo only) | free | | |
-| tools/render_previews.py | (repo only) | free | | |
-| docs/previews/*.svg | (repo only) | free | | |
+| tools/render_previews.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| docs/previews/*.svg | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
 | docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
@@ -158,11 +158,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | free | | |
-| docs/STUDIO_SYNC_LOBBY.md | (repo only) | @mattimarca02 (Claude Code) | kit-front-180 | 2026-10-17 |
+| tools/lobby_test.py | (repo only) | gameplay lane | gameplay-lobby-test-history | 2026-10-17 |
+| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | kit-front-180 | 2026-10-17 |
+| docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
 | PlotBuilding | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | PlotBuildingVisuals | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | BuildingClient | StarterPlayerScripts | free | | |
