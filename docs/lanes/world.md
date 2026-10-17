@@ -22,8 +22,18 @@ none
 
 ## Requests to other lanes
 
-none
+1. **gameplay (tools/lobby_test.py), blocks a green lobby suite on every world PR.** `lobby_test.py` checks that docs/STUDIO_SYNC_LOBBY.md's "Lobby all" table and hash block give the *current* SHA-256 of `WorldArt` and `WorldVisuals` (`ALL_SCRIPTS`, "changed"). Any change to those two files (only the world lane edits them, and the quality lane owns the doc) fails 6 lobby checks, all about that doc: the two table rows, the two hash block rows, and the block's two "ALL OK" runs. The same will happen to the building lane with `PlotBuilding`, `PlotBuildingVisuals` and `BuildingClient`, and to the ux lane with `LobbyClient`, `ShopClient` and `IpoClient`. Asked: treat the "Lobby all" section as history, like the L1 section (`L1_COMMIT`): compare its rows with the files at `98cc7a9` (main before the lanes), and for a file that changed since, check the owning lane file's "Studio steps" row instead. world_test.py does exactly this for docs/STUDIO_SYNC_WORLD.md since `world-ring-plaza` (`SYNC_HISTORY`, `LANE_FILE`, `history_bytes`). Until then the lobby suite on `world-ring-plaza` reports these 6 failures (148 passed, 64 of 64 mutants caught); nothing else in it fails.
+2. **quality (docs/STUDIO_SYNC_LOBBY.md, docs/STUDIO_SYNC_WORLD.md).** No edit needed if request 1 is done; the two docs then stay as history and the new hashes come from the lane files into docs/STUDIO_SYNC_BATCH.md. If the owner prefers the docs kept current instead, the two rows to write are in "Studio steps" below.
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none
+none merged yet. **When `world-ring-plaza` is merged** (the quality lane copies this into docs/STUDIO_SYNC_BATCH.md):
+
+| Script | Studio type and place | State | sha256 | Bytes |
+|---|---|---|---|---|
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f` | 17648 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90` | 59866 |
+
+1. Paste `WorldArt.lua` over `ServerScriptService > WorldArt` and `WorldVisuals.lua` over `ServerScriptService > WorldVisuals` (both already exist). No new object, no other script changes.
+2. Nothing changes while `LobbyConfig.ClaimEnabled` is off (it ships off): the garden is drawn only with the ring. To see it in Studio, set `ClaimEnabled = true` in `ReplicatedStorage > LobbyConfig` **for the playtest only** (docs/STUDIO_SYNC_LOBBY.md says how), press F5, walk the plaza: the paved square, four spokes, the promenade along the garages, four lawn beds, the fountain north of the spawn, benches and lamps. Output must show no red error and no `World` warning. Then set it back to `false` before any publish.
+3. Phone: Test > Device, a phone; the plaza should stay smooth (336 world parts, 4 lights).
