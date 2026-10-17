@@ -1260,10 +1260,11 @@ SYNCED = (("WorldArt", "ServerScriptService"), ("WorldVisuals", "ServerScriptSer
 # docs/STUDIO_SYNC_WORLD.md is the world pass's history (the quality lane owns it, docs/LANES.md): its rows and hash block
 # give the four files as they were on main at SYNC_HISTORY, before the lanes. A world lane PR that changes one of them
 # lists its new SHA-256 and size in its own lane file (LANE_FILE, "Studio steps"), and the quality lane carries it into
-# docs/STUDIO_SYNC_BATCH.md. So the doc is checked against the files at SYNC_HISTORY, and every newer file against the
-# lane file's row.
+# docs/STUDIO_SYNC_BATCH.md (BATCH_FILE). So the doc is checked against the files at SYNC_HISTORY, and every newer file
+# against its row in either file (once a batch is done the lane file's section empties, and the batch keeps the row).
 SYNC_HISTORY = "98cc7a9"
 LANE_FILE = "docs/lanes/world.md"
+BATCH_FILE = "docs/STUDIO_SYNC_BATCH.md"
 
 
 def history_bytes(name):
@@ -1296,6 +1297,7 @@ def sync_table_checks():
 
     doc = read("docs/STUDIO_SYNC_WORLD.md")
     lane = read(LANE_FILE) if os.path.exists(os.path.join(ROOT, LANE_FILE)) else ""
+    batch = read(BATCH_FILE) if os.path.exists(os.path.join(ROOT, BATCH_FILE)) else ""
     for name, place in SYNCED:
         raw = open(os.path.join(ROOT, name + ".lua"), "rb").read()
         old = history_bytes(name + ".lua")
@@ -1309,8 +1311,8 @@ def sync_table_checks():
         if raw != old:
             h = hashlib.sha256(raw).hexdigest()
             row = "| `%s` | ModuleScript, %s | changed | `%s` | %d |" % (name, place, h, len(raw))
-            check("%s: %s changed since %s, and the lane file's Studio steps give its real SHA-256 and size" % (LANE_FILE, name, SYNC_HISTORY),
-                  row in lane, "%s %d" % (h, len(raw)))
+            check("%s or %s: %s changed since %s, and the lane file's Studio steps or the batch give its real SHA-256 and size"
+                  % (LANE_FILE, BATCH_FILE, name, SYNC_HISTORY), row in lane or row in batch, "%s %d" % (h, len(raw)))
     how, patched = integration_state()
     made = patch_made_for()
     if how == "applied" and made is not None and sha(read("TycoonCore.lua"))[:2] == made[:2]:
