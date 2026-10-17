@@ -8,7 +8,7 @@ Only the gameplay lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-nothing yet
+gameplay-goal-chain - started 2026-10-17 15:42 UTC
 
 ## Last PR
 

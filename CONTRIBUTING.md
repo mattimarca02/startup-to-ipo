@@ -107,8 +107,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | free | | |
-| OnboardingConfig | ReplicatedStorage | free | | |
+| OnboardingServer | ServerScriptService | gameplay lane | gameplay-goal-chain | 2026-10-17 |
+| OnboardingConfig | ReplicatedStorage | gameplay lane | gameplay-goal-chain | 2026-10-17 |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
@@ -176,3 +176,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
+| tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
