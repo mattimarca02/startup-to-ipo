@@ -9,6 +9,7 @@
 --   OnboardingTarget (Vector3 or nil) -> where the glowing arrow points
 --   OnboardingTracker (boolean)       -> show the goal tracker
 --   OnboardingGoal_<key>, OnboardingGoalTarget_<key> (numbers) -> each goal's progress
+--   OnboardingGoalShown_<key> (boolean) -> the goals the tracker shows now (OnboardingConfig.ShowAtOnce at most)
 -- OnboardingRemotes.OnboardingNotify fires a display-only pop-up (e.g. the free egg message).
 -- Goals are checked here from the server's own data; the client can't finish one.
 -- The only thing the client can ask (OnboardingRemotes.OnboardingAction) is "DismissTracker":
@@ -21,6 +22,7 @@ local RunService = game:GetService("RunService")
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- the free egg's name, for the toast
+local TaskConfig = require(ReplicatedStorage:WaitForChild("TaskConfig")) -- the call goals: only while calls run
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer")) -- for the Studio Debug tab
 
@@ -141,30 +143,59 @@ local function goalProgress(data, goal)
 		if index then
 			return data.ipo.valuation, IpoConfig.stageValuation(index, data.ipo.count)
 		end
+	elseif goal.kind == "upgrades" then
+		return countOwned(data), goal.target
+	elseif goal.kind == "owns" then
+		if typeof(goal.upgrade) == "string" then
+			return data.owned[goal.upgrade] and 1 or 0, 1
+		end
+	elseif goal.kind == "ipos" then
+		return data.ipo.count, goal.target
+	elseif goal.kind == "calls" or goal.kind == "chain" then
+		-- Only while calls run for real (Studio only until the economy core): a goal nobody can reach is skipped
+		local tasks = data.tasks
+		if TaskConfig.isActive() and typeof(tasks) == "table" then
+			return goal.kind == "calls" and tasks.done or tasks.bestChain, goal.target
+		end
 	end
 	return nil
 end
 
 -- Marks goals that just became true as finished (saved, so they stay finished even if an IPO
--- or a poach takes the player back below), and sends each goal's progress to the screen.
--- Returns true when every goal is finished.
-local function updateGoals(player, data)
+-- or a poach takes the player back below), sends each goal's progress to the screen and picks
+-- the goals the tracker shows: the first ShowAtOnce unfinished ones in list order, where a shown
+-- goal that was just finished keeps its place for DoneShowSeconds (so its tick is seen).
+-- Every goal is checked, shown or not. Returns true when every goal is finished.
+local function updateGoals(player, data, now)
 	local onboarding = data.onboarding
+	local justDone = onboarding.justDone -- goal key -> os.time() it was finished while shown (not saved)
 	local allDone = true
-	for _, goal in ipairs(OnboardingConfig.Goals) do
+	local shown = 0
+	for _, goal in ipairs(OnboardingConfig.activeGoals()) do
 		local current, target = goalProgress(data, goal)
+		local show = false
 		if current then
 			if not onboarding.goals[goal.key] and current >= target then
 				onboarding.goals[goal.key] = true
+				if player:GetAttribute("OnboardingGoalShown_" .. goal.key) == true then
+					justDone[goal.key] = now
+				end
 			end
-			if onboarding.goals[goal.key] then
+			local done = onboarding.goals[goal.key]
+			if done then
 				current = target
 			else
 				allDone = false
 			end
+			local fresh = justDone[goal.key] ~= nil and now - justDone[goal.key] < OnboardingConfig.DoneShowSeconds
+			if shown < OnboardingConfig.ShowAtOnce and (not done or fresh) then
+				show = true
+				shown += 1
+			end
 			setAttribute(player, "OnboardingGoal_" .. goal.key, math.min(current, target))
 			setAttribute(player, "OnboardingGoalTarget_" .. goal.key, target)
 		end
+		setAttribute(player, "OnboardingGoalShown_" .. goal.key, show)
 	end
 	return allDone
 end
@@ -184,7 +215,7 @@ local function update(player, data, now)
 
 	local showTracker = false
 	if active then
-		local allDone = updateGoals(player, data)
+		local allDone = updateGoals(player, data, now)
 		-- It appears once the free egg has hatched (or the player is already past that point),
 		-- and stays until every goal is finished or the player closes it
 		local started = #data.team.employees >= OnboardingConfig.TrackerAfterEmployees
@@ -224,6 +255,7 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		dismissed = false, -- the player closed the goal tracker with its X (saved)
 		goals = {}, -- goal key -> true once finished; stays finished (saved)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
+		justDone = {}, -- goal key -> when a shown goal was finished, this session (not saved)
 	}
 	if typeof(savedOnboarding) == "table" then -- bad values are skipped, never an error
 		onboarding.seenIntro = savedOnboarding.seenIntro == true
@@ -298,6 +330,7 @@ local function addDebugActions()
 		onboarding.arrowDone = false
 		onboarding.dismissed = false
 		table.clear(onboarding.goals)
+		table.clear(onboarding.justDone)
 		if not grantFreeEgg(player, data) then
 			return "Tutorial restarted, but there was no empty incubator for the free egg"
 		end
@@ -331,9 +364,11 @@ function OnboardingServer.init(coreApi)
 		addDebugActions()
 	end
 
-	for _, goal in ipairs(OnboardingConfig.Goals) do
-		if goal.kind == "stage" and not stageNumber(goal.stage) then
-			warn("OnboardingConfig: goal " .. goal.key .. " needs a stage IpoConfig doesn't have: " .. tostring(goal.stage))
+	for _, list in ipairs({ OnboardingConfig.Goals, OnboardingConfig.Chain or {} }) do
+		for _, goal in ipairs(list) do
+			if goal.kind == "stage" and not stageNumber(goal.stage) then
+				warn("OnboardingConfig: goal " .. goal.key .. " needs a stage IpoConfig doesn't have: " .. tostring(goal.stage))
+			end
 		end
 	end
 
