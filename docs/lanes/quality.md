@@ -17,7 +17,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (last run 2026-10-17 16:45 to 18:30 UTC: the scheduled review of #35, #36, #37, #38, #40 and PR #41; a second, manager-fired run reviewed #35, #36, #37 at 17:10 to 18:05 and its verdicts are folded in below)
+2026-10-17 18:08 UTC: manager fire "review #35, #36, #37, #38, #40": checking whether any head changed since the verdicts below.
 
 ## Last PR
 
