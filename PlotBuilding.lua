@@ -23,7 +23,7 @@ local PlotBuilding = {}
 PlotBuilding.KIT_FOLDER = "KitModels" -- ReplicatedStorage.KitModels.<Key>
 -- The turn that brings an imported kit model's front back to +Z. The files face +Z; whether Studio's importer kept that
 -- is not verified. 0 = it did, 180 = it turned them around. docs/STUDIO_SYNC_LOBBY.md's kit front check pins it.
-PlotBuilding.KIT_FRONT_TURN = 0
+PlotBuilding.KIT_FRONT_TURN = 180
 
 -- The frame and the lot -------------------------------------------------------------------------------------------
 PlotBuilding.FLOOR_TOP = 0.5 -- TycoonCore's Floor is 1 thick, centered on the plot center (PlotArt.Layout.floorTop)
