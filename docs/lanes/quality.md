@@ -17,11 +17,11 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (last run 2026-10-17 18:08 to 18:12 UTC: a manager fire to review #35 to #40; no head had changed, the verdicts below stand)
+2026-10-17 22:45 UTC (woken by the merge of PR #41; the manager's quality starts were denied): releasing #41's claims; reviewing #37 (new head ef1a50d), #42, #43 and #40's state; then the batch doc and CLAUDE.md/README/ROADMAP for the merged #35, #36, #38 on branch `quality-batch-1`.
 
 ## Last PR
 
-PR #41 `quality-docs-batch`: https://github.com/mattimarca02/startup-to-ipo/pull/41 (docs/STUDIO_SYNC_BATCH.md, README, CLAUDE.md, ROADMAP; docs only), open, waiting for the owner.
+PR #41 `quality-docs-batch` (docs/STUDIO_SYNC_BATCH.md, README, CLAUDE.md, ROADMAP): merged 2026-10-17 22:42 UTC. Claims released.
 
 ## Verdicts
 
