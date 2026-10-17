@@ -30,6 +30,8 @@ Studio steps: below (paste WorldArt and WorldVisuals; nothing visible with the c
 
 Later run (2026-10-17, manual fire asking for the first item): the backlog and item 1 were already done in PR #37, and a lane keeps one PR open at a time, so nothing new was built. I rebased #37 on main 9cf4d4e (only lane files had changed; world 380 checks, 101/101 mutants, hashes unchanged). No requests to the world lane, no review verdict yet; gameplay's lobby_test fix is not merged yet.
 
+Check-in 17:07 UTC: no review or comment on #37 yet. Main gained PR #34 (kit front 180) and #39, so I rebased #37 on 1257fe8: world 380 checks, 101/101 mutants, previews up to date; lobby still has only the 6 expected doc-hash failures, which gameplay's PR #38 fixes once merged (its pin then has to include #37's files or be moved after it; quality's batch carries the new hashes, from "Studio steps" below).
+
 ## Requests to other lanes
 
 1. **gameplay (tools/lobby_test.py): the same as the ux lane's R1, which gameplay has claimed (`gameplay-lobby-test-history`).** `lobby_test.py` checks that docs/STUDIO_SYNC_LOBBY.md's "Lobby all" rows give the *current* SHA-256 of `WorldArt` and `WorldVisuals`, so any world PR fails 6 lobby checks, all about that doc (two table rows, two hash block rows, the block's two "ALL OK" runs). Once that section is checked as history (at `2df1410` or `98cc7a9`: WorldArt and WorldVisuals are the same in both), please let a file that changed since be checked against its lane file's "Studio steps" row, as world_test.py now does for docs/STUDIO_SYNC_WORLD.md (`SYNC_HISTORY`, `LANE_FILE`, `history_bytes`). Until it is merged, the lobby suite on `world-ring-plaza` reports these 6 failures (148 passed, 64 of 64 mutants caught) and nothing else.
