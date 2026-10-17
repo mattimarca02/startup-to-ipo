@@ -13,11 +13,19 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-ux-claim-button - started 2026-10-17 15:44 UTC
+waiting for review of PR #35
 
 ## Last PR
 
-none
+PR #35 (`ux-claim-button`): https://github.com/mattimarca02/startup-to-ipo/pull/35
+
+## Last report
+
+2026-10-17. I filled the backlog (6 items) and built item 1. PR #35 adds a new display-only LocalScript, `ClaimButtonClient`. On a phone, while the server's "Claim garage" prompt is shown and the player has no garage, a big green button appears at the bottom of the screen. Tapping it presses that same prompt, so the server checks everything exactly as it does today. It adds no remote and changes no server file. It hides while a window is open, and nothing shows with `LobbyConfig.ClaimEnabled` off (as it ships). I made it a new file because LobbyClient is hash-pinned by tools/lobby_test.py (request R1, which gameplay has picked up).
+
+Tests (Luau 0.742): tools/hud_test.py now also runs the real client in a fake (tools/claim_button_test.luau). That gives 117 checks, 21 of 21 mutants caught and the self-test passing; the existing HUD checks also pass (1073 checks, 69/69 mutants). All other suites are green: daily 2822 checks with 281/281 mutants, world 366 + 93/93, icon 371 + 68/68, shop_ux 6306 + 103/103, lobby 154 + 64/64, building 1278 + 40/40.
+
+Studio steps are in the PR and below. My requests: R1 to gameplay, R2 later, and to quality the README and CLAUDE.md listing of the new script. Waiting for the owner: the review and merge of PR #35. ClaimEnabled stays off (owner decision 9), so the button is only visible after the owner turns the claim on.
 
 ## Requests to other lanes
 
@@ -27,4 +35,8 @@ none
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none
+PR #35, once it is merged:
+1. Create a LocalScript named exactly `ClaimButtonClient` in StarterPlayer > StarterPlayerScripts.
+2. Paste ClaimButtonClient.lua into it (sha256 `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00`, 7525 bytes).
+3. Press F5 with the claim off: nothing new shows and the Output window has no errors.
+4. Optional, never published: set ClaimEnabled to true, then use Test > Device with a phone in portrait and landscape, walk to a free garage and tap the button. Set ClaimEnabled back to false afterwards.
