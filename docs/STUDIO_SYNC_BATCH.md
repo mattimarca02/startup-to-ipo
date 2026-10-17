@@ -16,20 +16,22 @@ The older sync docs (docs/STUDIO_SYNC_MASTER.md, docs/STUDIO_SYNC_LOBBY.md, docs
 6. **Checks** and **playtests** of the batch, in order. Anything the batch tells you to delete (a preview folder, a check model) is deleted before saving.
 7. **Run the hash block again**, then **File > Save to Roblox**. Write the date and the result at the end of the batch ("Run on ..."); a playtest that was skipped or showed an error is written down as such, never as done.
 
-## Batch 1 (open: nothing merged yet)
+## Batch 1 (open: #38, #35, #36 merged; #37, #40, #43 still open)
 
-Opened 2026-10-17 by the quality lane. **No lane pull request is merged yet**, so this batch has no script to paste today. The table below is what will enter it once the owner merges the open PRs, with the SHA-256 each lane file gives for the PR's head at review time (checked against the PR's head by the quality lane on 2026-10-17: all seven match; #36's PlotBuilding is the hash after its rebase on `KIT_FRONT_TURN = 180`). **A hash here is provisional until the PR is merged:** a rebase that changes the file changes it, and the quality lane rewrites the row and the hash block from `main` after each merge. Never paste from this table while a row says "open".
+Opened 2026-10-17 by the quality lane. **Merged so far** (the hashes below are from `main` at `57ef19a`, 2026-10-17 22:45 UTC): PR #38 (gameplay: `tools/lobby_test.py` only, nothing for Studio), PR #35 (ux: `ClaimButtonClient`, new) and PR #36 (building: `PlotBuilding` and `PlotBuildingVisuals`, changed). The rows marked **open** are what the still-open PRs will bring, with the SHA-256 their lane files give for the PR heads (checked by the quality lane; provisional until merged: the quality lane rewrites the row and the hash block from `main` after each merge). **Never paste a row that says open.**
 
-| PR | Lane | Script | Class, place | State | SHA-256 (PR head, provisional) | Bytes | Merged? |
+| PR | Lane | Script | Class, place | State | SHA-256 | Bytes | Merged? |
 |---|---|---|---|---|---|---|---|
-| #38 | gameplay | (none: `tools/lobby_test.py` only) | | | | | open |
-| #35 | ux | `ClaimButtonClient` | LocalScript, StarterPlayer > StarterPlayerScripts | new | `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00` | 7525 | open |
-| #36 | building | `PlotBuilding` | ModuleScript, ServerScriptService | changed | `f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788` (head `57085b7`, rebased on main: `KIT_FRONT_TURN = 180`) | 42603 | open |
-| #36 | building | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043` | 27493 | open |
+| #38 | gameplay | (none: `tools/lobby_test.py` only) | | | | | merged |
+| #35 | ux | `ClaimButtonClient` | LocalScript, StarterPlayer > StarterPlayerScripts | new | `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00` | 7525 | merged |
+| #36 | building | `PlotBuilding` | ModuleScript, ServerScriptService | changed | `f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788` | 42603 | merged |
+| #36 | building | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043` | 27493 | merged |
 | #37 | world | `WorldArt` | ModuleScript, ServerScriptService | changed | `7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f` | 17648 | open |
 | #37 | world | `WorldVisuals` | ModuleScript, ServerScriptService | changed | `3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90` | 59866 | open |
 | #40 | interiors | `PlotArt` | ModuleScript, ServerScriptService | changed | `e1d3f7e0e6dd789c3d4a7135a474e8dc92eacdfb23d9c65fcc0599ea9dd2b0c6` | 63975 | open |
 | #40 | interiors | `PlotVisuals` | ModuleScript, ServerScriptService | changed | `8eefee60866bb2ef0a31cbeda361e5f4bd145844d27644dd054e9e5951d8fcca` | 41197 | open |
+| #43 | gameplay | `OnboardingServer` | ModuleScript, ServerScriptService | changed | (from `main` when merged) | | open |
+| #43 | gameplay | `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | (from `main` when merged) | | open |
 
 ### 1. Before you start
 
@@ -39,15 +41,23 @@ The playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (the lobby-all syn
 
 | Name | Class | Parent | From PR |
 |---|---|---|---|
-| `ClaimButtonClient` | LocalScript | StarterPlayer > StarterPlayerScripts | #35 (when merged) |
+| `ClaimButtonClient` | LocalScript | StarterPlayer > StarterPlayerScripts | #35 |
 
 ### 3. The list (paste in any order)
 
-Filled from `main` after each merge (the table above says what is coming). Today: nothing.
+Paste each one the same way: open the `.lua` file on `main`, select all, copy; in Studio double-click the script, select all, paste (or write the file's text with the MCP's script tool). Team Create: commit the drafts before the hash block.
+
+| Script | Class, place | State | SHA-256 | Bytes |
+|---|---|---|---|---|
+| `ClaimButtonClient` | LocalScript, StarterPlayerScripts | new | `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00` | 7525 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788` | 42603 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043` | 27493 |
+
+Nothing else changes in Studio for these three PRs: no new remote, no new object besides the LocalScript, no config change (`LobbyConfig.ClaimEnabled` stays `false`).
 
 ### 4. Hash check (command bar)
 
-Paste the whole block into **View > Command Bar** and press Enter (with the MCP: `execute_luau`). It changes nothing. It prints `OK`, `DIFFERENT`, `MISSING` or `WRONG CLASS` per script, then `ALL OK` or `NOT YET`. Studio may drop the file's last newline or add one; both are accepted. The `WANT` table is the batch's list (section 3): the quality lane fills it from `main` after each merge, one row per script, `{ name, class, place, sha256, bytes }`. With an empty list it prints `ALL OK: 0 scripts`, which only means there is nothing to paste yet.
+Paste the whole block into **View > Command Bar** and press Enter (with the MCP: `execute_luau`). It changes nothing. It prints `OK`, `DIFFERENT`, `MISSING` or `WRONG CLASS` per script, then `ALL OK` or `NOT YET`. Studio may drop the file's last newline or add one; both are accepted. The `WANT` table is the batch's list (section 3): the quality lane fills it from `main` after each merge, one row per script, `{ name, class, place, sha256, bytes }`. Today it checks the three scripts of #35 and #36 and prints `ALL OK: 3 scripts match the repo (batch 1)`.
 
 ```lua
 local K = {
@@ -99,7 +109,9 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	-- filled from main after each merge: { "Name", "Class", "Place", "sha256", bytes },
+	{ "ClaimButtonClient", "LocalScript", "StarterPlayerScripts", "494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00", 7525 },
+	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788", 42603 },
+	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043", 27493 },
 }
 local problems = {}
 for _, w in ipairs(WANT) do
@@ -130,23 +142,24 @@ print(#problems == 0 and ("ALL OK: " .. #WANT .. " scripts match the repo (batch
 
 ### 5. Checks (after the paste)
 
-Added as PRs merge. Expected so far (from the open PRs' lane files; each row becomes a step when its PR is merged):
+1. **The kit is still right (#36 changes nothing in it):** the KitModels check of docs/STUDIO_SYNC_LOBBY.md section 5, pasted as it is, must still print `KIT OK: 36 models` (it reads `PlotBuilding.KitManifest`, which #36 did not change; the Blocks never look in the kit).
+2. **Nothing new in the Output at start:** after the paste, press F5 once and stop: no red error, and no new warning that starts with `Plot buildings:` (one such warning only if KitModels is missing or a model is wrong, as before).
 
-- **#36 and #40 (the kit):** the KitModels check of docs/STUDIO_SYNC_LOBBY.md section 5 still prints `KIT OK: 36 models` (neither PR changes the kit or its manifest; #40's rooms read the same folder).
-- **#40 (rooms):** the command-bar preview in docs/lanes/interiors.md ("Studio steps"): stage 1 prints `OK` with 39 kit MeshParts; delete `Workspace.PREVIEW_STAGES` after.
+Expected from the open PRs, each a step once its PR is merged: #37, nothing (the garden is drawn only with the claim on); #40, the command-bar preview in docs/lanes/interiors.md ("Studio steps"): stage 1 prints `OK` with 39 kit MeshParts, then delete `Workspace.PREVIEW_STAGES`; #43, nothing (`ChainEnabled` is off, the tracker is unchanged).
 
 ### 6. Playtests
 
-Added as PRs merge. Expected so far:
+**(a) #36, the Garage's roof and sign (claim off, as it ships).** F5. Your garage's building (a new save: the Garage) has a rusty pitched roof between brick gables stepped front and back, a ridge cap, gutters and four downpipes, a dark sign board with an orange growth-chart emblem over the roll-up door (no text), two front windows with sills and a concrete plinth. Walk in through the door: the whole shell fades, roof and sign included, and the camera never pulls in; walk out: it comes back. Open the shop's Debug tab, press "Building: next stage" through the five stages and back: only the Garage has the roof; the other four are as before. No new warning in the Output.
 
-- **#35:** F5 with the claim off: nothing new shows, no error in the Output. Optional, never saved: `ClaimEnabled = true` in Studio only, Test > Device (a phone, portrait and landscape), walk to a free garage and tap the big button; revert `LobbyConfig` afterwards (docs/STUDIO_SYNC_LOBBY.md 9 b, step 8).
-- **#36:** F5: the garage shows the pitched roof and the sign over the door; walking in fades the whole shell; no new warning.
-- **#37:** nothing changes with the claim off. Claim on in Studio only: the paved square, four spokes, the promenade, the lawn beds, the fountain, benches and lamps; no red error and no `World` warning; Test > Device, a phone; revert `LobbyConfig` afterwards.
-- **#40:** F5: the garage shows kit crates as hire desks, the old desk and chair with the PC, the workbench, the crates in the back-right corner, the glowing bulb; no `Plot visuals:` warning in the Output.
+**(b) #35, the claim button (nothing with the claim off).** F5 with the claim off: nothing new shows anywhere, and the Output has no error. Then, **in Studio only, never saved:** set `ReplicatedStorage > LobbyConfig` `ClaimEnabled = true` (docs/STUDIO_SYNC_LOBBY.md section 9 b says how, and how to undo it), **Test > Device**, a phone in portrait and then in landscape: on the plaza, walk to a free garage's claim post; when Roblox shows its "Claim garage" prompt, a big green button "Claim garage / Garage N" sits at the bottom of the screen (portrait: centered above the thumbstick; landscape: between the thumbstick and the jump button), clear of the thumbstick and the jump button. Tap it: it says "Claiming..." for half a second, then the garage is yours and the button is gone. Walk away from a post before tapping: the button hides with the prompt. Open the shop while the button shows: it hides, and comes back when the shop closes. Afterwards **revert `LobbyConfig`** (View > Drafts, discard; or paste `LobbyConfig.lua` again) and check it reads `ClaimEnabled = false`.
+
+**(c) Phone sizes, claim off.** Test > Device with a phone: the HUD, the valuation bar and the shop as before; the Garage's roof reads well from the plaza side.
+
+Expected from the open PRs, once merged: #37 (claim on in Studio only: the paved square, four spokes, the promenade, the lawn beds, the fountain, benches and lamps; no red error and no `World` warning; Test > Device; revert `LobbyConfig`); #40 (F5: kit crates as hire desks, the old desk and chair with the PC, the workbench, the crates in the back-right corner, the glowing bulb; no `Plot visuals:` warning); #43 (F5: the Goals card is exactly as before, two goals, because `ChainEnabled` is off).
 
 ### 7. Saving
 
-Delete every preview or check object the batch made. Run the hash block (section 4) again: `ALL OK`. **File > Save to Roblox.** Write "Run on <date>: <result>" below.
+Delete every preview or check object the batch made. `LobbyConfig` is the repo's file (`ClaimEnabled = false`) and every draft is committed. Run the hash block (section 4) again: `ALL OK: 3 scripts`. **File > Save to Roblox.** Write "Run on <date>: <result>" below.
 
 Run on: (not yet)
 
