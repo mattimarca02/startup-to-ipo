@@ -46,7 +46,7 @@ SYNC_DOC = "docs/STUDIO_SYNC_LOBBY.md"
 L1_HEADING = "## L1. Plot frame (nothing visible)"
 L1_COMMIT = "f6a546f"       # main with L1 merged: the L1 section's table is history, checked against the files of this commit
 ALL_HEADING = "## Lobby all (L2 to L5)"
-ALL_COMMIT = "2df1410"      # main with lobby-all merged (PR #32): the Lobby all section is history, checked against the files of this commit
+ALL_COMMIT = "fb8c057"      # main with lobby-all (PR #32) and the kit front turn (PR #34, which updated the section last): the Lobby all section is history, checked against the files of this commit
 # Every script lobby-all creates or changes: (file, Studio class, Studio place, "new" or "changed"). The "Lobby all"
 # section's table and hash block must give each one's SHA-256 and size as lobby-all merged it (ALL_COMMIT), so a later
 # edit of one of these files never fails this test: new Studio steps go to docs/STUDIO_SYNC_BATCH.md.
