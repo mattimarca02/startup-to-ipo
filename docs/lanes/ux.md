@@ -15,7 +15,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (PR #35 merged; next: backlog item 2, U1, once `OnboardingConfig.activeGoals` is on main, else item 3)
+ux-claim-prompts - started 2026-10-17 22:44 UTC (backlog item 3: item 2 waits for `OnboardingConfig.activeGoals`, PR #43, not on main yet)
 
 ## Last PR
 

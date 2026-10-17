@@ -137,7 +137,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | free | | |
+| tools/hud_test.py | (repo only) | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
 | WorldVisuals | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
@@ -177,6 +177,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
 | tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
-| ClaimButtonClient | StarterPlayerScripts | free | | |
-| tools/claim_button_test.luau | (repo only) | free | | |
+| ClaimButtonClient | StarterPlayerScripts | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
+| tools/claim_button_test.luau | (repo only) | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-docs-batch | 2026-10-17 |
