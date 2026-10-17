@@ -64,6 +64,10 @@ Groups: **structure** (one kit for all five buildings) = `Wall` to `RoofCrown`; 
 
 Openings in the structure pieces (from the files): `WallDoor` a hole 6 wide x 10 high, centered, from the floor; `WallGarage` a hole 20 x 12, centered, from the floor; `WallWindow` two holes 5 x 5 with bottoms at height 5; `DoorLeaf` fits the `WallDoor` hole; `GarageDoor` fits the `WallGarage` hole; `Stairs` rises 15 (a 14-high wall plus a 1-thick floor) in 15 steps, lowest step at the front.
 
+## Details that are not kit models (Blocks)
+
+Added 2026-10-17 (building lane, PR `building-garage-roof`). The buildings also use **Blocks**: plain Parts for details the kit has no piece for (the Garage's pitched roof, its stepped gables and their copings, the ridge cap, gutters and downpipes, the window sills, the plinth and the sign over the door). A Block is a layout piece with `key = "Block"`, a `size` and one `role`; `PlotBuilding.partsOf(piece)` gives its one box. It is painted by its role from the stage's style (a look such as `pitch` or `sign` first), stands on its bottom-center like a kit piece, is never stretched, and gets the fallback Part's flags (anchored, `CanCollide`, `CanTouch` and `CanQuery` off, no shadow). It never looks for a model in KitModels, so the kit check and this table are unchanged. Signs are Parts only: no text, no decal, no gui (`tools/building_test.py` checks it).
+
 ## Re-importing (if KitModels is ever lost)
 
 1. Studio, **Home > Import**, select the five files in `assets/kit/`, keep the default settings, Import.
