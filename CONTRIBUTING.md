@@ -118,11 +118,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | Claude (quality lane) | quality-docs-batch | 2026-10-17 |
+| CLAUDE.md | (repo only) | Claude (quality lane) | quality-docs-batch | 2026-10-17 |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | free | | |
+| README.md | (repo only) | Claude (quality lane) | quality-docs-batch | 2026-10-17 |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -179,3 +179,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
 | ClaimButtonClient | StarterPlayerScripts | ux lane (Claude) | ux-claim-button | 2026-10-17 |
 | tools/claim_button_test.luau | (repo only) | ux lane (Claude) | ux-claim-button | 2026-10-17 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-docs-batch | 2026-10-17 |
