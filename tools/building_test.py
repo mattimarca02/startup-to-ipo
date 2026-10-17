@@ -478,7 +478,7 @@ local function unionBox(list)
 end
 -- The box a piece takes, from the layout alone (its kit size, stretch, turn and tilt), in the frame of the Floor's top
 local function pieceBox(p)
-	local s = PB.KitManifest[p.key].size
+	local s = p.key == PB.BLOCK and p.size or PB.KitManifest[p.key].size
 	local origin = CFrame.new()
 	local f = PBV.pieceFrame(origin, p)
 	local w, h, d = s[1] * (p.sx or 1), s[2], s[3] * (p.sz or 1)
@@ -488,6 +488,7 @@ end
 """
 
 DATA_TESTS = r"""
+local function countBlocks(L) local n = 0 for _, p in ipairs(L.pieces) do if p.key == PB.BLOCK then n += 1 end end return n end
 -- 1. The manifest against docs/KIT_MODELS.md -----------------------------------------------------------------------
 do
 	local n, bad = 0, nil
@@ -549,13 +550,17 @@ for s = 1, 5 do
 		check("footprint: stage " .. s .. " contains stage " .. (s - 1) .. " (it only grows)", fp.x1 >= prev.x1 and fp.z0 <= prev.z0)
 	end
 	-- keys and stretch
-	local unknown, stretched = nil, nil
+	local unknown, stretched, badBlock = nil, nil, nil
 	for _, p in ipairs(L.pieces) do
-		if not PB.KitManifest[p.key] then unknown = unknown or p.key end
+		if p.key == PB.BLOCK then
+			local sz = p.size
+			if type(sz) ~= "table" or #sz ~= 3 or not (sz[1] > 0 and sz[2] > 0 and sz[3] > 0) or type(p.role) ~= "string" or #PB.partsOf(p) ~= 1 then badBlock = badBlock or p.name end
+		elseif not PB.KitManifest[p.key] then unknown = unknown or p.key end
 		local allowed = STRETCH_ALLOWED[p.key]
 		if (p.sx ~= 1 and not (allowed and allowed.x)) or (p.sz ~= 1 and not (allowed and allowed.z)) then stretched = stretched or p.name end
 	end
-	check("kit: every key stage " .. s .. " uses is in the KitManifest", unknown == nil, unknown)
+	check("kit: every key stage " .. s .. " uses is in the KitManifest (or is a Block)", unknown == nil, unknown)
+	check("block: every Block of stage " .. s .. " has a size (three positive numbers) and a role, and is one Part", badBlock == nil, badBlock)
 	check("stretch: at stage " .. s .. " only Wall, RoofEdge, WallDoor and DoorLeaf (along X) and Floor (X and Z) are stretched", stretched == nil, stretched)
 	-- the doorway
 	local bx = {}
@@ -601,7 +606,7 @@ for s = 1, 5 do
 	-- the style table
 	local nostyle = nil
 	for _, p in ipairs(L.pieces) do
-		for role in pairs(PB.KitManifest[p.key].roles) do
+		for role in pairs(PB.rolesOf(p)) do
 			local st = PB.styleOf(s, p.key, role, p.look)
 			if not st or type(st.color) ~= "table" or #st.color ~= 3 or not PB.MATERIALS[st.material] or not (st.transparency >= 0 and st.transparency < 1) then
 				nostyle = nostyle or (p.key .. "." .. role)
@@ -614,8 +619,8 @@ for s = 1, 5 do
 	-- the budget, both ways
 	local kitParts, fbParts = #L.boxes, #L.boxes
 	for _, p in ipairs(L.pieces) do
-		for _ in pairs(PB.KitManifest[p.key].roles) do kitParts += 1 end
-		fbParts += #PB.fallbackOf(p.key)
+		for _ in pairs(PB.rolesOf(p)) do kitParts += 1 end
+		fbParts += #PB.partsOf(p)
 	end
 	check("budget: stage " .. s .. " is at most " .. PB.Budget.parts .. " parts, kit MeshParts plus boxes (" .. kitParts .. ")", kitParts <= PB.Budget.parts, kitParts)
 	check("budget: stage " .. s .. " is at most " .. PB.Budget.parts .. " parts built from Parts too (" .. fbParts .. ")", fbParts <= PB.Budget.parts, fbParts)
@@ -675,6 +680,58 @@ do
 	local function stories(s) return (LAYOUTS[s].height + 1) / PB.STORY end
 	check("look: Garage: one story, Corner posts, WallGarage with the GarageDoor rolled up, a BareBulb, WallWindow, RoofEdge",
 		stories(1) == 1 and has(1, "Corner") and has(1, "WallGarage") and has(1, "GarageDoor") and has(1, "BareBulb") and has(1, "WallWindow") and has(1, "RoofEdge"))
+	-- the Garage's pitched roof: the sheets' top faces run on the slope from 1 past the side walls to the ridge, and the
+	-- gables (front and back) reach that top face at every x: crow steps, never a gap under the sheets
+	do
+		local L, mass = LAYOUTS[1], PB.Stages[1].masses[1]
+		local pitch, h = mass.pitch, mass.half
+		local tierH = PB.KitManifest.RoofEdge.size[2]
+		local eave = PB.GROUND + PB.STORY * mass.to + tierH
+		local function roofTop(x) return eave + (h - math.abs(x)) * pitch.slope end
+		local sheets, ends = 0, true
+		local gables = { F = {}, B = {} }
+		for _, p in ipairs(L.pieces) do
+			if string.find(p.name, "Pitch", 1, true) then
+				sheets += 1
+				local f = PBV.pieceFrame(CFrame.new(), p)
+				local T, len = p.size[2], p.size[3]
+				local inner, outer = f * Vector3.new(0, T, -len / 2), f * Vector3.new(0, T, len / 2)
+				local side = p.x < 0 and -1 or 1
+				local reach = h + pitch.overhang
+				if not (near(inner.X, 0, 1e-4) and near(inner.Y, roofTop(0), 1e-4) and near(outer.X, side * reach, 1e-4) and near(outer.Y, roofTop(reach), 1e-4)
+					and near(p.size[1], (mass.front - PB.WALL) - (mass.back + PB.WALL), 1e-4)) then ends = false end
+			end
+			local g, k = string.match(p.name, "Gable(%u)(%d+)")
+			if g then table.insert(gables[g], { half = p.size[1] / 2, top = p.y + p.size[2] }) end
+		end
+		check("roof: the Garage has a pitched roof: two sheets whose top faces run on the slope from 1 past the side walls (the eave) to the ridge, over the whole depth",
+			sheets == 2 and ends, sheets)
+		local gap = nil
+		for _, g in ipairs({ "F", "B" }) do
+			if #gables[g] == 0 then gap = gap or (g .. ": no gable") end
+			for x = -h, h, 0.5 do
+				local high = -math.huge
+				for _, t in ipairs(gables[g]) do if math.abs(x) <= t.half + 1e-6 then high = math.max(high, t.top) end end
+				if high < roofTop(x) - 1e-6 then gap = gap or string.format("%s at x %g: the gable ends at %g, the roof at %g", g, x, high, roofTop(x)) end
+			end
+		end
+		check("roof: the Garage's stepped gables (front and back) reach the roof's top at every x (no gap under the sheets)", gap == nil, gap)
+		local sign, plate = 0, nil
+		for _, p in ipairs(L.pieces) do
+			if string.sub(p.name, 1, 4) == "Sign" then
+				sign += 1
+				local b = pieceBox(p)
+				if p.name == "SignPlate" then plate = b end
+				if b[3] < PB.Stages[1].door.top or b[5] < PB.FRONT_OUT - 1e-6 then sign = -100 end
+			end
+		end
+		local function mat(role, look) local st = PB.styleOf(1, PB.BLOCK, role, look) return st and st.material end
+		check("look: the Garage's roof sheets are rusty sheet metal (CorrodedMetal), its gables brick, its sign board dark metal on a concrete plate",
+			mat("main", "pitch") == "CorrodedMetal" and mat("main", nil) == "Brick" and mat("dark", "sign") == "Metal" and mat("trim", "sign") == "Concrete",
+			tostring(mat("main", "pitch")))
+		check("sign: the Garage has a sign over its door: a plate on the facade, a board and three bars, all above the opening and in front of the wall",
+			sign == 5 and plate ~= nil and near((plate[1] + plate[2]) / 2, 0), sign)
+	end
 	check("look: Small Office: one story, WallDoor with a DoorLeaf, WallWindow, Plants, RoofEdge",
 		stories(2) == 1 and has(2, "WallDoor") and has(2, "DoorLeaf") and has(2, "WallWindow") and has(2, "Plant") and has(2, "RoofEdge"))
 	check("look: Big Office: two stories, WallWindow and WallGlass, RoofEdge", stories(3) == 2 and has(3, "WallWindow") and has(3, "WallGlass") and has(3, "WallDoor"))
@@ -698,6 +755,7 @@ end
 """
 
 BUILD_TESTS = r"""
+local function countBlocks(L) local n = 0 for _, p in ipairs(L.pieces) do if p.key == PB.BLOCK then n += 1 end end return n end
 -- 4. Every stage built at four turns, with the kit, with the kit imported turned around, and from Parts --------------
 local zones = PlotVisuals.zones(PlotArt.Layout)
 local KITS = { { name = "kit", kit = makeKit(0), turn = 0, front = 0 }, { name = "kit imported turned 180", kit = makeKit(180), turn = 180, front = 180 },
@@ -794,15 +852,41 @@ for s = 1, 5 do
 					return ok and near((origin.Position - fr.Position).Magnitude, 0) and m:GetAttribute("Stage") == s
 				end)())
 			if K.kit then
-				check("kit: " .. tag .. ": every piece is built from the kit (" .. #L.pieces .. ")", m:GetAttribute("KitPieces") == #L.pieces and m:GetAttribute("PartPieces") == 0,
-					tostring(m:GetAttribute("KitPieces")) .. " / " .. tostring(m:GetAttribute("PartPieces")))
-				local onlyMesh = true
-				for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") and d.ClassName ~= "MeshPart" then onlyMesh = false end end
-				check("kit: " .. tag .. ": the shell is MeshParts only", onlyMesh)
+				local blocks = countBlocks(L)
+				check("kit: " .. tag .. ": every piece is built from the kit (" .. (#L.pieces - blocks) .. "), every Block as one Part (" .. blocks .. ")",
+					m:GetAttribute("KitPieces") == #L.pieces - blocks and m:GetAttribute("PartPieces") == 0 and m:GetAttribute("BlockPieces") == blocks,
+					tostring(m:GetAttribute("KitPieces")) .. " / " .. tostring(m:GetAttribute("PartPieces")) .. " / " .. tostring(m:GetAttribute("BlockPieces")))
+				local onlyMesh, blockParts = true, 0
+				for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do
+					if d:IsA("BasePart") and d.ClassName ~= "MeshPart" then
+						if d.ClassName == "Part" and d:GetAttribute("Key") == PB.BLOCK then blockParts += 1 else onlyMesh = false end
+					end
+				end
+				check("kit: " .. tag .. ": the shell is MeshParts only, but for the Blocks (one Part each)", onlyMesh and blockParts == blocks, blockParts)
 			else
 				check("fallback: " .. tag .. ": every piece is built from Parts, with one warning for the missing kit",
-					m:GetAttribute("PartPieces") == #L.pieces and #WARNED >= 1)
+					m:GetAttribute("PartPieces") == #L.pieces - countBlocks(L) and m:GetAttribute("BlockPieces") == countBlocks(L) and #WARNED >= 1)
 			end
+			local text = nil
+			for _, d in ipairs(m:GetDescendants()) do
+				if d.ClassName == "SurfaceGui" or d.ClassName == "BillboardGui" or d.ClassName == "TextLabel" or d.ClassName == "Decal" or d.ClassName == "Texture" then text = text or d.Name end
+			end
+			local byPiece, blockBad = {}, nil
+			for _, d in ipairs(m:GetDescendants()) do
+				if d:IsA("BasePart") and d:GetAttribute("Key") == PB.BLOCK then byPiece[d:GetAttribute("Piece")] = d end
+			end
+			for _, p in ipairs(L.pieces) do
+				if p.key == PB.BLOCK then
+					local d, want = byPiece[p.name], pieceBox(p)
+					if not d then blockBad = blockBad or (p.name .. " missing") else
+						local b = inFrame(origin, d)
+						for k = 1, 6 do if not near(b[k], want[k], 1e-4) then blockBad = blockBad or (p.name .. " box") end end
+						if d.Material.Name ~= PB.styleOf(s, PB.BLOCK, p.role, p.look).material then blockBad = blockBad or (p.name .. " style") end
+					end
+				end
+			end
+			check("block: " .. tag .. ": every Block is one Part at its size, where the layout puts it, painted by its role", blockBad == nil, blockBad)
+			check("text: " .. tag .. ": no gui, text, decal or texture (the sign is Parts only: no odds text, no assets)", text == nil, text)
 		end
 		-- The kit and the fallback build the same pieces (same roles, same boxes): the turn of the kit's front is right
 		local a, b = piecesOf(built["kit"], frame), piecesOf(built["no kit"], frame)
@@ -905,7 +989,7 @@ do
 	for _, w in ipairs(WARNED) do if string.find(w, "Archivable", 1, true) then warnings += 1 end end
 	local okPiece, piece, fromKit = pcall(PBV.buildPiece, nil, frameAt(0), PB, 2, { name = "W", key = "Wall", x = 0, y = -1, z = 0, turn = 0, sx = 1, sz = 1 }, kit)
 	check("kit: a MeshPart with Archivable off (Clone gives nil): its pieces are built from Parts, with one warning, never an error",
-		wallPart ~= nil and ok and m:GetAttribute("PartPieces") == walls and m:GetAttribute("KitPieces") == #PB.layout(2).pieces - walls and warnings == 1
+		wallPart ~= nil and ok and m:GetAttribute("PartPieces") == walls and m:GetAttribute("KitPieces") == #PB.layout(2).pieces - walls - countBlocks(PB.layout(2)) and warnings == 1
 		and okPiece and fromKit == false and #piece:GetChildren() > 0, ok and (tostring(m:GetAttribute("PartPieces")) .. " " .. warnings) or m)
 end
 do
@@ -922,7 +1006,7 @@ do
 	local warned = 0
 	for _, w in ipairs(WARNED) do if string.find(w, "Plant", 1, true) then warned += 1 end end
 	check("stretch: float noise in KitSize (3.0004 for 3) is no stretch: a Plant with a turned part is still built from the kit",
-		m:GetAttribute("PartPieces") == 0 and m:GetAttribute("KitPieces") == #PB.layout(2).pieces and warned == 0, tostring(m:GetAttribute("PartPieces")) .. " " .. warned)
+		m:GetAttribute("PartPieces") == 0 and m:GetAttribute("KitPieces") == #PB.layout(2).pieces - countBlocks(PB.layout(2)) and warned == 0, tostring(m:GetAttribute("PartPieces")) .. " " .. warned)
 end
 do
 	local ok = PBV.checkKit(makeKit(0, nil, true), PB.KitManifest)
@@ -1760,6 +1844,15 @@ MUTANTS = [
     ("the RevolvingDoor back on Small Corporate's lane", PB, '\t\textras = {\n\t\t\t{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 },',
      '\t\textras = {\n\t\t\t{ key = "RevolvingDoor", x = 0, y = -1, z = 35, turn = 0, lane = true },\n\t\t\t{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 },',
      "lane: only the door piece", ("data",)),
+    # building-garage-roof
+    ("the gable steps too narrow (a gap under the Garage's roof)", PB, "\tlocal run = tierH / s\n", "\tlocal run = tierH / s + 2\n", "roof: the Garage's stepped gables", ("data",)),
+    ("the Garage's roof sheets tilted the wrong way (a valley, not a ridge)", PB, "turn = side < 0 and 270 or 90, tilt = math.deg(a) })", "turn = side < 0 and 270 or 90, tilt = -math.deg(a) })",
+     "roof: the Garage has a pitched roof", ("data",)),
+    ("a Block counted as a kit piece built from Parts", PBV, "\t\t\tif not isBlock then\n\t\t\t\tfromParts += 1\n\t\t\tend", "\t\t\tfromParts += 1", "kit: stage 1 at 0 (kit)", ("build",)),
+    ("a Block painted by the stage's plain roles (its look ignored: the roof brick, not rusty metal)", PB, "\tif not pick and look and style.looks and style.looks[look] then",
+     "\tif not pick and look and not block and style.looks and style.looks[look] then", "look: the Garage's roof sheets", ("data",)),
+    ("the sign hung over the doorway (y 5: in the lane)", PB, "sign = { y = 16.4, w = 18, h = 5.5 },", "sign = { y = 5, w = 18, h = 5.5 },", "lane: stage 1 at 0 (kit)", ("build",)),
+    ("a Block that ignores its size (built 1 x 1 x 1)", PB, "\t\treturn { box(piece.role, s[1], s[2], s[3], 0, s[2] / 2, 0) }", "\t\treturn { box(piece.role, 1, 1, 1, 0, 0.5, 0) }", "block: stage 1 at 0", ("build",)),
     ("the claim post outside its ClaimSpot (in the garage itself: it streams out on far clients)", CORE,
      '\t\tlocal post = makePart(spot, "ClaimPost",', '\t\tlocal post = makePart(garage, "ClaimPost",', "free:", ("core",)),
 ]

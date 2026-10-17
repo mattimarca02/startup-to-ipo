@@ -2,6 +2,7 @@
 -- (ReplicatedStorage.KitModels) or, for any piece whose model is missing, from Parts; and holds the pure maths of the
 -- fade. Put this ModuleScript in ServerScriptService, next to PlotBuilding (the data) and TycoonCore (which calls it).
 --
+-- Blocks (PlotBuilding.BLOCK: roofs, signs, sills...) are always one plain Part each, with the fallback's flags.
 -- Only looks, plus seven to ten invisible boxes that make the outer walls and the roof solid. Nothing is saved, sent
 -- through a remote or read back by the game. Every kit MeshPart and every fallback Part is anchored with CanCollide,
 -- CanTouch and CanQuery off and no shadow: it never decides collision, touch, rays or the camera. The solid boxes are
@@ -201,12 +202,13 @@ local function tag(part, piece, role)
 	part:SetAttribute("Role", role)
 end
 
--- The Parts version of one piece (PlotBuilding.fallbackOf), in the building-pass style
+-- The Parts version of one piece (PlotBuilding.partsOf: a kit model's fallback, or a Block's one Part), in the
+-- building-pass style
 local function buildFallback(parent, origin, building, stage, piece)
 	local base = pieceFrame(origin, piece)
 	local sx, sz = stretchOf(building, piece)
 	local parts = {}
-	for i, b in ipairs(building.fallbackOf(piece.key) or {}) do
+	for i, b in ipairs(building.partsOf(piece) or {}) do
 		local part = Instance.new("Part")
 		part.Name = piece.name .. "_" .. b.role .. i
 		part.Size = Vector3.new(b.size[1] * sx, b.size[2], b.size[3] * sz)
@@ -323,7 +325,7 @@ function PlotBuildingVisuals.buildPiece(parent, frame, building, stage, piece, k
 	local model = Instance.new("Model")
 	model.Name = piece.name
 	local origin = originOf(frame, building)
-	local template = kit and kit:FindFirstChild(piece.key)
+	local template = kit and piece.key ~= building.BLOCK and kit:FindFirstChild(piece.key)
 	local made = template and buildKit(model, origin, building, stage, piece, template)
 	if not made then
 		buildFallback(model, origin, building, stage, piece)
@@ -365,12 +367,15 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 	if not kit then
 		warnOnce("no kit", "ReplicatedStorage." .. building.KIT_FOLDER .. " is missing: every building is built from Parts")
 	end
-	local fromKit, fromParts = 0, 0
+	local fromKit, fromParts, blocks = 0, 0, 0
 	for _, piece in ipairs(layout.pieces) do
 		local parent2 = groups[piece.group] or groups.Fade
-		local template = kit and kit:FindFirstChild(piece.key)
+		local isBlock = piece.key == building.BLOCK
+		local template = kit and not isBlock and kit:FindFirstChild(piece.key)
 		local made, why = nil, nil
-		if template then
+		if isBlock then
+			blocks += 1 -- a Block is always one Part: there is no kit model to look for
+		elseif template then
 			made, why = buildKit(parent2, origin, building, layout.stage, piece, template)
 			if not made then
 				warnOnce("kit " .. piece.key, "KitModels." .. piece.key .. " can't be used (" .. tostring(why) .. "): built from Parts")
@@ -382,14 +387,17 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 			fromKit += 1
 		else
 			buildFallback(parent2, origin, building, layout.stage, piece)
-			fromParts += 1
+			if not isBlock then
+				fromParts += 1
+			end
 		end
 	end
 	for _, b in ipairs(layout.boxes) do
 		buildBox(groups.Solid, origin, b)
 	end
-	model:SetAttribute("KitPieces", fromKit)
-	model:SetAttribute("PartPieces", fromParts)
+	model:SetAttribute("KitPieces", fromKit) -- kit pieces built from the kit
+	model:SetAttribute("PartPieces", fromParts) -- kit pieces built from Parts (their model missing or unusable)
+	model:SetAttribute("BlockPieces", blocks) -- Blocks (always one Part each)
 	-- Streaming: the whole building is always there, even far away (lobby L4: the shells are seen across the plaza).
 	-- Some versions may not allow it from a script: then it simply stays the default.
 	pcall(function()

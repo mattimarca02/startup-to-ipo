@@ -12,6 +12,8 @@
 --   PlotBuilding.layout(stage)      -> { pieces, boxes, inside, footprint, furniture }: every piece, every solid box
 --   PlotBuilding.furnitureFootprints(stage) -> the floor boxes the furniture takes (customize PR 2 keeps them free)
 --   PlotBuilding.styleOf(stage, key, role, look) -> { color, material, transparency } of one part
+--   PlotBuilding.partsOf(piece)     the boxes of one piece built from Parts (a kit model's fallback, or a Block's one box)
+--   PlotBuilding.rolesOf(piece)     { role = true } of one piece: one MeshPart per role from the kit (a Block: its one role)
 --
 -- The frame: studs from the middle of the Floor's top face (the garage's frame, TycoonCore plotFrame), +X right, +Z the
 -- front (the door, toward the plaza), y 0 the floor top, y -1 the ground. A piece's "turn" is its front's direction in
@@ -56,6 +58,12 @@ PlotBuilding.NEON_KEYS = { BareBulb = true } -- Neon only on a light
 -- Only these may be stretched (by scaling their parts): along X, and Floor along Z too. Every other piece keeps its size.
 -- WallDoor and its DoorLeaf are stretched 1.5 times along X (24 and 9 wide): the kit's opening is 6, the doorway lane 9.
 PlotBuilding.STRETCH = { Wall = { x = true }, RoofEdge = { x = true }, Floor = { x = true, z = true }, WallDoor = { x = true }, DoorLeaf = { x = true } }
+-- A Block is a piece that is one plain Part, never a kit model: { key = "Block", size = { x, y, z }, role, look }. It stands
+-- on its bottom-center like a kit piece, is painted by its role from the stage's style (like the structure kit) and gets
+-- the same flags as a fallback Part (never solid, never touched, never hit by a ray, no shadow). It is never stretched: its
+-- size is its size. Roofs, signs, sills, gutters and pipes are Blocks: details the kit has no piece for.
+PlotBuilding.BLOCK = "Block"
+PlotBuilding.PITCH_THICK = 1 -- a pitched roof's sheets are this thick
 
 -- The kit, copied from docs/KIT_MODELS.md (tools/building_test.py compares the two) -----------------------------
 -- size = { width (X), height (Y), depth (Z) }. roles = the MeshParts of the model, one per role, with the file's colors.
@@ -150,6 +158,7 @@ local FALLBACK = {
 	Computer = { box("dark", 1.2, 0.6, 2, 0, 0.3, 0), box("main", 3, 2.4, 1.2, 0, 1.8, 0.2), box("trim", 2.6, 2, 0.2, 0, 1.8, 0.9) },
 	Chair = { box("dark", 2.4, 1, 2.4, 0, 0.5, 0), box("main", 3, 1, 3, 0, 1.5, 0), box("trim", 3, 2, 0.6, 0, 3, -1.2) },
 }
+local fallbackOf
 function PlotBuilding.fallbackOf(key)
 	local list = FALLBACK[key]
 	if list then
@@ -171,6 +180,25 @@ function PlotBuilding.fallbackOf(key)
 	end
 	return out
 end
+fallbackOf = PlotBuilding.fallbackOf
+
+-- The boxes of one piece built from Parts: a Block is its one box, anything else its kit model's fallback
+function PlotBuilding.partsOf(piece)
+	if piece.key == PlotBuilding.BLOCK then
+		local s = piece.size
+		return { box(piece.role, s[1], s[2], s[3], 0, s[2] / 2, 0) }
+	end
+	return fallbackOf(piece.key)
+end
+
+-- The roles of one piece's parts (the kit builds one MeshPart per role; a Block is one Part)
+function PlotBuilding.rolesOf(piece)
+	if piece.key == PlotBuilding.BLOCK then
+		return { [piece.role] = true }
+	end
+	local entry = PlotBuilding.KitManifest[piece.key]
+	return entry and entry.roles
+end
 
 -- Styles: the color and material of each role, per stage ----------------------------------------------------------
 -- roles: the structure kit's five roles. keys: one key's own role (it wins over roles). looks: a named set of roles a
@@ -187,7 +215,9 @@ PlotBuilding.Styles = {
 			glass = S(rgb(196, 192, 160), "Glass", GLASS), dark = S(rgb(52, 55, 61), "Metal"),
 		},
 		keys = { BareBulb = { glass = S(rgb(255, 226, 122), "Neon"), trim = S(rgb(213, 218, 225), "Metal") } },
-		looks = { roof = { main = S(rgb(84, 86, 92), "Concrete") } },
+		-- pitch: the rusty sheet-metal roof, its ridge cap and gutters; sign: the board over the roll-up door (accent: its emblem)
+		looks = { roof = { main = S(rgb(84, 86, 92), "Concrete") }, pitch = { main = S(rgb(128, 84, 62), "CorrodedMetal"), dark = S(rgb(60, 62, 68), "Metal") },
+			sign = { dark = S(rgb(40, 42, 48), "Metal"), trim = S(rgb(214, 210, 200), "Concrete") } },
 		furniture = "SmoothPlastic",
 	},
 	{ -- 2 Small Office: white walls, mint trim, clear glass
@@ -234,18 +264,19 @@ end
 -- The look of one part: { color = { r, g, b }, material, transparency }. nil when the stage has no style for it.
 function PlotBuilding.styleOf(stage, key, role, look)
 	local style = PlotBuilding.Styles[stage]
+	local block = key == PlotBuilding.BLOCK
 	local entry = PlotBuilding.KitManifest[key]
-	if not style or not entry then
+	if not style or not (entry or block) then
 		return nil
 	end
 	local pick = style.keys and style.keys[key] and style.keys[key][role]
 	if not pick and look and style.looks and style.looks[look] then
 		pick = style.looks[look][role]
 	end
-	if not pick and PlotBuilding.STRUCTURE[key] then
+	if not pick and (PlotBuilding.STRUCTURE[key] or block) then
 		pick = style.roles[role]
 		if not pick then
-			return nil -- the structure kit is always restyled: a role the stage forgot is a mistake, not the file's color
+			return nil -- the structure kit and the Blocks are always styled: a role the stage forgot is a mistake, not the file's color
 		end
 	end
 	if pick then
@@ -265,6 +296,9 @@ end
 -- The five buildings ------------------------------------------------------------------------------------------------
 -- A building is one or more masses (a box of stories: half-width, back face, front face, first and last story, corner
 -- posts or not), the sequence of pieces along each wall of each story, the door, the pieces outside, and the furniture.
+-- A mass may have a pitched roof (pitch = { slope, overhang }: two sheets from the side eaves to a ridge along Z, brick
+-- gables stepped front and back, a ridge cap, gutters) and a stage a sign over its door (sign = { y, w, h }: a board on the
+-- facade with a growth-chart emblem, no text). Both are Blocks. Extras may be Blocks too: { block = { x, y, z }, role, name }.
 -- Walls: doorWall (the front of the ground story), frontWall (the front above it), sideWall, backWall. A wall sequence lists pieces from one end to the other: { key = "WallWindow" } (its kit width), { fill = true } (a
 -- Wall stretched to share what is left), { gap = 10 } (nothing in the wall run: the doorway, or the room an extra fills,
 -- like the offices' stretched WallDoor).
@@ -274,15 +308,28 @@ local function K(key) return { key = key } end
 local function gap(width) return { gap = width } end
 
 PlotBuilding.Stages = {
-	{ -- 1 Garage: one story, brick, corner posts, the roll-up door rolled up under the ceiling, a bare bulb by the door
+	{ -- 1 Garage: one story, brick, corner posts, the roll-up door rolled up under the ceiling, a bare bulb by the door, a
+		-- rusty pitched roof between stepped brick gables, the company's sign over the door, windows either side of it
 		key = "Garage", name = "Garage",
-		masses = { { half = 34, back = -34, front = 32.2, from = 1, to = 1, corners = true, roofEdge = true,
-			doorWall = { F, K("WallGarage"), F }, sideWall = { F, K("WallWindow"), F }, backWall = { F, K("WallWindow"), F } } },
+		masses = { { half = 34, back = -34, front = 32.2, from = 1, to = 1, corners = true, roofEdge = true, pitch = { slope = 1 / 3, overhang = 1 },
+			doorWall = { F, K("WallWindow"), K("WallGarage"), K("WallWindow"), F }, sideWall = { F, K("WallWindow"), F }, backWall = { F, K("WallWindow"), F } } },
 		door = { half = 10, top = 11, lanePiece = "WallGarage" }, -- the WallGarage opening: 20 wide, 12 high from the ground
+		sign = { y = 16.4, w = 18, h = 5.5 }, -- on the front gable, over the roll-up door
 		extras = {
 			-- rolled up: lying flat under the ceiling, just inside the opening (front facing up), non-solid
 			{ key = "GarageDoor", x = 0, y = 11.5, z = 30.2, turn = 0, tilt = -90 },
 			{ key = "BareBulb", x = 0, y = 10.2, z = 32.7, turn = 0 },
+			-- the facade: sills under the two windows (their holes start 4 above the floor top), a concrete plinth either side
+			-- of the door (from the opening's jambs to the corners)
+			{ block = { 14, 0.4, 0.8 }, role = "trim", name = "SillL", x = -20, y = 3.6, z = 32.4 },
+			{ block = { 14, 0.4, 0.8 }, role = "trim", name = "SillR", x = 20, y = 3.6, z = 32.4 },
+			{ block = { 22, 1.2, 0.4 }, role = "trim", name = "PlinthL", x = -23, y = -1, z = 32.4 },
+			{ block = { 22, 1.2, 0.4 }, role = "trim", name = "PlinthR", x = 23, y = -1, z = 32.4 },
+			-- four downpipes against the side walls, under the gutters, from the ground up to them
+			{ block = { 0.6, 15.2, 0.6 }, role = "dark", look = "pitch", name = "PipeLF", x = -34.4, y = -1, z = 31 },
+			{ block = { 0.6, 15.2, 0.6 }, role = "dark", look = "pitch", name = "PipeRF", x = 34.4, y = -1, z = 31 },
+			{ block = { 0.6, 15.2, 0.6 }, role = "dark", look = "pitch", name = "PipeLB", x = -34.4, y = -1, z = -33 },
+			{ block = { 0.6, 15.2, 0.6 }, role = "dark", look = "pitch", name = "PipeRB", x = 34.4, y = -1, z = -33 },
 		},
 		furniture = {},
 	},
@@ -405,6 +452,7 @@ local function widthOf(key)
 end
 
 -- One piece: name, key, x y z (bottom-center), turn, tilt (about its own X), sx sz (stretch: 1 = kit size), look,
+-- size and role (a Block only),
 -- group ("Fade": the shell, it fades; "Static": the furniture, it stays), lane (a door piece, allowed in the doorway lane)
 local function addPiece(out, p)
 	p.sx = p.sx or 1
@@ -446,6 +494,56 @@ local function wallRun(out, name, line, seq, look, door)
 			})
 		end
 		pos += w
+	end
+end
+
+-- A pitched roof on a mass whose walls end at `top`: two sheets (Blocks, tilted) from 1 past each side wall up to a ridge
+-- along Z, over the whole depth between the gables. Their top face rises `slope` studs per stud from the eave (the roof
+-- edge's top) to the middle. The gables front and back step up in tiers as high as the roof edge, each `run` narrower on
+-- both sides, and always reach the sheets' top: the outer corner of each step is on the slope (crow steps). Each tier has
+-- a coping on top. A ridge cap and two gutters under the eaves. Looks only: the roof's solid box stays the flat one.
+local function pitchedRoof(out, m, mass, top)
+	local p, h, W = mass.pitch, mass.half, PlotBuilding.WALL
+	local tierH = PlotBuilding.KitManifest.RoofEdge.size[2]
+	local eave = top + (mass.roofEdge and tierH or 0)
+	local s, T = p.slope, PlotBuilding.PITCH_THICK
+	local run = tierH / s
+	local tiers = math.ceil(h * s / tierH - 1e-9)
+	local z0, z1 = mass.back + W, mass.front - W
+	local cz, depth = (z0 + z1) / 2, z1 - z0
+	local reach = h + p.overhang
+	local a = math.atan(s)
+	local mid = reach / 2
+	local tag = "M" .. m
+	for _, side in ipairs({ -1, 1 }) do
+		local lr = side < 0 and "L" or "R"
+		-- turned to face outward, tilted down by the slope: its top face's middle is on the slope, halfway out
+		addPiece(out, { name = tag .. "Pitch" .. lr, key = PlotBuilding.BLOCK, size = { depth, T, reach / math.cos(a) }, role = "main", look = "pitch",
+			x = side * (mid - math.sin(a) * T), y = eave + (h - mid) * s - math.cos(a) * T, z = cz, turn = side < 0 and 270 or 90, tilt = math.deg(a) })
+		addPiece(out, { name = tag .. "Gutter" .. lr, key = PlotBuilding.BLOCK, size = { 0.8, 0.6, depth }, role = "dark", look = "pitch",
+			x = side * (reach - 0.2), y = eave - p.overhang * s - T - 0.6, z = cz, turn = 0 })
+	end
+	addPiece(out, { name = tag .. "Ridge", key = PlotBuilding.BLOCK, size = { 2, 0.6, depth }, role = "dark", look = "pitch", x = 0, y = eave + h * s - 0.3, z = cz, turn = 0 })
+	for k = 1, tiers do
+		local half, y = h - (k - 1) * run, eave + (k - 1) * tierH
+		for _, g in ipairs({ { "F", mass.front - W / 2, 0 }, { "B", mass.back + W / 2, 180 } }) do
+			addPiece(out, { name = tag .. "Gable" .. g[1] .. k, key = PlotBuilding.BLOCK, size = { 2 * half, tierH, W }, role = "main", look = mass.look,
+				x = 0, y = y, z = g[2], turn = g[3] })
+			addPiece(out, { name = tag .. "Coping" .. g[1] .. k, key = PlotBuilding.BLOCK, size = { 2 * half + 0.4, 0.4, W + 0.4 }, role = "trim", look = mass.look,
+				x = 0, y = y + tierH, z = g[2], turn = g[3] })
+		end
+	end
+end
+
+-- The sign on the facade over the door: a plate, the board on it and a growth chart of three bars (the emblem; no text,
+-- no odds). Its bottom at sign.y, centered, standing out of the front face (from FRONT_OUT to 0.7 in front of it).
+local function addSign(out, sign)
+	local w, h, y, z = sign.w, sign.h, sign.y, PlotBuilding.FRONT_OUT
+	local B = PlotBuilding.BLOCK
+	addPiece(out, { name = "SignPlate", key = B, size = { w + 0.6, h + 0.6, 0.3 }, role = "trim", look = "sign", x = 0, y = y - 0.3, z = z + 0.15, turn = 0 })
+	addPiece(out, { name = "SignBoard", key = B, size = { w, h, 0.2 }, role = "dark", look = "sign", x = 0, y = y, z = z + 0.4, turn = 0 })
+	for i, share in ipairs({ 0.28, 0.48, 0.68 }) do
+		addPiece(out, { name = "SignBar" .. i, key = B, size = { 2, h * share, 0.2 }, role = "accent", look = "sign", x = (i - 2) * 3, y = y + 0.9, z = z + 0.6, turn = 0 })
 	end
 end
 
@@ -497,15 +595,26 @@ function PlotBuilding.layout(stage)
 		if mass.crown then
 			addPiece(pieces, { name = "M" .. m .. "Crown", key = "RoofCrown", x = 0, y = top, z = cz, turn = 0, look = mass.look })
 		end
+		if mass.pitch then
+			pitchedRoof(pieces, m, mass, top)
+		end
 	end
 	-- The door's lintel (an open entrance) and the pieces outside the walls
 	local door = def.door
 	if door.lintel then
 		addPiece(pieces, { name = "DoorLintel", key = "RoofEdge", x = 0, y = door.top, z = PlotBuilding.FRONT_IN + W / 2, turn = 0, sx = 2 * door.half / widthOf("RoofEdge") })
 	end
+	if def.sign then
+		addSign(pieces, def.sign)
+	end
 	for i, e in ipairs(def.extras) do
-		addPiece(pieces, { name = "Extra" .. i .. e.key, key = e.key, x = e.x, y = e.y, z = e.z, turn = e.turn, tilt = e.tilt,
-			sx = e.width and e.width / widthOf(e.key) or 1, lane = e.lane })
+		if e.block then
+			addPiece(pieces, { name = "Extra" .. i .. e.name, key = PlotBuilding.BLOCK, size = e.block, role = e.role, look = e.look,
+				x = e.x, y = e.y, z = e.z, turn = e.turn or 0, tilt = e.tilt })
+		else
+			addPiece(pieces, { name = "Extra" .. i .. e.key, key = e.key, x = e.x, y = e.y, z = e.z, turn = e.turn, tilt = e.tilt,
+				sx = e.width and e.width / widthOf(e.key) or 1, lane = e.lane })
+		end
 	end
 	-- The band's floor (stages with furniture): three strips around the room, level with its Floor (top at y 0), each with a
 	-- solid box under it, so a player walks around the room at the room's height. Never in front: the front wall is there.
