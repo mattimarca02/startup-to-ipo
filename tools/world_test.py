@@ -1203,7 +1203,7 @@ def preview_source(doc=None):
                       .replace("__CHECK__", indented(doc_block("### The check block (command bar)", doc), 1)).replace("__PREVIEW__", block))
 
 
-HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_WORLD.md, run as it is, on the real files in a fake place ----------------
+HASH_TESTS = r"""-- Tests: the hash block of docs/STUDIO_SYNC_WORLD.md, run as it is, on the files at SYNC_HISTORY in a fake place ----------------
 local SOURCES = __SOURCES__
 for name, entry in pairs(SOURCES) do
 	local script = newInstance("ModuleScript")
@@ -1218,7 +1218,7 @@ check("hash block: it runs without an error", ok, err)
 for name in pairs(SOURCES) do
 	local said = nil
 	for _, line in ipairs(PRINTED) do if string.sub(line, 1, #name + 1) == name .. " " then said = line end end
-	check("hash block: " .. name .. " prints OK (Luau's SHA-256 of the real file is the one in the table)", said ~= nil and string.find(said, " OK ", 1, true) ~= nil, said)
+	check("hash block: " .. name .. " prints OK (Luau's SHA-256 of the file at 98cc7a9 is the one in the table)", said ~= nil and string.find(said, " OK ", 1, true) ~= nil, said)
 end
 local function runWith(change)
 	for name, entry in pairs(SOURCES) do
@@ -1257,11 +1257,27 @@ def lua_long_string(text):
 
 
 SYNCED = (("WorldArt", "ServerScriptService"), ("WorldVisuals", "ServerScriptService"), ("IconArt", "ReplicatedStorage"), ("IconVisuals", "ReplicatedStorage"))
+# docs/STUDIO_SYNC_WORLD.md is the world pass's history (the quality lane owns it, docs/LANES.md): its rows and hash block
+# give the four files as they were on main at SYNC_HISTORY, before the lanes. A world lane PR that changes one of them
+# lists its new SHA-256 and size in its own lane file (LANE_FILE, "Studio steps"), and the quality lane carries it into
+# docs/STUDIO_SYNC_BATCH.md (BATCH_FILE). So the doc is checked against the files at SYNC_HISTORY, and every newer file
+# against its row in either file (once a batch is done the lane file's section empties, and the batch keeps the row).
+SYNC_HISTORY = "98cc7a9"
+LANE_FILE = "docs/lanes/world.md"
+BATCH_FILE = "docs/STUDIO_SYNC_BATCH.md"
+
+
+def history_bytes(name):
+    """A file as it was at SYNC_HISTORY (bytes), or None when git can't show it (a copy without the history)."""
+    got = subprocess.run(["git", "show", "%s:%s" % (SYNC_HISTORY, name)], cwd=ROOT, capture_output=True)
+    return got.stdout if got.returncode == 0 else None
 
 
 def hash_source(doc=None):
     block = doc_block("## (d) Hash check (command bar)", doc)
-    sources = "{ " + ", ".join('%s = { place = "%s", source = %s }' % (name, place, lua_long_string(read(name + ".lua"))) for name, place in SYNCED) + " }"
+    old = {name: history_bytes(name + ".lua") for name, _ in SYNCED}
+    sources = "{ " + ", ".join('%s = { place = "%s", source = %s }' % (name, place, lua_long_string(
+        old[name].decode("utf-8") if old[name] is not None else read(name + ".lua"))) for name, place in SYNCED) + " }"
     text = HASH_TESTS.replace("__SOURCES__", sources).replace("__HASHBLOCK__", block)
     return PRELUDE + text
 
@@ -1280,12 +1296,23 @@ def sync_table_checks():
             print("FAIL: " + name + (" -- " + str(extra) if extra else ""))
 
     doc = read("docs/STUDIO_SYNC_WORLD.md")
+    lane = read(LANE_FILE) if os.path.exists(os.path.join(ROOT, LANE_FILE)) else ""
+    batch = read(BATCH_FILE) if os.path.exists(os.path.join(ROOT, BATCH_FILE)) else ""
     for name, place in SYNCED:
         raw = open(os.path.join(ROOT, name + ".lua"), "rb").read()
-        h = hashlib.sha256(raw).hexdigest()
-        row = "| `%s` | ModuleScript, %s | new | `%s` | %d |" % (name, place, h, len(raw))
-        check("STUDIO_SYNC_WORLD.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
-        check("STUDIO_SYNC_WORLD.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), place)) in doc)
+        old = history_bytes(name + ".lua")
+        check("git: %s.lua can be read at %s (git show; a copy without the git history lacks it)" % (name, SYNC_HISTORY), old is not None)
+        if old is None:
+            continue
+        h = hashlib.sha256(old).hexdigest()
+        row = "| `%s` | ModuleScript, %s | new | `%s` | %d |" % (name, place, h, len(old))
+        check("STUDIO_SYNC_WORLD.md: the table row of %s has its SHA-256 and size at %s" % (name, SYNC_HISTORY), row in doc, "%s %d" % (h, len(old)))
+        check("STUDIO_SYNC_WORLD.md: the hash block expects %s's SHA-256 and size at %s" % (name, SYNC_HISTORY), ('%s = { "%s", %d, "%s" },' % (name, h, len(old), place)) in doc)
+        if raw != old:
+            h = hashlib.sha256(raw).hexdigest()
+            row = "| `%s` | ModuleScript, %s | changed | `%s` | %d |" % (name, place, h, len(raw))
+            check("%s or %s: %s changed since %s, and the lane file's Studio steps or the batch give its real SHA-256 and size"
+                  % (LANE_FILE, BATCH_FILE, name, SYNC_HISTORY), row in lane or row in batch, "%s %d" % (h, len(raw)))
     how, patched = integration_state()
     made = patch_made_for()
     if how == "applied" and made is not None and sha(read("TycoonCore.lua"))[:2] == made[:2]:
@@ -2491,6 +2518,109 @@ section("ring world", function()
 	check("ring world: the lounge, its door, the drop spot and the moved spawn pad are kept clear (the keepouts check)",
 		(function() for _, r in ipairs(WorldVisuals.checks(world, WorldArt, site)) do if r.name == "keepouts" then return #r.problems == 0 end end return false end)())
 end)
+
+-- The plaza garden (world-ring-plaza): the paving, the beds, what stands where, the fountain, the benches
+section("ring garden", function()
+	site = site or WorldVisuals.ringSite(WorldArt, ring)
+	world = world or WorldVisuals.build(nil, WorldArt, site)
+	local cx, cz, H = R.plaza.x, R.plaza.z, R.plaza.half
+	local function rectOf(part)
+		local b = WorldVisuals.boxOf(part.CFrame, part.Size)
+		return { name = part.Name, x0 = b[1], x1 = b[2], z0 = b[5], z1 = b[6], y0 = b[3], y1 = b[4] }
+	end
+	local paths, missing = {}, {}
+	for _, part in ipairs(world:FindFirstChild("Paths"):GetChildren()) do paths[part.Name] = rectOf(part) end
+	local WAYS = { "SpokeNorth", "SpokeNorthOuter", "SpokeSouth", "SpokeWest", "SpokeEast", "PromenadeNorth", "PromenadeSouth", "PromenadeWest", "PromenadeEast", "Forecourt" }
+	for _, name in ipairs(WAYS) do if not paths[name] then table.insert(missing, name) end end
+	for _, name in ipairs({ "PlazaSouth", "PlazaNorth", "PlazaWest", "PlazaEast", "FountainNode" }) do if not paths[name] then table.insert(missing, name) end end
+	check("ring garden: the square, four spokes, the fountain's node, four promenade bands and the forecourt are paved", #missing == 0, missing[1])
+	-- every walk ends on a promenade band (shares its whole width with the band's outer edge) and stays inside the plaza's verge
+	local loose = nil
+	for i = 1, 6 do
+		local w = paths["Walk" .. i]
+		local ok = false
+		for _, band in ipairs({ "PromenadeNorth", "PromenadeSouth", "PromenadeWest", "PromenadeEast" }) do
+			local b = paths[band]
+			if w and b then
+				local alongX = math.min(w.x1, b.x1) - math.max(w.x0, b.x0)
+				local alongZ = math.min(w.z1, b.z1) - math.max(w.z0, b.z0)
+				if (math.abs(w.x1 - b.x0) < 0.01 or math.abs(b.x1 - w.x0) < 0.01) and alongZ >= R.walkWidth - 0.01 then ok = true end
+				if (math.abs(w.z1 - b.z0) < 0.01 or math.abs(b.z1 - w.z0) < 0.01) and alongX >= R.walkWidth - 0.01 then ok = true end
+			end
+		end
+		if not ok then loose = loose or ("Walk" .. i) end
+	end
+	check("ring garden: every walk ends on the promenade, its whole width on the band's outer edge", loose == nil, loose)
+	-- four beds, each with four kerbs, inside the promenade's inner edge and 4 or more from every path
+	local ground = world:FindFirstChild("Ground")
+	local beds, badBed, kerbs = 0, nil, 0
+	for _, part in ipairs(ground and ground:GetChildren() or {}) do
+		if string.sub(part.Name, 1, 3) == "Bed" then
+			beds += 1
+			local b = rectOf(part)
+			local inner = H - R.promenade.inset - R.promenade.width
+			if b.x0 < cx - inner or b.x1 > cx + inner or b.z0 < cz - inner or b.z1 > cz + inner then badBed = badBed or (part.Name .. " reaches the promenade") end
+			for name, r in pairs(paths) do
+				local gx = math.max(r.x0 - b.x1, b.x0 - r.x1)
+				local gz = math.max(r.z0 - b.z1, b.z0 - r.z1)
+				if math.max(gx, gz) < 4 - 1e-9 then badBed = badBed or (part.Name .. " is " .. string.format("%.1f", math.max(gx, gz)) .. " from " .. name) end
+			end
+		end
+	end
+	for _, part in ipairs(world:FindFirstChild("Kerbs"):GetChildren()) do if string.sub(part.Name, 1, 7) == "KerbBed" then kerbs += 1 end end
+	check("ring garden: four lawn beds with four kerbs each (" .. beds .. " beds, " .. kerbs .. " kerbs)", beds == 4 and kerbs == 16)
+	check("ring garden: every bed lies inside the promenade and 4 or more from every path (a grass verge)", beds == 4 and badBed == nil, badBed)
+	-- nothing taller than the paving stands on a walking way: the spokes, the promenade, the walks and the forecourt (the
+	-- arch's beam passes high over the south spoke; the square and the fountain's node carry their own furniture)
+	local ways = {}
+	for _, name in ipairs(WAYS) do if paths[name] then table.insert(ways, paths[name]) end end
+	for i = 1, 6 do if paths["Walk" .. i] then table.insert(ways, paths["Walk" .. i]) end end
+	local onWay = nil
+	for _, d in ipairs(world:FindFirstChild("Decor"):GetDescendants()) do
+		if d:IsA("BasePart") then
+			local b = rectOf(d)
+			if b.y1 > 0.25 and b.y0 < 7 then
+				for _, w in ipairs(ways) do
+					if b.x0 < w.x1 - 0.01 and w.x0 < b.x1 - 0.01 and b.z0 < w.z1 - 0.01 and w.z0 < b.z1 - 0.01 then
+						onWay = onWay or (d.Parent.Name .. "." .. d.Name .. " on " .. w.name)
+					end
+				end
+			end
+		end
+	end
+	check("ring garden: no lamp, bench, sign, bush, planter, tree or fountain stands on a spoke, the promenade, a walk or the forecourt", onWay == nil, onWay)
+	-- the fountain: every part of it on the node's paving
+	local fountain, node, offNode, fparts = world:FindFirstChild("Fountain", true), paths.FountainNode, nil, 0
+	for _, d in ipairs(fountain and fountain:GetChildren() or {}) do
+		fparts += 1
+		local b = rectOf(d)
+		if not node or b.x0 < node.x0 or b.x1 > node.x1 or b.z0 < node.z0 or b.z1 > node.z1 then offNode = offNode or d.Name end
+	end
+	check("ring garden: the fountain stands on the north spoke's node, every part of it on the node's paving", fparts >= 4 and offNode == nil, offNode or fparts)
+	-- the spokes: two lamps and two benches each; every bench faces the paving next to it (seat in front of its back)
+	local count, facing = {}, nil
+	for _, m in ipairs(world:FindFirstChild("Decor"):GetChildren()) do
+		for _, kind in ipairs({ "SpokeLamp", "SpokeBench" }) do
+			if string.sub(m.Name, 1, #kind) == kind then count[kind] = (count[kind] or 0) + 1 end
+		end
+		if string.sub(m.Name, 1, 10) == "SpokeBench" or string.sub(m.Name, 1, 10) == "PlazaBench" then
+			local seat, back = m:FindFirstChild("BenchSeat"), m:FindFirstChild("BenchBack")
+			local s, k = rectOf(seat), rectOf(back)
+			local sx, sz = (s.x0 + s.x1) / 2, (s.z0 + s.z1) / 2
+			local dx, dz = sx - (k.x0 + k.x1) / 2, sz - (k.z0 + k.z1) / 2
+			-- 4 studs in front of the seat is paving (a spoke, the node or the square)
+			local px, pz = sx + dx / math.max(math.abs(dx), math.abs(dz)) * 4, sz + dz / math.max(math.abs(dx), math.abs(dz)) * 4
+			local paved = false
+			for _, r in pairs(paths) do
+				if px > r.x0 and px < r.x1 and pz > r.z0 and pz < r.z1 then paved = true end
+			end
+			if not paved then facing = facing or m.Name end
+		end
+	end
+	check("ring garden: every spoke has two lamps and two benches (" .. tostring(count.SpokeLamp) .. " lamps, " .. tostring(count.SpokeBench) .. " benches)",
+		count.SpokeLamp == 8 and count.SpokeBench == 8)
+	check("ring garden: every bench on the plaza faces paving (4 studs in front of its seat is a spoke, the node or the square)", facing == nil, facing)
+end)
 print_real(string.format("%d passed, %d failed", passed, failed))
 '''
 
@@ -2500,12 +2630,21 @@ RING_MUTANTS = [
     ("a corner gap under 6 (garage 3 moved 3 studs toward garage 2 on both axes)", "LobbyConfig.lua", "{ x = -45, z = 300, turn = 180 }", "{ x = -48, z = 297, turn = 180 }", "ring: every lot is 6 or more"),
     ("a lot off the Baseplate (garage 6 at x 1000)", "LobbyConfig.lua", "{ x = 125, z = 130, turn = 270 }", "{ x = 1000, z = 130, turn = 270 }", "ring: every lot is on the Baseplate"),
     ("a garage facing away from the plaza", "LobbyConfig.lua", "{ x = -125, z = 130, turn = 90 }", "{ x = -125, z = 130, turn = 270 }", "ring: every garage faces the plaza"),
-    ("a lamp standing in a doorway (the walk lamps at x 0)", "WorldArt.lua", "lamp = { x = -18, z = 42 }", "lamp = { x = 0, z = 38 }", "ring: no world part stands in a doorway lane"),
-    ("the spawn pad covered (a bench on it)", "WorldArt.lua", "benches = { { -18, 0, 90 },", "benches = { { 0, 0, 0 }, { -18, 0, 90 },", "ring world: the lounge, its door"),
+    ("a lamp standing in a doorway (the walk lamps at x 0)", "WorldArt.lua", "lamp = { x = -18, z = 37 }", "lamp = { x = 0, z = 37 }", "ring: no world part stands in a doorway lane"),
+    ("the spawn pad covered (a bench on it)", "WorldArt.lua", "benches = { { -17, -9, 90 },", "benches = { { 0, 0, 0 }, { -17, -9, 90 },", "ring world: the lounge, its door"),
     ("the ring's lot smaller than PlotBuilding's", "WorldArt.lua", "lot = { half = 41.3, front = 32.3, back = -54.3, top = 120 },", "lot = { half = 36, front = 32.3, back = -54.3, top = 120 },", "ring copied: WorldArt.Ring.lot"),
     ("the walks start at the floor's edge, not the front wall", "WorldArt.lua", "frontLine = 32.2,", "frontLine = 30,", "ring copied: the facade strip"),
     ("a tree inside a lot (the gap trees moved)", "WorldArt.lua", "gapTrees = { { -140, 175 }, { 140, 175 } },", "gapTrees = { { -140, 160 }, { 140, 175 } },", "ring world: every named check passes"),
     ("the ring world over its budget (the ring budget lowered to 100)", "WorldArt.lua", "ringParts = 480", "ringParts = 100", "ring world: every named check passes"),
+    # the plaza garden (world-ring-plaza)
+    ("a bed reaching the spokes (bed from 2)", "WorldArt.lua", "bed = { from = 26, to = 72 },", "bed = { from = 2, to = 72 },", "ring garden: every bed lies inside the promenade"),
+    ("a bed short of its kerbs (the east kerb left out)", "WorldVisuals.lua", '\t\trect(plan.kerbs, "KerbBed" .. name .. "East", bx1, bx1 + kw, bz0, bz1)\n', "", "ring garden: four lawn beds with four kerbs"),
+    ("the spoke lamps and benches on the spoke's edge (no gap)", "WorldArt.lua", "benchGap = 3,", "benchGap = 0,", "ring garden: no lamp, bench, sign"),
+    ("a garage's number sign back on the promenade (z 42)", "WorldArt.lua", "sign = { x = 18, z = 37 }", "sign = { x = 18, z = 42 }", "ring garden: no lamp, bench, sign"),
+    ("the benches turned away from their spoke", "WorldVisuals.lua", "local fx, fz = -side * oz, side * ox", "local fx, fz = side * oz, -side * ox", "ring garden: every bench on the plaza faces paving"),
+    ("the fountain moved off its node", "WorldVisuals.lua", 'item("Fountain", "Fountain", cx, cz + nd.z)', 'item("Fountain", "Fountain", cx + 12, cz + nd.z)', "ring garden: the fountain stands"),
+    ("the walks stop at the plaza's edge (not on to the promenade)", "WorldVisuals.lua", "\t\tfar += R.promenade.inset\n", "", "ring garden: every walk ends on the promenade"),
+    ("one spoke without its lamps", "WorldArt.lua", "spokeLamps = { { 30, 1 }, { 66, -1 } },", "spokeLamps = { { 30, 1 } },", "ring garden: every spoke has two lamps"),
     ("the zones forget the ring's lots (only the row's plots)", "WorldVisuals.lua", "\tif site.ring then\n\t\t-- The ring: each garage's whole lot", "\tif false then\n\t\t-- The ring: each garage's whole lot", "ring world: a part dropped inside a garage's lot"),
 ]
 
@@ -2581,7 +2720,7 @@ def main():
         total += int(m.group(1)) if m else 0
     if os.path.exists(os.path.join(ROOT, "docs", "STUDIO_SYNC_WORLD.md")) and "## (d) Hash check (command bar)" in read("docs/STUDIO_SYNC_WORLD.md"):
         result = run_luau(luau, hash_source())
-        print("Hash block (docs/STUDIO_SYNC_WORLD.md) on the real files: " + (result.stdout.strip() or result.stderr.strip()))
+        print("Hash block (docs/STUDIO_SYNC_WORLD.md) on the files at " + SYNC_HISTORY + ": " + (result.stdout.strip() or result.stderr.strip()))
         m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
         if not m or m.group(2) != "0":
             code = 1

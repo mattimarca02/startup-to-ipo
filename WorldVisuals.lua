@@ -401,8 +401,8 @@ function WorldVisuals.layout(art, site)
 	return plan
 end
 
--- The ring's layout (lobby L4): the plaza around the spawn pad, a walk from each garage's door to the plaza, the forecourt
--- to the lounge's door, and the decor. Same plan as layout(): paths, kerbs, ground, items, hills.
+-- The ring's layout (lobby L4, garden: world-ring-plaza): the plaza garden around the spawn pad, a walk from each garage's
+-- door to its promenade, the forecourt to the lounge's door, and the decor. Same plan as layout(): paths, kerbs, ground, items, hills.
 function WorldVisuals.ringLayout(art, site)
 	local R, L = art.Ring, art.Layout
 	local plan = { paths = {}, kerbs = {}, ground = {}, items = {}, hills = {} }
@@ -418,25 +418,86 @@ function WorldVisuals.ringLayout(art, site)
 		end
 		table.insert(plan.items, it)
 	end
-	local trees = { "TreeA", "TreeB", "TreeC" }
-	-- The plaza: four slabs around the spawn pad and its bare margin
+	-- The plaza garden (world-ring-plaza): a paved square around the spawn pad, four spokes out of it, a promenade along
+	-- the plaza's edges that every walk joins, a lawn bed in each quarter. Its numbers are from the plaza's center.
 	local pz, sp = R.plaza, site.spawn
-	local x0, x1, z0, z1 = pz.x - pz.half, pz.x + pz.half, pz.z - pz.half, pz.z + pz.half
+	local cx, cz = pz.x, pz.z
+	local x0, x1, z0, z1 = cx - pz.half, cx + pz.half, cz - pz.half, cz + pz.half
+	local Q, s = R.square, R.spokeWidth / 2
+	local pin = pz.half - R.promenade.inset -- the promenade's outer edge, from the center
+	local pout = pin - R.promenade.width -- its inner edge
+	-- The square: four slabs around the spawn pad and its bare margin
 	local hx, hz = sp.halfX + L.spawnMargin, sp.halfZ + L.spawnMargin
-	rect(plan.paths, "PlazaSouth", x0, x1, z0, sp.z - hz, "Plaza")
-	rect(plan.paths, "PlazaNorth", x0, x1, sp.z + hz, z1, "Plaza")
-	rect(plan.paths, "PlazaWest", x0, sp.x - hx, sp.z - hz, sp.z + hz, "Plaza")
-	rect(plan.paths, "PlazaEast", sp.x + hx, x1, sp.z - hz, sp.z + hz, "Plaza")
-	-- The forecourt: from the lounge's front (and its margin) to the plaza
+	rect(plan.paths, "PlazaSouth", cx - Q, cx + Q, cz - Q, sp.z - hz, "Plaza")
+	rect(plan.paths, "PlazaNorth", cx - Q, cx + Q, sp.z + hz, cz + Q, "Plaza")
+	rect(plan.paths, "PlazaWest", cx - Q, sp.x - hx, sp.z - hz, sp.z + hz, "Plaza")
+	rect(plan.paths, "PlazaEast", sp.x + hx, cx + Q, sp.z - hz, sp.z + hz, "Plaza")
+	-- The spokes (the north one broken by the fountain's node) and the node
+	local nd = R.node
+	rect(plan.paths, "SpokeNorth", cx - s, cx + s, cz + Q, cz + nd.z - nd.half, "Path")
+	rect(plan.paths, "FountainNode", cx - nd.half, cx + nd.half, cz + nd.z - nd.half, cz + nd.z + nd.half, "Plaza")
+	rect(plan.paths, "SpokeNorthOuter", cx - s, cx + s, cz + nd.z + nd.half, cz + pout, "Path")
+	rect(plan.paths, "SpokeSouth", cx - s, cx + s, cz - pout, cz - Q, "Path")
+	rect(plan.paths, "SpokeWest", cx - pout, cx - Q, cz - s, cz + s, "Path")
+	rect(plan.paths, "SpokeEast", cx + Q, cx + pout, cz - s, cz + s, "Path")
+	-- The promenade: the north and south bands run its whole width, the west and east ones fit between them
+	rect(plan.paths, "PromenadeNorth", cx - pin, cx + pin, cz + pout, cz + pin, "Path")
+	rect(plan.paths, "PromenadeSouth", cx - pin, cx + pin, cz - pin, cz - pout, "Path")
+	rect(plan.paths, "PromenadeWest", cx - pin, cx - pout, cz - pout, cz + pout, "Path")
+	rect(plan.paths, "PromenadeEast", cx + pout, cx + pin, cz - pout, cz + pout, "Path")
+	-- The forecourt: from the lounge's front (and its margin) to the promenade
 	local lg = site.lounge
-	rect(plan.paths, "Forecourt", lg.x - R.forecourt.half, lg.x + R.forecourt.half, lg.front + L.loungeMargin, z0, "Plaza")
-	-- Each garage: its walk from the front wall to the plaza's edge, its number, a lamp, two bushes
+	rect(plan.paths, "Forecourt", lg.x - R.forecourt.half, lg.x + R.forecourt.half, lg.front + L.loungeMargin, cz - pin, "Plaza")
+	-- The four lawn beds, each with a kerb round it: one quarter's numbers, flipped by the quarter's signs
+	local kw = L.kerbWidth
+	local quarters = { { -1, -1, "SouthWest" }, { 1, -1, "SouthEast" }, { -1, 1, "NorthWest" }, { 1, 1, "NorthEast" } }
+	local bf, bt = R.bed.from, R.bed.to
+	for _, q in ipairs(quarters) do
+		local qx, qz, name = q[1], q[2], q[3]
+		local bx0, bx1 = cx + math.min(qx * bf, qx * bt), cx + math.max(qx * bf, qx * bt)
+		local bz0, bz1 = cz + math.min(qz * bf, qz * bt), cz + math.max(qz * bf, qz * bt)
+		rect(plan.ground, "Bed" .. name, bx0, bx1, bz0, bz1, "Lawn")
+		rect(plan.kerbs, "KerbBed" .. name .. "South", bx0 - kw, bx1 + kw, bz0 - kw, bz0)
+		rect(plan.kerbs, "KerbBed" .. name .. "North", bx0 - kw, bx1 + kw, bz1, bz1 + kw)
+		rect(plan.kerbs, "KerbBed" .. name .. "West", bx0 - kw, bx0, bz0, bz1)
+		rect(plan.kerbs, "KerbBed" .. name .. "East", bx1, bx1 + kw, bz0, bz1)
+		for k, t in ipairs(R.bedTrees) do
+			item(t[3], "BedTree" .. name .. k, cx + qx * t[1], cz + qz * t[2])
+		end
+		for k, b in ipairs(R.bedBushes) do
+			item("Bush", "BedBush" .. name .. k, cx + qx * b[1], cz + qz * b[2])
+		end
+		item("Planter", "BedPlanter" .. name, cx + qx * R.bedPlanter[1], cz + qz * R.bedPlanter[2])
+	end
+	-- Along each spoke: two unlit lamps and two benches facing it. A spoke is { name, out x, out z }: a point "out"
+	-- along it and "side" across it (side +1 = to the right, walking out) is at(out, side).
+	for _, sk in ipairs({ { "North", 0, 1 }, { "South", 0, -1 }, { "West", -1, 0 }, { "East", 1, 0 } }) do
+		local name, ox, oz = sk[1], sk[2], sk[3]
+		local function at(out, side)
+			return cx + ox * out + oz * side, cz + oz * out - ox * side
+		end
+		for k, l in ipairs(R.spokeLamps) do
+			local lx, lz = at(l[1], l[2] * (s + R.benchGap))
+			item("Lamp", "SpokeLamp" .. name .. k, lx, lz, 0)
+		end
+		local edge = name == "North" and nd.half or s -- the north spoke's benches face the fountain's node
+		for k, side in ipairs({ 1, -1 }) do
+			local bx, bz = at(R.spokeBench, side * (edge + R.benchGap))
+			-- a bench faces +Z at yaw 0 and +X at 90: this one faces back across the spoke, (-side) * the side direction
+			local fx, fz = -side * oz, side * ox
+			local yaw = (fx > 0 and 90) or (fx < 0 and -90) or (fz > 0 and 0) or 180
+			item("Bench", "SpokeBench" .. name .. k, bx, bz, yaw)
+		end
+	end
+	item("Fountain", "Fountain", cx, cz + nd.z)
+	-- Each garage: its walk from the front wall across the grass verge to the promenade, its number, a lamp, two bushes
 	for i, p in ipairs(site.plots) do
 		local w = R.walkWidth / 2
 		local far = 0
-		-- how far out the walk goes: to the plaza's edge on this garage's side
+		-- how far out the walk goes: to the plaza's edge on this garage's side, then on to the promenade
 		local fx, fz = toWorld(p, 0, R.frontLine)
 		if p.turn == 90 then far = x0 - fx elseif p.turn == 270 then far = fx - x1 elseif p.turn == 180 then far = fz - z1 else far = z0 - fz end
+		far += R.promenade.inset
 		local wx0, wx1, wz0, wz1 = boxToWorld(p, -w, w, R.frontLine, R.frontLine + math.max(far, 0))
 		rect(plan.paths, "Walk" .. i, wx0, wx1, wz0, wz1, "Walk")
 		local yaw = p.turn or 0
@@ -449,7 +510,7 @@ function WorldVisuals.ringLayout(art, site)
 			item("Bush", "FacadeBush" .. i .. "_" .. k, bx, bz, yaw)
 		end
 	end
-	-- On the plaza: four lit lamps around the spawn pad, benches facing it, planters, the arch, trees at its corners
+	-- On the square: four lit lamps around the spawn pad, benches facing it, planters, the arch over the south spoke
 	local d = R.litLamps
 	for i, c in ipairs({ { -d, -d }, { d, -d }, { -d, d }, { d, d } }) do
 		item("Lamp", "PlazaLamp" .. i, sp.x + c[1], sp.z + c[2], 0, { lit = true })
@@ -461,9 +522,6 @@ function WorldVisuals.ringLayout(art, site)
 		item("Planter", "PlazaPlanter" .. i, sp.x + c[1], sp.z + c[2])
 	end
 	item("Arch", "WelcomeArch", sp.x + R.arch.x, sp.z + R.arch.z)
-	for i, c in ipairs(R.trees) do
-		item(trees[(i - 1) % #trees + 1], "PlazaTree" .. i, pz.x + c[1], pz.z + c[2])
-	end
 	for i, c in ipairs(R.gapTrees) do
 		item("TreeB", "GapTree" .. i, c[1], c[2]) -- the smallest crown (6): the gap between two lots is 7.4
 	end
@@ -811,7 +869,7 @@ function WorldVisuals.validate(art)
 				end
 			end
 		end
-		for _, needed in ipairs({ "Lamp", "TreeA", "TreeB", "TreeC", "Bush", "Hedge", "Bench", "Planter", "Sign", "Arch" }) do
+		for _, needed in ipairs({ "Lamp", "TreeA", "TreeB", "TreeC", "Bush", "Hedge", "Bench", "Planter", "Sign", "Arch", "Fountain" }) do
 			if type(art.Pieces[needed]) ~= "table" or #art.Pieces[needed] == 0 then
 				problem("Pieces." .. needed .. ": missing")
 			end
