@@ -30,7 +30,7 @@ Studio steps: below (paste WorldArt and WorldVisuals; nothing visible with the c
 
 Later run (2026-10-17, manual fire asking for the first item): the backlog and item 1 were already done in PR #37, and a lane keeps one PR open at a time, so nothing new was built. I rebased #37 on main 9cf4d4e (only lane files had changed; world 380 checks, 101/101 mutants, hashes unchanged). No requests to the world lane, no review verdict yet; gameplay's lobby_test fix is not merged yet.
 
-Check-in 17:07 UTC: no review or comment on #37 yet. Main gained PR #34 (kit front 180) and #39, so I rebased #37 on 1257fe8: world 380 checks, 101/101 mutants, previews up to date; lobby still has only the 6 expected doc-hash failures, which gameplay's PR #38 fixes once merged (its pin then has to include #37's files or be moved after it; quality's batch carries the new hashes, from "Studio steps" below).
+Check-in 17:07 UTC: no review or comment on #37 yet. Main gained PR #34 (kit front 180) and #39, so I rebased #37 on 1257fe8: world 380 checks, 101/101 mutants, previews up to date; lobby still has only the 6 expected doc-hash failures, which gameplay's PR #38 fixes once merged (it checks that doc against fb8c057, where WorldArt and WorldVisuals are still the old files; quality's batch carries the new hashes, from "Studio steps" below).
 
 ## Requests to other lanes
 
