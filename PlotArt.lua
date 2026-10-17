@@ -83,7 +83,7 @@ PlotArt.Layout = {
 -- height (Y), depth (Z) }, roles = the model's MeshParts (one per role), fallback = its Parts version: boxes { role,
 -- size, at (center), shape } in the model's own frame (bottom-center, front +Z), inside its size, each role at least once.
 PlotArt.KIT_FOLDER = "KitModels" -- ReplicatedStorage.KitModels.<Key>
-PlotArt.KIT_FRONT_TURN = 0 -- the importer's turn: always the same as PlotBuilding.KIT_FRONT_TURN (tools/daily_test.py checks)
+PlotArt.KIT_FRONT_TURN = 180 -- the importer's turn: always the same as PlotBuilding.KIT_FRONT_TURN (tools/daily_test.py checks)
 
 local function box(role, w, h, d, x, y, z, shape)
 	return { role = role, size = { w, h, d }, at = { x, y, z }, shape = shape }

@@ -4552,12 +4552,15 @@ do
 		end
 		return room
 	end
+	-- The importer's turn: the kit as imported is turned by PlotArt.KIT_FRONT_TURN (the builder turns it back); the other
+	-- value is tested too, so the builder is right whichever way Studio's importer turned the models
+	local IMPORT = PlotArt.KIT_FRONT_TURN
 	local turned = deepCopy(PlotArt)
-	turned.KIT_FRONT_TURN = 180
+	turned.KIT_FRONT_TURN = 180 - IMPORT
 	local modes = {
-		{ "the kit (each role one MeshPart, as imported)", PlotArt, makeKit(0, "union") },
-		{ "the kit with every role filling the whole model (worst case)", PlotArt, makeKit(0, "full") },
-		{ "the kit imported turned around (KIT_FRONT_TURN 180)", turned, makeKit(180, "union") },
+		{ "the kit (each role one MeshPart, as imported)", PlotArt, makeKit(IMPORT, "union") },
+		{ "the kit with every role filling the whole model (worst case)", PlotArt, makeKit(IMPORT, "full") },
+		{ "the kit imported the other way (KIT_FRONT_TURN " .. (180 - IMPORT) .. ")", turned, makeKit(180 - IMPORT, "union") },
 		{ "no kit (Parts only)", PlotArt, nil },
 	}
 	-- Every room, in every mode: the same checks as the Parts rooms (zones, floating, walls, flags, 260 parts, 3 lights)
@@ -4651,7 +4654,7 @@ do
 				end
 			end
 		end
-		check("kit: room " .. i .. ": a kit model as imported and one imported turned around (KIT_FRONT_TURN 180) put each part where the Parts version has it", moved == nil, moved)
+		check("kit: room " .. i .. ": a kit model as imported and one imported the other way (the other KIT_FRONT_TURN) put each part where the Parts version has it", moved == nil, moved)
 	end
 	check("kit: the rooms have kit pieces to test (the Garage at least)", pieceCount > 0, pieceCount)
 
@@ -4682,9 +4685,10 @@ do
 		check("garage with " .. mode[1] .. ": two PointLights (the bulb and the old PC)", lights == 2, lights)
 	end
 
-	-- Kit problems never stop a room: the piece is built from Parts, with one warning per model per server
+	-- Kit problems never stop a room: the piece is built from Parts, with one warning per model per server. Each case runs
+	-- inside pcall: a build that errors is a named failure here (in the game, looks() would leave the plot without a room)
 	local function buildWith(edit, art)
-		local kit = makeKit(0, "union", edit)
+		local kit = makeKit(IMPORT, "union", edit)
 		return kitRoom(art or PlotArt, 1, kit), kit
 	end
 	local function warnings(word)
@@ -4696,56 +4700,83 @@ do
 		local p = room:FindFirstChild("Decor"):FindFirstChild(name)
 		return p ~= nil and p.ClassName == "Part"
 	end
-	WARNED = {}
-	local room = buildWith(function(f) f:FindFirstChild("Workbench"):Destroy() end)
-	buildWith(function(f) f:FindFirstChild("Workbench"):Destroy() end)
-	check("kit: a missing model (Workbench) is built from Parts, with one warning even when the room is built twice",
-		isParts(room, "Workbench_main") and room:FindFirstChild("Decor"):FindFirstChild("OldDesk_main").ClassName == "MeshPart" and warnings("Workbench") == 1, warnings("Workbench"))
-	WARNED = {}
-	room = buildWith(function(f) f:FindFirstChild("Chair"):FindFirstChildOfClass("MeshPart").Archivable = false end)
-	local leftover = 0
-	for _, d in ipairs(room:GetDescendants()) do if d.ClassName == "MeshPart" and string.find(d.Name, "OldChair", 1, true) == 1 then leftover += 1 end end
-	check("kit: a MeshPart that can't be copied (Archivable off): its piece is built from Parts, nothing of the kit copy is left, one warning",
-		isParts(room, "OldChair_main") and leftover == 0 and warnings("Chair") == 1, warnings("Chair"))
-	WARNED = {}
-	room = buildWith(function(f)
-		local s = newInstance("Script") s.Name = "Sneaky" s.Parent = f:FindFirstChild("BareBulb")
-	end)
-	local sneaky = false
-	for _, d in ipairs(room:GetDescendants()) do if d.Name == "Sneaky" or d.ClassName == "Script" then sneaky = true end end
-	check("kit: something that isn't a MeshPart inside a model is left out (one warning); the piece still comes from the kit",
-		not sneaky and room:FindFirstChild("Decor"):FindFirstChild("Bulb_glass").ClassName == "MeshPart" and warnings("Sneaky") == 1)
-	WARNED = {}
-	room = buildWith(function(f) f:FindFirstChild("Desk"):FindFirstChildOfClass("MeshPart"):SetAttribute("Role", "mian") end)
-	check("kit: a MeshPart with a role the piece has no color for: the piece is built from Parts (one warning)", isParts(room, "OldDesk_main") and warnings("mian") == 1)
-	WARNED = {}
-	room = buildWith(function(f)
-		local p = f:FindFirstChild("Crate"):FindFirstChildOfClass("MeshPart")
-		p.CFrame = p.CFrame * CFrame.Angles(0, math.rad(30), 0)
-	end)
-	local hire = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
-	check("kit: a part turned inside its model can't be scaled unevenly (the hire's crate): built from Parts; the evenly scaled crates still use the kit",
-		hire:FindFirstChild("Crate_main").ClassName == "Part" and hire:FindFirstChild("Crate_trim").ClassName == "Part"
-		and room:FindFirstChild("Decor"):FindFirstChild("JunkCrateLow_main").ClassName == "MeshPart")
-	room = buildWith(function(f)
-		local m = f:FindFirstChild("Workbench")
-		for _, p in ipairs(m:GetChildren()) do
-			local rel = m.WorldPivot:ToObjectSpace(p.CFrame)
-			local x, y, z = rel:GetComponents()
-			p.Size = Vector3.new(p.Size.X * 1.1, p.Size.Y * 1.1, p.Size.Z * 1.1)
-			p.CFrame = m.WorldPivot * CFrame.new(x * 1.1, y * 1.1, z * 1.1) * rel.Rotation
-		end
-		m:SetAttribute("KitSize", Vector3.new(8.8, 4.4, 4.4))
-	end)
-	local wb = PlotVisuals.kitBox(PlotArt, bench)
-	local fits = true
-	for _, d in ipairs(room:FindFirstChild("Decor"):GetChildren()) do
-		if string.find(d.Name, "Workbench_", 1, true) == 1 then
-			local b = PlotVisuals.boxOf(origin:ToObjectSpace(d.CFrame), d.Size)
-			if d.ClassName ~= "MeshPart" or b[1] < wb[1] - 1e-6 or b[2] > wb[2] + 1e-6 or b[4] > wb[4] + 1e-6 or b[6] > wb[6] + 1e-6 then fits = false end
-		end
+	local function case(name, fn)
+		WARNED = {}
+		local ok, result = pcall(fn)
+		check(name, ok and result == true, not ok and result or nil)
 	end
-	check("kit: a model a little bigger than the manifest (KitSize 8.8 x 4.4 x 4.4) is fitted to its size: the workbench stays in its kitBox", fits)
+	case("kit: a missing model (Workbench) is built from Parts, with one warning even when the room is built twice", function()
+		local room = buildWith(function(f) f:FindFirstChild("Workbench"):Destroy() end)
+		buildWith(function(f) f:FindFirstChild("Workbench"):Destroy() end)
+		return isParts(room, "Workbench_main") and room:FindFirstChild("Decor"):FindFirstChild("OldDesk_main").ClassName == "MeshPart" and warnings("Workbench") == 1
+	end)
+	case("kit: a MeshPart that can't be copied (Archivable off): its piece is built from Parts, nothing of the kit copy is left, one warning", function()
+		local room = buildWith(function(f) f:FindFirstChild("Chair"):FindFirstChildOfClass("MeshPart").Archivable = false end)
+		local leftover = 0
+		for _, d in ipairs(room:GetDescendants()) do if d.ClassName == "MeshPart" and string.find(d.Name, "OldChair", 1, true) == 1 then leftover += 1 end end
+		return isParts(room, "OldChair_main") and leftover == 0 and warnings("Chair") == 1
+	end)
+	case("kit: something that isn't a MeshPart inside a model is left out (one warning); the piece still comes from the kit", function()
+		local room = buildWith(function(f)
+			local x = newInstance("Script") x.Name = "Sneaky" x.Parent = f:FindFirstChild("BareBulb")
+		end)
+		local sneaky = false
+		for _, d in ipairs(room:GetDescendants()) do if d.Name == "Sneaky" or d.ClassName == "Script" then sneaky = true end end
+		return not sneaky and room:FindFirstChild("Decor"):FindFirstChild("Bulb_glass").ClassName == "MeshPart" and warnings("Sneaky") == 1
+	end)
+	case("kit: a MeshPart with a role the piece has no color for: the piece is built from Parts (one warning)", function()
+		local room = buildWith(function(f) f:FindFirstChild("Desk"):FindFirstChildOfClass("MeshPart"):SetAttribute("Role", "mian") end)
+		return isParts(room, "OldDesk_main") and warnings("mian") == 1
+	end)
+	case("kit: a part turned inside its model can't be scaled unevenly (the hire's crate): built from Parts; the evenly scaled crates still use the kit", function()
+		local room = buildWith(function(f)
+			local p = f:FindFirstChild("Crate"):FindFirstChildOfClass("MeshPart")
+			p.CFrame = p.CFrame * CFrame.Angles(0, math.rad(30), 0)
+		end)
+		local hire = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
+		return hire:FindFirstChild("Crate_main").ClassName == "Part" and hire:FindFirstChild("Crate_trim").ClassName == "Part"
+			and room:FindFirstChild("Decor"):FindFirstChild("JunkCrateLow_main").ClassName == "MeshPart"
+	end)
+	case("kit: a model a little bigger than the manifest (KitSize 8.8 x 4.4 x 4.4) is fitted to its size: the workbench stays in its kitBox", function()
+		local room = buildWith(function(f)
+			local m = f:FindFirstChild("Workbench")
+			for _, p in ipairs(m:GetChildren()) do
+				local rel = m.WorldPivot:ToObjectSpace(p.CFrame)
+				local x, y, z = rel:GetComponents()
+				p.Size = Vector3.new(p.Size.X * 1.1, p.Size.Y * 1.1, p.Size.Z * 1.1)
+				p.CFrame = m.WorldPivot * CFrame.new(x * 1.1, y * 1.1, z * 1.1) * rel.Rotation
+			end
+			m:SetAttribute("KitSize", Vector3.new(8.8, 4.4, 4.4))
+		end)
+		local wb = PlotVisuals.kitBox(PlotArt, bench)
+		local fits, n = true, 0
+		for _, d in ipairs(room:FindFirstChild("Decor"):GetChildren()) do
+			if string.find(d.Name, "Workbench_", 1, true) == 1 then
+				n += 1
+				local b = PlotVisuals.boxOf(origin:ToObjectSpace(d.CFrame), d.Size)
+				if d.ClassName ~= "MeshPart" or b[1] < wb[1] - 1e-6 or b[2] > wb[2] + 1e-6 or b[4] > wb[4] + 1e-6 or b[6] > wb[6] + 1e-6 then fits = false end
+			end
+		end
+		return fits and n == 4
+	end)
+	-- A quarter turn swaps width and depth: a workbench (8 x 4) turned 90 is 4 wide, from the kit and from Parts
+	local wb90 = PlotVisuals.kitBox(PlotArt, { kit = "Workbench", offset = { 1, 0, 2 }, turn = 90, scale = 1 })
+	check("kit: kitBox of a workbench turned 90 is 4 wide (X) and 8 deep (Z)", math.abs(wb90[1] + 1) < 1e-9 and math.abs(wb90[2] - 3) < 1e-9 and math.abs(wb90[5] + 2) < 1e-9 and math.abs(wb90[6] - 6) < 1e-9
+		and wb90[3] == 0 and wb90[4] == 4)
+	for _, mode in ipairs(modes) do
+		case("kit: a workbench turned 90 stays inside its kitBox with " .. mode[1], function()
+			local model = newInstance("Model")
+			local spec = { name = "Turned", kit = "Workbench", offset = { 1, 0, 2 }, turn = 90, roles = bench.roles }
+			PlotVisuals.buildKitPiece(model, origin, spec, mode[2], mode[3])
+			local n = 0
+			for _, d in ipairs(model:GetChildren()) do
+				n += 1
+				local b = PlotVisuals.boxOf(origin:ToObjectSpace(d.CFrame), d.Size)
+				if b[1] < wb90[1] - 1e-6 or b[2] > wb90[2] + 1e-6 or b[5] < wb90[5] - 1e-6 or b[6] > wb90[6] + 1e-6 then return false end
+			end
+			return n > 0
+		end)
+	end
 	local folder = newInstance("Folder")
 	folder.Parent = ROOT
 	local floor = newInstance("Part")
@@ -4753,7 +4784,7 @@ do
 	floor.Size = Vector3.new(60, 1, 60)
 	floor.CFrame = CFrame.new(center)
 	floor.Parent = folder
-	local kit = makeKit(0, "union")
+	local kit = makeKit(IMPORT, "union")
 	local plot = PlotVisuals.newPlot(folder, center, PlotArt, floor, 2, kit)
 	PlotVisuals.setStage(plot, 1, false)
 	check("kit: newPlot keeps the kit it is given, and setStage builds the next room with it", plot.kit == kit
@@ -7751,6 +7782,56 @@ def visuals_expected_lua():
         buy.group(1), buy.group(2), ipo.group(1), ipo.group(2), spawn.group(1), spawn.group(2))
 
 
+# Interiors: broken versions of PlotVisuals' kit builder. Each must be caught by the named visuals check (its start).
+VISUALS_KIT_MUTANTS = [
+    ("a kit MeshPart left collidable", "\t\t\tpart.CanCollide = false\n\t\t\tpart.CanQuery = false\n", "\t\t\tpart.CanQuery = false\n",
+     "kit: room 1 with the kit (each role one MeshPart, as imported): PlotVisuals.check finds nothing"),
+    ("the importer's turn ignored", "local target = pieceFrame(base, spec) * CFrame.Angles(0, math.rad(frontTurn), 0)", "local target = pieceFrame(base, spec)",
+     "kit: room 1: a kit model as imported and one imported the other way"),
+    ("a model's KitSize ignored (not fitted to the manifest)", "sx * entry.size[1] / (ok and real.X or entry.size[1]),", "sx,",
+     "kit: a model a little bigger than the manifest"),
+    ("the Parts version not scaled", "size = { b.size[1] * sx, b.size[2] * sy, b.size[3] * sz },", "size = { b.size[1], b.size[2], b.size[3] },",
+     "room 1: no part in a reserved zone"),
+    ("a kit MeshPart not recolored", "\t\t\tpart.Color = rgb(look[1])\n", "",
+     "kit: room 1 with the kit (each role one MeshPart, as imported): every kit piece part has its role's color and material"),
+    ("an uneven scale of a part turned in its model", "return fail(\"a part is not square to the model, so it can't be scaled unevenly\")", "out[axis] = size[axis] * f[axis]",
+     "kit: a part turned inside its model can't be scaled unevenly"),
+    ("no PointLight on a kit bulb", "if spec.light and role == spec.lightRole and seen[role] == 1 then", "if false then",
+     "garage with the kit (each role one MeshPart, as imported): the bulb's glass glows"),
+    ("a MeshPart that can't be copied (Clone gives nil) not handled", "\t\t\tif not part then -- Roblox's Clone gives nil when Archivable is off\n", "\t\t\tif false then\n",
+     "kit: a MeshPart that can't be copied"),
+    ("kitBox ignores a quarter turn", "if (spec.turn or 0) % 180 == 90 then", "if false then",
+     "kit: kitBox of a workbench turned 90"),
+    ("a missing model warned at every build", "\t\twarnOnce(\"kit \" .. spec.kit, \"KitModels.\" .. spec.kit .. \" is missing: the rooms build it from Parts\")",
+     "\t\twarn(\"Plot visuals: KitModels.\" .. spec.kit .. \" is missing: the rooms build it from Parts\")",
+     "kit: a missing model (Workbench) is built from Parts"),
+    ("validate lets any turn through", "if s.turn ~= nil and not PlotVisuals.TURNS[s.turn] then", "if false then",
+     "mutation (kit): a turn that is not a quarter turn is caught"),
+    ("a kit piece built from Parts even with the kit", "\tlocal template = kit and kit:FindFirstChild(spec.kit)\n", "\tlocal template = nil\n",
+     "kit: room 1 with the kit (each role one MeshPart, as imported): every kit piece is built from the kit's MeshParts"),
+    ("newPlot forgets the kit it is given", "kit = kit or PlotVisuals.findKit(art)", "kit = PlotVisuals.findKit(art)",
+     "kit: newPlot keeps the kit it is given"),
+]
+
+
+def run_visuals_kit_mutants(luau, base):
+    """Runs the visuals tests (base: the program with every placeholder but __PLOTVISUALS__ filled) once per mutant."""
+    with open(os.path.join(ROOT, "PlotVisuals.lua"), encoding="utf-8") as f:
+        real = f.read()
+    caught, problems = 0, []
+    for label, old, new, expected in VISUALS_KIT_MUTANTS:
+        if real.count(old) != 1:
+            problems.append("FAIL: the kit mutant '%s' no longer matches PlotVisuals.lua (update VISUALS_KIT_MUTANTS)" % label)
+            continue
+        result = run_luau(luau, base.replace("__PLOTVISUALS__", real.replace(old, new)))
+        verdict = mutant_verdict(result, (expected,), "plot visuals", label)
+        if verdict:
+            problems.append(verdict)
+        else:
+            caught += 1
+    return caught, problems
+
+
 def kit_doc_lua():
     """docs/KIT_MODELS.md's table of the 36 kit models as a Luau table: { Key = { size = { W, H, D }, roles = { ... } } }.
     The doc gives W x D x H; PlotArt.Kit (and PlotBuilding.KitManifest) give width, height, depth."""
@@ -9016,11 +9097,17 @@ def main():
         plot_art = f.read()
     with open(os.path.join(ROOT, "PlotVisuals.lua"), encoding="utf-8") as f:
         plot_visuals = f.read()
-    result18 = run_luau(luau, VISUALS_TESTS.replace("__PLOTART__", plot_art).replace("__PLOTVISUALS__", plot_visuals)
-                        .replace("__IPOCONFIG__", ipo_config).replace("__EXPECTED__", visuals_expected_lua()).replace("__KITDOC__", kit_doc_lua())
-                        .replace("__ALL_STAGES__", "true" if VISUALS_ALL_STAGES else "false"))
+    visuals_base = (VISUALS_TESTS.replace("__PLOTART__", plot_art).replace("__IPOCONFIG__", ipo_config).replace("__EXPECTED__", visuals_expected_lua())
+                    .replace("__KITDOC__", kit_doc_lua()).replace("__ALL_STAGES__", "true" if VISUALS_ALL_STAGES else "false"))
+    result18 = run_luau(luau, visuals_base.replace("__PLOTVISUALS__", plot_visuals))
     print("Plot visuals check (PlotArt + PlotVisuals): " + (result18.stdout.strip() or result18.stderr.strip()))
     if result18.returncode != 0 or " 0 failed" not in result18.stdout:
+        code = 1
+    kit_caught, kit_problems = run_visuals_kit_mutants(luau, visuals_base)
+    for line in kit_problems:
+        print(line)
+    print("Plot visuals kit mutations (interiors): %d of %d caught, each by its named check" % (kit_caught, len(VISUALS_KIT_MUTANTS)))
+    if kit_problems:
         code = 1
     visuals_passed, visuals_failed = visuals_wiring_checks()
     print("Plot visuals wiring check: %d passed, %d failed" % (visuals_passed, visuals_failed))
