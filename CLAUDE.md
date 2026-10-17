@@ -166,6 +166,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
   Then playtest.
 - **If you edit a script in Studio,** write the same source into its `.lua` file.
 - Never push a script into Studio if someone else has claimed it.
+- **Lanes (docs/LANES.md, since 2026-10-17):** six Claude sessions work in parallel, each on the files it owns, one pull request at a time, on its own branch and worktree; a change in another lane's file is a written request in `docs/lanes/<lane>.md`. No lane touches Studio: a merged PR's Studio steps are collected by the quality lane into `docs/STUDIO_SYNC_BATCH.md`, and the owner runs that batch. The older `docs/STUDIO_SYNC_*.md` are history and their hash tables are checked against the commits they were written for, never against today's files.
 
 ## Testing
 
