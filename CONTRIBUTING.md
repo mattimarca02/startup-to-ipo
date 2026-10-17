@@ -163,17 +163,17 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
 | docs/LOBBY_ALL_PROGRESS.md | (repo only) | free | | |
-| PlotBuilding | ServerScriptService | free | | |
-| PlotBuildingVisuals | ServerScriptService | free | | |
+| PlotBuilding | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
+| PlotBuildingVisuals | ServerScriptService | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | BuildingClient | StarterPlayerScripts | free | | |
-| tools/building_test.py | (repo only) | free | | |
+| tools/building_test.py | (repo only) | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | docs/BUILDING_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
 | LobbyConfig | ReplicatedStorage | free | | |
 | LobbyClient | StarterPlayerScripts | free | | |
-| docs/KIT_MODELS.md | (repo only) | free | | |
+| docs/KIT_MODELS.md | (repo only) | building lane (Claude) | building-garage-roof | 2026-10-17 |
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
 | tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
