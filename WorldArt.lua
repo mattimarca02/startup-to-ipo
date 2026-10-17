@@ -126,6 +126,9 @@ WorldArt.Palette = {
 	ArchText = { 255, 196, 60 },
 	Hill = { 104, 162, 92 },
 	HillFar = { 122, 170, 118 },
+	Stone = { 214, 208, 196 }, -- the fountain's stone
+	Water = { 84, 170, 230 },
+	WaterLight = { 160, 214, 246 },
 }
 
 -- Helpers ------------------------------------------------------------------------
@@ -200,6 +203,16 @@ WorldArt.Pieces = {
 		P("ArchBeam", "Block", { 14.4, 1.8, 0.8 }, { 0, 9.9, 0 }, "ArchBeam", "SmoothPlastic",
 			{ text = { value = "BUILD YOUR STARTUP", font = "FredokaOne", color = "ArchText", faces = { "Front", "Back" }, glow = true } }),
 	},
+	-- The plaza's fountain (the ring only): a low stone basin full of water, a pillar with a bowl and a ball of water on
+	-- top. Solid colours only (no glass, no particles); the water's top stands just above the basin's rim.
+	Fountain = {
+		upright("FountainBasin", 0.7, 12, 0, 0, 0, "Stone", "Concrete"),
+		upright("FountainWater", 0.9, 10.4, 0, 0, 0, "Water", "SmoothPlastic"),
+		upright("FountainPillar", 3.2, 1.4, 0, 0, 0, "Stone", "Concrete"),
+		upright("FountainBowl", 0.5, 4.4, 0, 3.2, 0, "Stone", "Concrete"),
+		upright("FountainBowlWater", 0.5, 3.8, 0, 3.3, 0, "Water", "SmoothPlastic"),
+		P("FountainSpout", "Ball", { 1.2, 1.2, 1.2 }, { 0, 4.3, 0 }, "WaterLight", "SmoothPlastic"),
+	},
 }
 
 -- The light of a lit lamp (the layout lights the plaza's four and the forecourt's two): a PointLight in LampGlow
@@ -236,14 +249,31 @@ WorldArt.Ring = {
 	walkWidth = 9, -- as wide as the doorway lane
 	forecourt = { half = 12 }, -- the paving between the lounge's door and the plaza
 	-- Decor, in each garage's frame (x across its front, z out from its floor's center): its number sign and a lamp beside
-	-- the walk, two bushes at the facade's corners
-	sign = { x = 18, z = 42 }, lamp = { x = -18, z = 42 }, bushes = { { -24, 36 }, { 24, 36 } },
-	-- On the plaza (from its center): four lit lamps around the spawn pad, benches facing it, planters, the arch, trees
+	-- the walk, two bushes at the facade's corners, all on the grass verge between the front wall and the promenade
+	sign = { x = 18, z = 37 }, lamp = { x = -18, z = 37 }, bushes = { { -24, 36 }, { 24, 36 } },
+	-- The plaza garden (world-ring-plaza). Every number is from the plaza's center (the spawn pad's), in studs; the four
+	-- quarters are mirror images (x and z signs flipped), so one quarter's numbers draw all four.
+	--   square     the paved square around the spawn pad: this half-width (the pad and its bare margin cut out of it)
+	--   spokeWidth the four spokes from the square to the promenade (north, south, west, east)
+	--   promenade  the paved band along the plaza's edges that every garage walk joins: inset from the edge, width
+	--   node       the paved square on the north spoke where the fountain stands: its center (z) and half-width
+	--   bed        the lawn bed in each quarter: from..to on both axes, with a kerb round it
+	square = 22, spokeWidth = 8, promenade = { inset = 4, width = 8 }, node = { z = 50, half = 10 },
+	bed = { from = 26, to = 72 },
+	-- What stands in each bed (one quarter, mirrored into the other three): trees, bushes, a flower planter
+	bedTrees = { { 36, 62, "TreeC" }, { 62, 36, "TreeA" }, { 60, 62, "TreeB" } },
+	bedBushes = { { 36, 36 }, { 48, 64 }, { 64, 48 } },
+	bedPlanter = { 48, 48 },
+	-- Along each spoke (distance from the center, side: +1 or -1, the two sides of the spoke): two unlit lamps, and two
+	-- benches facing the spoke, one on each side (on the north spoke they face the fountain's node)
+	spokeLamps = { { 30, 1 }, { 66, -1 } },
+	spokeBench = 50, -- both benches of a spoke stand this far out
+	benchGap = 3, -- from a spoke bench's or lamp's center to the edge of the paving beside it
+	-- The square (from the pad's center): four lit lamps, four benches facing the pad, four planters, the arch
 	litLamps = 10, -- the four lit lamps stand this far from the pad's center on both axes
-	benches = { { -18, 0, 90 }, { 18, 0, -90 }, { 0, -18, 0 } },
+	benches = { { -17, -9, 90 }, { -17, 9, 90 }, { 17, -9, -90 }, { 17, 9, -90 } },
 	planters = { { -14, -14 }, { 14, -14 }, { -14, 14 }, { 14, 14 } },
-	arch = { x = 0, z = -15 }, -- over the way from the lounge to the spawn
-	trees = { { -75, -75 }, { 75, -75 }, { -75, 75 }, { 75, 75 } },
+	arch = { x = 0, z = -26 }, -- over the south spoke: the gate from the lounge into the square
 	gapTrees = { { -140, 175 }, { 140, 175 } }, -- in the gaps between the two west and the two east garages (world x, z)
 }
 
