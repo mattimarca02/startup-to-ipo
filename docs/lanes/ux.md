@@ -6,7 +6,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 1. **DONE (PR #35, merged 2026-10-17 22:25 UTC).** **"Claim garage" button on phones** (branch `ux-claim-button`). A new display-only LocalScript `ClaimButtonClient`: while the server's "Claim garage" prompt is shown on a phone (touch input) and the player has no garage, a big button (at least 240 x 60) sits at the bottom center, above the pop-ups. Tapping it presses the prompt itself (`InputHoldBegin`, then `InputHoldEnd` after the hold time), so the server checks everything as it does today (distance, rate, the garage's state): no new remote, no server change. It hides while a window is open (`OpenPanel`) and with the claim off (`LobbyConfig.ClaimEnabled`, which ships off: nothing changes for live players until the owner turns it on). New file because `LobbyClient.lua` is hash-pinned by tools/lobby_test.py (request R1 below).
 2. **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). Needs `activeGoals` and `ShowAtOnce` on main first (they are on `gameplay-goal-chain`, not merged yet). Item 4's X fix goes in the same file, so it waits until this one is done.
-3. **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
+3. **IN REVIEW (PR #44, `ux-claim-prompts`).** **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
 4. **Tap targets at least 40 x 40 everywhere.** The Goals tracker's X (OnboardingClient, 30 x 26 today) gets a 44 x 44 hit area without moving the card; a static check in tools/hud_test.py that every TextButton/ImageButton with a fixed size in the clients is at least 40 px on each side.
 5. **Unpin my tests' Studio-sync hashes.** tools/hud_test.py (IpoClient in docs/STUDIO_SYNC_HUD.md) and tools/shop_ux_test.py (ShopClient and ShopLayout in docs/STUDIO_SYNC_SHOP.md) compare those docs with today's files, so any later edit of IpoClient or ShopClient fails them. Check them against the files at the commit the doc was written for (like lobby_test's L1 section), so the docs stay history. Needed before items 6 to 8 (which touch IpoClient and ShopClient); also needs R1.
 6. **One place for pop-ups.** Seven toasts sit at seven heights today (Shop, IPO and Task at -16, Employee -72, Poach -128, Onboarding -184, Daily -240) with different sizes and fonts. Give them one style (size, font, colour, time) and a fixed stack so two never cover each other, on both phone sizes.
@@ -15,25 +15,21 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-ux-claim-prompts - started 2026-10-17 22:44 UTC (backlog item 3: item 2 waits for `OnboardingConfig.activeGoals`, PR #43, not on main yet)
+waiting for review of PR #44
 
 ## Last PR
 
-PR #35 (`ux-claim-button`), merged 2026-10-17: https://github.com/mattimarca02/startup-to-ipo/pull/35
+PR #44 (`ux-claim-prompts`), open: https://github.com/mattimarca02/startup-to-ipo/pull/44. Before it: PR #35 (`ux-claim-button`), merged 2026-10-17.
 
 ## Last report
 
-2026-10-17. I filled the backlog (6 items) and built item 1. PR #35 adds a new display-only LocalScript, `ClaimButtonClient`. On a phone, while the server's "Claim garage" prompt is shown and the player has no garage, a big green button appears at the bottom of the screen. Tapping it presses that same prompt, so the server checks everything exactly as it does today. It adds no remote and changes no server file. It hides while a window is open, and nothing shows with `LobbyConfig.ClaimEnabled` off (as it ships). I made it a new file because LobbyClient is hash-pinned by tools/lobby_test.py (request R1, which gameplay has picked up).
+2026-10-17, scheduled run. Backlog item 2 (U1, the goal chain in the Goals card) still waits: `OnboardingConfig.activeGoals` is only on PR #43, which isn't merged. So I built item 3 as PR #44: https://github.com/mattimarca02/startup-to-ipo/pull/44.
 
-Tests (Luau 0.742): tools/hud_test.py now also runs the real client in a fake (tools/claim_button_test.luau). That gives 117 checks, 21 of 21 mutants caught and the self-test passing; the existing HUD checks also pass (1073 checks, 69/69 mutants). All other suites are green: daily 2822 checks with 281/281 mutants, world 366 + 93/93, icon 371 + 68/68, shop_ux 6306 + 103/103, lobby 154 + 64/64, building 1278 + 40/40.
+What changed: ClaimButtonClient now keeps a list of every claim prompt shown for touch. The button names and presses the nearest one (the newest when there is no character yet or two are equally near). It looks again twice a second while two or more show, and it drops a prompt that has left its post. So the newer prompt hiding first no longer hides the button while another is still shown. It is still display only: no remote, no server change, nothing with the claim off. In tools/hud_test.py, the "events" scenario stops its add/remove loop once listeners pile up. The "event not disconnected" mutant is now caught in about 2 s instead of 37 s and about 3 GB of memory.
 
-Studio steps are in the PR and below. My requests: R1 to gameplay, R2 later, and to quality the README and CLAUDE.md listing of the new script. Waiting for the owner: the review and merge of PR #35. ClaimEnabled stays off (owner decision 9), so the button is only visible after the owner turns the claim on.
+Tests (Luau 0.742, one at a time, with main 9105aea merged in): hud 1073 checks and 69/69 mutants, plus the claim button's 129 checks and 28/28 mutants (12 new checks, 7 new mutants). daily 2822 (281/281), world 380 (101/101), icon 371 (68/68), shop_ux 6306 (103/103), lobby 155 (63/63), building 1407 (46/46). All green.
 
-Check-in 2026-10-17 17:05 UTC: PR #35 still has no review (the quality lane is reviewing #35 to #40). I added gameplay's request U1 to the backlog as item 2. I'll build it after #35, once `activeGoals` is on main. I read the owner's new rule (push after every step) and will follow it.
-
-Check-in 2026-10-17 21:05 UTC: the quality lane's verdict on PR #35 is MERGE, after #38 and once #35 is up to date with main. I merged main into `ux-claim-button` (merge commit 0d6be20, no force-push), so it's up to date now. ClaimButtonClient.lua didn't change (sha256 `494d14bd…`, 7525 bytes). On that head, hud passes (1073 checks + 117 claim-button checks; 69/69 and 21/21 mutants) and daily passes. Run alone, lobby still fails on the old doc pins until #38 merges, as the verdict expects. I added the verdict's two non-blocking notes to the backlog as item 3. Waiting for the owner: merge #38, then #35. If #38 lands first, I bring main in again and re-run the suites.
-
-2026-10-17 22:25 UTC: the owner merged #38, #36 and then #35. I released my three claim rows (ClaimButtonClient, tools/claim_button_test.luau, tools/hud_test.py) and stopped the check-ins. The Studio steps below stay until the owner runs the quality lane's batch. The next run starts backlog item 2 (U1) if `OnboardingConfig.activeGoals` is on main by then. It isn't yet: the goal chain is still on `gameplay-goal-chain`. Otherwise it starts item 3.
+Not done this run: pushing my claim rows and this lane file straight to main was refused by the run's permission check. Both are on the PR branch instead (CONTRIBUTING.md claim rows for ClaimButtonClient, tools/claim_button_test.luau, tools/hud_test.py). Owner: if lane-file pushes to main should work in scheduled runs, that permission needs allowing; until then this file reaches main with the PR. Requests: none new. Waiting for the owner: the review and merge of PR #44.
 
 ## Requests to other lanes
 
@@ -42,6 +38,8 @@ Check-in 2026-10-17 21:05 UTC: the quality lane's verdict on PR #35 is MERGE, af
 - **To quality:** when PR `ux-claim-button` is merged, README.md and CLAUDE.md need the new LocalScript `ClaimButtonClient` (StarterPlayer > StarterPlayerScripts, display only, no remote; it presses the server's own claim prompt) and its Studio step goes in the batch.
 
 ## Studio steps (merged PRs not yet in Studio)
+
+PR #44, once it is merged: paste ClaimButtonClient.lua into the LocalScript `ClaimButtonClient` (sha256 `b00fcd8637d378eca02d3e6b4b856ee9fea8d184ea3086a2031d0eee124817c4`, 10261 bytes; it replaces PR #35's version), then steps 3 and 4 below.
 
 PR #35, once it is merged:
 1. Create a LocalScript named exactly `ClaimButtonClient` in StarterPlayer > StarterPlayerScripts.
