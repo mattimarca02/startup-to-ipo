@@ -6,7 +6,7 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
 
 1. **Pull before you start.** Always begin with the latest `main`.
 2. **One branch per milestone or feature.** Never commit code straight to `main`.
-3. **Never edit the same script at the same time.** Claim a script in the [Ownership](#ownership) table before touching it, and leave scripts the other person has claimed alone.
+3. **Never edit the same script at the same time.** Claim a script in the [Ownership](#ownership) table (docs/lanes/claims.md) before touching it, and leave scripts the other person has claimed alone.
 4. **Small commits.** Make one commit per working step, with a message saying what changed and why.
 5. **Merge through a pull request.** The other person looks at it before it goes into `main`.
 6. **Never commit secrets.** `.env` and `.env.txt` are ignored by git. Keep API keys out of code, Studio and chat.
@@ -19,9 +19,9 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
    git pull
    ```
 
-2. **Claim your scripts.** In the [Ownership](#ownership) table below, put your name, branch and date next to each script you'll change. This table is the only thing you may push straight to `main`:
+2. **Claim your scripts.** In the Ownership table, [docs/lanes/claims.md](docs/lanes/claims.md), put your name, branch and date next to each script you'll change. That file is the only thing you may push straight to `main` (lanes also push their own lane file), and a pull request never changes it:
    ```
-   git add CONTRIBUTING.md
+   git add docs/lanes/claims.md
    git commit -m "Claim EmployeeServer for milestone-4-poaching"
    git push
    ```
@@ -63,7 +63,7 @@ Two people, one Roblox place (Team Create) and one GitHub repo. These rules stop
    git checkout main
    git pull
    ```
-   Clear your rows in the Ownership table and push that.
+   Clear your rows in docs/lanes/claims.md and push that straight to `main`.
 
 **If git says CONFLICT or refuses to push,** stop and ask your teammate or Claude Code. Never use `git push --force` on `main`.
 
@@ -82,102 +82,4 @@ If Studio lists your script in the **Drafts** window (**View → Drafts**), righ
 
 ## Ownership
 
-Whoever is named here is the only person editing that script right now. Claim a script before changing it and clear it when your pull request is merged. Add a row when you create a new script.
-
-Team: @mattimarca02 (owner) · @wildsheepchaser
-
-| Script | Studio location | Being edited by | Branch | Since |
-|---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
-| ShopServer | ServerScriptService | free | | |
-| EmployeeServer | ServerScriptService | free | | |
-| ShopConfig | ReplicatedStorage | free | | |
-| CreatureConfig | ReplicatedStorage | free | | |
-| CreatureModels | ReplicatedStorage | free | | |
-| ShopClient | StarterPlayerScripts | free | | |
-| EmployeeClient | StarterPlayerScripts | free | | |
-| ChatTags | StarterPlayerScripts | free | | |
-| sync_monetization.py | (repo only) | free | | |
-| PoachServer | ServerScriptService | free | | |
-| PoachClient | StarterPlayerScripts | free | | |
-| IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
-| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| IpoConfig | ReplicatedStorage | free | | |
-| IpoClient | StarterPlayerScripts | free | | |
-| DailyServer | ServerScriptService | free | | |
-| DailyConfig | ReplicatedStorage | free | | |
-| DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | free | | |
-| OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | free | | |
-| tools/economy_sim.py | (repo only) | free | | |
-| docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | free | | |
-| docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
-| docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
-| TaskConfig | ReplicatedStorage | free | | |
-| TaskServer | ServerScriptService | free | | |
-| TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
-| PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| README.md | (repo only) | free | | |
-| docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| docs/STUDIO_SYNC.md | (repo only) | free | | |
-| docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
-| docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
-| docs/SECTORS_PROPOSAL.md | (repo only) | free | | |
-| docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md | (repo only) | free | | |
-| docs/GAMEPLAY_NOTES.md | (repo only) | free | | |
-| docs/SOUND_PLAN.md | (repo only) | free | | |
-| tools/first_hour_model.py | (repo only) | free | | |
-| docs/SIMS_RESULTS.md | (repo only) | free | | |
-| CompanyServer | ServerScriptService | free | | |
-| CompanyConfig | ReplicatedStorage | free | | |
-| SectorConfig | ReplicatedStorage | free | | |
-| docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | Claude (ux lane) | ux-sync-history | 2026-10-18 |
-| docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
-| WorldArt | ServerScriptService | free | | |
-| WorldVisuals | ServerScriptService | free | | |
-| IconArt | ReplicatedStorage | free | | |
-| IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | free | | |
-| tools/icon_test.py | (repo only) | free | | |
-| tools/render_previews.py | (repo only) | free | | |
-| docs/previews/*.svg | (repo only) | free | | |
-| docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
-| docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
-| docs/world_pass_integration.patch | (repo only) | free | | |
-| docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
-| ShopLayout | ReplicatedStorage | free | | |
-| tools/shop_ux_test.py | (repo only) | Claude (ux lane) | ux-sync-history | 2026-10-18 |
-| docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
-| docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
-| docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | free | | |
-| docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
-| docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
-| docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
-| docs/LOBBY_ALL_PROGRESS.md | (repo only) | @mattimarca02 (Claude Code) | lobby-studio-sync-notes | 2026-10-17 |
-| PlotBuilding | ServerScriptService | free | | |
-| PlotBuildingVisuals | ServerScriptService | free | | |
-| BuildingClient | StarterPlayerScripts | free | | |
-| tools/building_test.py | (repo only) | free | | |
-| docs/BUILDING_PASS_PROPOSAL.md | (repo only) | free | | |
-| docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
-| docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
-| docs/building_pass_integration.patch | (repo only) | free | | |
-| LobbyConfig | ReplicatedStorage | free | | |
-| LobbyClient | StarterPlayerScripts | free | | |
-| docs/KIT_MODELS.md | (repo only) | free | | |
-| tools/lobby_runtime.luau | (repo only) | free | | |
-| tools/lobby_client_test.luau | (repo only) | free | | |
-| tools/onboarding_test.py | (repo only) | free | | |
-| ClaimButtonClient | StarterPlayerScripts | free | | |
-| tools/claim_button_test.luau | (repo only) | free | | |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
+The Ownership table (who is editing which script right now) lives in its own file, **[docs/lanes/claims.md](docs/lanes/claims.md)**, since 2026-10-18. Claim a script there before changing it and clear it when your pull request is merged; add a row when you create a new script. That file is pushed straight to `main` and **never** changed by a pull request, so claims never make a pull request conflict.

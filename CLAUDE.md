@@ -2,7 +2,7 @@
 
 Read ROADMAP.md first. At the end of every milestone, update its Status section.
 
-"Startup to IPO" is a Roblox idle tycoon, published as **Build your Startup!** (place `86395856666175`, universe `10768772528`). Two collaborators build it together in Team Create. See `README.md` for the file layout and `CONTRIBUTING.md` for the workflow and the Ownership table.
+"Startup to IPO" is a Roblox idle tycoon, published as **Build your Startup!** (place `86395856666175`, universe `10768772528`). Two collaborators build it together in Team Create. See `README.md` for the file layout `CONTRIBUTING.md` for the workflow and `docs/lanes/claims.md` for the Ownership table.
 
 ## How to work with us
 
@@ -12,7 +12,7 @@ Read ROADMAP.md first. At the end of every milestone, update its Status section.
 ## Before changing anything
 
 1. **Read the code you're about to touch** and follow its structure, naming, comment style and save system.
-2. **Check the Ownership table** in `CONTRIBUTING.md`. Only edit scripts claimed by the person you're working for. If a script is claimed by someone else, stop and say so.
+2. **Check the Ownership table** in `docs/lanes/claims.md` (pushed straight to `main`, never changed by a pull request). Only edit scripts claimed by the person you're working for. If a script is claimed by someone else, stop and say so.
 3. **Work on a branch,** never on `main`, and `git pull` first.
 4. **Don't rewrite working systems.** Extend them.
 5. **Don't delete anything you weren't asked to delete:** scripts, Studio objects, functions, save fields, config entries or files.
