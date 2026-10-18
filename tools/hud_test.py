@@ -23,8 +23,8 @@ real client asks TextService for the real width, so on the real font it picks by
 test sees depends on the estimate. Studio is the only way to see the real font (docs/STUDIO_SYNC_HUD.md).
 
 It also runs the REAL ClaimButtonClient.lua (the ux lane's "Claim garage" button for phones) in a fake client
-(tools/claim_button_test.luau): what it shows for which prompt, the tap that presses the server's own prompt, its
-place at seven screen sizes with three top bars, then its own mutation runs.
+(tools/claim_button_test.luau): what it shows for which prompt (the nearest when two show), the tap that presses the server's own
+prompt, its place at seven screen sizes with three top bars, then its own mutation runs.
 
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
@@ -841,6 +841,10 @@ scenario("events", function()
 		extra.Name = "Extra" .. n
 		extra.Parent = folder
 		extra.Parent = nil
+		-- a leak doubles the listeners on every add and remove (2^20 after 10 rounds, about 3 GB): stop once it is plain
+		if cash:_signal("Changed"):Count() > base + 64 then
+			break
+		end
 	end
 	advance(1)
 	check("events: adding and removing other stats does not add listeners to Cash (" .. base .. " before and after)", cash:_signal("Changed"):Count() == base, cash:_signal("Changed"):Count())
@@ -1974,19 +1978,34 @@ CLAIM_MUTANTS = [
     ("a ClaimPost outside a ClaimSpot counts", "return post ~= nil and post.Name == \"ClaimPost\" and post.Parent ~= nil and post.Parent.Name == \"ClaimSpot\"",
      "return post ~= nil and post.Name == \"ClaimPost\"", "client: a ClaimPost outside a ClaimSpot"),
     ("the button stays while a window is open", " and playerGui:GetAttribute(\"OpenPanel\") == nil\n", "\n", "client: a window open hides"),
-    ("the button stays with a garage", "local show = shownPrompt ~= nil and player:GetAttribute(\"Garage\") == 0 and",
-     "local show = shownPrompt ~= nil and", "client: with a garage the button goes"),
+    ("the button stays with a garage", "local show = prompt ~= nil and player:GetAttribute(\"Garage\") == 0 and",
+     "local show = prompt ~= nil and", "client: with a garage the button goes"),
     ("a tap with a garage still presses", "if pressing or not prompt or player:GetAttribute(\"Garage\") ~= 0 then return end",
      "if pressing or not prompt then return end", "client: with a garage a tap presses nothing"),
     ("a second tap presses again", "if pressing or not prompt or", "if not prompt or", "client: a second tap while holding"),
     ("the hold is shorter than the prompt's hold time", "task.delay(prompt.HoldDuration + 0.15, function()", "task.delay(0.1, function()",
      "client: it does not let go before"),
     ("the hold never ends", "\t\tpcall(function()\n\t\t\tprompt:InputHoldEnd()\n\t\tend)\n", "", "client: then it lets go"),
-    ("the shown prompt hidden keeps the button", "\tif prompt == shownPrompt then\n\t\tshownPrompt = nil", "\tif false then\n\t\tshownPrompt = nil",
+    ("the shown prompt hidden keeps the button", "\tif shownPrompts[prompt] then\n\t\tshownPrompts[prompt] = nil", "\tif false then\n\t\tshownPrompts[prompt] = nil",
      "client: the shown prompt hidden"),
-    ("any prompt hiding hides the button", "\tif prompt == shownPrompt then\n\t\tshownPrompt = nil", "\tif true then\n\t\tshownPrompt = nil",
+    ("any prompt hiding hides the button", "\tif shownPrompts[prompt] then\n\t\tshownPrompts[prompt] = nil", "\tif true then\n\t\ttable.clear(shownPrompts)",
      "client: another prompt hiding leaves"),
-    ("the garage line not updated", "\t\tsubtitle.Text = shownPrompt.ObjectText\n", "", "client: a claim prompt shown for touch"),
+    ("the garage line not updated", "\t\tsubtitle.Text = prompt.ObjectText\n", "", "client: a claim prompt shown for touch"),
+    # two prompts at once (quality's follow-up on PR #35)
+    ("one slot again: a new prompt forgets the others", "\t\tshownCount += 1\n", "\t\tshownCount += 1\n\t\ttable.clear(shownPrompts)\n",
+     "client: two prompts: the newer one hiding first"),
+    ("the newest wins over the nearest", "local d = (from and entry.pos) and distance(from, entry.pos) or math.huge", "local d = math.huge",
+     "client: two prompts: the button names the nearest"),
+    ("the farthest wins", "if d < bestDist or (d == bestDist", "if d > bestDist or bestKey == nil or (d == bestDist",
+     "client: two prompts: the button names the nearest"),
+    ("the oldest wins a tie", "(d == bestDist and entry.order > bestOrder)", "(d == bestDist and entry.order < bestOrder)",
+     "client: two prompts with no character: the button names the newest"),
+    ("no new look while walking", "\t\trefresh()\n\t\trecheck()\n\tend\nend)", "\t\trefresh()\n\tend\nend)",
+     "client: two prompts: walking to the other garage"),
+    ("the looks never stop", "if rechecking or count < 2 then return end", "if rechecking then return end",
+     "client: two prompts: no look is left pending"),
+    ("a prompt gone from its post is never forgotten", "\t\telse\n\t\t\tshownPrompts[prompt] = nil\n\t\tend", "\t\tend",
+     "client: two prompts: and the looks stop"),
     ("the busy text never shows", "title.Text = pressing and PRESSING_TEXT or LobbyConfig.Texts.Prompt", "title.Text = LobbyConfig.Texts.Prompt",
      "client: while pressing"),
     ("the button never moves with the screen", "gui:GetPropertyChangedSignal(\"AbsoluteSize\"):Connect(place)\n", "", "client: a new screen size"),
@@ -2003,7 +2022,7 @@ CLAIM_MUTANTS = [
 ]
 # Must be reported as NOT caught: the client errors on every tap, so checks about the tap fail too, but an error is
 # never a catch (its "ran without an error" check fails).
-CLAIM_SELF_TEST = ("a client that errors on every tap", "\tlocal prompt = shownPrompt\n", "\terror(\"crash (test)\")\n\tlocal prompt = shownPrompt\n",
+CLAIM_SELF_TEST = ("a client that errors on every tap", "\tlocal prompt = nearestPrompt()\n\tif pressing", "\terror(\"crash (test)\")\n\tlocal prompt = nearestPrompt()\n\tif pressing",
                    "client: the tap presses")
 
 

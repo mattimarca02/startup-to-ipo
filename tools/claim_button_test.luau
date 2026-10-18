@@ -195,6 +195,50 @@ do -- the claim on, on the plaza: the button follows the shown claim prompt
 	check("client: it makes no remote and sends nothing", REMOTES == 0, REMOTES)
 	ranClean(W, "on the plaza, then a garage")
 end
+do -- two claim prompts shown at once (two free garages side by side)
+	local W = start(world(true, 0))
+	local touch = Enum.ProximityPromptInputType.Touch
+	fire(W, W.pps.PromptShown, W.prompt1, touch)
+	fire(W, W.pps.PromptShown, W.prompt2, touch)
+	check("client: two prompts with no character: the button names the newest shown", shown(W) and garageText(W) == "Garage 2", garageText(W))
+	fire(W, W.pps.PromptHidden, W.prompt2)
+	check("client: two prompts: the newer one hiding first leaves the button on the other", shown(W) and garageText(W) == "Garage 1", garageText(W))
+	fire(W, W.pps.PromptHidden, W.prompt1)
+	check("client: two prompts: the last one hiding hides the button", not shown(W))
+	advance(W, 2)
+	check("client: two prompts: no look is left pending once fewer than two show", #timers == 0, #timers)
+	-- with a character: the nearest garage, not the newest
+	local character = new("Model")
+	local root = new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Position = { X = 0, Y = 3, Z = 0 }
+	root.Parent = character
+	W.player.Character = character
+	W.prompt1.Parent.Position = { X = 10, Y = 3, Z = 0 }
+	W.prompt2.Parent.Position = { X = 40, Y = 3, Z = 0 }
+	fire(W, W.pps.PromptShown, W.prompt1, touch)
+	fire(W, W.pps.PromptShown, W.prompt2, touch)
+	check("client: two prompts: the button names the nearest garage (not the newest)", shown(W) and garageText(W) == "Garage 1", garageText(W))
+	tap(W)
+	check("client: two prompts: the tap presses the nearest prompt", (W.prompt1.began or 0) == 1 and (W.prompt2.began or 0) == 0,
+		tostring(W.prompt1.began) .. " / " .. tostring(W.prompt2.began))
+	advance(W, 1)
+	root.Position = { X = 38, Y = 3, Z = 0 } -- walked along the row
+	advance(W, 0.6)
+	check("client: two prompts: walking to the other garage moves the button to it within a second", shown(W) and garageText(W) == "Garage 2", garageText(W))
+	tap(W)
+	advance(W, 1)
+	check("client: two prompts: then a tap presses that garage's prompt", (W.prompt2.began or 0) == 1 and (W.prompt2.ended or 0) == 1 and (W.prompt1.began or 0) == 1,
+		tostring(W.prompt2.began) .. " / " .. tostring(W.prompt1.began))
+	-- a garage reset while its prompt shows: the prompt leaves its post without a PromptHidden
+	W.prompt2.Parent = nil
+	advance(W, 0.6)
+	check("client: two prompts: a prompt gone from its post is forgotten, the button goes back to the other", shown(W) and garageText(W) == "Garage 1", garageText(W))
+	advance(W, 2)
+	check("client: two prompts: and the looks stop (one prompt left)", #timers == 0, #timers)
+	check("client: two prompts: it makes no remote", REMOTES == 0, REMOTES)
+	ranClean(W, "two prompts")
+end
 do -- only touch, only claim prompts
 	local W = start(world(true, 0))
 	fire(W, W.pps.PromptShown, W.prompt1, Enum.ProximityPromptInputType.Keyboard)

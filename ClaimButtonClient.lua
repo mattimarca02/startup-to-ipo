@@ -21,6 +21,11 @@
 --     320x568: x 30-290, y 332-392. The -184 and -240 lanes (Onboarding, Daily) start only after the claim, when this
 --     button is gone.
 -- The button is 60 high (a touch target is at least 44).
+--
+-- Two claim prompts can show at once (two free garages side by side). The script keeps every claim prompt Roblox shows
+-- for touch, and the button names and presses the nearest one to the player (the newest shown when there is no
+-- character yet, or two are as near). It looks again twice a second while two or more show, so walking along the row
+-- moves the button to the next garage. One of them hiding never hides the button while another is still shown.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -70,6 +75,24 @@ local JUMP_LEFT_FROM_RIGHT = 150 -- the jump button's zone starts at W minus thi
 local SHORT_BOTTOM = 72 -- short screens: the button's bottom is this far above the GUI's bottom
 local TALL_BOTTOM = 176 -- tall screens: the same, above the thumbstick's zone (170)
 local SIDE_MARGIN = 16
+local RECHECK = 0.5 -- seconds between looks for the nearest prompt, only while two or more show
+-- The distance between two points ({ X, Y, Z }: a Vector3 or a plain table)
+local function distance(a, b)
+	local dx, dy, dz = a.X - b.X, a.Y - b.Y, a.Z - b.Z
+	return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+-- shown = { [key] = { pos = point or nil, order = number } } -> the key nearest to from (nil: no character), ties and
+-- unknown places going to the highest order (the newest shown); nil when shown is empty
+local function nearestKey(shown, from)
+	local bestKey, bestDist, bestOrder = nil, math.huge, -math.huge
+	for key, entry in pairs(shown) do
+		local d = (from and entry.pos) and distance(from, entry.pos) or math.huge
+		if d < bestDist or (d == bestDist and entry.order > bestOrder) then
+			bestKey, bestDist, bestOrder = key, d, entry.order
+		end
+	end
+	return bestKey
+end
 local function buttonLayout(w, h)
 	local left, right, bottom
 	if h < 460 then
@@ -138,45 +161,90 @@ local function isClaimPrompt(prompt)
 	return post ~= nil and post.Name == "ClaimPost" and post.Parent ~= nil and post.Parent.Name == "ClaimSpot"
 end
 
-local shownPrompt = nil -- the claim prompt Roblox shows for touch right now, or nil
-local pressing = false -- a tap is holding the prompt
+local shownPrompts = {} -- every claim prompt Roblox shows for touch right now: { [prompt] = order shown }
+local shownCount = 0 -- how many prompts were ever shown (the order of the newest)
+local pressing = nil -- the prompt a tap is holding, or nil
+
+-- Where a claim prompt stands (its ClaimPost), or nil
+local function promptPlace(prompt)
+	local post = prompt.Parent
+	local ok, pos = pcall(function()
+		return post.Position
+	end)
+	return ok and pos or nil
+end
+
+-- The shown claim prompt nearest to the player, or nil. A prompt no longer on a claim post (its garage was reset) is
+-- forgotten here, in case Roblox never said it hid.
+local function nearestPrompt()
+	local entries = {}
+	for prompt, order in pairs(shownPrompts) do
+		if isClaimPrompt(prompt) then
+			entries[prompt] = { pos = promptPlace(prompt), order = order }
+		else
+			shownPrompts[prompt] = nil
+		end
+	end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	return nearestKey(entries, root and root.Position or nil)
+end
 
 local function refresh()
-	local show = shownPrompt ~= nil and player:GetAttribute("Garage") == 0 and playerGui:GetAttribute("OpenPanel") == nil
+	local prompt = pressing or nearestPrompt()
+	local show = prompt ~= nil and player:GetAttribute("Garage") == 0 and playerGui:GetAttribute("OpenPanel") == nil
 	gui.Enabled = show
-	if shownPrompt then
-		subtitle.Text = shownPrompt.ObjectText
+	if prompt then
+		subtitle.Text = prompt.ObjectText
 	end
 	button.BackgroundColor3 = pressing and COLORS.busy or COLORS.buy
 	title.Text = pressing and PRESSING_TEXT or LobbyConfig.Texts.Prompt
 end
 
+-- While two or more prompts show, look again for the nearest twice a second (the player walks); one look at a time
+local rechecking = false
+local function recheck()
+	local count = 0
+	for _ in pairs(shownPrompts) do
+		count += 1
+	end
+	if rechecking or count < 2 then return end
+	rechecking = true
+	task.delay(RECHECK, function()
+		rechecking = false
+		refresh()
+		recheck()
+	end)
+end
+
 ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
 	if inputType == Enum.ProximityPromptInputType.Touch and isClaimPrompt(prompt) then
-		shownPrompt = prompt
+		shownCount += 1
+		shownPrompts[prompt] = shownCount
 		refresh()
+		recheck()
 	end
 end)
 ProximityPromptService.PromptHidden:Connect(function(prompt)
-	if prompt == shownPrompt then
-		shownPrompt = nil
+	if shownPrompts[prompt] then
+		shownPrompts[prompt] = nil
 		refresh()
 	end
 end)
 
--- The tap: hold the shown prompt for its own hold time (plus a little), then let go. Roblox triggers the prompt and the
--- server's handler decides; a second tap while holding does nothing.
+-- The tap: hold the nearest shown prompt for its own hold time (plus a little), then let go. Roblox triggers the prompt
+-- and the server's handler decides; a second tap while holding does nothing.
 button.Activated:Connect(function()
-	local prompt = shownPrompt
+	local prompt = nearestPrompt()
 	if pressing or not prompt or player:GetAttribute("Garage") ~= 0 then return end
-	pressing = true
+	pressing = prompt
 	refresh()
 	prompt:InputHoldBegin()
 	task.delay(prompt.HoldDuration + 0.15, function()
 		pcall(function()
 			prompt:InputHoldEnd()
 		end)
-		pressing = false
+		pressing = nil
 		refresh()
 	end)
 end)
