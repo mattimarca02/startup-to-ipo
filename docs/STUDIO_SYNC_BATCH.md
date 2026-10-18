@@ -335,6 +335,25 @@ Playtests (each written down as done, skipped or failed): (a) 1 player, F5: spaw
 
 Run on: (see the pull request of `overhaul-phase1`)
 
+## Batch 4 (overhaul phase 2: the occlusion fade, the ceiling light, the stage-up look and toast; branch `overhaul-phase2`, on top of Batch 3)
+
+Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 2). Pushed through the Studio MCP by the owner session; this batch is the record.
+
+**What the owner sees after this batch:** (1) inside a garage the building is there: walls, the ceiling with its light, the door and the windows around you; only the shell parts between the camera and your character turn see-through (0.8), and come back when they are not in the way; from outside the building is solid and never "blinks" as someone walks up to it; (2) every building has one PointLight under its ceiling (warm in the Garage, white in the offices, cool in the tower, gold-white in the headquarters); (3) when your garage reaches a new funding round, a pop-up says what happened ("🌱 Seed reached! Your Garage becomes a Small Office"), the camera flies to a spot in front of the new facade for about 2.6 seconds and comes back (a tap or key skips it; never while a window is open; never after an IPO), with a short built-in sound. No save change, no new remote, no publish.
+
+| Script | Studio | State | sha256 (`overhaul-phase2`) | bytes |
+|---|---|---|---|---|
+| `BuildingClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed (rewritten) | `b0fdbd5ffa351781d575829cc4d17b097b852f01c37eb50d629fca8c9ffa8028` | 15055 |
+| `TycoonCore` | Script, ServerScriptService | changed | `c7c52763a51814306e051c56ce1f658e1e03d67cd6e850f5430d9abd7d4120d1` | 56224 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `eae1b73e8ba1ae8a1a7a9d628a77dc1ebcc9d00a3e5be6531c7f68758af93a5f` | 44826 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `d168aa3080d43c9fe39197da60b1120a7da9be92829a18299f2989c3aca6a4dd` | 31817 |
+
+The hash block is Batch 1's with these four `WANT` rows; it must print `ALL OK: 4 scripts match the repo`.
+
+Playtests (each written down as done, skipped or failed): (a) 1 player, F5, claim a garage: inside, turn the camera around: the walls and the ceiling are there and only what sits between the camera and you goes see-through; walk out and look back: the facade is solid; Debug > "Building: next stage" with every window closed: the pop-up, the camera's look at the facade, the sound; with the Shop open: the pop-up only. (b) 2 players: the other player never sees your camera move, and sees your building swap. (c) Test > Device, a phone: the fade and the look are smooth; a tap skips the look.
+
+Run on: (see the pull request of `overhaul-phase2`)
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

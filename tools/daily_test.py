@@ -7968,6 +7968,12 @@ def visuals_wiring_checks():
     # tests them in depth. Here: looks only, wired like the plot visuals.
     for name in ("PlotBuilding.lua", "PlotBuildingVisuals.lua", "BuildingClient.lua"):
         text = code_only(read(name))
+        if name == "BuildingClient.lua":
+            # overhaul phase 2: the stage-up look's sound is one of Roblox's own built-in sounds (rbxasset://sounds/...), never a
+            # Store asset (rbxassetid) or a mesh; the one allowed asset reference
+            sounds = re.findall(r'"rbxasset://sounds/[\w.]+"', text)
+            check("BuildingClient.lua's only asset is one built-in sound (rbxasset://sounds/..., never rbxassetid)", len(sounds) == 1 and "rbxassetid" not in text, sounds)
+            text = text.replace(sounds[0], '""') if len(sounds) == 1 else text
         for word in ("RemoteEvent", "RemoteFunction", "FireServer", "DataStore", "SetAsync", "addEarnings", "math.random", "Random.new",
                      "rbxasset", "http", "MeshId", "require("):
             check("%s never uses %s (looks only: no remotes, saves, earnings, randomness or assets)" % (name, word), word not in text)
