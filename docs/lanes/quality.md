@@ -14,7 +14,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (Batch 1 complete on `main`; #44 MERGE at 6b7952b; next: #44's ClaimButtonClient row in the batch once it merges, verdicts for new heads or `ux-sync-history` once it is a PR)
+2026-10-18 09:10 UTC: scheduled run. No open lane PR. Working on one docs PR: #44's ClaimButtonClient in Batch 1, and the owner's request to move the claim rows out of CONTRIBUTING.md (docs/lanes/claims.md).
 
 ## Last PR
 
