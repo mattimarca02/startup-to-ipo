@@ -102,13 +102,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py (checks of gameplay: daily) | (repo only) | Claude (gameplay lane) | gameplay-first-hour-fixes | 2026-10-18 |
 | tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
-| DailyServer | ServerScriptService | free | | |
+| DailyServer | ServerScriptService | Claude (gameplay lane) | gameplay-first-hour-fixes | 2026-10-18 |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | free | | |
+| OnboardingServer | ServerScriptService | Claude (gameplay lane) | gameplay-first-hour-fixes | 2026-10-18 |
 | OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
@@ -177,7 +178,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
-| tools/onboarding_test.py | (repo only) | free | | |
+| tools/onboarding_test.py | (repo only) | Claude (gameplay lane) | gameplay-first-hour-fixes | 2026-10-18 |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |

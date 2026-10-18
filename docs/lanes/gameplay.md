@@ -47,7 +47,7 @@ Decisions I need from the owner:
 
 ## Doing now
 
-idle (PR #43 merged; next run: backlog item 2. Item 4 waits for the owner's D-A to D-C)
+gameplay-first-hour-fixes - started 2026-10-18 09:43 UTC (backlog item 2)
 
 ## Last PR
 
