@@ -13,7 +13,8 @@
 --   DailyNextAt (number, os.time())       -> when the next day starts (the countdown)
 --   DailyMissed, DailyLostDay (numbers), DailyKept (boolean) -> the "you missed a day" line
 --   DailyBlocked (string)                 -> why Claim can't work right now ("" = it can)
---   DailyAutoOpen (boolean)               -> the window may open by itself (not in the first minute)
+--   DailyAutoOpen (boolean)               -> the window may open by itself (not in the first minute; a
+--                                            brand-new player's first gift waits for the first pause)
 -- The only thing the client can ask (DailyRemotes.DailyAction) is "Claim". It sends no day,
 -- time, streak or amount: the server works all of that out.
 
@@ -97,6 +98,26 @@ local function sharesFor(reward)
 	return 0
 end
 
+-- True while a brand-new player's first gift waits for the first pause of session 1 (TUT 6): onboarding
+-- is on, they never claimed, and they haven't had DailyConfig.FirstPause.employees employees for
+-- FirstPause.delay seconds yet. Once reached it stays reached for the session (a poach doesn't undo it).
+local function waitsForFirstPause(data, daily)
+	local onboarding = data.onboarding
+	local pause = DailyConfig.FirstPause
+	if not OnboardingConfig.Enabled or onboarding == nil or onboarding.legacy or daily.claims > 0
+		or typeof(pause) ~= "table" or typeof(pause.employees) ~= "number" or typeof(pause.delay) ~= "number" then
+		return false
+	end
+	if not daily.pauseAt then
+		local employees = data.team and data.team.employees
+		if typeof(employees) ~= "table" or #employees < pause.employees then
+			return true
+		end
+		daily.pauseAt = os.time() + pause.delay -- not saved: this session only
+	end
+	return os.time() < daily.pauseAt
+end
+
 -- Copies the state the Daily window shows onto the player. The server never reads them back.
 local function publish(player, data, now)
 	local daily = data.daily
@@ -111,6 +132,7 @@ local function publish(player, data, now)
 	-- The M5 first minute keeps the screen for the free egg and the arrow: no pop-up then
 	local onboarding = data.onboarding
 	local firstMinute = OnboardingConfig.Enabled and onboarding ~= nil and not onboarding.legacy and not onboarding.arrowDone
+	local waiting = firstMinute or waitsForFirstPause(data, daily)
 
 	setAttribute(player, "DailyEnabled", DailyConfig.Enabled)
 	setAttribute(player, "DailyReady", DailyConfig.Enabled and not info.claimedToday)
@@ -122,7 +144,7 @@ local function publish(player, data, now)
 	setAttribute(player, "DailyKept", info.kept == true)
 	setAttribute(player, "DailyLostDay", info.lostDay)
 	setAttribute(player, "DailyBlocked", blocked)
-	setAttribute(player, "DailyAutoOpen", DailyConfig.AutoOpen and not firstMinute and data.loaded == true)
+	setAttribute(player, "DailyAutoOpen", DailyConfig.AutoOpen and not waiting and data.loaded == true)
 end
 
 -- "Day 3: Garage Egg, it's incubating"
@@ -250,6 +272,7 @@ function DailyServer.setupPlayer(player, data, savedDaily)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
 		lastRequest = 0, -- os.clock() of the last Claim request (debounce)
 		fakeDays = 0, -- Studio Debug tab only: fake days passed this session
+		pauseAt = nil, -- os.time() of the first pause of a brand-new player (not saved)
 	}
 	if typeof(savedDaily) == "table" then -- bad values are skipped with a warning, never an error
 		for key in pairs(KNOWN_FIELDS) do
