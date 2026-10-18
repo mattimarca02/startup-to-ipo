@@ -119,11 +119,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| README.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -138,7 +138,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
+| tools/hud_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -178,6 +178,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
 | tools/onboarding_test.py | (repo only) | free | | |
-| ClaimButtonClient | StarterPlayerScripts | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
-| tools/claim_button_test.luau | (repo only) | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| ClaimButtonClient | StarterPlayerScripts | free | | |
+| tools/claim_button_test.luau | (repo only) | free | | |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |

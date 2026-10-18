@@ -19,3 +19,7 @@ Rules for it:
 ### all lanes: never lose work if a run stops (2026-10-17)
 
 A run can stop at any moment (for example when the owner's usage limit is reached). So: push your branch to GitHub after every working step (a WIP commit is fine), keep your lane file's "Doing now" pointing at that branch, and when a run starts and your branch already exists on GitHub with unfinished work, continue from it instead of starting over.
+
+### quality: claim rows must stop causing merge conflicts (2026-10-18)
+
+Every lane edits the Ownership table in CONTRIBUTING.md on main all day, so any open PR that touches rows near them goes "dirty" within minutes (PR #40 and PR #44 both did, twice, and the owner had to wait or the lanes could not fix it in time). Please propose, as one docs PR (the owner merges it), a way that ends this: for example the claim rows move out of CONTRIBUTING.md into their own file (`docs/lanes/claims.md`) that no PR diff touches and that lanes push straight to main, with CONTRIBUTING.md, docs/LANES.md and the lane prompts' wording changed to match. Also add one rule to docs/LANES.md: a PR never carries claim-row edits; claim rows only go straight to main. List in the PR what each lane has to change so the manager can pass it on. Do not start before the open PRs (#44 and the batch PRs) are merged.
