@@ -759,10 +759,78 @@ EmployeeServer.init({
 '''),
 )
 
+
+# Gameplay backlog item 7's edits outside the CLAIMLOAD markers (the welcome-back pop-up: addEarnings notes the join load's
+# offline pay before data.ready, welcomeBack says it once after the load; docs/lanes/gameplay.md), applied after L5_EDITS,
+# each old text found once.
+L6_EDITS = (
+    ('''local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
+''',
+     '''local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
+local WELCOME_BACK_MIN_SECONDS = 5 * 60 -- away at least this long: one "Welcome back" pop-up says what the startup earned
+local WELCOME_BACK_DELAY = 3 -- seconds after the load, so the pop-up shows once the player's screen is up
+'''),
+    ('''-- Cash the startup earned (not refunds or gifts): raises the valuation
+local function addEarnings(player, amount)
+	IpoServer.addEarnings(player, amount)
+end
+''',
+     '''-- Cash the startup earned (not refunds or gifts): raises the valuation
+local function addEarnings(player, amount)
+	local data = playerData[player]
+	if data and not data.ready then
+		-- Before data.ready the only earnings are the join load's offline pay: noted for the welcome-back
+		-- pop-up (welcomeBack), in memory only, never saved
+		data.offlineEarned = (data.offlineEarned or 0) + amount
+	end
+	IpoServer.addEarnings(player, amount)
+end
+
+-- "3h 12m", "45m" (whole minutes, for the welcome-back pop-up)
+local function formatAway(seconds)
+	local minutes = math.floor(seconds / 60)
+	local h, m = minutes // 60, minutes % 60
+	if h > 0 and m > 0 then
+		return string.format("%dh %dm", h, m)
+	elseif h > 0 then
+		return string.format("%dh", h)
+	end
+	return string.format("%dm", m)
+end
+
+-- The welcome-back pop-up (backlog item 7, GAMEPLAY_FIRST_HOUR_PROPOSAL A12): once per join, a few seconds after the
+-- load, after an absence of WELCOME_BACK_MIN_SECONDS or more that paid offline Cash. It only tells: the Cash was paid
+-- by the claim's load (its offline earnings), and this adds nothing, saves nothing and reads nothing back.
+-- "8h max" when the absence reached the offline cap (Night Shift raises it). Free: no product doubles it (D7).
+local function welcomeBack(player, data, lastSeen)
+	local earned = data.offlineEarned
+	data.offlineEarned = nil
+	if not (type(earned) == "number" and earned > 0 and type(lastSeen) == "number") then return end
+	local away = os.time() - lastSeen
+	if away < WELCOME_BACK_MIN_SECONDS then return end
+	local cap = OFFLINE_CAP_SECONDS + IpoServer.perk(data, "OfflineCap")
+	local text = string.format("Welcome back! You earned %s while away (%s)", IpoConfig.formatShort(earned),
+		away >= cap and formatAway(cap) .. " max" or formatAway(away))
+	task.delay(WELCOME_BACK_DELAY, function()
+		if playerData[player] == data and player.Parent then
+			ShopServer.notify(player, text)
+		end
+	end)
+end
+'''),
+    ('''	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
+	setGarageState(slot, "Taken", player.DisplayName)
+''',
+     '''	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
+	welcomeBack(player, data, lastSeen) -- what the offline pay above gave, said once
+	setGarageState(slot, "Taken", player.DisplayName)
+'''),
+)
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L5_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
@@ -1260,6 +1328,16 @@ L3_MUTANTS = [
     ("the claim spot streams like any model (not Persistent: a far post and its prompt are missing on the client)", "TycoonCore.lua",
      "\t\t\tspot.ModelStreamingMode = Enum.ModelStreamingMode.Persistent\n", "\t\t\tspot.ModelStreamingMode = Enum.ModelStreamingMode.Default\n",
      "plaza: each garage's claim post and lamp stand in its ClaimSpot"),
+    # The welcome-back pop-up (gameplay backlog item 7)
+    ("welcome back: never called after the load", "TycoonCore.lua", "\twelcomeBack(player, data, lastSeen) -- what the offline pay above gave, said once\n", "",
+     "welcome back: one pop-up after the load"),
+    ("welcome back: income after the load also noted as offline pay (no data.ready check)", "TycoonCore.lua", "\tif data and not data.ready then\n",
+     "\tif data then\n", "welcome back: said once per join"),
+    ("welcome back: no minimum absence", "TycoonCore.lua", "\tif away < WELCOME_BACK_MIN_SECONDS then return end\n", "", "welcome back: a 2-minute absence"),
+    ("welcome back: the cap never named", "TycoonCore.lua", "away >= cap and formatAway(cap) .. \" max\" or formatAway(away)", "formatAway(away)",
+     "welcome back: away past the offline cap"),
+    ("welcome back: sent to a player who left", "TycoonCore.lua", "\t\tif playerData[player] == data and player.Parent then\n\t\t\tShopServer.notify(player, text)",
+     "\t\tif true then\n\t\t\tShopServer.notify(player, text)", "welcome back: a player who leaves"),
 ]
 
 

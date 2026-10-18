@@ -820,5 +820,62 @@ do
 	noCrash(W, "broken building")
 end
 
+-- 9. The welcome-back pop-up (gameplay backlog item 7): what the join load's offline pay gave, said once -------------------------
+local function welcomeNotes(W, p)
+	local out = {}
+	for _, text in ipairs(noteFor(W, p)) do if string.find(text, "Welcome back", 1, true) then table.insert(out, text) end end
+	return out
+end
+do
+	-- 1000 s away with the Desk ($1/s): the load pays 50% of 1000 s = $500, and 3 s later one pop-up says so
+	local W = newWorld({ claim = false, save = { player_301 = { cash = 10, owned = { "Desk" }, lastSeen = 0 } } })
+	W.boot()
+	local H = W.H
+	local p = W.join("Wen", 301, PLAZA)
+	W.run(2)
+	local data = H.playerData[p]
+	check("welcome back: the offline pay is paid by the load as before (Cash 10 + $500), and no pop-up yet (it waits 3 s)",
+		data and data.ready and cashOf(p) >= 510 and #welcomeNotes(W, p) == 0, cashOf(p))
+	check("welcome back: the noted offline pay is cleared once said (data.offlineEarned is never kept)", data and data.offlineEarned == nil)
+	W.run(3)
+	local notes = welcomeNotes(W, p)
+	check("welcome back: one pop-up after the load with the Cash and the time away", #notes == 1
+		and notes[1] == "Welcome back! You earned $500 while away (16m)", notes[1])
+	W.run(10)
+	check("welcome back: said once per join (income after the load is never counted as offline pay)", #welcomeNotes(W, p) == 1
+		and data.offlineEarned == nil, #welcomeNotes(W, p))
+	noCrash(W, "welcome back")
+end
+do
+	-- Away longer than the 8 h cap: the pop-up says the cap was reached; the pay stops at 8 h (4 h of income at $1/s)
+	local W = newWorld({ claim = false, save = { player_302 = { cash = 0, owned = { "Desk" }, lastSeen = 1000 - 9 * 3600 } } })
+	W.boot()
+	local p = W.join("Cap", 302, PLAZA)
+	W.run(5)
+	local notes = welcomeNotes(W, p)
+	check("welcome back: away past the offline cap: the pop-up says \"8h max\" and the pay is the cap's (8 h at 50%: $14.4K)",
+		#notes == 1 and notes[1] == "Welcome back! You earned $14.4K while away (8h max)", notes[1])
+	noCrash(W, "welcome back, capped")
+end
+do
+	-- Short absence (2 min), a new player (no save), an old save with no upgrades (no income), a leave before the pop-up
+	local W = newWorld({ claim = false, save = { player_303 = { cash = 0, owned = { "Desk" }, lastSeen = 1000 - 120 },
+		player_305 = { cash = 0, owned = {}, lastSeen = 0 }, player_306 = { cash = 0, owned = { "Desk" }, lastSeen = 0 } } })
+	W.boot()
+	local short = W.join("Sho", 303, PLAZA)
+	local fresh = W.join("New", 304, PLAZA)
+	local poor = W.join("Nil", 305, PLAZA)
+	local gone = W.join("Bye", 306, PLAZA)
+	W.run(1.5)
+	W.leave(gone)
+	W.run(20)
+	check("welcome back: a 2-minute absence still gets its offline pay but no pop-up (under 5 minutes)",
+		cashOf(short) >= 60 and #welcomeNotes(W, short) == 0, cashOf(short))
+	check("welcome back: a new player (no save) gets no pop-up", #welcomeNotes(W, fresh) == 0)
+	check("welcome back: a save that earned nothing offline (no Income) gets no pop-up", #welcomeNotes(W, poor) == 0)
+	check("welcome back: a player who leaves before the pop-up is sent nothing", #welcomeNotes(W, gone) == 0)
+	noCrash(W, "welcome back, no pop-up")
+end
+
 print_real(string.format("%d passed, %d failed", passed, failed))
 print_real("DONE")

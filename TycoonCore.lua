@@ -88,6 +88,8 @@ if LobbyConfig.ClaimEnabled then -- the ring (lobby L4): each garage turned to f
 end
 local OFFLINE_CAP_SECONDS = 8 * 60 * 60 -- max 8 hours of offline earnings (the Night Shift IPO perk adds more)
 local OFFLINE_RATE = 0.5 -- offline you earn 50% of normal income
+local WELCOME_BACK_MIN_SECONDS = 5 * 60 -- away at least this long: one "Welcome back" pop-up says what the startup earned
+local WELCOME_BACK_DELAY = 3 -- seconds after the load, so the pop-up shows once the player's screen is up
 local LOAD_TRIES = 3 -- reads of a joining player's save before giving up and kicking them
 local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a moment: your progress is safe."
 
@@ -868,7 +870,45 @@ end
 
 -- Cash the startup earned (not refunds or gifts): raises the valuation
 local function addEarnings(player, amount)
+	local data = playerData[player]
+	if data and not data.ready then
+		-- Before data.ready the only earnings are the join load's offline pay: noted for the welcome-back
+		-- pop-up (welcomeBack), in memory only, never saved
+		data.offlineEarned = (data.offlineEarned or 0) + amount
+	end
 	IpoServer.addEarnings(player, amount)
+end
+
+-- "3h 12m", "45m" (whole minutes, for the welcome-back pop-up)
+local function formatAway(seconds)
+	local minutes = math.floor(seconds / 60)
+	local h, m = minutes // 60, minutes % 60
+	if h > 0 and m > 0 then
+		return string.format("%dh %dm", h, m)
+	elseif h > 0 then
+		return string.format("%dh", h)
+	end
+	return string.format("%dm", m)
+end
+
+-- The welcome-back pop-up (backlog item 7, GAMEPLAY_FIRST_HOUR_PROPOSAL A12): once per join, a few seconds after the
+-- load, after an absence of WELCOME_BACK_MIN_SECONDS or more that paid offline Cash. It only tells: the Cash was paid
+-- by the claim's load (its offline earnings), and this adds nothing, saves nothing and reads nothing back.
+-- "8h max" when the absence reached the offline cap (Night Shift raises it). Free: no product doubles it (D7).
+local function welcomeBack(player, data, lastSeen)
+	local earned = data.offlineEarned
+	data.offlineEarned = nil
+	if not (type(earned) == "number" and earned > 0 and type(lastSeen) == "number") then return end
+	local away = os.time() - lastSeen
+	if away < WELCOME_BACK_MIN_SECONDS then return end
+	local cap = OFFLINE_CAP_SECONDS + IpoServer.perk(data, "OfflineCap")
+	local text = string.format("Welcome back! You earned %s while away (%s)", IpoConfig.formatShort(earned),
+		away >= cap and formatAway(cap) .. " max" or formatAway(away))
+	task.delay(WELCOME_BACK_DELAY, function()
+		if playerData[player] == data and player.Parent then
+			ShopServer.notify(player, text)
+		end
+	end)
 end
 
 IpoServer.init({
@@ -1155,6 +1195,7 @@ local function claimGarage(player, slot)
 	-- CLAIMLOAD-END
 
 	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
+	welcomeBack(player, data, lastSeen) -- what the offline pay above gave, said once
 	setGarageState(slot, "Taken", player.DisplayName)
 	player.CharacterAdded:Connect(function(character)
 		teleportToPlot(character, slot)
