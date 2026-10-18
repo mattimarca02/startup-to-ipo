@@ -24,6 +24,11 @@
 --   extra    rot = { x, y, z } degrees, quarter turns only; text = { value or slot = true, font, color, faces, glow }
 --            (faces "Front" = -Z, "Back" = +Z; slot = true shows the plot's number)
 -- Everything is decor: anchored, no collision, no touch, no queries. Lights are added by the layout (WorldArt.LampLight).
+-- A piece's `solid` list (overhaul phase 1, the owner's point 2) names the invisible boxes a player bumps into:
+-- { w, h, d, x, z } (the box's width, height and depth in studs, its center from the piece's base point, its bottom on the
+-- ground). Only what a player expects to be solid: a trunk, a post, a bench, a planter, the fountain's basin, the arch's
+-- posts. WorldVisuals builds them in the World's Solid group (anchored, CanCollide on, CanTouch off, Transparency 1), each
+-- inside its own piece's footprint, so nothing invisible ever stands on a path away from the decor.
 
 local WorldArt = {}
 
@@ -144,14 +149,22 @@ local function upright(name, height, diameter, x, y, z, color, material)
 	return P(name, "Cylinder", { height, diameter, diameter }, { x, y + height / 2, z }, color, material, { rot = { 0, 0, 90 } })
 end
 
--- A tree: a trunk, a big round crown on it and a smaller one on top (three sizes, three greens)
+-- A solid box (see the top of this file): { w, h, d, x, z }
+local function solid(w, h, d, x, z)
+	return { w, h, d, x or 0, z or 0 }
+end
+
+-- A tree: a trunk, a big round crown on it and a smaller one on top (three sizes, three greens). Solid: the trunk up into
+-- the crown's middle (a player walks under the crown's edge, never through the tree).
 local function tree(trunk, crown, top, leaf)
 	local crownY = trunk + crown * 0.3
-	return {
+	local parts = {
 		upright("Trunk", trunk, 1.3, 0, 0, 0, "Trunk", "Wood"),
 		P("Crown", "Ball", { crown, crown, crown }, { 0, crownY, 0 }, leaf, "Fabric"),
 		P("CrownTop", "Ball", { top, top, top }, { 0.5, crownY + crown * 0.4, -0.4 }, "LeafTop", "Fabric"),
 	}
+	parts.solid = { solid(1.8, crownY, 1.8) }
+	return parts
 end
 
 -- The pieces ---------------------------------------------------------------------
@@ -164,6 +177,7 @@ WorldArt.Pieces = {
 		P("LampGlow", "Block", { 1.2, 1.4, 1.2 }, { 0, 8.6, 0 }, "LampGlow", "Neon"),
 		P("LampRoof", "Block", { 1.7, 0.35, 1.7 }, { 0, 9.475, 0 }, "LampCap", "Metal"),
 		P("LampFinial", "Ball", { 0.5, 0.5, 0.5 }, { 0, 9.9, 0 }, "LampCap", "Metal"),
+		solid = { solid(1.4, 9.5, 1.4) }, -- the post, base to lantern
 	},
 	TreeA = tree(5, 7, 4.6, "LeafA"),
 	TreeB = tree(4, 6, 4, "LeafB"),
@@ -183,11 +197,13 @@ WorldArt.Pieces = {
 		P("BenchBack", "Block", { 4, 1.1, 0.3 }, { 0, 1.85, -0.5 }, "Bench", "WoodPlanks"),
 		P("BenchLegLeft", "Block", { 0.3, 1, 1.1 }, { -1.6, 0.5, 0 }, "BenchLeg", "Metal"),
 		P("BenchLegRight", "Block", { 0.3, 1, 1.1 }, { 1.6, 0.5, 0 }, "BenchLeg", "Metal"),
+		solid = { solid(4, 2.4, 1.2, 0, -0.05) }, -- the whole bench (seat and back)
 	},
 	-- A round planter with a ball of flowers
 	Planter = {
 		upright("PlanterPot", 1.2, 2.6, 0, 0, 0, "Planter", "SmoothPlastic"),
 		P("PlanterFlowers", "Ball", { 2.2, 2.2, 2.2 }, { 0, 1.6, 0 }, "Flower", "Fabric"),
+		solid = { solid(2.6, 2.4, 2.6) }, -- the pot and the flowers
 	},
 	-- A street sign: a post and a green board with the plot's number on both faces, a ball on top
 	Sign = {
@@ -195,6 +211,7 @@ WorldArt.Pieces = {
 		P("SignBoard", "Block", { 3.2, 2.2, 0.3 }, { 0, 5.2, 0 }, "SignBoard", "SmoothPlastic",
 			{ text = { slot = true, font = "FredokaOne", color = "SignText", faces = { "Front", "Back" } } }),
 		P("SignCap", "Ball", { 0.6, 0.6, 0.6 }, { 0, 6.5, 0 }, "SignPost", "Metal"),
+		solid = { solid(0.6, 6.4, 0.6) }, -- the post
 	},
 	-- The welcome arch over the avenue: two posts and a navy beam with the game's name in gold on both faces
 	Arch = {
@@ -202,6 +219,7 @@ WorldArt.Pieces = {
 		P("ArchPostRight", "Block", { 1.2, 9, 1.2 }, { 6.6, 4.5, 0 }, "ArchPost", "Metal"),
 		P("ArchBeam", "Block", { 14.4, 1.8, 0.8 }, { 0, 9.9, 0 }, "ArchBeam", "SmoothPlastic",
 			{ text = { value = "BUILD YOUR STARTUP", font = "FredokaOne", color = "ArchText", faces = { "Front", "Back" }, glow = true } }),
+		solid = { solid(1.2, 9, 1.2, -6.6, 0), solid(1.2, 9, 1.2, 6.6, 0) }, -- the two posts (the beam is far overhead)
 	},
 	-- The plaza's fountain (the ring only): a low stone basin full of water, a pillar with a bowl and a ball of water on
 	-- top. Solid colours only (no glass, no particles); the water's top stands just above the basin's rim.
@@ -212,6 +230,7 @@ WorldArt.Pieces = {
 		upright("FountainBowl", 0.5, 4.4, 0, 3.2, 0, "Stone", "Concrete"),
 		upright("FountainBowlWater", 0.5, 3.8, 0, 3.3, 0, "Water", "SmoothPlastic"),
 		P("FountainSpout", "Ball", { 1.2, 1.2, 1.2 }, { 0, 4.3, 0 }, "WaterLight", "SmoothPlastic"),
+		solid = { solid(10.4, 1.2, 10.4), solid(1.6, 4.2, 1.6) }, -- the basin (a low step: nobody walks into the water) and the pillar
 	},
 }
 

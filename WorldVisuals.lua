@@ -2,11 +2,14 @@
 -- Put this ModuleScript in ServerScriptService, next to WorldArt. The art itself (pieces, palette, numbers) is data
 -- in WorldArt.
 --
--- Only looks: nothing here is saved, sent through a remote or read back by the game. Every part is anchored and never
--- collides, is touched or stops a ray or the camera (CanCollide, CanTouch and CanQuery off): the paths are thin
--- colored layers on the Baseplate, which stays the only solid ground (with the game's own floors). No script, no
--- asset, nothing random. The builder only creates new parts inside its own Model; it never moves, resizes, renames,
--- re-parents or deletes anything else (the SpawnLocation, the Baseplate, the plots, the lounge).
+-- Only looks: nothing here is saved, sent through a remote or read back by the game. Every look part is anchored and
+-- never collides, is touched or stops a ray or the camera (CanCollide, CanTouch and CanQuery off): the paths are thin
+-- colored layers on the Baseplate, which stays the only solid ground (with the game's own floors). The one exception
+-- (overhaul phase 1, the owner's point 2) is the Solid group: invisible anchored boxes (CanCollide on, CanTouch off,
+-- Transparency 1) under the decor a player expects to bump into (trunks, posts, benches, planters, the fountain, the
+-- arch's posts), each inside its own piece's footprint (WorldArt: a piece's `solid` list). No script, no asset, nothing
+-- random. The builder only creates new parts inside its own Model; it never moves, resizes, renames, re-parents or
+-- deletes anything else (the SpawnLocation, the Baseplate, the plots, the lounge).
 --
 -- No GetService and no require: the art and the site are passed in, so the same code runs in the game, in Studio's
 -- command bar (the preview) and in tools/world_test.py.
@@ -44,7 +47,8 @@ WorldVisuals.FORBIDDEN_CLASSES = {
 	Sound = true, ParticleEmitter = true, ClickDetector = true, ProximityPrompt = true, Seat = true, VehicleSeat = true,
 	SpawnLocation = true, Beam = true, Trail = true,
 }
-WorldVisuals.CHECKS = { "data", "budget", "flags", "keepouts", "floating", "zfighting", "baseplate", "connected", "palette", "texts" }
+WorldVisuals.CHECKS = { "data", "budget", "flags", "solid", "keepouts", "floating", "zfighting", "baseplate", "connected", "palette", "texts" }
+WorldVisuals.SOLID_GROUP = "Solid" -- the invisible boxes a player bumps into (WorldArt: a piece's `solid` list), the one group that collides
 WorldVisuals.TINY = 2 -- a part whose longest side is shorter than this casts no shadow
 WorldVisuals.FLAT = 0.2 -- a part at most this tall lying on the ground is a ground layer (paving, lawn)
 WorldVisuals.TOUCH = 0.06 -- parts closer than this touch (floating check)
@@ -616,6 +620,7 @@ function WorldVisuals.build(parent, art, site, palette)
 		return g
 	end
 	local paths, kerbs, ground, decor, hills = group("Paths"), group("Kerbs"), group("Ground"), group("Decor"), group("Hills")
+	local solid = group(WorldVisuals.SOLID_GROUP)
 	for _, r in ipairs(plan.paths) do
 		slab(paths, r, L.pathTop, colorOf(palette, r.color), "SmoothPlastic")
 	end
@@ -648,6 +653,25 @@ function WorldVisuals.build(parent, art, site, palette)
 			model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 		end)
 		model.Parent = decor
+		-- The item's solid boxes: invisible, anchored, the only parts of the world a player bumps into (CanQuery stays on:
+		-- Roblox needs it on anything that collides; a part this transparent never pulls the camera in)
+		for i, s in ipairs(art.Pieces[it.piece].solid or {}) do
+			local box = Instance.new("Part")
+			box.Name = it.name .. "Solid" .. i
+			box.Shape = Enum.PartType.Block
+			box.Size = Vector3.new(s[1], s[2], s[3])
+			box.CFrame = base * CFrame.new(s[4] or 0, s[2] / 2, s[5] or 0)
+			box.Transparency = 1
+			box.Anchored = true
+			box.CanCollide = true
+			box.CanTouch = false
+			box.CanQuery = true
+			box.CastShadow = false
+			box.TopSurface = Enum.SurfaceType.Smooth
+			box.BottomSurface = Enum.SurfaceType.Smooth
+			box:SetAttribute("Item", it.name)
+			box.Parent = solid
+		end
 	end
 	for _, h in ipairs(plan.hills) do
 		local d = (h.radius * h.radius + h.height * h.height) / h.height -- the sphere whose cap at y 0 has this radius
@@ -874,6 +898,21 @@ function WorldVisuals.validate(art)
 				problem("Pieces." .. needed .. ": missing")
 			end
 		end
+		-- A piece's solid boxes: { w, h, d, x, z }, sides above 0, finite offsets
+		for key, list in pairs(art.Pieces) do
+			if list.solid ~= nil then
+				if type(list.solid) ~= "table" then
+					problem("Pieces." .. tostring(key) .. ".solid: a list of boxes { w, h, d, x, z }")
+				else
+					for i, s in ipairs(list.solid) do
+						if type(s) ~= "table" or not (finite(s[1]) and s[1] > 0 and finite(s[2]) and s[2] > 0 and finite(s[3]) and s[3] > 0)
+							or not (finite(s[4] or 0) and finite(s[5] or 0)) then
+							problem("Pieces." .. tostring(key) .. ".solid[" .. i .. "]: w, h, d above 0 and finite x, z")
+						end
+					end
+				end
+			end
+		end
 	end
 	local lamp = art.LampLight
 	if type(lamp) ~= "table" or type(lamp.part) ~= "string" or not palette[lamp.color] or not finite(lamp.brightness) or lamp.brightness <= 0
@@ -987,6 +1026,7 @@ local function partInfo(d)
 		part = d, name = d:GetFullName(), box = b, above = above, shape = shape,
 		flat = b[4] - b[3] <= WorldVisuals.FLAT and b[3] >= -WorldVisuals.TOUCH and b[3] <= WorldVisuals.TOUCH,
 		Name = d.Name,
+		solid = d.Parent ~= nil and d.Parent.Name == WorldVisuals.SOLID_GROUP, -- a solid box: its own rules (the "solid" check)
 	}
 end
 
@@ -1052,6 +1092,9 @@ function WorldVisuals.checks(world, art, site, options)
 			if not part.Anchored then
 				problem(p.name .. ": not anchored")
 			end
+			if p.solid then
+				continue -- the Solid group's boxes have their own rules (the "solid" check)
+			end
 			if part.CanCollide then
 				problem(p.name .. ": CanCollide is on (decor never collides)")
 			end
@@ -1078,6 +1121,54 @@ function WorldVisuals.checks(world, art, site, options)
 			end
 			if WorldVisuals.RESERVED_NAMES[part.Name] then
 				problem(p.name .. ": named like a part of the game")
+			end
+		end
+	end)
+
+	-- The Solid group: every box collides, is never touched, is invisible, casts no shadow and stands inside the footprint
+	-- (seen from above) of the decor item it belongs to, so nothing invisible blocks a path away from the decor; every item
+	-- with solid boxes in the art has them built; nothing collides outside the group
+	run("solid", function(problem)
+		local items = {}
+		for _, p in ipairs(parts) do
+			if not p.solid then
+				local model = p.part.Parent
+				if model and model.Parent and model.Parent.Name == "Decor" then
+					local f = items[model.Name] or { math.huge, -math.huge, math.huge, -math.huge, piece = nil }
+					f[1], f[2], f[3], f[4] = math.min(f[1], p.box[1]), math.max(f[2], p.box[2]), math.min(f[3], p.box[5]), math.max(f[4], p.box[6])
+					items[model.Name] = f
+				end
+			end
+		end
+		local built = {}
+		for _, p in ipairs(parts) do
+			local part = p.part
+			if p.solid then
+				local item = part:GetAttribute("Item")
+				built[item] = (built[item] or 0) + 1
+				if not part.CanCollide or part.CanTouch or not part.CanQuery or part.Transparency < 1 or part.CastShadow then
+					problem(p.name .. ": a solid box is CanCollide on, CanTouch off, CanQuery on, Transparency 1, no shadow")
+				end
+				local f = item and items[item]
+				local e = WorldVisuals.OVERLAP
+				if not f then
+					problem(p.name .. ": a solid box of no decor item (" .. tostring(item) .. ")")
+				elseif p.box[1] < f[1] - e or p.box[2] > f[2] + e or p.box[5] < f[3] - e or p.box[6] > f[4] + e then
+					problem(p.name .. ": a solid box sticks out of its item's footprint (" .. tostring(item) .. ")")
+				end
+				if p.box[3] > WorldVisuals.TOUCH or p.box[3] < -WorldVisuals.TOUCH then
+					problem(p.name .. ": a solid box stands on the ground")
+				end
+			elseif part.CanCollide then
+				problem(p.name .. ": collides outside the Solid group")
+			end
+		end
+		local plan = WorldVisuals.layout(art, site)
+		for _, it in ipairs(plan.items) do
+			local want = art.Pieces[it.piece] and art.Pieces[it.piece].solid
+			local n = want and #want or 0
+			if (built[it.name] or 0) ~= n then
+				problem(it.name .. ": " .. tostring(built[it.name] or 0) .. " solid boxes built, the art has " .. n)
 			end
 		end
 	end)
@@ -1134,6 +1225,9 @@ function WorldVisuals.checks(world, art, site, options)
 		local g = site.ground
 		local faces = { { axis = 2, side = 1, at = g.top, u0 = g.x0, u1 = g.x1, v0 = g.z0, v1 = g.z1, who = { name = "the Baseplate's top" }, other = true } }
 		for _, p in ipairs(parts) do
+			if p.solid then
+				continue -- invisible: it never flickers
+			end
 			for _, f in ipairs(facesOf(p)) do
 				if not (f.axis == 2 and f.side == -1 and f.at <= WorldVisuals.TOUCH) then -- a bottom resting on the ground is never seen
 					table.insert(faces, f)

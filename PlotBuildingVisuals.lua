@@ -13,6 +13,7 @@
 --   PlotBuildingVisuals.sync(garage, frame, building, stage, kit)  -> the Model of that stage in the garage, changed
 --   PlotBuildingVisuals.unstick(model, roots, landing)             -> moves a character found inside a solid box
 --   PlotBuildingVisuals.buildPiece(parent, frame, building, stage, piece, kit) -> one piece alone (the kit front check)
+--   PlotBuildingVisuals.setSign(model, title, subtitle)            -> writes the facade sign's text (the one gui of a building)
 --   PlotBuildingVisuals.checkKit(folder, manifest)                 -> problems of ReplicatedStorage.KitModels (empty = fine)
 --   PlotBuildingVisuals.check(model, frame, building, opts)        -> problems of a built Model (budget, flags, lane...)
 --   Pure maths, the same text as BuildingClient (a test compares them):
@@ -202,8 +203,32 @@ local function tag(part, piece, role)
 	part:SetAttribute("Role", role)
 end
 
+-- The sign's text: the one gui of a building (PlotBuilding.SIGN_TEXT), on the board's plaza side, empty until the server
+-- writes it (setSign). No decal, no asset: a TextLabel in a SurfaceGui.
+local function addSignText(part, building)
+	local spec = building.SIGN_TEXT
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = spec.name
+	gui.Face = Enum.NormalId[spec.face]
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = spec.pixelsPerStud
+	gui.LightInfluence = 0.5
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Position = UDim2.fromScale(spec.area[1], spec.area[2])
+	label.Size = UDim2.fromScale(spec.area[3], spec.area[4])
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font[spec.font]
+	label.TextColor3 = rgb(spec.color)
+	label.Text = ""
+	label.Parent = gui
+	gui.Parent = part
+	return gui
+end
+
 -- The Parts version of one piece (PlotBuilding.partsOf: a kit model's fallback, or a Block's one Part), in the
--- building-pass style
+-- building-pass style. The sign board (a Block with text = true) gets the building's SurfaceGui.
 local function buildFallback(parent, origin, building, stage, piece)
 	local base = pieceFrame(origin, piece)
 	local sx, sz = stretchOf(building, piece)
@@ -218,11 +243,35 @@ local function buildFallback(parent, origin, building, stage, piece)
 		lookFlags(part)
 		paint(part, building, stage, piece, b.role)
 		tag(part, piece, b.role)
+		if piece.text and piece.key == building.BLOCK then
+			addSignText(part, building)
+		end
 		part.Parent = parent
 		table.insert(parts, part)
 	end
 	return parts
 end
+
+-- Writes the sign's text: title on the first line, subtitle (or nothing) on the second. The server calls it with the
+-- owner's company name and the stage's name, or FREE and "Claim this garage" (TycoonCore). Returns true when the
+-- building has a sign. Looks only: nothing is read back.
+function PlotBuildingVisuals.setSign(model, title, subtitle)
+	local fade = model and model:FindFirstChild("Fade")
+	local gui = fade and fade:FindFirstChild(PlotBuildingVisuals.SIGN_TEXT_NAME, true)
+	local label = gui and gui:FindFirstChild("Label")
+	if not label then
+		return false
+	end
+	local text = tostring(title or "")
+	if subtitle ~= nil and subtitle ~= "" then
+		text ..= "\n" .. tostring(subtitle)
+	end
+	if label.Text ~= text then
+		label.Text = text
+	end
+	return true
+end
+PlotBuildingVisuals.SIGN_TEXT_NAME = "SignText"
 
 -- The axis of a part (1 X, 2 Y, 3 Z) that lies along the model's axis (1 X or 3 Z), or nil when it is turned otherwise
 local function alignedAxis(rel, modelAxis)
@@ -351,6 +400,7 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 	model.Name = "PlotBuilding"
 	model:SetAttribute("Stage", layout.stage)
 	model:SetAttribute("StageKey", layout.key)
+	model:SetAttribute("StageName", layout.name) -- the sign's second line for a taken garage (TycoonCore)
 	model:SetAttribute("Frame", origin)
 	for field, attribute in pairs(PlotBuildingVisuals.ATTRIBUTES) do
 		model:SetAttribute(attribute, layout.inside[field])

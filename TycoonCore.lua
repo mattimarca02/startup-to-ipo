@@ -238,14 +238,36 @@ local function claimPart(slot, name)
 	return spot and spot:FindFirstChild(name)
 end
 
--- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
--- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
+-- The sign over each garage's door (the building's one text, PlotBuildingVisuals.setSign; overhaul phase 1): the owner's
+-- company name and the stage's name while someone plays there ("Moving in..." or "Closing..." while their save runs),
+-- FREE and "Claim this garage" while it is free. Looks only, in memory only; written again whenever the state or the
+-- building changes. A building without a sign (the kit's fallback included) just shows none.
+local facadeTitle = {} -- slot -> the owner's company name, or "" (a free garage)
+local function applyFacadeSign(slot)
+	local building = PlotBuildingVisuals and garages[slot] and garages[slot]:FindFirstChild("PlotBuilding")
+	if not building then return end
+	local state, title, subtitle = garageState[slot], facadeTitle[slot] or "", nil
+	if state == "MovingIn" then
+		subtitle = LobbyConfig.Texts.MovingIn
+	elseif state == "Closing" then
+		subtitle = LobbyConfig.Texts.Closing
+	elseif state == "Taken" then
+		subtitle = building:GetAttribute("StageName")
+	else
+		title, subtitle = LobbyConfig.Texts.Free, LobbyConfig.Texts.SignFree
+	end
+	pcall(PlotBuildingVisuals.setSign, building, title, subtitle)
+end
+
+-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), the claim post's
+-- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on, and the facade sign's text
 local function setGarageState(slot, state, ownerName)
 	garageState[slot] = state
 	local garage = garages[slot]
 	if not garage then return end
 	garage:SetAttribute("State", state)
 	garage:SetAttribute("OwnerName", ownerName or "")
+	applyFacadeSign(slot)
 	local free = state == "Free" and LobbyConfig.ClaimEnabled
 	local post = claimPart(slot, "ClaimPost")
 	if post then
@@ -295,10 +317,12 @@ local function syncBuilding(slot, stage)
 			if root then table.insert(roots, root) end
 		end
 		pcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing
+		applyFacadeSign(slot) -- a new building: its sign is blank until it is written again
 	end
 end
 
--- The name over a garage ("" hides it): set when someone moves in, cleared when they leave
+-- The name over a garage ("" hides it): set when someone moves in, cleared when they leave. It is the label over the roof
+-- (seen across the plaza) and the first line of the facade sign over the door.
 local function setGarageSign(slot, text)
 	local sign = garages[slot] and garages[slot]:FindFirstChild("GarageSign")
 	local gui = sign and sign:FindFirstChildOfClass("BillboardGui")
@@ -306,6 +330,8 @@ local function setGarageSign(slot, text)
 		gui.TextLabel.Text = text
 		gui.Enabled = text ~= ""
 	end
+	facadeTitle[slot] = text
+	applyFacadeSign(slot)
 end
 
 -- After the owner's leave save: the garage is a new Garage again (Floor and building at stage 1, no name)
