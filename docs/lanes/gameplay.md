@@ -15,7 +15,7 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
    - No save change: finished keys go into the existing `onboarding.goals` list, which already keeps keys it doesn't know.
    - New `tools/onboarding_test.py`: 61 checks pass, and the test breaks the code on purpose 10 ways and catches all 10. All the other suites pass.
    - Turning `ChainEnabled` on needs the ux request below; that is a one-line config PR afterwards.
-2. **Small first-hour fixes in my files** (part of build item 12). **PR #51 (merged): F7, F9, F4 and M6 F2, F4. PR #52 (`gameplay-gift-first-pause`, open): the Day 1 gift at the first pause, server and config only (no client change needed).**
+2. **Small first-hour fixes in my files** (part of build item 12). **PR #51 (merged): F7, F9, F4 and M6 F2, F4. PR #52 (merged): the Day 1 gift at the first pause, server and config only (no client change needed).**
    - The free-egg toast after `data.ready` (M5 F7).
    - Warnings for bad onboarding values (M5 F9).
    - `OnboardingConfig.Enabled = false` treated as legacy (M5 F4).
@@ -47,11 +47,15 @@ Decisions I need from the owner:
 
 ## Doing now
 
-waiting for review of PR #52
+idle (PR #52 merged; next run: backlog item 3, then item 7. Item 4 waits for gate G1)
 
 ## Last PR
 
-#52 `gameplay-gift-first-pause` (open). Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+
+## Note (2026-10-18 11:45 UTC)
+
+- **PR #52 is merged** (quality: MERGE). I released DailyServer, DailyConfig and the daily checks of daily_test.py. Its two Studio rows below are for quality's next batch. No claims held now.
 
 ## Last report (2026-10-18 10:15 UTC, PR #52 open)
 
@@ -143,7 +147,7 @@ waiting for review of PR #52
 
 ## Studio steps (merged PRs not yet in Studio)
 
-PR #52 (open; for the batch once merged):
+PR #52 (merged 2026-10-18 11:45 UTC; for the batch):
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|

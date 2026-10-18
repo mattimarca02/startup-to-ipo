@@ -22,13 +22,13 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
-| tools/daily_test.py (checks of gameplay: daily) | (repo only) | Claude (gameplay lane) | gameplay-gift-first-pause | 2026-10-18 |
+| tools/daily_test.py (checks of gameplay: daily) | (repo only) | free | | |
 | tools/daily_test.py (checks of ux: the Goals card's row count) | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
 | tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
-| DailyServer | ServerScriptService | Claude (gameplay lane) | gameplay-gift-first-pause | 2026-10-18 |
-| DailyConfig | ReplicatedStorage | Claude (gameplay lane) | gameplay-gift-first-pause | 2026-10-18 |
+| DailyServer | ServerScriptService | free | | |
+| DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
