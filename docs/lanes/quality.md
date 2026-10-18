@@ -14,7 +14,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (2026-10-18 09:55 UTC). No quality PR open; the files held for #50 are released.
+2026-10-18 10:24 UTC, scheduled run: reviewing PR #52 (gameplay, 5d6c3c9) and PR #53 (ux, 819e3a6); then the owner's request "turn the claim on" (branch `quality-claim-on`: LobbyConfig `ClaimEnabled = true`, its pins, CLAUDE.md, docs/PLOT_VISUALS.md, Batch 2).
 
 ## Last PR
 
