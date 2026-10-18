@@ -107,8 +107,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | gameplay lane | gameplay-goal-chain | 2026-10-17 |
-| OnboardingConfig | ReplicatedStorage | gameplay lane | gameplay-goal-chain | 2026-10-17 |
+| OnboardingServer | ServerScriptService | free | | |
+| OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
@@ -176,7 +176,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
-| tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
+| tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |

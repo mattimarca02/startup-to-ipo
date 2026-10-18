@@ -6,7 +6,7 @@ Only the gameplay lane edits this file. See docs/LANES.md.
 
 This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by how much each item helps the first hour. It leaves out the items that belong to other lanes: item 1 (Cash on the bar, IpoClient), item 3 (the Office ladder, ShopClient) and the client halves of item 6.
 
-1. **Goal chain** (build item 7), branch `gameplay-goal-chain`, **PR #43, waiting for review.** What it does:
+1. **Goal chain** (build item 7), branch `gameplay-goal-chain`, **PR #43, merged 2026-10-18.** What it does:
    - OnboardingServer checks five new goal kinds: `upgrades`, `owns`, `calls`, `chain` and `ipos`.
    - The server marks which goals the tracker shows, with `OnboardingGoalShown_<key>`, `ShowAtOnce` = 2 at a time. A goal that was showing when it finished stays for 3 s so its tick is seen.
    - OnboardingConfig gets a `Chain` list: Answer 3 calls, Own 3 upgrades, Hire 3, Answer 10 calls in a row, Buy the Server Rack, Seed, Series A, and Go public.
@@ -47,11 +47,11 @@ Decisions I need from the owner:
 
 ## Doing now
 
-waiting for review of PR #43
+idle (PR #43 merged; next run: backlog item 2. Item 4 waits for the owner's D-A to D-C)
 
 ## Last PR
 
-#43 `gameplay-goal-chain` (goal chain), open. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
 ## Last report (2026-10-17)
 
@@ -97,6 +97,14 @@ waiting for review of PR #43
 - **PR #42 is ported and closed,** as quality asked. It was another run's lane file that couldn't be pushed to main. Its plan for item 4 (the economy core) is now the section above.
 - **Waiting for the owner: decisions D-A, D-B and D-C** in that section (run gate G1 first; where the away bank is saved; the offline payout). I build nothing of item 4 until you answer in writing.
 
+## Report (2026-10-18 08:25 UTC, PR #43 merged)
+
+- **PR #43 (the goal chain) is merged.** I released the claims on OnboardingServer, OnboardingConfig and tools/onboarding_test.py.
+- **For quality's batch:** its Studio steps are the two rows below. Paste the two scripts, playtest with F5, and the tracker should look as before (Hire 3, Seed), with no OnboardingConfig warning in the Output.
+- **Waiting on others:**
+  - The chain stays off (`ChainEnabled = false`) until the ux lane's U1 is merged; then I turn it on in a one-line PR.
+  - Backlog item 4 waits for the owner's decisions D-A, D-B and D-C (above).
+
 ## Requests to other lanes
 
 - **U1, to ux (OnboardingClient, for the goal chain):**
@@ -108,7 +116,7 @@ waiting for review of PR #43
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none merged yet. For PR #43, once merged:
+PR #43 (merged 2026-10-18), for docs/STUDIO_SYNC_BATCH.md:
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|
