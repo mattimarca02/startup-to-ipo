@@ -14,11 +14,11 @@ Only the world lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-waiting for review of PR #37
+idle (PR #37 merged; next: backlog item 2, around the VIP Lounge, on the next lane run)
 
 ## Last PR
 
-PR #37 (`world-ring-plaza`): https://github.com/mattimarca02/startup-to-ipo/pull/37
+PR #37 (`world-ring-plaza`): https://github.com/mattimarca02/startup-to-ipo/pull/37 - **merged** 2026-10-17 22:43 UTC (853eaa3)
 
 ## Last report
 
@@ -30,6 +30,12 @@ Studio steps: below (paste WorldArt and WorldVisuals; nothing visible with the c
 
 Later run (2026-10-17, manual fire asking for the first item): the backlog and item 1 were already done in PR #37, and a lane keeps one PR open at a time, so nothing new was built. I rebased #37 on main 9cf4d4e (only lane files had changed; world 380 checks, 101/101 mutants, hashes unchanged). No requests to the world lane, no review verdict yet; gameplay's lobby_test fix is not merged yet.
 
+Check-in 17:07 UTC: no review or comment on #37 yet. Main gained PR #34 (kit front 180) and #39, so I rebased #37 on 1257fe8: world 380 checks, 101/101 mutants, previews up to date; lobby still has only the 6 expected doc-hash failures, which gameplay's PR #38 fixes once merged (it checks that doc against fb8c057, where WorldArt and WorldVisuals are still the old files; quality's batch carries the new hashes, from "Studio steps" below).
+
+Check-in 21:09 UTC: the quality lane's verdict on #37 is **MERGE, after #38**. I did its one non-blocking request: world_test.py now also accepts a changed world file's hash row from docs/STUDIO_SYNC_BATCH.md, so main stays green once this file's "Studio steps" empties after a batch (tested both ways: lane row removed with no batch fails, with the batch row passes). New head ef1a50d, rebased on 049d096: world 380 checks, 101/101 mutants. WorldArt and WorldVisuals are unchanged (hashes below still right). Waiting for the owner: merge #38, then #37.
+
+Check-in 2026-10-18 01:12 UTC: **PR #37 is merged** (853eaa3). On main: world 380 checks, 101/101 mutants. I released my five claim rows in CONTRIBUTING.md (WorldArt, WorldVisuals, tools/world_test.py, tools/render_previews.py, docs/previews/*.svg). Its Studio steps stay below until the owner runs Batch 1. Lane idle; the next lane run starts backlog item 2.
+
 ## Requests to other lanes
 
 1. **gameplay (tools/lobby_test.py): the same as the ux lane's R1, which gameplay has claimed (`gameplay-lobby-test-history`).** `lobby_test.py` checks that docs/STUDIO_SYNC_LOBBY.md's "Lobby all" rows give the *current* SHA-256 of `WorldArt` and `WorldVisuals`, so any world PR fails 6 lobby checks, all about that doc (two table rows, two hash block rows, the block's two "ALL OK" runs). Once that section is checked as history (at `2df1410` or `98cc7a9`: WorldArt and WorldVisuals are the same in both), please let a file that changed since be checked against its lane file's "Studio steps" row, as world_test.py now does for docs/STUDIO_SYNC_WORLD.md (`SYNC_HISTORY`, `LANE_FILE`, `history_bytes`). Until it is merged, the lobby suite on `world-ring-plaza` reports these 6 failures (148 passed, 64 of 64 mutants caught) and nothing else.
@@ -37,7 +43,7 @@ Later run (2026-10-17, manual fire asking for the first item): the backlog and i
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none merged yet. **When `world-ring-plaza` is merged** (the quality lane copies this into docs/STUDIO_SYNC_BATCH.md):
+**PR #37 `world-ring-plaza`, merged 2026-10-17** (the quality lane carries it into docs/STUDIO_SYNC_BATCH.md, Batch 1; this section empties once the owner has run that batch):
 
 | Script | Studio type and place | State | sha256 | Bytes |
 |---|---|---|---|---|

@@ -3,17 +3,47 @@
 <text x="24" y="28" font-size="20" font-weight="bold" fill="#1c1e26">The ring around the plaza, seen from above (lobby L4, claim on)</text>
 <text x="24" y="48" font-size="12" fill="#4a4e5a">From the real WorldArt, WorldVisuals, LobbyConfig and PlotBuilding. Dashed: each lot (82.6 x 86.6).</text>
 <text x="24" y="63" font-size="12" fill="#4a4e5a">Grey: the Floor. Thin: the Garage (stage 1); thick: Big Corporate (stage 5). Red: the door. Up is +Z.</text>
-<rect x="182.88" y="390.08" width="288" height="132.8" fill="#ece2cc" stroke="none"/>
-<rect x="182.88" y="234.88" width="288" height="132.8" fill="#ece2cc" stroke="none"/>
-<rect x="182.88" y="367.68" width="132.8" height="22.4" fill="#ece2cc" stroke="none"/>
-<rect x="338.08" y="367.68" width="132.8" height="22.4" fill="#ece2cc" stroke="none"/>
-<rect x="307.68" y="522.88" width="38.4" height="3.2" fill="#ece2cc" stroke="none"/>
-<rect x="178.4" y="443.68" width="4.48" height="14.4" fill="#e6dcc6" stroke="none"/>
-<rect x="178.4" y="299.68" width="4.48" height="14.4" fill="#e6dcc6" stroke="none"/>
-<rect x="247.68" y="230.4" width="14.4" height="4.48" fill="#e6dcc6" stroke="none"/>
-<rect x="391.68" y="230.4" width="14.4" height="4.48" fill="#e6dcc6" stroke="none"/>
-<rect x="470.88" y="299.68" width="4.48" height="14.4" fill="#e6dcc6" stroke="none"/>
-<rect x="470.88" y="443.68" width="4.48" height="14.4" fill="#e6dcc6" stroke="none"/>
+<rect x="291.68" y="390.08" width="70.4" height="24" fill="#ece2cc" stroke="none"/>
+<rect x="291.68" y="343.68" width="70.4" height="24" fill="#ece2cc" stroke="none"/>
+<rect x="291.68" y="367.68" width="24" height="22.4" fill="#ece2cc" stroke="none"/>
+<rect x="338.08" y="367.68" width="24" height="22.4" fill="#ece2cc" stroke="none"/>
+<rect x="320.48" y="314.88" width="12.8" height="28.8" fill="#ded4c0" stroke="none"/>
+<rect x="310.88" y="282.88" width="32" height="32" fill="#ece2cc" stroke="none"/>
+<rect x="320.48" y="254.08" width="12.8" height="28.8" fill="#ded4c0" stroke="none"/>
+<rect x="320.48" y="414.08" width="12.8" height="89.6" fill="#ded4c0" stroke="none"/>
+<rect x="202.08" y="372.48" width="89.6" height="12.8" fill="#ded4c0" stroke="none"/>
+<rect x="362.08" y="372.48" width="89.6" height="12.8" fill="#ded4c0" stroke="none"/>
+<rect x="189.28" y="241.28" width="275.2" height="12.8" fill="#ded4c0" stroke="none"/>
+<rect x="189.28" y="503.68" width="275.2" height="12.8" fill="#ded4c0" stroke="none"/>
+<rect x="189.28" y="254.08" width="12.8" height="249.6" fill="#ded4c0" stroke="none"/>
+<rect x="451.68" y="254.08" width="12.8" height="249.6" fill="#ded4c0" stroke="none"/>
+<rect x="307.68" y="516.48" width="38.4" height="9.6" fill="#ece2cc" stroke="none"/>
+<rect x="178.4" y="443.68" width="10.88" height="14.4" fill="#e6dcc6" stroke="none"/>
+<rect x="178.4" y="299.68" width="10.88" height="14.4" fill="#e6dcc6" stroke="none"/>
+<rect x="247.68" y="230.4" width="14.4" height="10.88" fill="#e6dcc6" stroke="none"/>
+<rect x="391.68" y="230.4" width="14.4" height="10.88" fill="#e6dcc6" stroke="none"/>
+<rect x="464.48" y="299.68" width="10.88" height="14.4" fill="#e6dcc6" stroke="none"/>
+<rect x="464.48" y="443.68" width="10.88" height="14.4" fill="#e6dcc6" stroke="none"/>
+<rect x="210.72" y="494.08" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="210.72" y="419.52" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="210.72" y="420.48" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="285.28" y="420.48" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="494.08" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="419.52" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="420.48" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="442.08" y="420.48" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="210.72" y="337.28" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="210.72" y="262.72" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="210.72" y="263.68" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="285.28" y="263.68" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="337.28" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="262.72" width="75.52" height="0.96" fill="#f6f6f0" stroke="none"/>
+<rect x="367.52" y="263.68" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="442.08" y="263.68" width="0.96" height="73.6" fill="#f6f6f0" stroke="none"/>
+<rect x="211.68" y="420.48" width="73.6" height="73.6" fill="#80be60" stroke="none"/>
+<rect x="368.48" y="420.48" width="73.6" height="73.6" fill="#80be60" stroke="none"/>
+<rect x="211.68" y="263.68" width="73.6" height="73.6" fill="#80be60" stroke="none"/>
+<rect x="368.48" y="263.68" width="73.6" height="73.6" fill="#80be60" stroke="none"/>
 <rect x="40" y="384.8" width="138.56" height="132.16" fill="none" stroke="#5a6070" stroke-dasharray="6 4" stroke-width="1"/>
 <rect x="78.88" y="402.88" width="96" height="96" fill="#9a9aa4" stroke="none"/>
 <rect x="40" y="240.8" width="138.56" height="132.16" fill="none" stroke="#5a6070" stroke-dasharray="6 4" stroke-width="1"/>
@@ -44,80 +74,234 @@
 <rect x="475.36" y="396.48" width="105.92" height="108.8" fill="none" stroke="#2b2f3a" stroke-width="2.5"/>
 <rect x="475.36" y="384.96" width="119.04" height="131.84" fill="none" stroke="#2b2f3a" stroke-width="2.5"/>
 <rect x="475.36" y="443.68" width="3.2" height="14.4" fill="#d84a3a" stroke="none"/>
-<circle class="decor" cx="194.08" cy="479.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="479.68" r="1.2" fill="#2e6e64"/>
-<circle class="decor" cx="194.08" cy="479.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="194.08" cy="422.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="269.28" cy="478.08" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="269.28" cy="478.08" r="6.4" fill="#78c25c"/>
+<circle class="decor" cx="270.08" cy="478.72" r="4" fill="#96d66e"/>
+<circle class="decor" cx="227.68" cy="436.48" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="227.68" cy="436.48" r="5.6" fill="#54aa54"/>
+<circle class="decor" cx="228.48" cy="437.12" r="3.68" fill="#96d66e"/>
+<circle class="decor" cx="230.88" cy="478.08" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="230.88" cy="478.08" r="4.8" fill="#3e944c"/>
+<circle class="decor" cx="231.68" cy="478.72" r="3.2" fill="#96d66e"/>
+<circle class="decor" cx="269.28" cy="436.48" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="271.36" cy="435.68" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="250.08" cy="481.28" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="252.16" cy="480.48" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="224.48" cy="455.68" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="226.56" cy="454.88" r="1.6" fill="#70ba5c"/>
+<rect x="248" y="453.6" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
+<circle class="decor" cx="250.08" cy="455.68" r="1.76" fill="#ff96aa"/>
+<circle class="decor" cx="384.48" cy="478.08" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="384.48" cy="478.08" r="6.4" fill="#78c25c"/>
+<circle class="decor" cx="385.28" cy="478.72" r="4" fill="#96d66e"/>
+<circle class="decor" cx="426.08" cy="436.48" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="426.08" cy="436.48" r="5.6" fill="#54aa54"/>
+<circle class="decor" cx="426.88" cy="437.12" r="3.68" fill="#96d66e"/>
+<circle class="decor" cx="422.88" cy="478.08" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="422.88" cy="478.08" r="4.8" fill="#3e944c"/>
+<circle class="decor" cx="423.68" cy="478.72" r="3.2" fill="#96d66e"/>
+<circle class="decor" cx="384.48" cy="436.48" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="386.56" cy="435.68" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="403.68" cy="481.28" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="405.76" cy="480.48" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="429.28" cy="455.68" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="431.36" cy="454.88" r="1.6" fill="#70ba5c"/>
+<rect x="401.6" y="453.6" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
+<circle class="decor" cx="403.68" cy="455.68" r="1.76" fill="#ff96aa"/>
+<circle class="decor" cx="269.28" cy="279.68" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="269.28" cy="279.68" r="6.4" fill="#78c25c"/>
+<circle class="decor" cx="270.08" cy="280.32" r="4" fill="#96d66e"/>
+<circle class="decor" cx="227.68" cy="321.28" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="227.68" cy="321.28" r="5.6" fill="#54aa54"/>
+<circle class="decor" cx="228.48" cy="321.92" r="3.68" fill="#96d66e"/>
+<circle class="decor" cx="230.88" cy="279.68" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="230.88" cy="279.68" r="4.8" fill="#3e944c"/>
+<circle class="decor" cx="231.68" cy="280.32" r="3.2" fill="#96d66e"/>
+<circle class="decor" cx="269.28" cy="321.28" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="271.36" cy="320.48" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="250.08" cy="276.48" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="252.16" cy="275.68" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="224.48" cy="302.08" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="226.56" cy="301.28" r="1.6" fill="#70ba5c"/>
+<rect x="248" y="300" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
+<circle class="decor" cx="250.08" cy="302.08" r="1.76" fill="#ff96aa"/>
+<circle class="decor" cx="384.48" cy="279.68" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="384.48" cy="279.68" r="6.4" fill="#78c25c"/>
+<circle class="decor" cx="385.28" cy="280.32" r="4" fill="#96d66e"/>
+<circle class="decor" cx="426.08" cy="321.28" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="426.08" cy="321.28" r="5.6" fill="#54aa54"/>
+<circle class="decor" cx="426.88" cy="321.92" r="3.68" fill="#96d66e"/>
+<circle class="decor" cx="422.88" cy="279.68" r="1.2" fill="#7c5436"/>
+<circle class="decor" cx="422.88" cy="279.68" r="4.8" fill="#3e944c"/>
+<circle class="decor" cx="423.68" cy="280.32" r="3.2" fill="#96d66e"/>
+<circle class="decor" cx="384.48" cy="321.28" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="386.56" cy="320.48" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="403.68" cy="276.48" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="405.76" cy="275.68" r="1.6" fill="#70ba5c"/>
+<circle class="decor" cx="429.28" cy="302.08" r="2.4" fill="#46a050"/>
+<circle class="decor" cx="431.36" cy="301.28" r="1.6" fill="#70ba5c"/>
+<rect x="401.6" y="300" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
+<circle class="decor" cx="403.68" cy="302.08" r="1.76" fill="#ff96aa"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="338.08" cy="330.88" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="273.28" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="347.68" cy="298.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="348.48" cy="298.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="347.68" cy="301.44" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="347.68" cy="296.32" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="306.08" cy="298.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="305.28" cy="298.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="306.08" cy="296.32" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="306.08" cy="301.44" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="426.88" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="338.08" cy="484.48" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="315.68" cy="458.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="314.88" cy="458.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="315.68" cy="456.32" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="315.68" cy="461.44" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="458.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="338.88" cy="458.88" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="338.08" cy="461.44" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="338.08" cy="456.32" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="278.88" cy="367.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="221.28" cy="390.08" r="1.2" fill="#282c36"/>
+<rect x="243.68" y="366.64" width="6.4" height="2.08" fill="#b8885c" stroke="none"/>
+<rect x="243.68" y="366.64" width="6.4" height="0.48" fill="#b8885c" stroke="none"/>
+<circle class="decor" cx="249.44" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="244.32" cy="367.68" r="1.2" fill="#36383e"/>
+<rect x="243.68" y="389.04" width="6.4" height="2.08" fill="#b8885c" stroke="none"/>
+<rect x="243.68" y="390.64" width="6.4" height="0.48" fill="#b8885c" stroke="none"/>
+<circle class="decor" cx="244.32" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="249.44" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="374.88" cy="390.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="432.48" cy="367.68" r="1.2" fill="#282c36"/>
+<rect x="403.68" y="389.04" width="6.4" height="2.08" fill="#b8885c" stroke="none"/>
+<rect x="403.68" y="390.64" width="6.4" height="0.48" fill="#b8885c" stroke="none"/>
+<circle class="decor" cx="404.32" cy="390.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="409.44" cy="390.08" r="1.2" fill="#36383e"/>
+<rect x="403.68" y="366.64" width="6.4" height="2.08" fill="#b8885c" stroke="none"/>
+<rect x="403.68" y="366.64" width="6.4" height="0.48" fill="#b8885c" stroke="none"/>
+<circle class="decor" cx="409.44" cy="367.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="404.32" cy="367.68" r="1.2" fill="#36383e"/>
+<rect x="317.28" y="289.28" width="19.2" height="19.2" fill="#d6d0c4" stroke="none"/>
+<rect x="318.56" y="290.56" width="16.64" height="16.64" fill="#54aae6" stroke="none"/>
+<circle class="decor" cx="326.88" cy="298.88" r="1.2" fill="#d6d0c4"/>
+<rect x="323.36" y="295.36" width="7.04" height="7.04" fill="#d6d0c4" stroke="none"/>
+<rect x="323.84" y="295.84" width="6.08" height="6.08" fill="#54aae6" stroke="none"/>
+<circle class="decor" cx="326.88" cy="298.88" r="1.2" fill="#a0d6f6"/>
+<circle class="decor" cx="186.08" cy="479.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="479.68" r="1.2" fill="#2e6e64"/>
+<circle class="decor" cx="186.08" cy="479.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="186.08" cy="422.08" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="184.48" cy="412.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="185.28" cy="414.56" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="184.48" cy="489.28" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="185.28" cy="491.36" r="1.6" fill="#70ba5c"/>
-<circle class="decor" cx="194.08" cy="335.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="335.68" r="1.2" fill="#2e6e64"/>
-<circle class="decor" cx="194.08" cy="335.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="194.08" cy="278.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="186.08" cy="335.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="335.68" r="1.2" fill="#2e6e64"/>
+<circle class="decor" cx="186.08" cy="335.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="186.08" cy="278.08" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="184.48" cy="268.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="185.28" cy="270.56" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="184.48" cy="345.28" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="185.28" cy="347.36" r="1.6" fill="#70ba5c"/>
-<circle class="decor" cx="226.08" cy="246.08" r="1.2" fill="#36383e"/>
-<rect x="223.52" y="245.84" width="5.12" height="0.48" fill="#2e6e64" stroke="none"/>
-<circle class="decor" cx="226.08" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="283.68" cy="246.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="226.08" cy="238.08" r="1.2" fill="#36383e"/>
+<rect x="223.52" y="237.84" width="5.12" height="0.48" fill="#2e6e64" stroke="none"/>
+<circle class="decor" cx="226.08" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="283.68" cy="238.08" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="293.28" cy="236.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="291.2" cy="237.28" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="216.48" cy="236.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="214.4" cy="237.28" r="1.6" fill="#70ba5c"/>
-<circle class="decor" cx="370.08" cy="246.08" r="1.2" fill="#36383e"/>
-<rect x="367.52" y="245.84" width="5.12" height="0.48" fill="#2e6e64" stroke="none"/>
-<circle class="decor" cx="370.08" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="427.68" cy="246.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="370.08" cy="238.08" r="1.2" fill="#36383e"/>
+<rect x="367.52" y="237.84" width="5.12" height="0.48" fill="#2e6e64" stroke="none"/>
+<circle class="decor" cx="370.08" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="427.68" cy="238.08" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="437.28" cy="236.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="435.2" cy="237.28" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="360.48" cy="236.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="358.4" cy="237.28" r="1.6" fill="#70ba5c"/>
-<circle class="decor" cx="459.68" cy="278.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="278.08" r="1.2" fill="#2e6e64"/>
-<circle class="decor" cx="459.68" cy="278.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="459.68" cy="335.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="278.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="278.08" r="1.2" fill="#2e6e64"/>
+<circle class="decor" cx="467.68" cy="278.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="335.68" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="469.28" cy="345.28" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="468.48" cy="343.2" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="469.28" cy="268.48" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="468.48" cy="266.4" r="1.6" fill="#70ba5c"/>
-<circle class="decor" cx="459.68" cy="422.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="422.08" r="1.2" fill="#2e6e64"/>
-<circle class="decor" cx="459.68" cy="422.08" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.2" fill="#ffde96"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.36" fill="#282c36"/>
-<circle class="decor" cx="459.68" cy="479.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="422.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="422.08" r="1.2" fill="#2e6e64"/>
+<circle class="decor" cx="467.68" cy="422.08" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.2" fill="#ffde96"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.36" fill="#282c36"/>
+<circle class="decor" cx="467.68" cy="479.68" r="1.2" fill="#282c36"/>
 <circle class="decor" cx="469.28" cy="489.28" r="2.4" fill="#46a050"/>
 <circle class="decor" cx="468.48" cy="487.2" r="1.6" fill="#70ba5c"/>
 <circle class="decor" cx="469.28" cy="412.48" r="2.4" fill="#46a050"/>
@@ -146,18 +330,22 @@
 <circle class="decor" cx="342.88" cy="362.88" r="1.2" fill="#ffde96"/>
 <circle class="decor" cx="342.88" cy="362.88" r="1.36" fill="#282c36"/>
 <circle class="decor" cx="342.88" cy="362.88" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="298.08" cy="378.88" r="1.2" fill="#b8885c"/>
-<circle class="decor" cx="297.28" cy="378.88" r="1.2" fill="#b8885c"/>
-<circle class="decor" cx="298.08" cy="376.32" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="298.08" cy="381.44" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="355.68" cy="378.88" r="1.2" fill="#b8885c"/>
-<circle class="decor" cx="356.48" cy="378.88" r="1.2" fill="#b8885c"/>
-<circle class="decor" cx="355.68" cy="381.44" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="355.68" cy="376.32" r="1.2" fill="#36383e"/>
-<rect x="323.68" y="406.64" width="6.4" height="2.08" fill="#b8885c" stroke="none"/>
-<rect x="323.68" y="408.24" width="6.4" height="0.48" fill="#b8885c" stroke="none"/>
-<circle class="decor" cx="324.32" cy="407.68" r="1.2" fill="#36383e"/>
-<circle class="decor" cx="329.44" cy="407.68" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="299.68" cy="393.28" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="298.88" cy="393.28" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="299.68" cy="390.72" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="299.68" cy="395.84" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="299.68" cy="364.48" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="298.88" cy="364.48" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="299.68" cy="361.92" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="299.68" cy="367.04" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="354.08" cy="393.28" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="354.88" cy="393.28" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="354.08" cy="395.84" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="354.08" cy="390.72" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="354.08" cy="364.48" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="354.88" cy="364.48" r="1.2" fill="#b8885c"/>
+<circle class="decor" cx="354.08" cy="367.04" r="1.2" fill="#36383e"/>
+<circle class="decor" cx="354.08" cy="361.92" r="1.2" fill="#36383e"/>
 <rect x="302.4" y="399.2" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
 <circle class="decor" cx="304.48" cy="401.28" r="1.76" fill="#ff96aa"/>
 <rect x="347.2" y="399.2" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
@@ -166,21 +354,9 @@
 <circle class="decor" cx="304.48" cy="356.48" r="1.76" fill="#ff96aa"/>
 <rect x="347.2" y="354.4" width="4.16" height="4.16" fill="#c8704a" stroke="none"/>
 <circle class="decor" cx="349.28" cy="356.48" r="1.76" fill="#ff96aa"/>
-<circle class="decor" cx="316.32" cy="402.88" r="1.2" fill="#282c36"/>
-<circle class="decor" cx="337.44" cy="402.88" r="1.2" fill="#282c36"/>
-<rect x="315.36" y="402.24" width="23.04" height="1.28" fill="#1a223c" stroke="none"/>
-<circle class="decor" cx="206.88" cy="498.88" r="1.2" fill="#7c5436"/>
-<circle class="decor" cx="206.88" cy="498.88" r="5.6" fill="#54aa54"/>
-<circle class="decor" cx="207.68" cy="499.52" r="3.68" fill="#96d66e"/>
-<circle class="decor" cx="446.88" cy="498.88" r="1.2" fill="#7c5436"/>
-<circle class="decor" cx="446.88" cy="498.88" r="4.8" fill="#3e944c"/>
-<circle class="decor" cx="447.68" cy="499.52" r="3.2" fill="#96d66e"/>
-<circle class="decor" cx="206.88" cy="258.88" r="1.2" fill="#7c5436"/>
-<circle class="decor" cx="206.88" cy="258.88" r="6.4" fill="#78c25c"/>
-<circle class="decor" cx="207.68" cy="259.52" r="4" fill="#96d66e"/>
-<circle class="decor" cx="446.88" cy="258.88" r="1.2" fill="#7c5436"/>
-<circle class="decor" cx="446.88" cy="258.88" r="5.6" fill="#54aa54"/>
-<circle class="decor" cx="447.68" cy="259.52" r="3.68" fill="#96d66e"/>
+<circle class="decor" cx="316.32" cy="420.48" r="1.2" fill="#282c36"/>
+<circle class="decor" cx="337.44" cy="420.48" r="1.2" fill="#282c36"/>
+<rect x="315.36" y="419.84" width="23.04" height="1.28" fill="#1a223c" stroke="none"/>
 <circle class="decor" cx="102.88" cy="378.88" r="1.2" fill="#7c5436"/>
 <circle class="decor" cx="102.88" cy="378.88" r="4.8" fill="#3e944c"/>
 <circle class="decor" cx="103.68" cy="379.52" r="3.2" fill="#96d66e"/>

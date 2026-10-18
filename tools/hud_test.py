@@ -22,6 +22,10 @@ The fake's text WIDTHS are an estimate (a safe, wide one: digits 0.68 em, capita
 real client asks TextService for the real width, so on the real font it picks by real measurements; only what the
 test sees depends on the estimate. Studio is the only way to see the real font (docs/STUDIO_SYNC_HUD.md).
 
+It also runs the REAL ClaimButtonClient.lua (the ux lane's "Claim garage" button for phones) in a fake client
+(tools/claim_button_test.luau): what it shows for which prompt, the tap that presses the server's own prompt, its
+place at seven screen sizes with three top bars, then its own mutation runs.
+
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
 
@@ -1914,6 +1918,140 @@ def coupling_mutation_runs(client_text, detail=False):
     return code
 
 
+# --- the "Claim garage" button (ClaimButtonClient.lua, ux lane) -----------------------------------------------------
+# tools/claim_button_test.luau runs the REAL ClaimButtonClient.lua in a fake client (the prompts Roblox shows, the
+# player's Garage attribute, OpenPanel, a virtual clock for the hold) and its CLAIMBUTTON layout at seven screen sizes
+# with three top bars. Then each break below must fail its named check; a client that errored never counts.
+CLAIM_CLIENT = "ClaimButtonClient.lua"
+CLAIM_TEST = os.path.join("tools", "claim_button_test.luau")
+CLAIM_CLEAN = "client: ran without an error"
+CLAIM_DONE = "claim button: the program ran to the end"
+
+
+def claim_checks(luau, client_text=None):
+    """[(name, ok, extra)] of the real ClaimButtonClient.lua in the fake client."""
+    client = client_text if client_text is not None else read(CLAIM_CLIENT)
+    start = client.find("-- CLAIMBUTTON-START")
+    end = client.find("-- CLAIMBUTTON-END")
+    layout = client[start:end] if 0 <= start < end else "local function buttonLayout() return { x = -1, y = -1, w = 0, h = 0 } end\n"
+    head = ("local LOBBY_SOURCE = function()\n" + read("LobbyConfig.lua") + "\nend\n"
+            "local CLIENT = function(game, Instance, require, UDim2, UDim, Color3, Enum, task)\n" + client + "\nend\n"
+            "local LAYOUT = function()\n" + layout + "\nreturn buttonLayout\nend\n")
+    body = read(CLAIM_TEST)
+    at = body.index("local function world(")
+    result = run_luau(luau, body[:at] + head + body[at:])
+    out = []
+    for line in result.stdout.splitlines():
+        if line.startswith("FAIL: "):
+            name, _, extra = line[len("FAIL: "):].partition(" -- ")
+            out.append((name, False, extra or None))
+    m = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+    out += [("claim button", True, None)] * (int(m.group(1)) if m else 0)
+    if result.returncode != 0 or "DONE" not in result.stdout.splitlines():
+        out.append((CLAIM_DONE + " (it crashed: a crash is never a catch)", False, (result.stderr or result.stdout)[-300:]))
+    return out
+
+
+def claim_static_checks(text):
+    code = code_only(text)
+    return [
+        ("claim button static: it fires no remote (no FireServer, InvokeServer or RemoteEvent)",
+         all(w not in code for w in ("FireServer", "InvokeServer", "RemoteEvent", "RemoteFunction")), None),
+        ("claim button static: it has no Touched handler and no input of its own besides the button (only the server's prompt claims)",
+         "Touched" not in code and "UserInputService" not in code, None),
+        ("claim button static: it stops at once with LobbyConfig.ClaimEnabled off, before building anything",
+         code.find("if not LobbyConfig.ClaimEnabled then") >= 0 and code.find("if not LobbyConfig.ClaimEnabled then") < code.find("make(\"ScreenGui\""), None),
+    ]
+
+
+CLAIM_MUTANTS = [
+    ("the button built with the claim off", "if not LobbyConfig.ClaimEnabled then\n\treturn -- the claim is off", "if false then\n\treturn -- the claim is off",
+     "client: with the claim off"),
+    ("a keyboard prompt shows the button too", "if inputType == Enum.ProximityPromptInputType.Touch and isClaimPrompt(prompt) then",
+     "if isClaimPrompt(prompt) then", "client: a claim prompt shown for keyboard"),
+    ("any prompt counts as a claim prompt", "return post ~= nil and post.Name == \"ClaimPost\" and post.Parent ~= nil and post.Parent.Name == \"ClaimSpot\"",
+     "return post ~= nil", "client: another prompt (the VIP door)"),
+    ("a ClaimPost outside a ClaimSpot counts", "return post ~= nil and post.Name == \"ClaimPost\" and post.Parent ~= nil and post.Parent.Name == \"ClaimSpot\"",
+     "return post ~= nil and post.Name == \"ClaimPost\"", "client: a ClaimPost outside a ClaimSpot"),
+    ("the button stays while a window is open", " and playerGui:GetAttribute(\"OpenPanel\") == nil\n", "\n", "client: a window open hides"),
+    ("the button stays with a garage", "local show = shownPrompt ~= nil and player:GetAttribute(\"Garage\") == 0 and",
+     "local show = shownPrompt ~= nil and", "client: with a garage the button goes"),
+    ("a tap with a garage still presses", "if pressing or not prompt or player:GetAttribute(\"Garage\") ~= 0 then return end",
+     "if pressing or not prompt then return end", "client: with a garage a tap presses nothing"),
+    ("a second tap presses again", "if pressing or not prompt or", "if not prompt or", "client: a second tap while holding"),
+    ("the hold is shorter than the prompt's hold time", "task.delay(prompt.HoldDuration + 0.15, function()", "task.delay(0.1, function()",
+     "client: it does not let go before"),
+    ("the hold never ends", "\t\tpcall(function()\n\t\t\tprompt:InputHoldEnd()\n\t\tend)\n", "", "client: then it lets go"),
+    ("the shown prompt hidden keeps the button", "\tif prompt == shownPrompt then\n\t\tshownPrompt = nil", "\tif false then\n\t\tshownPrompt = nil",
+     "client: the shown prompt hidden"),
+    ("any prompt hiding hides the button", "\tif prompt == shownPrompt then\n\t\tshownPrompt = nil", "\tif true then\n\t\tshownPrompt = nil",
+     "client: another prompt hiding leaves"),
+    ("the garage line not updated", "\t\tsubtitle.Text = shownPrompt.ObjectText\n", "", "client: a claim prompt shown for touch"),
+    ("the busy text never shows", "title.Text = pressing and PRESSING_TEXT or LobbyConfig.Texts.Prompt", "title.Text = LobbyConfig.Texts.Prompt",
+     "client: while pressing"),
+    ("the button never moves with the screen", "gui:GetPropertyChangedSignal(\"AbsoluteSize\"):Connect(place)\n", "", "client: a new screen size"),
+    ("short screens: the button down in the Shop's pop-up lane", "local SHORT_BOTTOM = 72", "local SHORT_BOTTOM = 40",
+     "layout: clear of the Shop's pop-up lane"),
+    ("short screens: the button over the thumbstick", "left, right, bottom = THUMBSTICK_RIGHT + 8,", "left, right, bottom = 100,",
+     "layout: clear of the thumbstick"),
+    ("tall screens: the button down on the thumbstick", "local TALL_BOTTOM = 176", "local TALL_BOTTOM = 120", "layout: clear of the thumbstick"),
+    ("a small button (40 high)", "local BUTTON_HEIGHT = 60", "local BUTTON_HEIGHT = 40", "layout: the button is a big touch target"),
+    ("the gui wiped on respawn", "\tResetOnSpawn = false,\n\tDisplayOrder = 0,", "\tResetOnSpawn = true,\n\tDisplayOrder = 0,",
+     "client: the button's gui is kept on respawn"),
+    ("the client makes a remote", "local player = Players.LocalPlayer\n", "local player = Players.LocalPlayer\nInstance.new(\"RemoteEvent\")\n",
+     "client: it makes no remote"),
+]
+# Must be reported as NOT caught: the client errors on every tap, so checks about the tap fail too, but an error is
+# never a catch (its "ran without an error" check fails).
+CLAIM_SELF_TEST = ("a client that errors on every tap", "\tlocal prompt = shownPrompt\n", "\terror(\"crash (test)\")\n\tlocal prompt = shownPrompt\n",
+                   "client: the tap presses")
+
+
+def claim_mutant(luau, source, old, new, want):
+    """(caught, why) for one mutant of ClaimButtonClient.lua."""
+    if source.count(old) != 1:
+        return False, "not applied (%d matches)" % source.count(old)
+    failed = [n for n, ok, _ in claim_checks(luau, source.replace(old, new)) if not ok]
+    if any(n.startswith(CLAIM_CLEAN) or n.startswith(CLAIM_DONE) for n in failed):
+        return False, "the client errored: an error is never a catch"
+    if any(n.startswith(want) for n in failed):
+        return True, None
+    return False, "no failing check starts with \"%s\" (failed: %s)" % (want, failed[:3])
+
+
+def claim_main(luau, mutations=True):
+    """Runs the claim button's checks and mutants; returns 0 or 1."""
+    code = 0
+    source = read(CLAIM_CLIENT)
+    results = claim_checks(luau) + claim_static_checks(source)
+    bad = [(n, e) for n, ok, e in results if not ok]
+    for n, e in bad:
+        print("FAIL: " + n + (" -- " + str(e) if e is not None else ""))
+    print("Claim garage button (ClaimButtonClient) in a fake client: %d passed, %d failed" % (len(results) - len(bad), len(bad)))
+    if bad:
+        code = 1
+    if not mutations:
+        return code
+    caught = 0
+    for label, old, new, want in CLAIM_MUTANTS:
+        ok, why = claim_mutant(luau, source, old, new, want)
+        if ok:
+            caught += 1
+        else:
+            print("NOT CAUGHT: %s -- %s" % (label, why))
+    print("Claim button mutations: %d of %d caught, each by its named check (never by an error)" % (caught, len(CLAIM_MUTANTS)))
+    if caught != len(CLAIM_MUTANTS):
+        code = 1
+    label, old, new, want = CLAIM_SELF_TEST
+    self_ok, why = claim_mutant(luau, source, old, new, want)
+    good = (not self_ok) and why is not None and "errored" in why
+    print("Claim button harness self-test (a client that errors never counts): %d of 1 reported as not caught" % (1 if good else 0))
+    if not good:
+        print("FAIL: the claim button harness counted an erroring client as caught (%s)" % why)
+        code = 1
+    return code
+
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -1965,6 +2103,8 @@ def main():
             code = 1
         if coupling_mutation_runs(client, "--coupling-detail" in sys.argv):
             code = 1
+    if claim_main(luau, "--no-mutations" not in sys.argv):
+        code = 1
     return code
 
 
