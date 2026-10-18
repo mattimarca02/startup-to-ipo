@@ -159,6 +159,12 @@ local function claim(player, data)
 		return false, TEXTS.Off
 	end
 
+	-- 0. A day with Shares needs the IPO not to be filing (grantShares refuses then). Checked
+	--    before anything is granted, so a refusal never uses up the day with part of it (M6 F2).
+	if sharesFor(reward) > 0 and IpoServer.isBusy(data) then
+		return false, TEXTS.IpoBusy
+	end
+
 	-- 1. The egg first: it's the only part that can fail. If it does, nothing changed and the
 	--    day isn't used up (the player can free an incubator and claim again today).
 	local eggKey = reward.egg
@@ -325,14 +331,14 @@ local function addDebugActions()
 		daily.lastClaimDay -= 1
 		daily.fakeDays += 1
 		publish(player, data, today())
-		return "Fake day +" .. daily.fakeDays .. " this session. " .. describe(daily)
+		return "Fake day +" .. daily.fakeDays .. " this session (written to your real save at the next save). " .. describe(daily)
 	end)
 	ShopServer.addDebugAction("DailyReset", function(player, data)
 		if not RunService:IsStudio() then return "Debug is disabled" end
 		local daily = data.daily
 		daily.lastClaimDay, daily.streak, daily.best, daily.claims, daily.fakeDays = 0, 0, 0, 0, 0
 		publish(player, data, today())
-		return "Calendar reset: next claim is Day 1, no streak (saved at the next save)"
+		return "Calendar reset: next claim is Day 1, no streak (written to your real save at the next save)"
 	end)
 end
 

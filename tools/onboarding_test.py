@@ -9,7 +9,8 @@ fake players, a fake garage) and checks the goal chain (docs/GAMEPLAY_FIRST_HOUR
 the goal kinds, which goals the tracker shows (OnboardingConfig.ShowAtOnce at a time, a just-finished goal
 keeps its place for DoneShowSeconds), that goals finish while hidden, that the call goals are skipped while
 calls don't run, that ChainEnabled = false keeps today's two goals exactly, and that the save keeps every
-finished key. Then it breaks the server on purpose (mutants) and checks that a named check catches each one.
+finished key. It also checks the M5 review's F4 (a save with progress and no free egg on record is legacy),
+F7 (the free-egg toast waits for data.ready) and F9 (bad saved values are warned about). Then it breaks the server on purpose (mutants) and checks that a named check catches each one.
 It changes nothing in the game or in Studio.
 """
 
@@ -54,7 +55,8 @@ local SERVICES = {
 }
 local game = { GetService = function(_, n) return SERVICES[n] end }
 local script = { Parent = token("ServerScriptService") }
-local Instance = { new = function(c) return { ClassName = c, FireClient = function() end } end }
+local TOASTS = {}
+local Instance = { new = function(c) return { ClassName = c, FireClient = function(_, player, text) table.insert(TOASTS, { player = player, text = text }) end } end }
 local LOOP
 local task = {
 	spawn = function(f) LOOP = coroutine.create(f) end,
@@ -316,6 +318,60 @@ do
 	check("save: legacy players get no tracker and no shown goals", l:GetAttribute("OnboardingTracker") ~= true and shownKeys(l) == "")
 end
 
+-- 7. M5 review fixes: F4, F7, F9 ---------------------------------------------------------------
+do
+	local function toastsFor(player)
+		local n = 0
+		for _, t in ipairs(TOASTS) do if t.player == player then n += 1 end end
+		return n
+	end
+	-- F7: the free egg's toast is sent by the first update after data.ready, once
+	local p = newPlayer("NewToast")
+	p.data.ready = false -- TycoonCore calls setupPlayer while the save is still loading
+	Server.setupPlayer(p, p.data, nil, true)
+	table.clear(PLAYERS); table.insert(PLAYERS, p)
+	check("F7: a new player gets the free egg", p.data.team.incubators[1] ~= false and p.data.onboarding.seenIntro == true)
+	check("F7: no toast during the load", toastsFor(p) == 0, toastsFor(p))
+	tick()
+	check("F7: still none while data.ready is false", toastsFor(p) == 0, toastsFor(p))
+	p.data.ready = true; tick()
+	check("F7: the toast comes with the first update after ready", toastsFor(p) == 1, toastsFor(p))
+	check("F7: it names the free egg", TOASTS[#TOASTS].text == string.format(Config.FreeEggMessage, Config.FreeEgg .. " Egg"), TOASTS[#TOASTS].text)
+	tick(3)
+	check("F7: it is sent only once", toastsFor(p) == 1, toastsFor(p))
+	check("F7: the waiting toast is never saved", Server.serialize(p.data).toast == nil)
+
+	-- F4: a save written while onboarding was off (seenIntro false, legacy false) with progress is legacy
+	local v = newPlayer("VeteranOff")
+	v.data.cash.Value = 500
+	Server.setupPlayer(v, v.data, { seenIntro = false, legacy = false, arrowDone = false, dismissed = false, goals = {} }, true)
+	table.clear(PLAYERS); table.insert(PLAYERS, v)
+	hire(v, 1); tick()
+	check("F4: progress and no egg on record = legacy", v.data.onboarding.legacy == true and v.data.onboarding.seenIntro == true)
+	check("F4: no free egg for them", v.data.team.incubators[1] == false)
+	check("F4: no arrow and no tracker", v:GetAttribute("OnboardingTarget") == nil and v:GetAttribute("OnboardingTracker") ~= true)
+	-- ... while the same section with no progress is still a new player
+	local n = fresh("NewOff", { seenIntro = false, legacy = false, goals = {} })
+	check("F4: no progress = still new, gets the egg", n.data.onboarding.legacy == false and n.data.team.incubators[1] ~= false)
+	-- ... and onboarding switched off gives nothing and marks nothing
+	Config.Enabled = false
+	local off = fresh("Disabled")
+	check("F4: Enabled = false gives no egg", off.data.team.incubators[1] == false and off.data.onboarding.seenIntro == false)
+	Config.Enabled = true
+
+	-- F9: bad values are skipped with a warning
+	local before = #WARNINGS
+	local b = fresh("BadValues", { seenIntro = "yes", legacy = 1, arrowDone = true, dismissed = false, goals = 5 })
+	local text = table.concat(WARNINGS, " | ", before + 1)
+	check("F9: a bad boolean is warned about", string.find(text, "onboarding.seenIntro", 1, true) ~= nil and string.find(text, "onboarding.legacy", 1, true) ~= nil, text)
+	check("F9: a goals value that is not a list is warned about", string.find(text, "onboarding.goals", 1, true) ~= nil, text)
+	check("F9: good values next to them still load", b.data.onboarding.arrowDone == true)
+	check("F9: a bad value is not taken as true", b.data.onboarding.legacy == false)
+	local before2 = #WARNINGS
+	fresh("GoodValues", { seenIntro = true, legacy = false, arrowDone = false, dismissed = false, goals = { "Hire3" } })
+	check("F9: a good section gives no warning", #WARNINGS == before2, table.concat(WARNINGS, " | ", before2 + 1))
+end
+
 -- 6. ShowAtOnce = 1 -----------------------------------------------------------------------
 do
 	Config.ShowAtOnce = 1
@@ -344,6 +400,13 @@ MUTANTS = [
     ("owns ignores the name", "return data.owned[goal.upgrade] and 1 or 0, 1", "return countOwned(data) > 0 and 1 or 0, 1"),
     ("ipos kind missing", "\telseif goal.kind == \"ipos\" then\n\t\treturn data.ipo.count, goal.target\n", ""),
     ("only the old list", "for _, goal in ipairs(OnboardingConfig.activeGoals()) do", "for _, goal in ipairs(OnboardingConfig.Goals) do"),
+    ("F7: the toast is sent during the load", "notifyWhenReady(data, string.format(", "notify(player, string.format("),
+    ("F7: the toast is sent every second", "\t\tonboarding.toast = nil\n", ""),
+    ("F4: only a missing section counts as legacy", "if not onboarding.seenIntro and hasProgress(data) then",
+     "if savedOnboarding == nil and hasProgress(data) then"),
+    ("F9: no warning for a bad boolean", "\t\t\telseif value ~= nil then\n", "\t\t\telseif false then\n"),
+    ("F9: no warning for bad goals", "if savedOnboarding.goals ~= nil and typeof(savedOnboarding.goals) ~= \"table\" then", "if false then"),
+    ("F9: a non-boolean is taken as true", "if typeof(value) == \"boolean\" then\n\t\t\t\tonboarding[key] = value", "if value then\n\t\t\t\tonboarding[key] = value == true or value == 1"),
     ("the done window counts one second more", "now - justDone[goal.key] < OnboardingConfig.DoneShowSeconds",
      "now - justDone[goal.key] <= OnboardingConfig.DoneShowSeconds"),
 ]
