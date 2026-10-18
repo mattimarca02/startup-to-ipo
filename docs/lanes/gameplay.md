@@ -47,11 +47,11 @@ Decisions I need from the owner:
 
 ## Doing now
 
-waiting for review of PR #51
+gameplay-gift-first-pause - started 2026-10-18 10:02 UTC (backlog item 2, last part: the Day 1 gift at the first pause)
 
 ## Last PR
 
-#51 `gameplay-first-hour-fixes` (open). Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
 ## Last report (2026-10-18 10:01 UTC, PR #51 open)
 
