@@ -15,7 +15,7 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
    - No save change: finished keys go into the existing `onboarding.goals` list, which already keeps keys it doesn't know.
    - New `tools/onboarding_test.py`: 61 checks pass, and the test breaks the code on purpose 10 ways and catches all 10. All the other suites pass.
    - Turning `ChainEnabled` on needs the ux request below; that is a one-line config PR afterwards.
-2. **Small first-hour fixes in my files** (part of build item 12). **PR #51 (`gameplay-first-hour-fixes`): F7, F9, F4 and M6 F2, F4 built.** The Day 1 gift at the first pause is left for its own PR (it needs the DailyClient half from ux):
+2. **Small first-hour fixes in my files** (part of build item 12). **PR #51 (merged): F7, F9, F4 and M6 F2, F4. PR #52 (`gameplay-gift-first-pause`, open): the Day 1 gift at the first pause, server and config only (no client change needed).**
    - The free-egg toast after `data.ready` (M5 F7).
    - Warnings for bad onboarding values (M5 F9).
    - `OnboardingConfig.Enabled = false` treated as legacy (M5 F4).
@@ -47,13 +47,26 @@ Decisions I need from the owner:
 
 ## Doing now
 
-gameplay-gift-first-pause - started 2026-10-18 10:02 UTC (backlog item 2, last part: the Day 1 gift at the first pause)
+waiting for review of PR #52
 
 ## Last PR
 
-#51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#52 `gameplay-gift-first-pause` (open). Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
-## Last report (2026-10-18 10:01 UTC, PR #51 open)
+## Last report (2026-10-18 10:15 UTC, PR #52 open)
+
+- **PR #51 is merged.** I released OnboardingServer and tools/onboarding_test.py. Its Studio rows stay below for quality's batch.
+- **Built the rest of backlog item 2 as PR #52:** https://github.com/mattimarca02/startup-to-ipo/pull/52
+  - A brand-new player's Day 1 gift now opens by itself at the first pause: 10 s after their third employee (TUT 6, about minute 10). Before, it never opened by itself in session 1.
+  - Old players, players who have claimed before and onboarding switched off work as today.
+  - DailyConfig: new `FirstPause = { employees = 3, delay = 10 }`, and `AutoOpenWithin` goes from 60 to 1800 s so the window can still open then. No DailyClient change was needed, so no request to ux.
+  - No save change, no reward or price change.
+- **Tests:** the daily calendar has 115 checks (13 new, driving the server's real every-second loop), and 4 hand-made breaks are each caught by a named check. Every other suite passes: onboarding 78 (16/16), hud, world 380, icon 371, shop_ux 6,308, lobby 155, building 1,407.
+- **Studio steps:** PR #52's rows below, once it is merged.
+- **Requests made:** none. **Waiting for the owner:** gate G1 for backlog item 4, and the review and merge of PR #52.
+- **Claims held** (docs/lanes/claims.md): DailyServer, DailyConfig, daily_test.py (checks of gameplay: daily).
+
+## Report (2026-10-18 10:01 UTC, PR #51 open)
 
 - **The owner answered D-A to D-C** (owner.md): G1 first, the `away` section as a new top-level section, and the offline Cash stays (only part of it may count toward the valuation). So I built nothing of backlog item 4; it waits for G1's numbers in ROADMAP.
 - **Built backlog item 2 as PR #51:** https://github.com/mattimarca02/startup-to-ipo/pull/51
@@ -130,7 +143,16 @@ gameplay-gift-first-pause - started 2026-10-18 10:02 UTC (backlog item 2, last p
 
 ## Studio steps (merged PRs not yet in Studio)
 
-PR #51 (open; for the batch once merged):
+PR #52 (open; for the batch once merged):
+
+| Script | Studio | State | sha256 | bytes |
+|---|---|---|---|---|
+| `DailyServer` | ModuleScript, ServerScriptService | changed | `3527123c3f33bc7f4b43cd89cddd9d9eb08aa3fc026d3a7a99ebad1e308e1ba1` | 17574 |
+| `DailyConfig` | ModuleScript, ReplicatedStorage | changed | `9a7a6820182ab984e36a153e983833b991d2f4a90c1d8088dea15d982a1a8693` | 7290 |
+
+Playtest: Debug > Onboarding restart, then Daily reset; hire up to 3 employees; about 10 s later the Daily window opens by itself on Day 1.
+
+PR #51 (merged 2026-10-18; replaced by PR #52's DailyServer row if both go in the same batch):
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|
