@@ -2823,6 +2823,21 @@ def toast_texts():
             continue
         rows.append(("TycoonCore.lua:%d" % (core.count("\n", 0, m.start()) + 1), m.group(1)))
         at("TycoonCore.lua", core, "ShopServer.notify(player, %s)" % const)
+    # overhaul phase 2: the funding-round toast (TycoonCore stageUpToast): "<icon> <stage> reached! Your <building> becomes a
+    # <building>", and " · tap IPO to go public" on the last stage; the stage names from IpoConfig, the buildings' from PlotBuilding
+    ipo, pb = read("IpoConfig.lua"), read("PlotBuilding.lua")
+    stages = re.findall(r'\{ key = "(\w+)", name = "([^"]+)", icon = "([^"]+)", valuation = \d+ \}', ipo)
+    buildings = re.findall(r'^\t\tkey = "(\w+)",[^\n]*?name = "([^"]+)",', pb[pb.index("PlotBuilding.Stages = {"):], re.M)
+    where = at("TycoonCore.lua", core, "ShopServer.notify(player, text)")
+    if len(stages) < 2 or len(buildings) != len(stages):
+        problems.append("the stage-up toast rows need IpoConfig's stages and PlotBuilding's buildings (%d, %d)" % (len(stages), len(buildings)))
+    for i in range(1, len(stages)):
+        text = "%s %s reached!" % (stages[i][2], stages[i][1])
+        if buildings and buildings[i - 1][1] != buildings[i][1]:
+            text += " Your %s becomes a %s" % (buildings[i - 1][1], buildings[i][1])
+        if i == len(stages) - 1:
+            text += " · tap IPO to go public"
+        rows.append((where, text))
     for text in ("Couldn't open the purchase. Please try again.", "Couldn't buy that. Please try again."):
         rows.append((at(CLIENT, client, '"%s"' % text), text))
     upgrade_names = [r[0] for r in re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+)', core)]
@@ -2845,7 +2860,7 @@ def toast_texts():
     if calls != known:
         problems.append("ShopServer.lua has %d notify(player, ...) calls, the toast tests know %d" % (calls, known))
     outside = sorted(set(re.findall(r"(?<!function )ShopServer\.notify\(player, (\w+)\)", "".join(code_only(read(f)) for f in sorted(os.listdir(ROOT)) if f.endswith(".lua")))))
-    if outside != ["SAVE_BACK_TEXT", "SAVE_TROUBLE_TEXT", "reason"]:
+    if outside != ["SAVE_BACK_TEXT", "SAVE_TROUBLE_TEXT", "reason", "text"]:  # text: TycoonCore's stage-up toast (the rows above)
         problems.append("ShopServer.notify is called with %r" % outside)
     return rows, problems
 
