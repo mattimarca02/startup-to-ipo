@@ -354,6 +354,24 @@ Playtests (each written down as done, skipped or failed): (a) 1 player, F5, clai
 
 Run on: (see the pull request of `overhaul-phase2`)
 
+## Batch 5 (overhaul phase 3: the office grows with the team; branch `overhaul-phase3`, on top of Batch 4)
+
+Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 3). Pushed through the Studio MCP by the owner session; this batch is the record.
+
+**What the owner sees after this batch:** a room starts with no hire desk: one see-through "next hire" desk marks the first spot; every hire gets a desk at its spot (it pops in) and the see-through one moves to the next spot; a hire that leaves takes its desk away; a free garage shows only the see-through desk. Derived from the team (never saved). No save change, no new remote, no publish.
+
+| Script | Studio | State | sha256 (`overhaul-phase3`) | bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `ba09f0497bed05825b3b5ee74e4370c674174785014af0cd5197baea2e2319dc` | 56770 |
+| `EmployeeServer` | ModuleScript, ServerScriptService | changed | `58c3094f755fba997a4c67de7ddd84148d016363391e7e54e380fc188c2788e8` | 32218 |
+| `PlotVisuals` | ModuleScript, ServerScriptService | changed | `acd424a2881b219923916203fa95d3ac920899f8df59e47aa182426d5ac33945` | 44592 |
+
+The hash block is Batch 1's with these three `WANT` rows; it must print `ALL OK: 3 scripts match the repo`.
+
+Playtests: (a) 1 player, F5, claim: a free garage shows one see-through desk; your room shows a desk per hire you already have plus the see-through one; Debug > GiveCash, buy a Garage Egg, Debug > Skip egg timers, hatch: a desk pops in at the hire's spot and the see-through desk moves on; TEAM > fire one: its desk goes. (b) a stage change (Debug > Building: next stage) keeps the desks. (c) 2 players: each sees the other's desks grow.
+
+Run on: (see the pull request of `overhaul-phase3`)
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

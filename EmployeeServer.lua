@@ -45,7 +45,7 @@ local WHITE = Color3.new(1, 1, 1)
 
 local EmployeeServer = {}
 
-local core -- { getData, save, updateIncome, plotFrame }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotFrame, onTeamChanged }, given by TycoonCore
 local remotes = {}
 local rng = Random.new()
 
@@ -207,6 +207,9 @@ local function placeEmployees(data)
 			model:Destroy()
 			team.models[id] = nil
 		end
+	end
+	if core.onTeamChanged then
+		core.onTeamChanged(data) -- the office grows with the team: a desk per hire (TycoonCore, looks only)
 	end
 end
 

@@ -21,7 +21,7 @@ Branch `visuals-garage`. Looks only: nothing here is saved, sent through a remot
 | 4 | `SeriesB` | Real office: blue-gray carpet tiles, white walls with a ribbon of windows along the back, glass walls along both sides, a glass-walled meeting room (table, chairs, wall screen), big plants, floor lamps. | Fabric, blue-gray | 253 | 3 |
 | 5 | `IpoReady` | HQ: polished light floor, four big windows with a simple block skyline behind them, a graphite logo wall with a neon rim ("HQ"), a trophy shelf, an armchair lounge, a reception desk. | SmoothPlastic, white | 257 | 3 |
 
-Every room (2 to 5) also has the founder's desk with the `DeskPhone` (a later step makes it ring) on the front right, and a hire desk for each of the 11 hire spots (white, oak or birch tops on two dark legs and a monitor, screen toward the hire).
+Every room (2 to 5) also has the founder's desk with the `DeskPhone` (a later step makes it ring) on the front right. The hire desks (white, oak or birch tops on two dark legs and a monitor, screen toward the hire; crates in the Garage) **follow the team** (overhaul phase 3): a player's room gets one desk per hire at the first hire spots and one see-through "next hire" desk at the spot after them (`PlotVisuals.setDesks`, called by TycoonCore after the load and on every team change, from `#team.employees`: nothing saved); a free garage's room shows only the ghost at the first spot. A room built with no desk count (`buildRoom(..., kit)`: the previews, the tests) has a desk at every one of the 11 spots.
 
 The six upgrade props (Desk, Coffee Machine, Laptop, Server Rack, Whiteboard, Neon Logo) are one shared list in `PlotArt.Props`, **identical in all five rooms**. A stage never owns props.
 
