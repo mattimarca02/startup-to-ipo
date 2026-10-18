@@ -90,3 +90,10 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-18 09:42 ux started: PR #48 merged 09:18, no open PR, continue with the backlog (branch ux-goal-chain exists).
 2026-10-18 09:42 quality not started: no open lane PR without a verdict (#50 is quality's own, clean, waiting for the owner).
 2026-10-18 09:43 notified owner: #50 ready to merge; interiors start denied twice (start it himself); STUDIO_SYNC_BATCH.md Batch 1 final (#49).
+2026-10-18 22:35 interiors start FAILED (permission denied by the run classifier, third time in a row): lanes resumed after the overhaul (owner.md), PR #40 merged, no open PR, lane file stale; tried once more because of the resume; stop trying, sent to the owner.
+2026-10-18 22:35 building started: lanes resumed (owner.md), PR #36 merged, no open PR, continue with the backlog (cloud only, no Mac approval).
+2026-10-18 22:35 world started: lanes resumed (owner.md), PR #37 merged, no open PR, continue with the backlog (cloud only, no Mac approval).
+2026-10-18 22:35 gameplay started: lanes resumed (owner.md), PR #52 merged, no open PR, continue with the backlog.
+2026-10-18 22:35 ux start FAILED (permission denied by the run classifier): lanes resumed, PR #53 merged, no open PR, continue with the backlog.
+2026-10-18 22:35 quality not started: no open PRs.
+2026-10-18 22:36 notified owner: interiors and ux starts denied (start them himself); STUDIO_SYNC_BATCH.md got Batches 2 to 7 (claim on and the overhaul).
