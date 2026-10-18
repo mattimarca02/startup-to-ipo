@@ -160,6 +160,12 @@ local HEADER_HEIGHT = 30
 local ROW_HEIGHT = 22
 local GAP = 6 -- between the valuation bar and the card
 
+-- The goals in use: OnboardingConfig.activeGoals() (Goals today, the longer Chain once ChainEnabled is on).
+-- The card has one row per goal the server shows at a time (ShowAtOnce), never more, so it keeps the
+-- same height however long the list is. The server picks which goals those are (OnboardingGoalShown_<key>).
+local GOALS = OnboardingConfig.activeGoals()
+local SLOTS = math.min(OnboardingConfig.ShowAtOnce, #GOALS)
+
 local gui = make("ScreenGui", {
 	Name = "OnboardingGui",
 	ResetOnSpawn = false,
@@ -201,7 +207,7 @@ onboardingNotify.OnClientEvent:Connect(showToast)
 
 local card = make("Frame", {
 	Name = "GoalTracker",
-	Size = UDim2.fromOffset(250, HEADER_HEIGHT + ROW_HEIGHT * #OnboardingConfig.Goals + 8),
+	Size = UDim2.fromOffset(250, HEADER_HEIGHT + ROW_HEIGHT * SLOTS + 8),
 	BackgroundColor3 = COLORS.panel,
 	BackgroundTransparency = 0.15,
 	Visible = false,
@@ -238,8 +244,8 @@ local closeButton = make("TextButton", {
 round(closeButton, 8)
 fitText(closeButton, 16)
 
-local rows = {} -- goal key -> { name, progress }
-for i, goal in ipairs(OnboardingConfig.Goals) do
+local rows = {} -- one per slot, top to bottom: { name, progress }; the goal in each slot changes
+for i = 1, SLOTS do
 	local y = HEADER_HEIGHT + (i - 1) * ROW_HEIGHT
 	local name = make("TextLabel", {
 		Position = UDim2.fromOffset(10, y),
@@ -264,7 +270,7 @@ for i, goal in ipairs(OnboardingConfig.Goals) do
 		Parent = card,
 	})
 	fitText(progress, 15)
-	rows[goal.key] = { name = name, progress = progress }
+	rows[i] = { name = name, progress = progress }
 end
 
 -- Sits under the valuation bar. IpoClient places that bar with offsets in a ScreenGui like this
@@ -305,18 +311,52 @@ end
 local closed = false -- closed with the X on this screen (the server saves it too)
 local celebrating = false
 
+-- The goals to draw, in list order: the ones the server marks as shown (OnboardingGoalShown_<key> == true).
+-- A server from before the goal chain marks none at all (the attribute is missing, not false): then the
+-- first goals of the list, as the card always did.
+local function shownGoals()
+	local list, marked = {}, false
+	for _, goal in ipairs(GOALS) do
+		local shown = player:GetAttribute("OnboardingGoalShown_" .. goal.key)
+		if shown ~= nil then
+			marked = true
+		end
+		if shown == true then
+			table.insert(list, goal)
+		end
+	end
+	if not marked then
+		for i = 1, SLOTS do
+			list[i] = GOALS[i]
+		end
+	end
+	return list
+end
+
 local function refreshTracker()
-	local allDone = true
-	for _, goal in ipairs(OnboardingConfig.Goals) do
-		local row = rows[goal.key]
+	-- Every goal the server checks is finished. A goal it can't check has no progress and is skipped
+	-- (the server skips it too: the call goals while calls don't run), so it never stops the "all done" card.
+	local allDone, counted = true, 0
+	for _, goal in ipairs(GOALS) do
 		local current = player:GetAttribute("OnboardingGoal_" .. goal.key)
 		local target = player:GetAttribute("OnboardingGoalTarget_" .. goal.key)
-		local done = typeof(current) == "number" and typeof(target) == "number" and current >= target
-		row.name.Text = (done and "✅" or goal.icon) .. " " .. goal.text
+		if typeof(current) == "number" and typeof(target) == "number" then
+			counted += 1
+			allDone = allDone and current >= target
+		end
+	end
+	allDone = allDone and counted > 0
+	local list = shownGoals()
+	for i, row in ipairs(rows) do
+		local goal = list[i]
+		local current = goal and player:GetAttribute("OnboardingGoal_" .. goal.key)
+		local target = goal and player:GetAttribute("OnboardingGoalTarget_" .. goal.key)
+		local known = typeof(current) == "number" and typeof(target) == "number"
+		local done = known and current >= target
+		row.name.Text = goal and ((done and "✅" or goal.icon) .. " " .. goal.text) or "" -- an empty slot stays empty
 		row.name.TextColor3 = done and COLORS.subtext or COLORS.text
-		row.progress.Text = typeof(current) == "number" and typeof(target) == "number" and progressText(goal, current, target) or ""
+		row.progress.Text = known and progressText(goal, current, target) or ""
 		row.progress.TextColor3 = done and COLORS.buy or COLORS.subtext
-		allDone = allDone and done
 	end
 	local show = player:GetAttribute("OnboardingTracker") == true and not closed
 	-- Every goal just got finished: show the ticks for a moment before the card goes away.

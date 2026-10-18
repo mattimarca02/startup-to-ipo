@@ -26,6 +26,10 @@ It also runs the REAL ClaimButtonClient.lua (the ux lane's "Claim garage" button
 (tools/claim_button_test.luau): what it shows for which prompt, the tap that presses the server's own prompt, its
 place at seven screen sizes with three top bars, then its own mutation runs.
 
+And it runs the REAL OnboardingClient.lua's Goals card in a fake client (tools/onboarding_client_test.luau): with
+ChainEnabled off and on, it draws only the goals the server marks as shown, in list order, in ShowAtOnce rows at most;
+then its own mutation runs.
+
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
 
@@ -53,11 +57,14 @@ def marked_source(name, filename):
 
 
 def onboarding_goal_count():
-    """How many goals OnboardingConfig.Goals has (the Goals card is 30 + 22 per goal + 8 high)."""
+    """How many goal rows the Goals card has: math.min(OnboardingConfig.ShowAtOnce, #activeGoals()), the way
+    OnboardingClient sizes it (30 + 22 per row + 8 high). activeGoals() is Chain with ChainEnabled on, else Goals."""
     text = read("OnboardingConfig.lua")
-    block = text[text.index("OnboardingConfig.Goals = {"):]
+    chain = re.search(r"^OnboardingConfig\.ChainEnabled = (true|false)\b", text, re.M).group(1) == "true"
+    block = text[text.index("OnboardingConfig.Chain = {" if chain else "OnboardingConfig.Goals = {"):]
     block = block[:block.index("\n}")]
-    return len(re.findall(r"\{\s*key = ", block))
+    at_once = int(re.search(r"^OnboardingConfig\.ShowAtOnce = (\d+)\b", text, re.M).group(1))
+    return min(at_once, len(re.findall(r"\{\s*key = ", block)))
 
 
 def run_luau(luau, source):
@@ -2052,6 +2059,121 @@ def claim_main(luau, mutations=True):
     return code
 
 
+# --- the Goals card (OnboardingClient.lua, ux lane; request U1 of the gameplay lane, the goal chain) ----------------
+# tools/onboarding_client_test.luau runs the REAL OnboardingClient.lua in a fake client: the server's goal attributes
+# (OnboardingGoal_, OnboardingGoalTarget_, OnboardingGoalShown_), OnboardingTracker, OpenPanel, a virtual clock for the
+# "All goals done!" moment, with ChainEnabled off (Goals) and on (Chain). Then each break below must fail its named
+# check; a client that errored never counts.
+GOALS_CLIENT = "OnboardingClient.lua"
+GOALS_TEST = os.path.join("tools", "onboarding_client_test.luau")
+GOALS_CLEAN = "client: ran without an error"
+GOALS_DONE = "goals card: the program ran to the end"
+
+
+def goals_card_checks(luau, client_text=None):
+    """[(name, ok, extra)] of the real OnboardingClient.lua's Goals card in the fake client."""
+    client = client_text if client_text is not None else read(GOALS_CLIENT)
+    head = ("local warn = function() end\n"
+            "local CONFIG_SOURCE = function()\n" + read("OnboardingConfig.lua") + "\nend\n"
+            "local CLIENT = function(game, Instance, require, UDim2, UDim, Color3, Enum, task, workspace, Vector3, Vector2,"
+            " ColorSequence, NumberSequence, warn)\n" + client + "\nend\n")
+    body = read(GOALS_TEST)
+    at = body.index("local function world(")
+    result = run_luau(luau, body[:at] + head + body[at:])
+    out = []
+    for line in result.stdout.splitlines():
+        if line.startswith("FAIL: "):
+            name, _, extra = line[len("FAIL: "):].partition(" -- ")
+            out.append((name, False, extra or None))
+    m = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+    out += [("goals card", True, None)] * (int(m.group(1)) if m else 0)
+    if result.returncode != 0 or "DONE" not in result.stdout.splitlines():
+        out.append((GOALS_DONE + " (it crashed: a crash is never a catch)", False, (result.stderr or result.stdout)[-300:]))
+    return out
+
+
+def goals_card_static_checks(text):
+    code = code_only(text)
+    return [
+        ("goals card static: the card reads the goals in use (OnboardingConfig.activeGoals()), never OnboardingConfig.Goals directly",
+         "OnboardingConfig.activeGoals()" in code and "OnboardingConfig.Goals" not in code, None),
+        ("goals card static: the card is sized for math.min(OnboardingConfig.ShowAtOnce, #GOALS) rows (tools/hud_test.py and"
+         " tools/daily_test.py count its rows that way: onboarding_goal_count)",
+         "local SLOTS = math.min(OnboardingConfig.ShowAtOnce, #GOALS)" in code and "HEADER_HEIGHT + ROW_HEIGHT * SLOTS + 8" in code, None),
+        ("goals card static: its only request is closing the tracker (one InvokeServer, DismissTracker; no FireServer)",
+         code.count("InvokeServer") == 1 and "InvokeServer(\"DismissTracker\")" in code and "FireServer" not in code, None),
+    ]
+
+
+GOALS_MUTANTS = [
+    ("the card reads Goals, not the goals in use", "local GOALS = OnboardingConfig.activeGoals()", "local GOALS = OnboardingConfig.Goals",
+     "chain: the card draws the goals the server shows"),
+    ("one row per goal of the list (the card grows with the chain)", "local SLOTS = math.min(OnboardingConfig.ShowAtOnce, #GOALS)",
+     "local SLOTS = #GOALS", "card: with the Chain"),
+    ("the shown mark is ignored (every goal drawn)", "\t\tif shown == true then\n", "\t\tif true then\n",
+     "chain: the card draws the goals the server shows"),
+    ("a goal marked not shown counts as shown", "\t\tif shown == true then\n", "\t\tif shown ~= nil then\n",
+     "chain: the card draws the goals the server shows"),
+    ("no fallback for a server from before the chain", "\tif not marked then\n", "\tif false then\n", "old server:"),
+    ("the fallback always on (the server's choice ignored)", "\tif not marked then\n", "\tif true then\n", "chain:"),
+    ("an empty row keeps its old goal", " or \"\" -- an empty slot stays empty", " or row.name.Text -- an empty slot stays empty",
+     "chain: with one goal shown the second row is empty"),
+    ("a goal with no progress counts as not done (the calls block \"All goals done!\")",
+     "\t\t\tallDone = allDone and current >= target\n\t\tend\n",
+     "\t\t\tallDone = allDone and current >= target\n\t\telse\n\t\t\tallDone = false\n\t\tend\n", "all done: a goal the server can't check"),
+    ("the tick is never drawn", "(done and \"✅\" or goal.icon)", "(goal.icon)", "chain: a shown goal just finished keeps its row"),
+]
+# Must be reported as NOT caught: the client errors on every refresh, so the row checks fail too, but an error is
+# never a catch (its "ran without an error" check fails).
+GOALS_SELF_TEST = ("a client that errors on every refresh", "\tlocal list = shownGoals()\n", "\terror(\"crash (test)\")\n\tlocal list = shownGoals()\n",
+                   "chain: the card draws the goals the server shows")
+
+
+def goals_card_mutant(luau, source, old, new, want):
+    """(caught, why) for one mutant of OnboardingClient.lua."""
+    if source.count(old) != 1:
+        return False, "not applied (%d matches)" % source.count(old)
+    failed = [n for n, ok, _ in goals_card_checks(luau, source.replace(old, new)) if not ok]
+    if any(n.startswith(GOALS_CLEAN) or n.startswith(GOALS_DONE) for n in failed):
+        return False, "the client errored: an error is never a catch"
+    if any(n.startswith(want) for n in failed):
+        return True, None
+    return False, "no failing check starts with \"%s\" (failed: %s)" % (want, failed[:3])
+
+
+def goals_card_main(luau, mutations=True):
+    """Runs the Goals card's checks and mutants; returns 0 or 1."""
+    code = 0
+    source = read(GOALS_CLIENT)
+    results = goals_card_checks(luau) + goals_card_static_checks(source)
+    bad = [(n, e) for n, ok, e in results if not ok]
+    for n, e in bad:
+        print("FAIL: " + n + (" -- " + str(e) if e is not None else ""))
+    print("Goals card (OnboardingClient) in a fake client: %d passed, %d failed" % (len(results) - len(bad), len(bad)))
+    if bad:
+        code = 1
+    if not mutations:
+        return code
+    caught = 0
+    for label, old, new, want in GOALS_MUTANTS:
+        ok, why = goals_card_mutant(luau, source, old, new, want)
+        if ok:
+            caught += 1
+        else:
+            print("NOT CAUGHT: %s -- %s" % (label, why))
+    print("Goals card mutations: %d of %d caught, each by its named check (never by an error)" % (caught, len(GOALS_MUTANTS)))
+    if caught != len(GOALS_MUTANTS):
+        code = 1
+    label, old, new, want = GOALS_SELF_TEST
+    self_ok, why = goals_card_mutant(luau, source, old, new, want)
+    good = (not self_ok) and why is not None and "errored" in why
+    print("Goals card harness self-test (a client that errors never counts): %d of 1 reported as not caught" % (1 if good else 0))
+    if not good:
+        print("FAIL: the Goals card harness counted an erroring client as caught (%s)" % why)
+        code = 1
+    return code
+
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -2104,6 +2226,8 @@ def main():
         if coupling_mutation_runs(client, "--coupling-detail" in sys.argv):
             code = 1
     if claim_main(luau, "--no-mutations" not in sys.argv):
+        code = 1
+    if goals_card_main(luau, "--no-mutations" not in sys.argv):
         code = 1
     return code
 

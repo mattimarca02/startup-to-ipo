@@ -3443,7 +3443,7 @@ end
 __TRAY__
 __PAUSE__
 __SHOWN__
-local GOALS = __GOALCOUNT__ -- OnboardingConfig.Goals: the Goals card is 30 + 22 per goal + 8 high
+local GOALS = __GOALCOUNT__ -- the Goals card's rows, min(ShowAtOnce, #activeGoals()): 30 + 22 per row + 8 high
 local function rect(x, y, w, h) return { x = x, y = y, w = w, h = h } end
 local function overlaps(a, b) return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h end
 local function trayRect(l) return rect(l.x, l.y, l.w, l.h) end
@@ -8504,13 +8504,16 @@ def marked_source(name, filename="TycoonCore.lua"):
 
 
 def onboarding_goal_count():
-    """How many goals OnboardingConfig.Goals has (the Goals card grows by 22 px per goal)."""
+    """How many goal rows the Goals card has (it grows by 22 px per row): math.min(OnboardingConfig.ShowAtOnce,
+    #activeGoals()), the way OnboardingClient sizes it. activeGoals() is Chain with ChainEnabled on, else Goals."""
     import re
     with open(os.path.join(ROOT, "OnboardingConfig.lua"), encoding="utf-8") as f:
         text = f.read()
-    block = text[text.index("OnboardingConfig.Goals = {"):]
+    chain = re.search(r"^OnboardingConfig\.ChainEnabled = (true|false)\b", text, re.M).group(1) == "true"
+    block = text[text.index("OnboardingConfig.Chain = {" if chain else "OnboardingConfig.Goals = {"):]
     block = block[:block.index("\n}")]
-    return len(re.findall(r"\{\s*key = ", block))
+    at_once = int(re.search(r"^OnboardingConfig\.ShowAtOnce = (\d+)\b", text, re.M).group(1))
+    return min(at_once, len(re.findall(r"\{\s*key = ", block)))
 
 
 def known_sections_line():

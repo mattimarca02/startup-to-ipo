@@ -101,7 +101,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py | (repo only) | Claude (ux lane): daily_test.py (checks of ux) | ux-goal-chain | 2026-10-18 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -109,7 +109,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | free | | |
+| OnboardingClient | StarterPlayerScripts | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
@@ -179,4 +179,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
+| tools/onboarding_client_test.luau | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
