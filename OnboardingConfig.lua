@@ -41,32 +41,36 @@ OnboardingConfig.TrackerAfterEmployees = 1
 -- kind "ipos": go public `target` times.
 -- A goal this version can't check is skipped: it is never shown and never blocks the tracker.
 
--- The two goals the tracker has shown since milestone 5. Today's screen (OnboardingClient) draws one row
--- per goal of this list, so this stays the list in use until the screen draws only the goals the server
--- marks as shown (OnboardingGoalShown_<key>): see ChainEnabled below.
+-- The two goals the tracker showed from milestone 5 until the chain went on (overhaul phase 4). Kept as the
+-- fallback list (ChainEnabled = false), so an old save's finished keys still mean the same.
+-- Each goal's `why` is the one-line reason the pop-up gives when the goal appears on the card ("New goal: ... ").
 OnboardingConfig.Goals = {
-	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3 },
-	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed" },
+	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3, why = "Every hire earns for you, even while you're away" },
+	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed", why = "Your first funding round: a bigger office" },
 }
 
 -- The goal chain (docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 4, build item 7): new goals keep coming
 -- through the first hour, ShowAtOnce at a time. Hire3 and Seed are the same goals as above (a player who
 -- finished them keeps them). The proposal's milestone goals come with the milestones (build item 10).
+-- The order is the order of play: the first upgrades and hires, the Server Rack, then each funding round, then the IPO.
 OnboardingConfig.Chain = {
-	{ key = "Calls3", icon = "📞", text = "Answer 3 calls", kind = "calls", target = 3 },
-	{ key = "Own3", icon = "🛒", text = "Own 3 upgrades", kind = "upgrades", target = 3 },
-	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3 },
-	{ key = "Calls10Row", icon = "🔥", text = "Answer 10 calls in a row", kind = "chain", target = 10 },
-	{ key = "ServerRack", icon = "🗄️", text = "Buy the Server Rack", kind = "owns", upgrade = "Server Rack" },
-	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed" },
-	{ key = "SeriesA", icon = "💼", text = "Reach Series A", kind = "stage", stage = "SeriesA" },
-	{ key = "FirstIpo", icon = "🔔", text = "Go public (your first IPO)", kind = "ipos", target = 1 },
+	{ key = "Calls3", icon = "📞", text = "Answer 3 calls", kind = "calls", target = 3, why = "A customer call pays a few seconds of income" },
+	{ key = "Own3", icon = "🛒", text = "Own 3 upgrades", kind = "upgrades", target = 3, why = "SHOP > Office: each upgrade raises your income" },
+	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3, why = "EGGS: every hire earns for you, even while you're away" },
+	{ key = "Calls10Row", icon = "🔥", text = "Answer 10 calls in a row", kind = "chain", target = 10, why = "A chain of calls pays up to double" },
+	{ key = "ServerRack", icon = "🗄️", text = "Buy the Server Rack", kind = "owns", upgrade = "Server Rack", why = "SHOP > Office: +$15 a second" },
+	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed", why = "Your first funding round: the garage becomes a Small Office" },
+	{ key = "Hire5", icon = "👥", text = "Hire 5 employees", kind = "employees", target = 5, why = "A full team: more income every second" },
+	{ key = "SeriesA", icon = "💼", text = "Reach Series A", kind = "stage", stage = "SeriesA", why = "The next round: a two-story Big Office" },
+	{ key = "SeriesB", icon = "🚀", text = "Reach Series B", kind = "stage", stage = "SeriesB", why = "The next round: a glass tower" },
+	{ key = "IpoReady", icon = "🔔", text = "Reach IPO-ready", kind = "stage", stage = "IpoReady", why = "The last round: then you can go public" },
+	{ key = "FirstIpo", icon = "🔔", text = "Go public (your first IPO)", kind = "ipos", target = 1, why = "IPO: you start again stronger, with x1.5 income and Shares for permanent perks" },
 }
 
--- Off: the tracker uses Goals (today's two goals). On: it uses Chain. Turn it on only after OnboardingClient
--- draws just the goals the server marks as shown, at most ShowAtOnce rows (the request to the ux lane in
--- docs/lanes/gameplay.md). Turning it on or off never loses a finished goal: both lists save the same way.
-OnboardingConfig.ChainEnabled = false
+-- Off: the tracker uses Goals (today's two goals). On: it uses Chain (on since overhaul phase 4, 2026-10-18:
+-- OnboardingClient draws just the goals the server marks as shown, ShowAtOnce rows at most, PR #53).
+-- Turning it on or off never loses a finished goal: both lists save the same way.
+OnboardingConfig.ChainEnabled = true
 
 -- How many goals the tracker shows at a time: the first unfinished ones, in list order
 OnboardingConfig.ShowAtOnce = 2
@@ -74,6 +78,10 @@ OnboardingConfig.ShowAtOnce = 2
 -- A shown goal that was just finished stays shown (with its tick) this many seconds before the next goal
 -- takes its place
 OnboardingConfig.DoneShowSeconds = 3
+
+-- The pop-up when a goal appears on the card: "%s" is the goal's text, then its why on a second line (overhaul phase 4).
+-- Not for the goals shown at the very first tick (the card itself says them), only for the ones that come later.
+OnboardingConfig.NewGoalMessage = "New goal: %s"
 
 -- The list of goals in use (the server and the screen both ask this)
 function OnboardingConfig.activeGoals()

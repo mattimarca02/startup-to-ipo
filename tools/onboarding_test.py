@@ -172,8 +172,13 @@ local function savedKeys(player)
 end
 
 -- 1. Config ------------------------------------------------------------------------------
-check("config: ChainEnabled ships false", Config.ChainEnabled == false)
+check("config: ChainEnabled ships true (overhaul phase 4, 2026-10-18)", Config.ChainEnabled == true)
+check("config: on = the chain", Config.activeGoals() == Config.Chain)
+Config.ChainEnabled = false
 check("config: off = today's list", Config.activeGoals() == Config.Goals)
+Config.ChainEnabled = true
+check("config: every goal has a why (the New goal pop-up's second line) and the chain ends with the IPO",
+	(function() for _, g in ipairs(Config.Chain) do if typeof(g.why) ~= "string" or g.why == "" then return false end end return Config.Chain[#Config.Chain].key == "FirstIpo" end)())
 check("config: today's list is still Hire3 then Seed", #Config.Goals == 2 and Config.Goals[1].key == "Hire3" and Config.Goals[2].key == "Seed")
 check("config: ShowAtOnce is a whole number from 1", typeof(Config.ShowAtOnce) == "number" and Config.ShowAtOnce >= 1 and Config.ShowAtOnce % 1 == 0)
 check("config: DoneShowSeconds is a number from 1", typeof(Config.DoneShowSeconds) == "number" and Config.DoneShowSeconds >= 1)
@@ -214,6 +219,7 @@ do
 end
 
 -- 2. Chain off: exactly today's tracker ------------------------------------------------------
+Config.ChainEnabled = false
 do
 	IS_STUDIO = true
 	local p = fresh("Off")
@@ -260,18 +266,25 @@ do
 	p.data.owned["Server Rack"] = true; tick()
 	check("live: owns goal finished", p.data.onboarding.goals.ServerRack == true)
 	tick(Config.DoneShowSeconds)
-	check("live: Seed is skipped, Series A comes next", shownKeys(p) == "Hire3,SeriesA", shownKeys(p))
+	check("live: Seed is skipped (finished while hidden), Hire 5 comes next", shownKeys(p) == "Hire3,Hire5", shownKeys(p))
+	local mine = {}
+	for _, t in ipairs(TOASTS) do if t.player == p and string.find(t.text, "New goal", 1, true) then table.insert(mine, t.text) end end
+	check("live: a goal that takes a row later gets one New goal pop-up with its why (the first two got none)",
+		#mine == 2 and string.find(mine[1], "New goal: Buy the Server Rack", 1, true) ~= nil and string.find(mine[1], "+$15", 1, true) ~= nil
+		and string.find(mine[2], "New goal: Hire 5 employees", 1, true) ~= nil, table.concat(mine, " | "))
 	-- An IPO takes the player below: finished goals stay finished
 	p.data.owned = {}; p.data.ipo.valuation = 0; tick()
 	check("live: finished goals stay after the upgrades reset", p.data.onboarding.goals.Own3 and p.data.onboarding.goals.ServerRack)
 	check("live: a finished goal shows its target after a reset", p:GetAttribute("OnboardingGoal_Own3") == 3)
 	hire(p, 2); p.data.ipo.valuation = Ipo.stageValuation(3, 0); tick(Config.DoneShowSeconds + 1)
+	check("live: Hire3 and Series A done: Hire 5 and Series B are shown", shownKeys(p) == "Hire5,SeriesB", shownKeys(p))
+	hire(p, 2); p.data.ipo.valuation = Ipo.stageValuation(5, 0); tick(Config.DoneShowSeconds + 1)
 	check("live: only the IPO is left", shownKeys(p) == "FirstIpo", shownKeys(p))
 	check("live: tracker still up", p:GetAttribute("OnboardingTracker") == true)
 	p.data.ipo.count = 1; tick()
 	check("live: the IPO goal finishes", p.data.onboarding.goals.FirstIpo == true)
 	check("live: every reachable goal done hides the tracker (call goals skipped, not blocking)", p:GetAttribute("OnboardingTracker") == false)
-	check("live: the save lists every finished key, sorted", savedKeys(p) == "FirstIpo,Hire3,Own3,Seed,SeriesA,ServerRack", savedKeys(p))
+	check("live: the save lists every finished key, sorted", savedKeys(p) == "FirstIpo,Hire3,Hire5,IpoReady,Own3,Seed,SeriesA,SeriesB,ServerRack", savedKeys(p))
 end
 
 -- 4. Chain on, calls running (Studio) ------------------------------------------------------
@@ -393,13 +406,13 @@ MUTANTS = [
      "if typeof(tasks) == \"table\" then"),
     ("chain reads done", "return goal.kind == \"calls\" and tasks.done or tasks.bestChain, goal.target",
      "return tasks.done, goal.target"),
-    ("hidden goals get a tick time", "if player:GetAttribute(\"OnboardingGoalShown_\" .. goal.key) == true then",
-     "if true then"),
+    ("hidden goals get a tick time", "if player:GetAttribute(\"OnboardingGoalShown_\" .. goal.key) == true then\n\t\t\t\t\tjustDone[goal.key] = now",
+     "if true then\n\t\t\t\t\tjustDone[goal.key] = now"),
     ("the shown flag is never cleared", "\t\tsetAttribute(player, \"OnboardingGoalShown_\" .. goal.key, show)\n",
      "\t\tif show then setAttribute(player, \"OnboardingGoalShown_\" .. goal.key, show) end\n"),
     ("owns ignores the name", "return data.owned[goal.upgrade] and 1 or 0, 1", "return countOwned(data) > 0 and 1 or 0, 1"),
     ("ipos kind missing", "\telseif goal.kind == \"ipos\" then\n\t\treturn data.ipo.count, goal.target\n", ""),
-    ("only the old list", "for _, goal in ipairs(OnboardingConfig.activeGoals()) do", "for _, goal in ipairs(OnboardingConfig.Goals) do"),
+    ("only the old list", "\tlocal shown = 0\n\tfor _, goal in ipairs(OnboardingConfig.activeGoals()) do", "\tlocal shown = 0\n\tfor _, goal in ipairs(OnboardingConfig.Goals) do"),
     ("F7: the toast is sent during the load", "notifyWhenReady(data, string.format(", "notify(player, string.format("),
     ("F7: the toast is sent every second", "\t\tonboarding.toast = nil\n", ""),
     ("F4: only a missing section counts as legacy", "if not onboarding.seenIntro and hasProgress(data) then",
