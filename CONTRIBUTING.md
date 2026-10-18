@@ -101,7 +101,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachServer | ServerScriptService | free | | |
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
-| tools/daily_test.py | (repo only) | Claude (ux lane): daily_test.py (checks of ux) | ux-goal-chain | 2026-10-18 |
+| tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -109,7 +110,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
+| OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
@@ -118,12 +119,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| PlotVisuals | ServerScriptService | free | | |
-| PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
+| PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| README.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
@@ -137,7 +138,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | free | | |
+| tools/hud_test.py | (repo only) | Claude (ux lane) | ux-sync-history | 2026-10-18 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -153,7 +154,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/world_pass_integration.patch | (repo only) | free | | |
 | docs/WORLD_ICONS_NOTES.md | (repo only) | free | | |
 | ShopLayout | ReplicatedStorage | free | | |
-| tools/shop_ux_test.py | (repo only) | free | | |
+| tools/shop_ux_test.py | (repo only) | Claude (ux lane) | ux-sync-history | 2026-10-18 |
 | docs/STUDIO_SYNC_SHOP.md | (repo only) | free | | |
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
@@ -179,5 +180,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
-| tools/onboarding_client_test.luau | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |

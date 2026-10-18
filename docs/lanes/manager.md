@@ -76,3 +76,10 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-18 07:44 ux not started: PR #44 MERGE at d960956; 13 behind main, same commits, clean merge; sent to the owner.
 2026-10-18 07:44 quality not started: no open lane PR without a verdict for its head (#45 is quality's own, waiting for the owner).
 2026-10-18 07:45 notified owner: #43, #44, #45 ready to merge; interiors at its daily limit, he can merge main into #40 himself; building and world at their daily limit after this run.
+2026-10-18 08:45 interiors start FAILED (permission denied by the run classifier): PR #40 merged 08:27, no open PR, continue with the backlog (tried once: denied attempts are not starts, no real start today).
+2026-10-18 08:45 building not started: started by the manager at 07:44 (under 3 h).
+2026-10-18 08:45 world not started: started by the manager at 05:42 (under 3 h).
+2026-10-18 08:45 gameplay start FAILED (permission denied by the run classifier): PR #43 merged 08:19, no open PR, continue with the backlog.
+2026-10-18 08:45 ux not started: PR #44 MERGE at d960956 but now 37 behind main with a conflict (needs a rebase); a ux run is already active (ux-goal-chain pushed 08:35, U1), so not started twice; the rebase goes to the next run.
+2026-10-18 08:45 quality not started: quality is running (Doing now 08:32, batch for #40); #44 has a verdict for its head.
+2026-10-18 08:46 notified owner: gameplay and interiors starts denied (start them himself); #44 conflicts after the merges and needs a rebase; STUDIO_SYNC_BATCH.md Batch 1 (7 scripts) is on main and ready to run.
