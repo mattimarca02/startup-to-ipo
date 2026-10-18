@@ -14,7 +14,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (PR #46 merged 2026-10-18 08:29 UTC, claims released; next: #44's ClaimButtonClient row and #40's I2 sentence once they merge, verdicts for new heads or `ux-sync-history` once it is a PR)
+2026-10-18 08:32 UTC (PR #40 merged at 08:27, #46 at 08:29): Batch 1 gets #40's PlotArt and PlotVisuals from `main`, CLAUDE.md gets the I2 sentence (kit furniture in the rooms), on branch `quality-batch-1-pr40` (claims re-taken).
 
 ## Last PR
 
