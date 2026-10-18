@@ -853,6 +853,26 @@ section("negative tests", function()
 		local gui = newInstance("SurfaceGui")
 		gui.Parent = anyPart(w, "Avenue")
 		check("negative texts: a text surface without its label is caught", failsWith(w, site, "texts", "text surfaces"))
+		-- the flat pieces' materials (overhaul phase 5: textured ground instead of flat plastic)
+		check("materials: WorldArt.Materials is Concrete paths and kerbs, Grass lawns and hills (overhaul phase 5)", type(WorldArt.Materials) == "table"
+			and WorldArt.Materials.path == "Concrete" and WorldArt.Materials.kerb == "Concrete" and WorldArt.Materials.ground == "Grass" and WorldArt.Materials.hill == "Grass")
+		w = fresh()
+		check("materials: a built path slab is Concrete, a kerb Concrete, a lawn Grass and a hill Grass", w:FindFirstChild("Paths"):GetChildren()[1].Material.Name == "Concrete"
+			and w:FindFirstChild("Kerbs"):GetChildren()[1].Material.Name == "Concrete" and w:FindFirstChild("Ground"):GetChildren()[1].Material.Name == "Grass"
+			and w:FindFirstChild("Hills"):GetChildren()[1].Material.Name == "Grass")
+		check("materials: the trees' crowns, the bushes, the hedge balls and the planters' flowers are Grass (leafy), the trunks Wood", WorldArt.Pieces.TreeA[2].material == "Grass"
+			and WorldArt.Pieces.TreeC[3].material == "Grass" and WorldArt.Pieces.Bush[1].material == "Grass" and WorldArt.Pieces.Hedge[1].material == "Grass"
+			and WorldArt.Pieces.Planter[2].material == "Grass" and WorldArt.Pieces.TreeA[1].material == "Wood")
+		local bad = deepCopy(WorldArt)
+		bad.Materials.ground = "Neon"
+		check("negative data: a Neon lawn material is caught (Materials.ground)", anyMatch(WorldVisuals.validate(bad), "Materials.ground"))
+		bad = deepCopy(WorldArt)
+		bad.Materials.path = "Sand"
+		check("negative data: a path material outside MATERIALS is caught", anyMatch(WorldVisuals.validate(bad), "Materials.path"))
+		bad = deepCopy(WorldArt)
+		bad.Materials = nil
+		check("data: with no Materials table the world still builds (SmoothPlastic paths and lawns, as before phase 5)", #WorldVisuals.validate(bad) == 0
+			and WorldVisuals.build(nil, bad, site):FindFirstChild("Paths"):GetChildren()[1].Material.Name == "SmoothPlastic")
 		local bad = deepCopy(WorldArt)
 		bad.Pieces.Bush[1].shape = "Wedge"
 		check("negative data: a Wedge is caught", anyMatch(WorldVisuals.validate(bad), "unknown shape Wedge"))
@@ -2026,6 +2046,8 @@ MUTANTS_A = [
     ("a script in every decor item", V, "\t\tmodel.Parent = decor", "\t\tInstance.new(\"Script\").Parent = model\n\t\tmodel.Parent = decor",
      "default site: check flags"),
     ("paths, kerbs and lawns in Neon", V, "part.Material = Enum.Material[material]", "part.Material = Enum.Material.Neon", "default site: check flags"),
+    ("the lawns back to SmoothPlastic (the Materials table ignored)", V, 'M.ground or "SmoothPlastic"', '"SmoothPlastic"', "materials: a built path slab"),
+    ("the hills back to SmoothPlastic", V, 'Enum.Material[M.hill or "SmoothPlastic"]', 'Enum.Material.SmoothPlastic', "materials: a built path slab"),
     ("two plaza slabs overlapping", V, 'rect(plan.paths, "PlazaWest", px0, cx - hx, cz - hz, cz + hz, "Plaza")',
      'rect(plan.paths, "PlazaWest", px0, cx - hx, cz - hz - 2, cz + hz, "Plaza")', "default site: check zfighting"),
     ("the build resizes the Baseplate next to it", V, "\tworld.Parent = parent\n\treturn world",

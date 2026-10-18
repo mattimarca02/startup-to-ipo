@@ -560,6 +560,18 @@ for s = 1, 5 do
 		if (p.sx ~= 1 and not (allowed and allowed.x)) or (p.sz ~= 1 and not (allowed and allowed.z)) then stretched = stretched or p.name end
 	end
 	check("kit: every key stage " .. s .. " uses is in the KitManifest (or is a Block)", unknown == nil, unknown)
+	-- the facade's depth (overhaul phase 5): the named Blocks each stage adds outside its front wall (and the tower's band)
+	local FACADE = { {}, { "Canopy", "CanopyFascia", "SillL", "SillR" }, { "Canopy", "Course", "Sill2", "PilasterL1", "PilasterR2" },
+		{ "FinL1", "FinR2", "Line1", "Line3", "PlinthL", "PlinthR" }, { "PodiumGold", "TowerLine" } }
+	local missing = nil
+	for _, want in ipairs(FACADE[s]) do
+		local found = false
+		for _, p in ipairs(L.pieces) do
+			if p.key == PB.BLOCK and string.sub(p.name, -#want) == want then found = true end
+		end
+		if not found then missing = missing or want end
+	end
+	check("facade: stage " .. s .. " has its facade Blocks (overhaul phase 5: canopy, sills, course, pilasters, fins, lines, plinths)", missing == nil, missing)
 	check("block: every Block of stage " .. s .. " has a size (three positive numbers) and a role, and is one Part", badBlock == nil, badBlock)
 	check("stretch: at stage " .. s .. " only Wall, RoofEdge, WallDoor and DoorLeaf (along X) and Floor (X and Z) are stretched", stretched == nil, stretched)
 	-- the doorway
@@ -1896,8 +1908,8 @@ MUTANTS = [
     ("a second light on every building (a spot light on the sign)", PBV, "\tlight.Parent = roof\n\treturn light", "\tlight.Parent = roof\n\tlocal extra = Instance.new(\"PointLight\")\n\textra.Parent = roof\n\treturn light", "check:", ("build",)),
     ("the apron on the wrong side (behind the back wall)", PBV, "return z > b.maxZ and z <= b.maxZ + b.doorDepth + m", "return z < b.minZ and z >= b.minZ - b.doorDepth - m", "inside:", ("math",)),
     ("a door jamb in the lane (a Corner at x 3 in front of the Small Office's door)", PB,
-     '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
-     '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
+     '\t\t\t{ block = { 29.6, 0.5, 0.8 }, role = "trim", name = "SillR", x = 19.4, y = 3.6, z = 32.4 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
+     '\t\t\t{ block = { 29.6, 0.5, 0.8 }, role = "trim", name = "SillR", x = 19.4, y = 3.6, z = 32.4 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
     ("an inner part solid (the fallback's Parts collide)", PBV, "\t\tlookFlags(part)\n\t\tpaint(part, building, stage, piece, b.role)", "\t\tlookFlags(part)\n\t\tpart.CanCollide = true\n\t\tpaint(part, building, stage, piece, b.role)", "solid:", ("build",)),
     ("the occluded transparency capped at 0.2 (the camera's popper would pull in on a shell part in the way)", PBV, "\treturn clamp01(b + (t - b) * clamp01(fade))", "\treturn math.min(0.2, clamp01(b + (t - b) * clamp01(fade)))", "fade:", ("build", "math")),
     ("the roof left unfaded (in Static)", PB, '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof" })',
