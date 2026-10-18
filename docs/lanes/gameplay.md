@@ -6,7 +6,7 @@ Only the gameplay lane edits this file. See docs/LANES.md.
 
 This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by how much each item helps the first hour. It leaves out the items that belong to other lanes: item 1 (Cash on the bar, IpoClient), item 3 (the Office ladder, ShopClient) and the client halves of item 6.
 
-1. **Goal chain** (build item 7), branch `gameplay-goal-chain`, **PR #43, waiting for review.** What it does:
+1. **Goal chain** (build item 7), branch `gameplay-goal-chain`, **PR #43, merged 2026-10-18.** What it does:
    - OnboardingServer checks five new goal kinds: `upgrades`, `owns`, `calls`, `chain` and `ipos`.
    - The server marks which goals the tracker shows, with `OnboardingGoalShown_<key>`, `ShowAtOnce` = 2 at a time. A goal that was showing when it finished stays for 3 s so its tick is seen.
    - OnboardingConfig gets a `Chain` list: Answer 3 calls, Own 3 upgrades, Hire 3, Answer 10 calls in a row, Buy the Server Rack, Seed, Series A, and Go public.
@@ -28,13 +28,30 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
 8. **Headhunter E2** (build item 13) and **D6 poach prices** (build item 14). **Needs the owner:** a paid item changes and economy numbers move.
 9. **Ux R2:** a saved list of the HUD hints a player has seen. **Needs the owner:** it's a new top-level save section (rule A10). Only when ux asks for it.
 
+## Plan for backlog item 4: economy core (LONG_GAME PR 2), waiting for the owner
+
+Not built. It changes saved data and the Cash/valuation numbers players already have, so it waits for a written OK. What is already decided (LONG_GAME section 9, closed): valuation at base Cash (no 2x Cash pass), engaged = a graded task answer in the last 180 s, 3 engaged hours a day at 100% then 5%, Cash packs and daily Cash never count.
+
+What the PR would do, in one branch `gameplay-economy-core` (may split in two: 2a the earnings path, 2b IpoConfig numbers):
+
+1. `IpoServer.addEarnings(player, amount, kind)`, the one choke point, gets a `kind` (`engaged`, `away`, `task`, `debug`); `TycoonCore.addEarnings` forwards it. Valuation counts base Cash only, with the 3 h/day weight from `tasks.engagedDay` / `tasks.engagedSeconds` (already saved since PR 1, so no new field for the cap).
+2. The income loop pays Cash every second as today, but only engaged seconds raise the valuation. Away (online or offline, not engaged): the startup banks 10% of base Income for up to 2 h (Night Shift: +30 min a level, 4 h max); the next graded answer pays the bank, 10% of it counts toward valuation.
+3. ShopServer's Cash packs stop calling `addEarnings` (a gift, like daily Cash). `TaskConfig.StudioOnly` goes off: calls go live.
+4. IpoConfig: Shares 20 / 0.25 / cap 1.5, perk costs from the sim, Night Shift 1,800 s a level, 7 stages (`SeriesCD`, `PreIpo`), `StageScale(L)`. DailyConfig Day 7 drops its 3 Shares. About 28 of the 73 D1 checks in daily_test are rewritten.
+
+Decisions I need from the owner:
+
+- **D-A, gate G1 first?** ROADMAP says G1 (5 players x 2 Studio sessions, calls only, measured f near Garage 0.32 / Seed 0.37 / Series A 0.41) comes before PR 2, and it hasn't been run. My default: run G1 first; I build nothing of item 4 until its numbers are in ROADMAP (or the owner writes "skip G1").
+- **D-B, where the away bank is saved.** (a) the proposal's new top-level section `away = { engagedDay, engagedSeconds, bankSeconds }` (rule A10, KNOWN_SECTIONS, Shut down all servers), or (b) one new field `bankSeconds` in the existing `tasks` section. (b) is safe here only because TaskServer already writes back unknown `tasks` fields and `tasks` already holds `engagedDay`/`engagedSeconds`; code older than PR 1 keeps `tasks` whole. My recommendation: (b), one place for the engaged clock, no new section. Either way it is a save-format change and needs your written OK.
+- **D-C, the offline payout.** Today: 50% of Income for up to 8 h, paid on join (TycoonCore, inside the byte-pinned CLAIMLOAD block). The plan replaces it with the 10% / 2 h bank. That cuts what a returning player gets by about 20x, and the CLAIMLOAD block's pin in tools/lobby_test.py must move (gameplay's own file). OK to change the offline rule, and in the same PR as the welcome-back card (backlog item 7) so the player sees why?
+
 ## Doing now
 
-waiting for review of PR #43
+idle (PR #43 merged; next run: backlog item 2. Item 4 waits for the owner's D-A to D-C)
 
 ## Last PR
 
-#43 `gameplay-goal-chain` (goal chain), open. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
 ## Last report (2026-10-17)
 
@@ -70,6 +87,24 @@ waiting for review of PR #43
 - **Waiting for the owner:** nothing.
 - **Claims held:** OnboardingServer, OnboardingConfig and tools/onboarding_test.py.
 
+## Report (2026-10-17 23:20 UTC, safety-net check of PR #43)
+
+- **Quality's verdict on PR #43 is MERGE,** once it's rebased on main. Done:
+  - I rebased it on main 9105aea.
+  - I fixed quality's nit: a deliberately broken version of the code whose test run errors is no longer counted as caught.
+  - I re-ran every suite one at a time. All pass: onboarding 61 (10/10), daily, hud, world 380 (101/101), icon 371, shop_ux 6,306, lobby 155 (63/63), building 1,407 (46/46).
+  - The two scripts' hashes are unchanged (only the test file changed).
+- **PR #42 is ported and closed,** as quality asked. It was another run's lane file that couldn't be pushed to main. Its plan for item 4 (the economy core) is now the section above.
+- **Waiting for the owner: decisions D-A, D-B and D-C** in that section (run gate G1 first; where the away bank is saved; the offline payout). I build nothing of item 4 until you answer in writing.
+
+## Report (2026-10-18 08:25 UTC, PR #43 merged)
+
+- **PR #43 (the goal chain) is merged.** I released the claims on OnboardingServer, OnboardingConfig and tools/onboarding_test.py.
+- **For quality's batch:** its Studio steps are the two rows below. Paste the two scripts, playtest with F5, and the tracker should look as before (Hire 3, Seed), with no OnboardingConfig warning in the Output.
+- **Waiting on others:**
+  - The chain stays off (`ChainEnabled = false`) until the ux lane's U1 is merged; then I turn it on in a one-line PR.
+  - Backlog item 4 waits for the owner's decisions D-A, D-B and D-C (above).
+
 ## Requests to other lanes
 
 - **U1, to ux (OnboardingClient, for the goal chain):**
@@ -81,7 +116,7 @@ waiting for review of PR #43
 
 ## Studio steps (merged PRs not yet in Studio)
 
-none merged yet. For PR #43, once merged:
+PR #43 (merged 2026-10-18), for docs/STUDIO_SYNC_BATCH.md:
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|
