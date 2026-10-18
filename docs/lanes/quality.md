@@ -4,21 +4,21 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Backlog (in order)
 
-1. **Review every open lane PR** (read-only: the seven suites, the CLAUDE.md rules, the files each lane may edit, the diff) and write the verdicts below. A PR whose head changes gets a new verdict on the next run. Open now: #44 (MERGE, d960956) and #40 (MERGE after its merge of `main`); #43 merged 2026-10-18 08:19 UTC. Coming: the ux lane's `ux-sync-history` once it is a PR (after #44).
-2. **docs/STUDIO_SYNC_BATCH.md** (#45 and #46 merged): Batch 1 holds the seven scripts of #35, #36, #37 and #43 from `main`; after each later merge (#40; #44: the newer ClaimButtonClient replaces #35's row), that PR's scripts, hashes, checks and playtests from `main`, in a new small quality PR (or Batch 2 once Batch 1 is run).
+1. **Review every open lane PR** (read-only: the seven suites, the CLAUDE.md rules, the files each lane may edit, the diff) and write the verdicts below. A PR whose head changes gets a new verdict on the next run. Open now: #44 (MERGE, d960956); #43 merged 2026-10-18 08:19 UTC, #40 merged 08:27 UTC (the owner merged `main` into it himself). Coming: the ux lane's `ux-sync-history` once it is a PR (after #44).
+2. **docs/STUDIO_SYNC_BATCH.md** (#45 and #46 merged; PR #47 open with #40's rows): Batch 1 holds the nine scripts of #35, #36, #37, #43 and #40 from `main`; after each later merge (#44: the newer ClaimButtonClient replaces #35's row), that PR's scripts, hashes, checks and playtests from `main`, in a new small quality PR (or Batch 2 once Batch 1 is run).
 3. **CLAUDE.md, README.md, ROADMAP.md from merged PRs**, each after its merge, one small PR per batch of merges. Done in #45: ux #35 (ClaimButtonClient), building #36 (request B2, Blocks), world #37 (world_test's README row, the garden), gameplay #38 (the lobby doc as history). Still to do, after their merges:
-   - interiors (#40, request I2): in "Plot visuals", "built-in Parts and the allowed materials only, no assets" becomes: built-in Parts plus furniture from the 3D kit in `ReplicatedStorage.KitModels`, recolored per stage, with a Parts version of every kit piece (`PlotArt.Kit`); PlotVisuals reads only that one service (`findKit`, inside pcall); every room rule holds with the kit and without it.
+   - interiors (#40, request I2): done in PR #47 (the "Plot visuals" sentence, README's PlotArt and PlotVisuals rows).
    - gameplay (#43): done in PR #46 (CLAUDE.md's `OnboardingConfig` line, README's rows, `tools/onboarding_test.py`).
 4. **docs/PUBLISH_RULES.md**: nothing to change from the open PRs (no save change, no new remote, `ClaimEnabled` still off). Re-read after each merge.
 5. **Stale branches**: the list below; nothing deleted. PR #16 is closed.
 
 ## Doing now
 
-2026-10-18 08:32 UTC (PR #40 merged at 08:27, #46 at 08:29): Batch 1 gets #40's PlotArt and PlotVisuals from `main`, CLAUDE.md gets the I2 sentence (kit furniture in the rooms), on branch `quality-batch-1-pr40` (claims re-taken).
+idle (PR #47 open: Batch 1 with #40's scripts, the I2 sentence; next: #44's ClaimButtonClient row once it merges, verdicts for new heads or `ux-sync-history` once it is a PR)
 
 ## Last PR
 
-PR #46 `quality-batch-1-pr43` (Batch 1 + #43's two scripts; CLAUDE.md, README, ROADMAP for the goal chain): merged 2026-10-18 08:29 UTC. Claims released. Before it: PR #45, merged 2026-10-18 08:22 UTC (809f310).
+PR #47 `quality-batch-1-pr40` (Batch 1 + #40's PlotArt and PlotVisuals; CLAUDE.md's plot visuals rule, README, ROADMAP): open, https://github.com/mattimarca02/startup-to-ipo/pull/47. Claims held: CLAUDE.md, ROADMAP.md, README.md, docs/STUDIO_SYNC_BATCH.md. Before it: PR #46, merged 2026-10-18 08:29 UTC; PR #45, merged 08:22 UTC.
 
 ## Verdicts
 
@@ -38,10 +38,10 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 
 - **To world (tools/world_test.py): DONE** in #37's head ef1a50d (the batch row is accepted). Checked on `main` after the merge: world 380 (101/101) with the rows in docs/STUDIO_SYNC_BATCH.md.
 - **To interiors (tools/daily_test.py, after #40):** `kit_doc_lua` raises `SystemExit` unless docs/KIT_MODELS.md has exactly 36 kit rows. That file is the building lane's, and a kit model added there would stop the whole daily suite instead of failing one named check. Please compare the rows with `PlotArt.Kit`'s keys (or `PlotBuilding.KitManifest`) and fail a named check instead. (Today #36's "Blocks" section in that doc does not add a row: the merged tree passes, 456 plot visuals checks.)
-- **To interiors (PR #40):** merge `main` into `interiors-kit-garage` (keep both sides of the CONTRIBUTING.md claim rows), run the suites one at a time, push. Nothing else is needed: the two scripts' hashes stay as the PR says.
+- **To interiors:** #40 is merged (the owner merged `main` into it). Please release your four claim rows in CONTRIBUTING.md (PlotVisuals, PlotArt, docs/PLOT_VISUALS.md, `tools/daily_test.py (checks of interiors)`) and empty your "Studio steps" (they are in Batch 1 now, PR #47). The `kit_doc_lua` request above still stands for a later PR.
 - **To ux:** PR #44 is MERGE (above); nothing to change. U1 (OnboardingClient draws only the shown goals) is what #43's `ChainEnabled` waits on.
 - **To gameplay:** #43 is merged and its claims released; its two Studio rows are in Batch 1 (PR #46), hashes checked on `main`. U1 (ux) is what `ChainEnabled` waits on. The #42 plan was ported to `main` (130f0fa): that branch can go.
-- **To the manager / owner:** nothing is stuck on a lane. #44 waits on the owner (MERGE); #46 is merged; #40 on the interiors lane's (or the owner's) merge of `main`. #40 waits on the interiors lane's merge of `main`, and that lane's starts have been denied twice by the run classifier: the owner can do that merge himself (above). Batch 1 of docs/STUDIO_SYNC_BATCH.md is ready to run once PR `quality-batch-1` is merged (five scripts, hash block checked); the lobby playtests 9 (a) to (c) come first. The LANES table could say that docs/previews/building/ is the building lane's (it is the world lane's by the table, the owner's cinematic request names it for building).
+- **To the manager / owner:** nothing is stuck on a lane. #44 waits on the owner (MERGE); #47 (Batch 1 with #40's rows) too. The interiors lane's claim rows are stale until that lane runs (or the owner frees them). #40 waits on the interiors lane's merge of `main`, and that lane's starts have been denied twice by the run classifier: the owner can do that merge himself (above). Batch 1 of docs/STUDIO_SYNC_BATCH.md is ready to run once PR `quality-batch-1` is merged (five scripts, hash block checked); the lobby playtests 9 (a) to (c) come first. The LANES table could say that docs/previews/building/ is the building lane's (it is the world lane's by the table, the owner's cinematic request names it for building).
 
 ## Stale branches (nothing deleted; a recommendation only)
 
@@ -52,6 +52,8 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 - **PR #16** is closed (22:43 UTC), as recommended. Nothing left to do about it but the branch above.
 
 ## Last report
+
+2026-10-18, 08:29 to 09:05 UTC, woken by the merge of PR #46 (the owner had also merged #40 two minutes earlier, with main merged into it himself). I released the claims, took them again and opened PR #47: Batch 1 now lists nine scripts, with #40's PlotArt and PlotVisuals hashed from main (they match the interiors lane's rows), a hash block that prints ALL OK: 9 scripts in Luau (NOT YET when broken on purpose), the KitModels check and the optional room preview for #40, the Garage playtest, and the playtests reordered so every claim-off test comes before the claim-on one. CLAUDE.md's plot visuals rule now allows the kit's furniture, as the interiors lane asked (I2). This branch is today's main plus docs, so I ran all eight suites on it: all green, the first full run with #35, #36, #37, #38, #40 and #43 together. Still open: #44 (MERGE). Nothing merged by me, nothing deleted.
 
 2026-10-18, 08:22 to 08:45 UTC, woken by the merge of PR #45 (the owner also merged #43 just before). I released the four claim rows and took them again for `quality-batch-1-pr43`, then opened PR #46: Batch 1 now lists seven scripts, with #43's OnboardingServer and OnboardingConfig hashed from main (they match the gameplay lane's rows), a hash block that prints ALL OK: 7 scripts in Luau (and DIFFERENT or MISSING when broken on purpose), an Output check for the OnboardingConfig warning and a playtest of the unchanged tracker; CLAUDE.md, README and ROADMAP describe the goal chain and the two merges. The suites that read these docs pass (world, lobby, onboarding, icon, building, daily). Still open: #44 (MERGE) and #40 (MERGE after a merge of main). Nothing merged by me, nothing deleted.
 
@@ -65,4 +67,4 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 
 ## Studio steps (merged PRs not yet in Studio)
 
-docs/STUDIO_SYNC_BATCH.md, **Batch 1** (on `main` since #45 and #46, ready to run): seven scripts from `main` f666726: `ClaimButtonClient` (new LocalScript, #35), `PlotBuilding` and `PlotBuildingVisuals` (#36), `WorldArt` and `WorldVisuals` (#37), `OnboardingServer` and `OnboardingConfig` (#43); the hash block prints `ALL OK: 7 scripts`; checks (`KIT OK: 36 models`, a clean Output) and six playtests in order (the Garage's roof and the unchanged tracker with the claim off; then, in Studio only, the claim on: the garden and the phone button; revert the switch). Before any batch: the playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (docs/LOBBY_ALL_PROGRESS.md, 2026-10-17). Coming: #44 (the newer ClaimButtonClient) and #40 (PlotArt, PlotVisuals) once merged.
+docs/STUDIO_SYNC_BATCH.md, **Batch 1** (on `main` since #45 and #46; #40's rows on branch `quality-batch-1-pr40`, PR #47, until merged): nine scripts from `main` cac89d9: `ClaimButtonClient` (new LocalScript, #35), `PlotBuilding` and `PlotBuildingVisuals` (#36), `WorldArt` and `WorldVisuals` (#37), `OnboardingServer` and `OnboardingConfig` (#43), `PlotArt` and `PlotVisuals` (#40); the hash block prints `ALL OK: 9 scripts`; checks (`KIT OK: 36 models`, a clean Output, the optional room preview) and seven playtests in order (claim off: the Garage's roof and furniture, the unchanged tracker; then, in Studio only, the claim on: the garden and the phone button; revert the switch). Before any batch: the playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (docs/LOBBY_ALL_PROGRESS.md, 2026-10-17). Coming: #44 (the newer ClaimButtonClient) once merged.
