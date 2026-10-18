@@ -1298,7 +1298,7 @@ def client_checks(luau, client_text=None, lobby_text=None):
     client = client_text if client_text is not None else read("LobbyClient.lua")
     lobby = lobby_text if lobby_text is not None else read("LobbyConfig.lua")
     head = ("local LOBBY_SOURCE = function()\n" + lobby + "\nend\n"
-            "local CLIENT = function(game, workspace, Instance, require, UDim2, UDim, Color3, Enum, Vector3)\n" + client + "\nend\n")
+            "local CLIENT = function(game, workspace, Instance, require, UDim2, UDim, Color3, Enum, Vector3, Vector2)\n" + client + "\nend\n")
     body = read(CLIENT_TEST_FILE)
     at = body.index("local function world(")
     result = run_luau(luau, body[:at] + head + body[at:])

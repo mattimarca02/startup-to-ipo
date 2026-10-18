@@ -201,7 +201,25 @@ local function updateGoals(player, data, now)
 			setAttribute(player, "OnboardingGoal_" .. goal.key, math.min(current, target))
 			setAttribute(player, "OnboardingGoalTarget_" .. goal.key, target)
 		end
+		-- A goal that takes a row after the first tick gets a pop-up with its text and its why (overhaul phase 4): the player
+		-- always knows what to do next and what it is for. Display only; nothing is granted.
+		if show and not done and onboarding.announced and not onboarding.announced[goal.key] and player:GetAttribute("OnboardingGoalShown_" .. goal.key) ~= true then
+			onboarding.announced[goal.key] = true
+			local text = string.format(OnboardingConfig.NewGoalMessage or "%s", goal.text)
+			if typeof(goal.why) == "string" and goal.why ~= "" then
+				text ..= "\n" .. goal.why
+			end
+			notify(player, text)
+		end
 		setAttribute(player, "OnboardingGoalShown_" .. goal.key, show)
+	end
+	if not onboarding.announced then -- the first tick: the card itself says the first goals, no pop-up for them
+		onboarding.announced = {}
+		for _, goal in ipairs(OnboardingConfig.activeGoals()) do
+			if player:GetAttribute("OnboardingGoalShown_" .. goal.key) == true then
+				onboarding.announced[goal.key] = true
+			end
+		end
 	end
 	return allDone
 end
@@ -268,6 +286,7 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
 		justDone = {}, -- goal key -> when a shown goal was finished, this session (not saved)
 		toast = nil, -- a pop-up waiting for data.ready (not saved)
+		announced = nil, -- goal key -> true once its "New goal" pop-up went, this session; nil until the first tick (not saved)
 	}
 	if typeof(savedOnboarding) == "table" then -- bad values are skipped with a warning, never an error
 		for _, key in ipairs({ "seenIntro", "legacy", "arrowDone", "dismissed" }) do

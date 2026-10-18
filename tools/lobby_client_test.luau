@@ -43,6 +43,7 @@ local function new(class)
 	if class == "RemoteEvent" or class == "RemoteFunction" then REMOTES += 1 end
 	local o = setmetatable({ ClassName = class, _children = {}, _attrs = {}, _attrSignals = {}, _props = { Name = class } }, Mt)
 	if class == "ScreenGui" then o._props.AbsoluteSize = vec(390, 800) end -- a phone, portrait
+	if class == "TextButton" then o._props.Activated = signal() end -- the welcome card's button
 	return o
 end
 function M.FindFirstChild(t, n) for _, c in ipairs(t._children) do if c.Name == n then return c end end return nil end
@@ -53,10 +54,12 @@ function M.GetAttribute(t, k) return t._attrs[k] end
 function M.GetAttributeChangedSignal(t, k) t._attrSignals[k] = t._attrSignals[k] or signal() return t._attrSignals[k] end
 function M.GetPropertyChangedSignal() return signal() end
 local Instance = { new = new }
-local UDim2 = { fromOffset = function(x, y) return { x, y } end, fromScale = function(x, y) return { x, y } end }
+local function udim2(xs, xo, ys, yo) return { X = { Scale = xs, Offset = xo }, Y = { Scale = ys, Offset = yo } } end
+local UDim2 = { fromOffset = function(x, y) return udim2(0, x, 0, y) end, fromScale = function(x, y) return udim2(x, 0, y, 0) end, new = udim2 }
 local UDim = { new = function(a, b) return { a, b } end }
 local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end }
-local Enum = { Font = { GothamBold = "GothamBold" } }
+local Vector2 = { new = function(x, y) return { X = x, Y = y } end }
+local Enum = { Font = { GothamBold = "GothamBold", Gotham = "Gotham" }, TextXAlignment = { Left = "Left" }, TextYAlignment = { Top = "Top" } }
 
 local function world(claimOn, garageAttr)
 	local W = { heartbeat = signal() }
@@ -117,7 +120,7 @@ local function world(claimOn, garageAttr)
 	return W
 end
 local function start(W)
-	local ok, err = pcall(CLIENT, W.game, W.workspace, Instance, W.require, UDim2, UDim, Color3, Enum, Vector3)
+	local ok, err = pcall(CLIENT, W.game, W.workspace, Instance, W.require, UDim2, UDim, Color3, Enum, Vector3, Vector2)
 	W.err = not ok and err or nil
 	W.gui = W.player.PlayerGui:FindFirstChild("LobbyGui")
 	W.marker = W.player.PlayerGui:FindFirstChild("FreeGarageMarker")
@@ -150,6 +153,12 @@ do
 	check("client: a garage someone is moving into is no longer marked", W.marker ~= nil and W.marker.Adornee == W.post2)
 	check("client: on the plaza the other garages' FREE signs, prompts and lamps stay as the server set them",
 		W.sign2.Enabled == true and W.prompt2.Enabled == true and W.lamp2.Transparency == 0 and W.sign1.Enabled == false and W.prompt1.Enabled == false and W.lamp1.Transparency == 1)
+	local welcome = W.gui and W.gui:FindFirstChild("Welcome")
+	check("client: on the plaza the welcome card shows the story under the banner, with a Got it button (overhaul phase 4)",
+		welcome ~= nil and welcome.Visible == true and welcome:FindFirstChild("Body") ~= nil and string.find(welcome.Body.Text, "Go public (IPO)", 1, true) ~= nil
+		and welcome:FindFirstChild("GotIt") ~= nil and welcome.Position.Y.Offset > W.gui.Banner.Position.Y.Offset)
+	welcome.GotIt.Activated:Fire()
+	check("client: Got it hides the welcome card for the session", welcome.Visible == false)
 	W.player:SetAttribute("Garage", 2)
 	check("client: with a garage the banner and the marker go at once", W.gui ~= nil and W.gui.Enabled == false and W.marker ~= nil and W.marker.Enabled == false)
 	check("client: with a garage every FREE sign, prompt and lamp is hidden on this client (the server still refuses a second claim)",

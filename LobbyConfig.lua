@@ -55,6 +55,10 @@ LobbyConfig.ReceiptWait = 30 -- a Robux purchase waits this long for the save, c
 
 LobbyConfig.Texts = {
 	Banner = "Walk to a free garage to start your company",
+	-- The welcome card on the plaza (LobbyClient, overhaul phase 4): the story in four lines, once per session
+	WelcomeTitle = "You're a founder with an idea and no money",
+	Welcome = "Claim a free garage. Hire a team from recruiting eggs. Buy upgrades to earn more. Each funding round gives you a bigger office. Go public (IPO) and start again stronger.",
+	WelcomeButton = "Got it",
 	Prompt = "Claim garage",
 	Free = "FREE",
 	SignFree = "Claim this garage", -- the facade sign's second line on a free garage (overhaul phase 1)

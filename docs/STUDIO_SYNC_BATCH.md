@@ -372,6 +372,25 @@ Playtests: (a) 1 player, F5, claim: a free garage shows one see-through desk; yo
 
 Run on: (see the pull request of `overhaul-phase3`)
 
+## Batch 6 (overhaul phase 4: the story and the goal chain; branch `overhaul-phase4`, on top of Batch 5)
+
+Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 4). Pushed through the Studio MCP by the owner session; this batch is the record.
+
+**What the owner sees after this batch:** on the plaza, a welcome card under the banner ("You're a founder with an idea and no money" and the story in four lines, "Got it"); the goal card follows the chain (upgrades, hires, the Server Rack, each funding round, the IPO: OnboardingConfig.Chain, ChainEnabled on); every goal that takes a row after the first one comes with a pop-up "New goal: <goal>" and a second line saying what it is for. No save change (the finished goals save as before), no new remote, no publish.
+
+| Script | Studio | State | sha256 (`overhaul-phase4`) | bytes |
+|---|---|---|---|---|
+| `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `e69c3243b8b329dcc8e29ba0400abadea852d2e1ae3da653b541adc09ac7ece0` | 8290 |
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `22792a3153c3e7ee47abb33648d345447bfdfe60996833a26c8260f0078a59ce` | 18619 |
+| `LobbyClient` | LocalScript, StarterPlayerScripts | changed | `d79672179a20b765153b6f037bca8c7f329d30c1ce345707932a8172a16f1c9d` | 9091 |
+| `LobbyConfig` | ModuleScript, ReplicatedStorage | changed | `ee96863715d265047b051f8a1c4734b66abe686c80c16b05f8a24841636fcf7c` | 6811 |
+
+The hash block is Batch 1's with these four `WANT` rows; it must print `ALL OK: 4 scripts match the repo`.
+
+Playtests: (a) 1 player, F5: on the plaza the welcome card shows under the banner; "Got it" hides it; claim a garage: the card is gone and the goal card shows the first two chain goals (in Studio "Answer 3 calls" and "Own 3 upgrades"; live, where calls don't run, "Own 3 upgrades" and "Hire 3 employees"). Debug > GiveCash, SHOP > Office, buy three upgrades: "Own 3 upgrades" finishes and a pop-up "New goal: Hire 3 employees / EGGS: every hire earns for you, even while you're away" shows, the card now lists it. (b) an old save (Debug > OnboardingMarkOld) shows no card and no pop-up, as before. (c) 2 players: each sees only their own card and pop-ups.
+
+Run on: (see the pull request of `overhaul-phase4`)
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.
