@@ -23,7 +23,6 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
 | tools/daily_test.py (checks of gameplay: daily) | (repo only) | free | | |
-| tools/daily_test.py (checks of ux: the Goals card's row count) | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
 | tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
@@ -32,8 +31,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
-| tools/onboarding_client_test.luau | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
+| OnboardingClient | StarterPlayerScripts | free | | |
+| tools/onboarding_client_test.luau | (repo only) | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
@@ -61,7 +60,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | Claude (ux lane) | ux-goal-chain | 2026-10-18 |
+| tools/hud_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
