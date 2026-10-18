@@ -8183,6 +8183,7 @@ local function buildGarage(core, slot, withLooks)
 	local data = { slot = slot, folder = folder, items = {}, owned = {} }
 	if withLooks then
 		data.looks = PlotVisuals.newPlot(folder, core.plotCenter(slot), PlotArt, floor, 1)
+		PlotVisuals.setDesks(data.looks, #PlotArt.Layout.employeeSpots) -- a full team: a desk at every spot, like the full room (overhaul phase 3)
 	end
 	for i, upg in ipairs(core.UPGRADES) do
 		data.owned[upg.name] = true
