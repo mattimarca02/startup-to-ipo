@@ -20,11 +20,11 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
    - Warnings for bad onboarding values (M5 F9).
    - `OnboardingConfig.Enabled = false` treated as legacy (M5 F4).
    - The Day 1 gift at the first pause, in DailyServer (the DailyClient half goes to ux).
-3. **Calls pause under the hatch reveal** (A15). This is mostly EmployeeClient (`OpenPanel`), so it's a request to ux. On the server, TaskServer already freezes calls while a window is open.
+3. **Calls pause under the hatch reveal** (A15). This is mostly EmployeeClient (`OpenPanel`), so it's request U2 to ux (below). On the server, TaskServer already freezes calls while a window is open. (Overhaul note: `ChainEnabled` is on since phase 4, so item 1 is fully done.)
 4. **Economy core: calls live, the away bank** (build item 8, LONG_GAME PR 2). **Needs the owner:** it changes saved data (the away bank and the 3 h engaged cap) and the economy numbers players have. I'll write the plan here before building anything.
 5. **D1 prices, Desk 3, E1 levels I and II, the Garage re-fit** (build item 9). **Needs the owner:** these are economy numbers players already have, and they depend on item 4. The new upgrade names also need the interiors lane (the six-station prop list).
 6. **D2 milestones and titles** (build item 10), after item 4. The milestone goals then join the chain.
-7. **Welcome-back card** (build item 11). The server part is mine; the offline payout is inside the byte-pinned CLAIMLOAD block, so it needs a careful plan. The card itself is ux's.
+7. **Welcome-back message** (build item 11), branch `gameplay-welcome-back`, **PR #61, open.** A server pop-up through `ShopServer.notify`; the offline pay and the CLAIMLOAD block are unchanged. If ux wants a full card later, I can add display-only player attributes (Cash, seconds away, capped).
 8. **Headhunter E2** (build item 13) and **D6 poach prices** (build item 14). **Needs the owner:** a paid item changes and economy numbers move.
 9. **Ux R2:** a saved list of the HUD hints a player has seen. **Needs the owner:** it's a new top-level save section (rule A10). Only when ux asks for it.
 
@@ -47,11 +47,27 @@ Decisions I need from the owner:
 
 ## Doing now
 
-gameplay-welcome-back - started 2026-10-18 22:36 UTC (backlog item 7, the welcome-back message)
+waiting for review of PR #61
 
 ## Last PR
 
-#52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#61 `gameplay-welcome-back`, open since 2026-10-18. Before it: #52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+
+## Last report (2026-10-18, PR #61 open)
+
+- **Read the overhaul report first.** The goal chain is already on (`ChainEnabled`, phase 4), and calls stay Studio-only. No lane has an open request for me.
+- **Built backlog item 7 as PR #61:** https://github.com/mattimarca02/startup-to-ipo/pull/61
+  - A player who comes back after 5 minutes or more gets one pop-up about 3 s after loading: "Welcome back! You earned $12.3K while away (3h 12m)", or "(8h max)" if they reached the offline cap.
+  - The offline pay is unchanged (the owner's D-C answer). The CLAIMLOAD block is byte-identical. Nothing is saved, and there is no new remote and no client change.
+- **Tests:**
+  - lobby: 172 checks, 70 of 70 mutants caught. That includes 12 new checks that run the real TycoonCore and 5 new mutants.
+  - All other suites pass: daily, onboarding 82 (16/16), hud 1073, world 389, icon 371, shop_ux 6308, building 1423.
+- **Studio steps:** the TycoonCore row below, for quality's batch once #61 is merged.
+- **Requests made:** U2 to ux (calls pause under the hatch reveal).
+- **Waiting for the owner:**
+  - Review and merge of #61.
+  - Gate G1 for item 4.
+- **Claims held:** TycoonCore, tools/lobby_test.py, tools/lobby_runtime.luau.
 
 ## Note (2026-10-18 11:45 UTC)
 
@@ -138,6 +154,7 @@ gameplay-welcome-back - started 2026-10-18 22:36 UTC (backlog item 7, the welcom
 
 ## Requests to other lanes
 
+- **U2, to ux (EmployeeClient, A15, backlog item 3):** while the hatch reveal plays, set the PlayerGui attribute `OpenPanel` (for example `"Hatch"`) and clear it when the reveal ends, if no other window took it in the meantime. TaskServer already holds calls while a window is open, so a call no longer rings or runs out behind the reveal. No server change needed.
 - **U1, to ux (OnboardingClient, for the goal chain):**
   - Draw only the goals the server marks with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()` (use that function, not `OnboardingConfig.Goals`).
   - Size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows (2), so the card stays 30 + 22 x 2 + 8 high whatever the list's length. Then the tray tests can count rows that way: `onboarding_goal_count` in tools/daily_test.py and tools/hud_test.py.
@@ -146,6 +163,14 @@ gameplay-welcome-back - started 2026-10-18 22:36 UTC (backlog item 7, the welcom
 - **To quality:** PR #43's Studio steps for the batch, once it's merged: the rows under "Studio steps" below.
 
 ## Studio steps (merged PRs not yet in Studio)
+
+PR #61 (open; for the batch once merged):
+
+| Script | Studio | State | sha256 | bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `47e00621d8c50a41ecf59cd3dccba7d0fbcd67d1d88337edbe62daa3c1310e84` | 58854 |
+
+Playtest: play with the Desk, stop, wait 5+ minutes, play again: about 3 s after the load the bottom pop-up says "Welcome back! You earned $... while away (..m)".
 
 PR #52 (merged 2026-10-18 11:45 UTC; for the batch):
 
