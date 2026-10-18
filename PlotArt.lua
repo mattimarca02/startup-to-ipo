@@ -21,6 +21,15 @@
 --            text = { value, font, color, face, area, glow } (face "Back" = toward +Z);
 --            particles = { ... } (the default emitter: no texture asset)
 -- Everything else is decor: anchored, no collision, no touch, no queries.
+--
+-- A kit piece (furniture from the 3D kit, docs/KIT_MODELS.md): KIT(name, key, x, y, z, roles [, extra])
+--   key      a key of PlotArt.Kit (a model in ReplicatedStorage.KitModels)
+--   x, y, z  where its bottom-center stands (like an offset)
+--   roles    { role = { color, material [, transparency] } } for every role of the model: the same model recolored
+--   extra    turn = 0, 90, 180 or 270 (its front, +Z in the file, then faces that way: 90 = +X); scale = a number or
+--            { x, y, z } (of the kit size); light = { color, brightness, range } on the part of role lightRole
+-- PlotVisuals builds it from the kit's MeshParts, or from PlotArt.Kit's boxes when the kit is missing: same colors,
+-- never bigger than the kit size times the scale.
 
 local PlotArt = {}
 
@@ -67,6 +76,52 @@ PlotArt.Layout = {
 		hireHalf = 1.5, hireHeight = 7, deskHalfX = 1.9, deskFrom = 2.4, deskTo = 4.2, deskHeight = 3,
 		slotHalfX = 6, slotBack = 4.5, slotFront = 3.5, slotHeight = 12, minAisle = 6, laneEnd = 30,
 	},
+}
+
+-- The furniture kit ---------------------------------------------------------------
+-- The kit models the rooms use, copied from docs/KIT_MODELS.md (tools/daily_test.py compares them): size = { width (X),
+-- height (Y), depth (Z) }, roles = the model's MeshParts (one per role), fallback = its Parts version: boxes { role,
+-- size, at (center), shape } in the model's own frame (bottom-center, front +Z), inside its size, each role at least once.
+PlotArt.KIT_FOLDER = "KitModels" -- ReplicatedStorage.KitModels.<Key>
+PlotArt.KIT_FRONT_TURN = 180 -- the importer's turn: always the same as PlotBuilding.KIT_FRONT_TURN (tools/daily_test.py checks)
+
+local function box(role, w, h, d, x, y, z, shape)
+	return { role = role, size = { w, h, d }, at = { x, y, z }, shape = shape }
+end
+
+PlotArt.Kit = {
+	-- A wooden crate: the body and a lid board on top
+	Crate = { size = { 4, 4, 4 }, roles = { "main", "trim" }, fallback = {
+		box("main", 3.8, 3.6, 3.8, 0, 1.8, 0),
+		box("trim", 4, 0.4, 4, 0, 3.8, 0),
+	} },
+	-- A workbench: the top, two leg frames, a low shelf and a vise on the top
+	Workbench = { size = { 8, 4, 4 }, roles = { "main", "trim", "accent", "dark" }, fallback = {
+		box("main", 8, 0.5, 4, 0, 3.25, 0),
+		box("dark", 0.5, 3, 3.6, -3.6, 1.5, 0),
+		box("dark", 0.5, 3, 3.6, 3.6, 1.5, 0),
+		box("trim", 6.7, 0.3, 3.4, 0, 0.8, 0),
+		box("accent", 1.2, 0.5, 0.9, 2.6, 3.75, 1),
+	} },
+	-- A desk (you sit on its +Z side): the top, two side panels, a modesty panel at the back
+	Desk = { size = { 8, 3, 4 }, roles = { "main", "trim", "dark" }, fallback = {
+		box("main", 8, 0.3, 4, 0, 2.85, 0),
+		box("dark", 0.4, 2.7, 3.6, -3.7, 1.35, 0),
+		box("dark", 0.4, 2.7, 3.6, 3.7, 1.35, 0),
+		box("trim", 7, 1.4, 0.2, 0, 2, -1.7),
+	} },
+	-- A chair: the base, the seat, the back (at -Z: the seat side, +Z, is its front)
+	Chair = { size = { 3, 4, 3 }, roles = { "main", "trim", "dark" }, fallback = {
+		box("dark", 2.4, 1, 2.4, 0, 0.5, 0),
+		box("main", 3, 0.8, 3, 0, 1.4, 0),
+		box("trim", 3, 2.2, 0.6, 0, 2.9, -1.2),
+	} },
+	-- A bare bulb hanging from its cord: the glass at the bottom, the socket, the cord up to the top
+	BareBulb = { size = { 1, 3, 1 }, roles = { "trim", "glass", "dark" }, fallback = {
+		box("glass", 1, 1, 1, 0, 0.6, 0, "Ball"),
+		box("trim", 0.5, 0.4, 0.5, 0, 1.3, 0),
+		box("dark", 0.12, 1.5, 0.12, 0, 2.25, 0),
+	} },
 }
 
 -- Palette --------------------------------------------------------------------
@@ -150,6 +205,13 @@ end
 -- A block from its center and its width, height and depth (the shape most decor is)
 local function B(name, x, y, z, w, h, d, color, material, extra)
 	return P(name, "Block", { w, h, d }, { x, y, z }, color, material, extra)
+end
+
+-- A kit piece (see the top of this file): a model of PlotArt.Kit standing at x, y, z, recolored by roles
+local function KIT(name, key, x, y, z, roles, extra)
+	local spec = extra or {}
+	spec.name, spec.kit, spec.offset, spec.roles = name, key, { x, y, z }, roles
+	return spec
 end
 
 -- A plant: a pot and a round bush on it
@@ -262,13 +324,16 @@ garage.shell = {
 
 -- The founder's corner, moved to the front-left of the room (the middle is the hire grid): the old PC,
 -- the phone and the dinner. Written around the folding table at (9, 2.2); `moved` carries it to its spot.
+-- The Garage's furniture from the kit, recolored worn and secondhand
+local OLD_DESK = { main = { C.woodDark, "Wood" }, trim = { C.tinDark, "Metal" }, dark = { C.steel, "Metal" } }
+local OLD_CHAIR = { main = { C.sleepingBag, "Fabric" }, trim = { C.tinDark, "Metal" }, dark = { C.cord, "SmoothPlastic" } }
+local CRATE = { main = { C.crate, "WoodPlanks" }, trim = { C.board, "Wood" } }
+local BENCH = { main = { C.wood, "WoodPlanks" }, trim = { C.tinDark, "Metal" }, accent = { C.paintRed, "Metal" }, dark = { C.steel, "Metal" } }
+local BULB = { trim = { C.steel, "Metal" }, glass = { C.bulb, "Neon" }, dark = { C.cord, "SmoothPlastic" } }
+
 local corner = {
-	-- The founder's corner: a wobbly folding table, an old chunky PC and a landline phone
-	P("FoldingTable", "Block", { 4.4, 0.2, 2.4 }, { 9, 2.6, 2.2 }, C.tableTop, "Plastic", { rot = { 0, 0, 1.2 } }),
-	P("TableLeg1", "Block", { 0.15, 2.5, 0.15 }, { 7, 1.25, 1.2 }, C.steel, "Metal"),
-	P("TableLeg2", "Block", { 0.15, 2.5, 0.15 }, { 11, 1.25, 1.2 }, C.steel, "Metal", { rot = { 4, 0, 0 } }),
-	P("TableLeg3", "Block", { 0.15, 2.5, 0.15 }, { 7, 1.25, 3.2 }, C.steel, "Metal"),
-	P("TableLeg4", "Block", { 0.15, 2.4, 0.15 }, { 11, 1.2, 3.2 }, C.steel, "Metal", { rot = { -3, 0, 2 } }),
+	-- The founder's corner: an old secondhand desk (the kit's Desk, worn wood, its top at 2.7), an old chunky PC and a landline phone
+	KIT("OldDesk", "Desk", 9, 0, 2.2, OLD_DESK, { scale = { 0.6, 0.9, 0.65 } }),
 	P("CRTStand", "Block", { 1, 0.1, 1 }, { 8.3, 2.75, 1.9 }, C.beigeDark, "SmoothPlastic"),
 	P("ComputerCRT", "Block", { 2.2, 1.8, 1.7 }, { 8.3, 3.7, 1.95 }, C.beige, "SmoothPlastic"),
 	P("CRTHump", "Block", { 1.5, 1.2, 0.7 }, { 8.3, 3.6, 1.05 }, C.beigeDark, "SmoothPlastic"),
@@ -287,15 +352,14 @@ local corner = {
 	upright("SodaCan1", 0.55, 0.4, 10.6, 2.7, 3.15, C.canRed, "SmoothPlastic"),
 	P("StickyNote", "Block", { 0.7, 0.7, 0.04 }, { 9.25, 4.25, 2.985 }, C.sticky, "SmoothPlastic",
 		{ rot = { 0, 0, 8 }, text = { value = "WIFI:\nask mom", font = "IndieFlower", color = C.ink } }),
-	upright("BucketStool", 1.3, 1.3, 8.6, 0, 5, C.paintBlue, "Plastic"),
+	KIT("OldChair", "Chair", 9, 0, 4.9, OLD_CHAIR, { scale = 0.75, turn = 180 }), -- facing the desk
 	upright("SignBucket", 1.2, 1.1, 11.4, 0, 6.2, C.bucketWhite, "Plastic"),
 	P("SignStick", "Block", { 0.18, 4.2, 0.18 }, { 11.4, 2.4, 6.2 }, C.wood, "Wood"),
 	P("OfficeSign", "Block", { 3, 1.4, 0.12 }, { 11.4, 3.9, 6.33 }, C.cardboard, "SmoothPlastic",
 		{ rot = { 0, 0, -4 }, text = { value = "OFFICE", font = "PermanentMarker", color = C.ink } }),
-	-- Dinner and power: pizza boxes, cans, an extension cord with one socket
+	-- Dinner and power: two pizza boxes, cans, an extension cord with one socket
 	P("PizzaBox1", "Block", { 2.2, 0.28, 2.2 }, { 6.5, 0.14, 5.6 }, C.pizza, "SmoothPlastic"),
 	P("PizzaBox2", "Block", { 2.2, 0.28, 2.2 }, { 6.6, 0.42, 5.5 }, C.pizza, "SmoothPlastic", { rot = { 0, 10, 0 } }),
-	P("PizzaBox3", "Block", { 2.2, 0.28, 2.2 }, { 6.4, 0.7, 5.7 }, C.pizzaDark, "SmoothPlastic", { rot = { 0, -6, 0 } }),
 	P("SodaCan2", "Cylinder", { 0.55, 0.4, 0.4 }, { 5.6, 0.2, 7.3 }, C.canGreen, "SmoothPlastic", { rot = { 0, 30, 0 } }),
 	upright("SodaCan3", 0.55, 0.4, 8, 0, 7.1, C.canBlue, "SmoothPlastic"),
 	P("PowerStrip", "Block", { 1.4, 0.25, 0.5 }, { 12.3, 0.125, 7.4 }, C.bucketWhite, "Plastic"),
@@ -319,19 +383,19 @@ local function moved(list, dx, dz)
 end
 
 garage.decor = join({
-	-- The bare bulb, hanging from an arm over the door
+	-- The bare bulb (the kit's BareBulb), hanging on its cord from an arm over the door
 	P("LampArm", "Block", { 0.3, 0.3, 3.6 }, { -6, 10.6, -27.6 }, C.steel, "Metal"),
-	P("LampCord", "Block", { 0.1, 1.2, 0.1 }, { -6, 9.85, -26 }, C.cord, "SmoothPlastic"),
-	P("Bulb", "Ball", { 0.7, 0.7, 0.7 }, { -6, 8.9, -26 }, C.bulb, "Neon", { light = { color = C.warmLight, brightness = 2.2, range = 40 } }),
+	KIT("Bulb", "BareBulb", -6, 7.45, -26, BULB, { lightRole = "glass", light = { color = C.warmLight, brightness = 2.2, range = 40 } }),
+	-- The workbench in the front-right corner, and two crates stacked in the back-right corner
+	KIT("Workbench", "Workbench", 10.5, 0, 20.2, BENCH, { scale = 0.8 }),
+	KIT("JunkCrateLow", "Crate", 25.6, 0, -16.3, CRATE, { scale = 0.7 }),
+	KIT("JunkCrateHigh", "Crate", 25.8, 2.8, -16.2, CRATE, { scale = 0.6, turn = 90 }),
 	-- The floor: an oil stain and cracks
 	P("OilStain1", "Cylinder", { 0.04, 4.6, 4.6 }, { -8.5, 0.02, 7.5 }, C.oil, "SmoothPlastic", { rot = { 0, 0, 90 } }),
-	P("OilStain2", "Cylinder", { 0.04, 2.4, 2.4 }, { -6.6, 0.025, 8.8 }, C.oil, "SmoothPlastic", { rot = { 0, 0, 90 } }),
 	P("Crack1", "Block", { 5.5, 0.03, 0.14 }, { -14, 0.015, -8.8 }, C.crack, "Concrete", { rot = { 0, 25, 0 } }),
 	P("Crack2", "Block", { 4.2, 0.03, 0.12 }, { 5.5, 0.015, -9.2 }, C.crack, "Concrete", { rot = { 0, -35, 0 } }),
 	P("Crack3", "Block", { 6, 0.03, 0.14 }, { -20, 0.015, 16.5 }, C.crack, "Concrete", { rot = { 0, 12, 0 } }),
-	P("Crack4", "Block", { 4.8, 0.03, 0.12 }, { 14, 0.015, 15.5 }, C.crack, "Concrete", { rot = { 0, 58, 0 } }),
-	P("Crack5", "Block", { 3.6, 0.03, 0.12 }, { -5.5, 0.015, -19.5 }, C.crack, "Concrete", { rot = { 0, -15, 0 } }),
-	-- Junk between the incubators: tires, paint buckets, boxes, a rusty bike
+	-- Junk between the incubators: tires, paint buckets, two boxes, a rusty bike
 	upright("Tire1", 0.9, 2.6, -18, 0, -27.4, C.tire, "SmoothPlastic"),
 	upright("Tire2", 0.9, 2.6, -18.15, 0.9, -27.3, C.tire, "SmoothPlastic"),
 	upright("Tire3", 0.9, 2.6, -17.9, 1.8, -27.5, C.tire, "SmoothPlastic"),
@@ -340,7 +404,6 @@ garage.decor = join({
 	upright("PaintBucket3", 1.3, 1.1, -7.1, 1.3, -27.85, C.paintBlue, "Plastic"),
 	P("Box1", "Block", { 2.2, 1.8, 2 }, { 5.6, 0.9, -27.6 }, C.cardboard, "SmoothPlastic", { rot = { 0, 6, 0 } }),
 	P("Box2", "Block", { 1.8, 1.5, 1.8 }, { 6.6, 0.75, -25.1 }, C.cardboardDark, "SmoothPlastic", { rot = { 0, -12, 0 } }),
-	P("Box3", "Block", { 1.6, 1.3, 1.5 }, { 5.5, 2.45, -27.5 }, C.cardboard, "SmoothPlastic", { rot = { 0, -10, 0 } }),
 	P("BikeWheelBack", "Cylinder", { 0.25, 2.2, 2.2 }, { 19.3, 1.1, -28.55 }, C.tire, "SmoothPlastic", { rot = { 0, 90, 0 } }),
 	P("BikeWheelFront", "Cylinder", { 0.25, 2.2, 2.2 }, { 16.7, 1.1, -28.55 }, C.tire, "SmoothPlastic", { rot = { 0, 90, 0 } }),
 	P("BikeTopTube", "Block", { 2.5, 0.2, 0.2 }, { 18.05, 2.1, -28.55 }, C.rust, "CorrodedMetal"),
@@ -362,13 +425,12 @@ garage.decor = join({
 },
 	moved(corner, -31, 20),
 	weed("Weed1", -28.9, 0, 8, 20), weed("Weed2", 28.9, 0, -17, -40), weed("Weed3", -15.3, 0, 28.6, 75),
-	weed("Weed4", -31.3, -1, 2, 10), weed("Weed5", 31.3, -1, -12, 130), weed("Weed6", 4, -1, -31.5, -20)
+	weed("Weed4", -31.3, -1, 2, 10), weed("Weed5", 31.3, -1, -12, 130)
 )
 
--- A hire's desk: a crate with a board on it (no tech in the garage)
+-- A hire's desk: a crate on its side, the kit's Crate made low and shallow to fit the desk zone (no tech in the garage)
 garage.desk = {
-	P("Crate", "Block", { 3.4, 2, 1.5 }, { 0, 1, 0 }, C.crate, "WoodPlanks"),
-	P("Board", "Block", { 3.6, 0.15, 1.7 }, { 0, 2.075, 0 }, C.board, "Wood"),
+	KIT("Crate", "Crate", 0, 0, 0, CRATE, { scale = { 0.9, 0.55, 0.44 } }),
 }
 
 -- Stage 2: the garage glow-up (Seed) -------------------------------------------------
