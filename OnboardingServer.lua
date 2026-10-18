@@ -75,6 +75,12 @@ local function notify(player, text)
 	end
 end
 
+-- A pop-up for later: kept on the player's data (not saved) and sent by the first update after
+-- data.ready, so it never shows behind the loading screen (M5 F7). The newest one wins.
+local function notifyWhenReady(data, text)
+	data.onboarding.toast = text
+end
+
 -- Gives the free egg. seenIntro flips in the same step, so the save that has the egg also says
 -- it was given (one save holds both, they can't be written apart).
 local function grantFreeEgg(player, data)
@@ -94,7 +100,7 @@ local function grantFreeEgg(player, data)
 	end
 	print(player.Name .. " is new: free " .. OnboardingConfig.FreeEgg .. " egg in incubator " .. index)
 	local egg = CreatureConfig.getEgg(OnboardingConfig.FreeEgg)
-	notify(player, string.format(OnboardingConfig.FreeEggMessage, egg and egg.name or OnboardingConfig.FreeEgg))
+	notifyWhenReady(data, string.format(OnboardingConfig.FreeEggMessage, egg and egg.name or OnboardingConfig.FreeEgg))
 	return true
 end
 
@@ -204,6 +210,11 @@ end
 -- screen where it points, and checks the goals
 local function update(player, data, now)
 	local onboarding = data.onboarding
+	if onboarding.toast then -- a pop-up that waited for the loading to end (the free egg's)
+		local text = onboarding.toast
+		onboarding.toast = nil
+		notify(player, text)
+	end
 	local active = OnboardingConfig.Enabled and not onboarding.legacy
 	if active and not onboarding.arrowDone then
 		local ends = OnboardingConfig.ArrowEndsAt
@@ -256,12 +267,20 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		goals = {}, -- goal key -> true once finished; stays finished (saved)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
 		justDone = {}, -- goal key -> when a shown goal was finished, this session (not saved)
+		toast = nil, -- a pop-up waiting for data.ready (not saved)
 	}
-	if typeof(savedOnboarding) == "table" then -- bad values are skipped, never an error
-		onboarding.seenIntro = savedOnboarding.seenIntro == true
-		onboarding.legacy = savedOnboarding.legacy == true
-		onboarding.arrowDone = savedOnboarding.arrowDone == true
-		onboarding.dismissed = savedOnboarding.dismissed == true
+	if typeof(savedOnboarding) == "table" then -- bad values are skipped with a warning, never an error
+		for _, key in ipairs({ "seenIntro", "legacy", "arrowDone", "dismissed" }) do
+			local value = savedOnboarding[key]
+			if typeof(value) == "boolean" then
+				onboarding[key] = value
+			elseif value ~= nil then
+				warn("Skipped a bad onboarding." .. key .. " in " .. player.Name .. "'s save: " .. tostring(value))
+			end
+		end
+		if savedOnboarding.goals ~= nil and typeof(savedOnboarding.goals) ~= "table" then
+			warn("Skipped a bad onboarding.goals in " .. player.Name .. "'s save: " .. tostring(savedOnboarding.goals))
+		end
 		-- Every finished goal key is kept, even ones this version's config doesn't list
 		for _, key in ipairs(typeof(savedOnboarding.goals) == "table" and savedOnboarding.goals or {}) do
 			if typeof(key) == "string" then
@@ -284,8 +303,11 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 		onboarding.legacy = true -- we don't know who this is: no free egg (this session isn't saved anyway)
 		return
 	end
-	if savedOnboarding == nil and hasProgress(data) then
-		onboarding.seenIntro = true -- a save from before milestone 5: already onboarded
+	-- A save with progress but no free egg on record is an old player: a save from before
+	-- milestone 5, or one written while OnboardingConfig.Enabled was off (M5 F4). Already onboarded:
+	-- no egg, no arrow, no tracker, also if onboarding is switched back on later.
+	if not onboarding.seenIntro and hasProgress(data) then
+		onboarding.seenIntro = true
 		onboarding.legacy = true
 		return
 	end
