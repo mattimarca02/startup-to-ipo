@@ -139,14 +139,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
 | tools/hud_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
-| WorldArt | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
-| WorldVisuals | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| WorldArt | ServerScriptService | free | | |
+| WorldVisuals | ServerScriptService | free | | |
 | IconArt | ReplicatedStorage | free | | |
 | IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| tools/world_test.py | (repo only) | free | | |
 | tools/icon_test.py | (repo only) | free | | |
-| tools/render_previews.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
-| docs/previews/*.svg | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| tools/render_previews.py | (repo only) | free | | |
+| docs/previews/*.svg | (repo only) | free | | |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
 | docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
