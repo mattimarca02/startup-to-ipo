@@ -58,7 +58,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 | `BuildingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Fades the shell of a garage's building while you are inside it (looks only) |
 | `LobbyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | With the claim on: the plaza's banner and a marker over the nearest free garage (shows nothing with it off) |
-| `ClaimButtonClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Phones, with the claim on: a big "Claim garage" button while the server's claim prompt is shown and you have no garage; tapping it presses that prompt (display only, no remote; shows nothing with the claim off) |
+| `ClaimButtonClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Phones, with the claim on: a big "Claim garage" button while a server claim prompt is shown and you have no garage; tapping it presses that prompt (the nearest one when several show) (display only, no remote; shows nothing with the claim off) |
 
 Other files:
 
