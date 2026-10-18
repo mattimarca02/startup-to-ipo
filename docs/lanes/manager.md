@@ -41,3 +41,10 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-18 02:42 ux not started: PR #44 MERGE at d960956; 8 behind main, only lane files and claim rows, clean merge; sent to the owner.
 2026-10-18 02:42 quality not started: no open lane PR without a verdict for its head (#45 is quality's own, waiting for the owner).
 2026-10-18 02:43 notified owner: #43, #44, #45 ready to merge; interiors denied a sixth time, he can merge main into #40 himself.
+2026-10-18 03:42 interiors start FAILED (permission denied by the run classifier, seventh time): PR #40 verdict MERGE at 1696f9c, 49 behind main, CONTRIBUTING.md conflict.
+2026-10-18 03:42 building not started: started by the manager at 02:42 (under 3 h).
+2026-10-18 03:42 world start FAILED (permission denied by the run classifier): started at 23:44 (over 3 h), no PR and no new branch, lane file still idle; needed the "previous run stopped" restart.
+2026-10-18 03:42 gameplay not started: PR #43 MERGE at d702c93; 9 behind main, only lane files, manager log and docs, clean merge; sent to the owner.
+2026-10-18 03:42 ux not started: PR #44 MERGE at d960956; 9 behind main, same commits, clean merge; sent to the owner.
+2026-10-18 03:42 quality not started: no open lane PR without a verdict for its head (#45 is quality's own, waiting for the owner).
+2026-10-18 03:43 notified owner: #43, #44, #45 ready to merge; interiors (7th) and world starts denied, he can merge main into #40 and start world himself.
