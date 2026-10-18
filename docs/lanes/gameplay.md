@@ -47,7 +47,7 @@ Decisions I need from the owner:
 
 ## Doing now
 
-idle (PR #52 merged; next run: backlog item 3, then item 7. Item 4 waits for gate G1)
+gameplay-welcome-back - started 2026-10-18 22:36 UTC (backlog item 7, the welcome-back message)
 
 ## Last PR
 

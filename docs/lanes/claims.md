@@ -8,7 +8,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
-| TycoonCore | ServerScriptService | free | | |
+| TycoonCore | ServerScriptService | gameplay lane (Claude) | gameplay-welcome-back | 2026-10-18 |
 | ShopServer | ServerScriptService | free | | |
 | EmployeeServer | ServerScriptService | free | | |
 | ShopConfig | ReplicatedStorage | free | | |
@@ -81,7 +81,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | free | | |
+| tools/lobby_test.py | (repo only) | gameplay lane (Claude) | gameplay-welcome-back | 2026-10-18 |
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
@@ -97,7 +97,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | LobbyConfig | ReplicatedStorage | free | | |
 | LobbyClient | StarterPlayerScripts | free | | |
 | docs/KIT_MODELS.md | (repo only) | free | | |
-| tools/lobby_runtime.luau | (repo only) | free | | |
+| tools/lobby_runtime.luau | (repo only) | gameplay lane (Claude) | gameplay-welcome-back | 2026-10-18 |
 | tools/lobby_client_test.luau | (repo only) | free | | |
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
