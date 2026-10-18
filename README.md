@@ -37,7 +37,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `WorldArt.lua` | ServerScriptService | ModuleScript | The plaza and the decor around the ring of garages, as data (used only with `LobbyConfig.ClaimEnabled` on) |
 | `WorldVisuals.lua` | ServerScriptService | ModuleScript | Builds the ring's plaza from `WorldArt` and checks it (TycoonCore calls it in pcall, only with the claim on) |
 | `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, on the same 60 x 60 plot, built from Parts and from the 3D kit's furniture: `PlotArt.Kit`), the hire desks, the six upgrade props |
-| `LobbyConfig.lua` | ReplicatedStorage | ModuleScript | The lobby: the claim switch `ClaimEnabled` (off), the garages (today's row; the ring around the plaza with the claim on), the claim rule `canClaim`, the texts. Create it before pasting TycoonCore |
+| `LobbyConfig.lua` | ReplicatedStorage | ModuleScript | The lobby: the claim switch `ClaimEnabled` (on since 2026-10-18), the garages (the ring around the plaza with the claim on; the old row with it off), the claim rule `canClaim`, the texts. Create it before pasting TycoonCore |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
