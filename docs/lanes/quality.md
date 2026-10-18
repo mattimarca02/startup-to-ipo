@@ -14,7 +14,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (scheduled run of 2026-10-17 22:55 to 23:50 UTC done; next: verdicts for new heads or new PRs, the docs for #40 and #43 once merged)
+2026-10-18 00:20 UTC (the check-in on PR #45 found #43 at a new head d702c93 and the new PR #44; the manager's 23:44 quality start left no trace on main): reviewing #43 (d702c93) and #44 (d960956); #45 unchanged, waiting for the owner.
 
 ## Last PR
 
