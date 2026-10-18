@@ -100,7 +100,7 @@ WorldArt.Layout = {
 
 -- Palette (bright chunky cartoon, next to the Baseplate's grass and PlotArt's colors) ------------------------
 WorldArt.Palette = {
-	Grass = { 108, 172, 82 }, -- the Baseplate's color (a Studio setting, docs/STUDIO_SYNC.md (b)); only the previews use it
+	Grass = { 96, 150, 72 }, -- the Baseplate's color (a Studio setting, docs/STUDIO_SYNC.md (b); Grass material since overhaul phase 5); only the previews use it
 	Plaza = { 236, 226, 204 },
 	Path = { 222, 212, 192 },
 	Street = { 168, 174, 186 },
@@ -136,6 +136,10 @@ WorldArt.Palette = {
 	WaterLight = { 160, 214, 246 },
 }
 
+-- The materials of the flat pieces (overhaul phase 5): the paved paths, the kerbs, the lawn tints and the far hills. Each
+-- must be in WorldVisuals.MATERIALS (the data check). The pieces below carry their own.
+WorldArt.Materials = { path = "Concrete", kerb = "Concrete", ground = "Grass", hill = "Grass" }
+
 -- Helpers ------------------------------------------------------------------------
 
 local function P(name, shape, size, offset, color, material, extra)
@@ -154,14 +158,14 @@ local function solid(w, h, d, x, z)
 	return { w, h, d, x or 0, z or 0 }
 end
 
--- A tree: a trunk, a big round crown on it and a smaller one on top (three sizes, three greens). Solid: the trunk up into
+-- A tree: a trunk, a big round crown on it and a smaller one on top (three sizes, three greens; leafy Grass material since overhaul phase 5). Solid: the trunk up into
 -- the crown's middle (a player walks under the crown's edge, never through the tree).
 local function tree(trunk, crown, top, leaf)
 	local crownY = trunk + crown * 0.3
 	local parts = {
 		upright("Trunk", trunk, 1.3, 0, 0, 0, "Trunk", "Wood"),
-		P("Crown", "Ball", { crown, crown, crown }, { 0, crownY, 0 }, leaf, "Fabric"),
-		P("CrownTop", "Ball", { top, top, top }, { 0.5, crownY + crown * 0.4, -0.4 }, "LeafTop", "Fabric"),
+		P("Crown", "Ball", { crown, crown, crown }, { 0, crownY, 0 }, leaf, "Grass"),
+		P("CrownTop", "Ball", { top, top, top }, { 0.5, crownY + crown * 0.4, -0.4 }, "LeafTop", "Grass"),
 	}
 	parts.solid = { solid(1.8, crownY, 1.8) }
 	return parts
@@ -184,12 +188,12 @@ WorldArt.Pieces = {
 	TreeC = tree(6, 8, 5, "LeafC"),
 	-- A bush: two round balls half sunk in the ground
 	Bush = {
-		P("BushBig", "Ball", { 3, 3, 3 }, { 0, 1.2, 0 }, "Bush", "Fabric"),
-		P("BushSmall", "Ball", { 2, 2, 2 }, { 1.3, 0.8, 0.5 }, "BushLight", "Fabric"),
+		P("BushBig", "Ball", { 3, 3, 3 }, { 0, 1.2, 0 }, "Bush", "Grass"),
+		P("BushSmall", "Ball", { 2, 2, 2 }, { 1.3, 0.8, 0.5 }, "BushLight", "Grass"),
 	},
 	-- One ball of the hedge beside the lounge (it fits the 3.5 stud strip between the wall and the arm)
 	Hedge = {
-		P("HedgeBall", "Ball", { 2.6, 2.6, 2.6 }, { 0, 1, 0 }, "Bush", "Fabric"),
+		P("HedgeBall", "Ball", { 2.6, 2.6, 2.6 }, { 0, 1, 0 }, "Bush", "Grass"),
 	},
 	-- A bench facing +Z: a plank seat and back on two dark legs
 	Bench = {
@@ -202,7 +206,7 @@ WorldArt.Pieces = {
 	-- A round planter with a ball of flowers
 	Planter = {
 		upright("PlanterPot", 1.2, 2.6, 0, 0, 0, "Planter", "SmoothPlastic"),
-		P("PlanterFlowers", "Ball", { 2.2, 2.2, 2.2 }, { 0, 1.6, 0 }, "Flower", "Fabric"),
+		P("PlanterFlowers", "Ball", { 2.2, 2.2, 2.2 }, { 0, 1.6, 0 }, "Flower", "Grass"),
 		solid = { solid(2.6, 2.8, 2.6) }, -- the pot and the flowers (taller than a step)
 	},
 	-- A street sign: a post and a green board with the plot's number on both faces, a ball on top

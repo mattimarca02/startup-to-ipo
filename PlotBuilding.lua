@@ -359,6 +359,12 @@ PlotBuilding.Stages = {
 			{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open flat against the facade, left of the opening
 			{ key = "Plant", x = -15.5, y = -1, z = 34, turn = 0 },
 			{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },
+			-- the facade's depth (overhaul phase 5): a canopy over the door (above the lane's top, 9, and the claim post's spot) with
+			-- a coral fascia, and a sill band under the windows either side of the door (the glass starts 4 above the floor top)
+			{ block = { 14, 0.5, 3.6 }, role = "trim", name = "Canopy", x = 0, y = 9.4, z = 34.1 },
+			{ block = { 14, 0.8, 0.4 }, role = "accent", name = "CanopyFascia", x = 0, y = 9.4, z = 35.7 },
+			{ block = { 29.6, 0.5, 0.8 }, role = "trim", name = "SillL", x = -19.4, y = 3.6, z = 32.4 },
+			{ block = { 29.6, 0.5, 0.8 }, role = "trim", name = "SillR", x = 19.4, y = 3.6, z = 32.4 },
 		},
 		furniture = {
 			{ key = "ReceptionDesk", side = "left", along = 16 },
@@ -378,6 +384,18 @@ PlotBuilding.Stages = {
 			{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 },
 			{ key = "Plant", x = -15.5, y = -1, z = 34, turn = 0 },
 			{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },
+			-- the facade's depth (overhaul phase 5): the canopy and its fascia as the Small Office's, the ground sills, a string
+			-- course on the story line (13), the second story's sill (its glass starts at 18) and four wooden pilasters
+			{ block = { 14, 0.5, 3.6 }, role = "trim", name = "Canopy", x = 0, y = 9.4, z = 34.1 },
+			{ block = { 14, 0.8, 0.4 }, role = "accent", name = "CanopyFascia", x = 0, y = 9.4, z = 35.7 },
+			{ block = { 31.4, 0.5, 0.8 }, role = "trim", name = "SillL", x = -20.3, y = 3.6, z = 32.4 },
+			{ block = { 31.4, 0.5, 0.8 }, role = "trim", name = "SillR", x = 20.3, y = 3.6, z = 32.4 },
+			{ block = { 76, 0.6, 0.6 }, role = "trim", name = "Course", x = 0, y = 12.7, z = 32.4 },
+			{ block = { 76, 0.5, 0.8 }, role = "trim", name = "Sill2", x = 0, y = 17.5, z = 32.4 },
+			{ block = { 1.2, 28, 0.8 }, role = "trim", name = "PilasterL2", x = -28, y = -1, z = 32.5 },
+			{ block = { 1.2, 28, 0.8 }, role = "trim", name = "PilasterL1", x = -14, y = -1, z = 32.5 },
+			{ block = { 1.2, 28, 0.8 }, role = "trim", name = "PilasterR1", x = 14, y = -1, z = 32.5 },
+			{ block = { 1.2, 28, 0.8 }, role = "trim", name = "PilasterR2", x = 28, y = -1, z = 32.5 },
 		},
 		furniture = {
 			{ key = "ReceptionDesk", side = "left", along = 16 },
@@ -401,6 +419,17 @@ PlotBuilding.Stages = {
 			{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 }, -- a band over the door (P3: pillars below)
 			{ key = "Corner", x = -6, y = -1, z = 33.2, turn = 0 },
 			{ key = "Corner", x = 6, y = -1, z = 33.2, turn = 0 },
+			-- the facade's depth (overhaul phase 5): four navy fins the tower's whole height, a floor line on each story line
+			-- (13, 27, 41) and a dark plinth either side of the entrance (the lane is 5 each side; the claim post's spot is clear)
+			{ block = { 0.8, 56, 1.0 }, role = "trim", name = "FinL2", x = -32, y = -1, z = 32.6 },
+			{ block = { 0.8, 56, 1.0 }, role = "trim", name = "FinL1", x = -16, y = -1, z = 32.6 },
+			{ block = { 0.8, 56, 1.0 }, role = "trim", name = "FinR1", x = 16, y = -1, z = 32.6 },
+			{ block = { 0.8, 56, 1.0 }, role = "trim", name = "FinR2", x = 32, y = -1, z = 32.6 },
+			{ block = { 80, 0.6, 0.6 }, role = "trim", name = "Line1", x = 0, y = 12.7, z = 32.4 },
+			{ block = { 80, 0.6, 0.6 }, role = "trim", name = "Line2", x = 0, y = 26.7, z = 32.4 },
+			{ block = { 80, 0.6, 0.6 }, role = "trim", name = "Line3", x = 0, y = 40.7, z = 32.4 },
+			{ block = { 35, 1.2, 0.5 }, role = "dark", name = "PlinthL", x = -22.5, y = -1, z = 32.4 },
+			{ block = { 35, 1.2, 0.5 }, role = "dark", name = "PlinthR", x = 22.5, y = -1, z = 32.4 },
 		},
 		furniture = {
 			{ key = "ReceptionDesk", side = "left", along = 16 },
@@ -430,6 +459,11 @@ PlotBuilding.Stages = {
 		extras = {
 			{ key = "Column", x = -7.5, y = -1, z = 31.7, turn = 0 },
 			{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },
+			-- the facade's depth (overhaul phase 5), within the budget (this stage is the biggest): a gold line along the podium's
+			-- front under its roof edge, and a gold floor line across the tower's front on its middle story line (41).
+			-- (No facade Block is named "...Band...": that name means the band's floor, the Static group, PlotBuilding.layout.)
+			{ block = { 82.4, 0.6, 0.6 }, role = "accent", name = "PodiumGold", x = 0, y = 11.6, z = 32.4 },
+			{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 40.7, z = 14.4 },
 		},
 		backBand = 8, -- P2: the BoardTable, the Rug and the Bell are 6 to 8 deep
 		furniture = {

@@ -621,14 +621,15 @@ function WorldVisuals.build(parent, art, site, palette)
 	end
 	local paths, kerbs, ground, decor, hills = group("Paths"), group("Kerbs"), group("Ground"), group("Decor"), group("Hills")
 	local solid = group(WorldVisuals.SOLID_GROUP)
+	local M = type(art.Materials) == "table" and art.Materials or {} -- the flat pieces' materials (overhaul phase 5)
 	for _, r in ipairs(plan.paths) do
-		slab(paths, r, L.pathTop, colorOf(palette, r.color), "SmoothPlastic")
+		slab(paths, r, L.pathTop, colorOf(palette, r.color), M.path or "SmoothPlastic")
 	end
 	for _, r in ipairs(plan.kerbs) do
-		slab(kerbs, r, L.kerbHeight, colorOf(palette, "Kerb"), "Concrete")
+		slab(kerbs, r, L.kerbHeight, colorOf(palette, "Kerb"), M.kerb or "Concrete")
 	end
 	for _, r in ipairs(plan.ground) do
-		slab(ground, r, L.groundTop, colorOf(palette, r.color), "SmoothPlastic")
+		slab(ground, r, L.groundTop, colorOf(palette, r.color), M.ground or "SmoothPlastic")
 	end
 	local lamp = art.LampLight
 	for _, it in ipairs(plan.items) do
@@ -681,7 +682,7 @@ function WorldVisuals.build(parent, art, site, palette)
 		part.Size = Vector3.new(d, d, d)
 		part.CFrame = CFrame.new(h.x, h.height - d / 2, h.z)
 		part.Color = colorOf(palette, h.color)
-		part.Material = Enum.Material.SmoothPlastic
+		part.Material = Enum.Material[M.hill or "SmoothPlastic"]
 		decorate(part, d, false, false)
 		part.CastShadow = false -- far away and huge: a shadow would only cost
 		part.Parent = hills
@@ -734,6 +735,18 @@ function WorldVisuals.validate(art)
 			end
 		end
 		return true
+	end
+	-- the flat pieces' materials (optional; every one must be allowed, and never Neon: nothing flat is a light)
+	if art.Materials ~= nil then
+		if type(art.Materials) ~= "table" then
+			problem("Materials: must be a table")
+		else
+			for k, m in pairs(art.Materials) do
+				if not WorldVisuals.MATERIALS[m] or m == "Neon" then
+					problem("Materials." .. tostring(k) .. ": material not allowed: " .. tostring(m))
+				end
+			end
+		end
 	end
 	local palette = art.Palette
 	if type(palette) ~= "table" then

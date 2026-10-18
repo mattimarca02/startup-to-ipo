@@ -391,6 +391,26 @@ Playtests: (a) 1 player, F5: on the plaza the welcome card shows under the banne
 
 Run on: (see the pull request of `overhaul-phase4`)
 
+## Batch 7 (overhaul phase 5: the visual pass; branch `overhaul-phase5`, on top of Batch 6)
+
+Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 5). Pushed through the Studio MCP by the owner session; this batch is the record.
+
+**What the owner sees after this batch:** textured ground (Grass lawns, hills and Baseplate; Concrete paths and kerbs; leafy Grass tree crowns, bushes and flowers), facade depth on every office (canopies, sills, a string course and pilasters on the Big Office, fins and floor lines on the glass tower, gold lines on Big Corporate), and the lighting retuned for phones (Bloom 24, EnvironmentDiffuseScale 0.6; Technology Future by hand). No save change, no new remote, no publish.
+
+| Script | Studio | State | sha256 (`overhaul-phase5`) | bytes |
+|---|---|---|---|---|
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `9b5cf2a2d116efaa20eb85fa1b5101d2088f968501499885823bc2cec9cd7d4b` | 48263 |
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `efe3ab6e8e59eef1a08580e16310379d071dc881a0f8a4fa4220b092a9ff1997` | 19503 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `8380daf658cbb18cc600698092d6222df62b771ff276423b9d37eb5965b095a2` | 64958 |
+
+The hash block is Batch 1's with these three `WANT` rows; it must print `ALL OK: 3 scripts match the repo`.
+
+**Studio-only settings** (set through the MCP in the same batch, recorded in docs/STUDIO_SYNC.md (b)): Lighting `EnvironmentDiffuseScale` 0.6, `EnvironmentSpecularScale` 0.6, `ShadowSoftness` 0.3; Bloom `Size` 24, `Intensity` 0.5, `Threshold` 1.5; Atmosphere `Density` 0.32, `Offset` 0.3; Baseplate `Material` Grass, `Color` 96, 150, 72. **By hand:** select Lighting in the Explorer, Properties > `Technology` = **Future** (ShadowMap if a phone test is slow).
+
+Playtests: (a) 1 player, F5: the plaza's paths are concrete, the lawns grass, the trees leafy; a free garage's Small Office preview (Debug > Building: next stage on your own) shows the canopy over the door and the sills; the Big Office its pilasters; the tower its fins; walking under a canopy fades it like the walls. (b) Test > Device, a phone: the frame rate stays smooth around the plaza (see the pull request for the numbers). (c) 2 players: unchanged.
+
+Run on: (see the pull request of `overhaul-phase5`)
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

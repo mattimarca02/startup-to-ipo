@@ -38,6 +38,18 @@ These live only in the Team Create place. The values come from the visuals-garag
 | Lighting > Bloom | `Threshold` | 2 | **1.6** |
 | Workspace > Baseplate | `Color` | gray (91, 91, 91) | **grass (108, 172, 82)**, and the grid `Texture` removed |
 
+Overhaul phase 5 (2026-10-18, set through the Studio MCP by the owner session; docs/STUDIO_SYNC_BATCH.md Batch 7), on top of the rows above:
+
+| Where | Property | Before | Now |
+|---|---|---|---|
+| Lighting | `Technology` | (unknown: not readable by a script) | **Future**, by hand: select Lighting, Properties > Technology (ShadowMap if a phone test is slow) |
+| Lighting | `EnvironmentDiffuseScale`, `EnvironmentSpecularScale` | 1, 1 | **0.6, 0.6** |
+| Lighting | `ShadowSoftness` | 0.2 | **0.3** |
+| Lighting > Atmosphere | `Density`, `Offset` | 0.3, 0.25 | **0.32, 0.3** |
+| Lighting > Bloom | `Size`, `Intensity`, `Threshold` | 32, 0.6, 1.6 | **24, 0.5, 1.5** |
+| Lighting > DepthOfField | `Enabled` | false | false (kept off) |
+| Workspace > Baseplate | `Material`, `Color` | Plastic, grass (108, 172, 82) | **Grass, lawn (96, 150, 72)** (`WorldArt.Palette.Grass`) |
+
 Also Studio-only: `Workspace.PREVIEW_STAGES` (the preview rooms at x = -600). It is **not part of the game**: rebuild it only to look at the rooms, and delete it before publishing (ROADMAP, before-publish item m).
 
 ## (c) Steps on the Mac
