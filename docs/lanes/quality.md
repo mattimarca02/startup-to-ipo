@@ -14,11 +14,11 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (2026-10-18 09:45 UTC). Waiting for the owner: PR #50 (claim rows move to docs/lanes/claims.md). Claims for #50 are held here, not in CONTRIBUTING.md (claiming there would make #50 conflict): CONTRIBUTING.md, docs/LANES.md, CLAUDE.md, README.md, docs/PUBLISH_RULES.md, new docs/lanes/claims.md, branch `quality-claims-file`.
+idle (2026-10-18 09:55 UTC). No quality PR open; the files held for #50 are released.
 
 ## Last PR
 
-PR #50 `quality-claims-file` (the owner's claim-rows request): open, head on GitHub. Before it: #49 (Batch 1 final, merged 09:27 UTC; the earlier note here that it was still open was wrong), #47 (08:49), #46 (08:29), #45 (08:22).
+PR #50 `quality-claims-file` (claim rows moved to docs/lanes/claims.md): merged 2026-10-18 09:51 UTC (68f0937). Before it, the owner carried gameplay's four new claim rows into claims.md in the merge (ce24994). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
 ## Verdicts
 
@@ -43,7 +43,7 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 - **To interiors:** #40 is merged (the owner merged `main` into it). Please release your four claim rows in CONTRIBUTING.md (PlotVisuals, PlotArt, docs/PLOT_VISUALS.md, `tools/daily_test.py (checks of interiors)`) and empty your "Studio steps" (they are in Batch 1 now, PR #47). The `kit_doc_lua` request above still stands for a later PR.
 - **To ux:** PR #44 is MERGE (above); nothing to change. U1 (OnboardingClient draws only the shown goals) is what #43's `ChainEnabled` waits on.
 - **To gameplay:** #43 is merged and its claims released; its two Studio rows are in Batch 1 (PR #46), hashes checked on `main`. U1 (ux) is what `ChainEnabled` waits on. The #42 plan was ported to `main` (130f0fa): that branch can go.
-- **To all lanes, coming with PR #50 (open):** once the owner merges it, claims live in docs/lanes/claims.md (straight to `main`), and a PR never carries claim-row edits. What each lane changes is listed in that PR's text.
+- **To all lanes (PR #50, merged 09:51 UTC):** claims now live in docs/lanes/claims.md (straight to `main`); a PR never carries claim-row edits (docs/LANES.md rule 2). Interiors: release your four old rows there. Ux: release `tools/hud_test.py` and `tools/shop_ux_test.py` if still held. The full per-lane list is in PR #50's text.
 - **To world and ux (later, not blocking):** the optional `--review` checks of tools/world_test.py (:1946-1975) and tools/icon_test.py (:1563-1589) allow a branch to change CONTRIBUTING.md's Ownership rows. After the claims move, a branch should change neither CONTRIBUTING.md nor docs/lanes/claims.md: please drop that allowance in your next PR.
 - **To the manager / owner (older note):** nothing is stuck on a lane. #44 waits on the owner (MERGE); #47 is merged: Batch 1 (nine scripts) is ready to run on `main` e38eab4. The interiors lane's claim rows are stale until that lane runs (or the owner frees them). #40 waits on the interiors lane's merge of `main`, and that lane's starts have been denied twice by the run classifier: the owner can do that merge himself (above). Batch 1 of docs/STUDIO_SYNC_BATCH.md is ready to run once PR `quality-batch-1` is merged (five scripts, hash block checked); the lobby playtests 9 (a) to (c) come first. The LANES table could say that docs/previews/building/ is the building lane's (it is the world lane's by the table, the owner's cinematic request names it for building).
 
@@ -56,6 +56,8 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 - **PR #16** is closed (22:43 UTC), as recommended. Nothing left to do about it but the branch above.
 
 ## Last report
+
+2026-10-18, 09:51 UTC: PR #50 is merged, so the claim rows now live in docs/lanes/claims.md and a PR never carries claim edits. The owner resolved the one conflict himself by carrying gameplay's new rows into the claims file. I cancelled my check-in and released the files I held for #50. Nothing else is waiting on the quality lane.
 
 2026-10-18, 09:37 to 09:45 UTC, manual run from the manager asking for the owner's claim-rows request now. PR #49 had already been merged (09:27), so Batch 1 of docs/STUDIO_SYNC_BATCH.md is final on main and the owner can run it. I rebased my prepared branch on main, checked that the 93 claim rows are copied byte for byte from main's CONTRIBUTING.md, and opened PR #50. It moves the Ownership table to docs/lanes/claims.md, which is pushed straight to main only. CONTRIBUTING.md, CLAUDE.md, README and PUBLISH_RULES now point there. LANES.md gets the rule that a PR never carries claim-row edits. The PR text lists what each lane, the manager and the owner change, and how to resolve a CONTRIBUTING.md conflict if a lane claims there before the merge. No script or test changed; the world, icon, lobby and building suites pass on the branch. Nothing merged or deleted by me.
 
