@@ -5,7 +5,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 ## Backlog (in order)
 
 1. **DONE (PR #35, merged 2026-10-17 22:25 UTC).** **"Claim garage" button on phones** (branch `ux-claim-button`). A new display-only LocalScript `ClaimButtonClient`: while the server's "Claim garage" prompt is shown on a phone (touch input) and the player has no garage, a big button (at least 240 x 60) sits at the bottom center, above the pop-ups. Tapping it presses the prompt itself (`InputHoldBegin`, then `InputHoldEnd` after the hold time), so the server checks everything as it does today (distance, rate, the garage's state): no new remote, no server change. It hides while a window is open (`OpenPanel`) and with the claim off (`LobbyConfig.ClaimEnabled`, which ships off: nothing changes for live players until the owner turns it on). New file because `LobbyClient.lua` is hash-pinned by tools/lobby_test.py (request R1 below).
-2. **BUILT (branch `ux-goal-chain`, pushed, head e665149; PR after item 5's).** **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). `activeGoals` and `ShowAtOnce` are on main since PR #43. Item 4's X fix goes in the same file, so it waits until this one is done.
+2. **IN REVIEW (PR #53, `ux-goal-chain`).** **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). `activeGoals` and `ShowAtOnce` are on main since PR #43. Item 4's X fix goes in the same file, so it waits until this one is done.
 3. **DONE (PR #44, merged 2026-10-18 08:53 UTC).** **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
 4. **Tap targets at least 40 x 40 everywhere.** The Goals tracker's X (OnboardingClient, 30 x 26 today) gets a 44 x 44 hit area without moving the card; a static check in tools/hud_test.py that every TextButton/ImageButton with a fixed size in the clients is at least 40 px on each side.
 5. **DONE (PR #48, merged 2026-10-18 09:18 UTC).** **Unpin my tests' Studio-sync hashes.** tools/hud_test.py (IpoClient in docs/STUDIO_SYNC_HUD.md) and tools/shop_ux_test.py (ShopClient and ShopLayout in docs/STUDIO_SYNC_SHOP.md) compare those docs with today's files, so any later edit of IpoClient or ShopClient fails them. Check them against the files at the commit the doc was written for (like lobby_test's L1 section), so the docs stay history. Needed before items 6 to 8 (which touch IpoClient and ShopClient); also needs R1.
@@ -15,13 +15,19 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-ux-goal-chain - started 2026-10-18 10:07 UTC
+waiting for review of PR #53
 
 ## Last PR
 
-PR #48 (`ux-sync-history`), merged 2026-10-18 09:18 UTC: https://github.com/mattimarca02/startup-to-ipo/pull/48. Before it: PR #44, merged 2026-10-18.
+PR #53 (`ux-goal-chain`, backlog item 2, U1), open: https://github.com/mattimarca02/startup-to-ipo/pull/53. Before it: PR #48, merged 2026-10-18 09:18 UTC.
 
 ## Last report
+
+2026-10-18 10:24 UTC. I merged main (acab027) into `ux-goal-chain` with no conflicts and opened PR #53: https://github.com/mattimarca02/startup-to-ipo/pull/53. With this change, the Goals card draws only the goals the server marks with `OnboardingGoalShown_<key>`, in the order of `activeGoals()`, with `min(ShowAtOnce, #activeGoals())` rows. A server that marks nothing gets the old first-goals card. The PR changes OnboardingClient.lua, the new tools/onboarding_client_test.luau, tools/hud_test.py, and the ux check in tools/daily_test.py. With `ChainEnabled` off, players see the same card as today. My claim rows went straight to main.
+
+Tests (Luau 0.742, one at a time): hud 1073 (69/69, coupling 26/26), claim button 129 (28/28), Goals card 27 (9/9), daily all green, world 380 (101/101), icon 371 (68/68), shop_ux 6308 (103/103), lobby 155 (63/63), building 1407 (46/46), onboarding 78 (16/16). The Studio step is below (OnboardingClient, sha256 7c69d99f…, 14691 bytes). No new requests. Waiting for the owner: the review and merge of PR #53. After the merge, gameplay can turn `ChainEnabled` on, and my next item is 4 (tap targets, starting with the Goals card's X).
+
+Earlier run (about 10:10 UTC): stopped before any work because the permission check refused git commands; nothing was changed.
 
 2026-10-18 09:10 UTC. The owner merged PR #44 at 08:53 UTC. Its two claim rows (ClaimButtonClient, tools/claim_button_test.luau) were already free on main, because the merge took CONTRIBUTING.md from main. I brought main into `ux-sync-history` (backlog item 5, built in the previous run) and opened PR #48: https://github.com/mattimarca02/startup-to-ipo/pull/48. It changes only tools/hud_test.py and tools/shop_ux_test.py. They now check docs/STUDIO_SYNC_HUD.md and docs/STUDIO_SYNC_SHOP.md against IpoClient, ShopClient and ShopLayout as they were at `645393a`, so a later edit of those scripts no longer fails either suite. Per the owner's new note, the PR carries no claim rows: I pushed my two claim rows (hud_test, shop_ux_test) and this file straight to main, and this time the push worked.
 
@@ -33,7 +39,7 @@ Next: backlog item 2 (U1). PR #43 is merged, so `OnboardingConfig.activeGoals` i
 
 ## Requests to other lanes
 
-- **To gameplay (U1): built** on `ux-goal-chain`; once it is merged, `ChainEnabled` can go on in your one-line PR.
+- **To gameplay (U1): PR #53**; once it is merged, `ChainEnabled` can go on in your one-line PR.
 - **To quality:** once `ux-goal-chain` is merged: README's tools row for tools/onboarding_client_test.luau (run by tools/hud_test.py) and the Studio step above in the batch.
 - **R1, to gameplay (tools/lobby_test.py): DONE (PR #38, merged).** its "Lobby all" doc checks (`ALL_SCRIPTS`) compare docs/STUDIO_SYNC_LOBBY.md with today's bytes of ShopClient, IpoClient, LobbyClient, EmployeeClient, BuildingClient (and TycoonCore, ShopServer, WorldArt, WorldVisuals, PlotVisuals, ...). That doc is history now (lobby-all is merged; new Studio steps go to docs/STUDIO_SYNC_BATCH.md), so any later edit of one of those files fails lobby_test, in every lane. Please check that section against the files at the lobby-all merge commit `2df1410`, the way the L1 section uses `L1_COMMIT = "f6a546f"`. 
 - **R2, to gameplay (later, item 6):** a place to save which HUD hints a player has seen (a list of short keys). Rule A10 says a new top-level section; it needs the owner's written OK. Not needed yet (item 8).
