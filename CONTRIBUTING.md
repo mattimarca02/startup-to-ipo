@@ -102,6 +102,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -118,12 +119,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
-| PlotVisuals | ServerScriptService | free | | |
-| PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
-| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| README.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |
+| docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
@@ -179,4 +180,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
 | tools/claim_button_test.luau | (repo only) | Claude (ux lane) | ux-claim-prompts | 2026-10-17 |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1-pr40 | 2026-10-18 |

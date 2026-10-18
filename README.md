@@ -27,7 +27,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `EmployeeServer.lua` | ServerScriptService | ModuleScript | Eggs, incubators, hatch rolls, team slots, employees in the garage |
 | `PoachServer.lua` | ServerScriptService | ModuleScript | Poaching negotiations, protection and shields, Counter-Offers, the HR Department (bought in the Poach window) |
 | `IpoServer.lua` | ServerScriptService | ModuleScript | Valuation, funding stages, going public (IPO), Shares, the IPO shop, the garage's funding sign |
-| `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished |
+| `OnboardingServer.lua` | ServerScriptService | ModuleScript | First minute for new players: the one free egg, where the arrow points, which goals are finished and which the tracker shows (`OnboardingGoalShown_<key>`, `ShowAtOnce` at a time) |
 | `DailyServer.lua` | ServerScriptService | ModuleScript | Daily login calendar: which UTC day it is, the streak, the Claim action and its rewards |
 | `TaskServer.lua` | ServerScriptService | ModuleScript | Task engine (PR 1: customer calls, **Studio only**): when a call rings (not before the player owns the Desk, or has done an IPO), grading an answer, the reward, engaged time, the measurement numbers for gate G1 |
 | `CompanyServer.lua` | ServerScriptService | ModuleScript | The company and its Pokedex (customize PR 1, invisible): the `pokedex` save section on join and save, and the Studio-only office requests Place, Store and Sync. Never touches Cash or the valuation |
@@ -42,7 +42,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
 | `IpoConfig.lua` | ReplicatedStorage | ModuleScript | IPO rules: stage thresholds, multiplier and Shares formulas, cooldown, IPO shop perks |
-| `OnboardingConfig.lua` | ReplicatedStorage | ModuleScript | First-minute settings: the free egg, the goals, when the arrow and tracker end, an on/off switch |
+| `OnboardingConfig.lua` | ReplicatedStorage | ModuleScript | First-minute settings: the free egg, the goals (`Goals` today; the first-hour `Chain` behind `ChainEnabled`, off), when the arrow and tracker end, an on/off switch |
 | `DailyConfig.lua` | ReplicatedStorage | ModuleScript | Daily calendar: the 7 rewards, grace days, Cash caps, reset hour (UTC), texts, an on/off switch |
 | `TaskConfig.lua` | ReplicatedStorage | ModuleScript | Task rules: one row per task (gap, time limit, reward, team share, when it starts: the Desk), rungs, reward budget, the `Enabled` and `StudioOnly` switches |
 | `SectorConfig.lua` | ReplicatedStorage | ModuleScript | The four sector keys (only Software can be picked), the picker switch (off), company names, Hall of Fame goals |
@@ -73,6 +73,7 @@ Other files:
 | `tools/lobby_test.py` | The lobby: TycoonCore's CLAIMLOAD block byte for byte, its listed edits, the whole TycoonCore run in a fake Roblox (`tools/lobby_runtime.luau`), LobbyClient, docs/STUDIO_SYNC_LOBBY.md as history (its L1 section at `f6a546f`, its "Lobby all" section at `fb8c057`), plus mutation runs. Needs `luau` |
 | `tools/hud_test.py` | The HUD: the valuation bar's Cash and Income row (the real `IpoClient` in a fake Roblox at the phone sizes and three top bars), the goal tracker's rows, and `ClaimButtonClient` in its own fake (`tools/claim_button_test.luau`), plus mutation runs. Needs `luau` |
 | `tools/world_test.py` | The world (the real `WorldArt` and `WorldVisuals` in a fake Roblox): the row and the ring, the plaza garden, budgets, reserved zones, docs/STUDIO_SYNC_WORLD.md as history at `98cc7a9` (a world file changed since must have its hash row in the world lane file or in docs/STUDIO_SYNC_BATCH.md), plus mutation runs. Needs `luau` |
+| `tools/onboarding_test.py` | The goal tracker's goals: the real `OnboardingServer` and `OnboardingConfig` in a fake Roblox (the goal kinds, which goals are shown, goals finishing while hidden, the call goals skipped off Studio, the chain off = today's two goals, the save keeps every finished key), plus mutation runs. Needs `luau` |
 | `tools/icon_test.py` | The icons (`IconArt`, `IconVisuals`): one icon per item, the palette, the ViewportFrame cap, plus mutation runs. Needs `luau` |
 | `assets/kit/`, `docs/KIT_MODELS.md` | The 3D kit (36 models) the buildings are made of, and how it was imported into `ReplicatedStorage.KitModels` |
 | `docs/LANES.md`, `docs/lanes/` | The six Claude lanes (interiors, building, world, gameplay, ux, quality): who owns which files, one PR at a time, requests between lanes; each lane's file holds its backlog, what it is doing, its requests and its Studio steps. `docs/lanes/owner.md` is the owner's requests to the lanes, `docs/lanes/quality.md` the review verdicts |
