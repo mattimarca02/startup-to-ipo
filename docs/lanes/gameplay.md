@@ -39,11 +39,16 @@ What the PR would do, in one branch `gameplay-economy-core` (may split in two: 2
 3. ShopServer's Cash packs stop calling `addEarnings` (a gift, like daily Cash). `TaskConfig.StudioOnly` goes off: calls go live.
 4. IpoConfig: Shares 20 / 0.25 / cap 1.5, perk costs from the sim, Night Shift 1,800 s a level, 7 stages (`SeriesCD`, `PreIpo`), `StageScale(L)`. DailyConfig Day 7 drops its 3 Shares. About 28 of the 73 D1 checks in daily_test are rewritten.
 
-Decisions I need from the owner:
+The owner's answers (owner.md, 2026-10-18), and what they change in the plan:
 
-- **D-A, gate G1 first?** ROADMAP says G1 (5 players x 2 Studio sessions, calls only, measured f near Garage 0.32 / Seed 0.37 / Series A 0.41) comes before PR 2, and it hasn't been run. My default: run G1 first; I build nothing of item 4 until its numbers are in ROADMAP (or the owner writes "skip G1").
-- **D-B, where the away bank is saved.** (a) the proposal's new top-level section `away = { engagedDay, engagedSeconds, bankSeconds }` (rule A10, KNOWN_SECTIONS, Shut down all servers), or (b) one new field `bankSeconds` in the existing `tasks` section. (b) is safe here only because TaskServer already writes back unknown `tasks` fields and `tasks` already holds `engagedDay`/`engagedSeconds`; code older than PR 1 keeps `tasks` whole. My recommendation: (b), one place for the engaged clock, no new section. Either way it is a save-format change and needs your written OK.
-- **D-C, the offline payout.** Today: 50% of Income for up to 8 h, paid on join (TycoonCore, inside the byte-pinned CLAIMLOAD block). The plan replaces it with the 10% / 2 h bank. That cuts what a returning player gets by about 20x, and the CLAIMLOAD block's pin in tools/lobby_test.py must move (gameplay's own file). OK to change the offline rule, and in the same PR as the welcome-back card (backlog item 7) so the player sees why?
+- **D-A: G1 first.** I build nothing of item 4 until G1's numbers are in ROADMAP (or the owner writes "skip G1"). G1 is still not run (ROADMAP M6 "Next").
+- **D-B: a new top-level section** `away = { engagedDay, engagedSeconds, bankSeconds }` (rule A10: its own serialize, an entry in KNOWN_SECTIONS, optional on load, Shut down all servers when published). `tasks.engagedDay` / `engagedSeconds` stay where they are and keep being written, so an older server (or a rollback) still reads them. The new code reads `away` first and falls back to `tasks` when `away` is missing.
+- **D-C: the offline Cash stays.** It is still 50% of Income for up to 8 h, paid on join. Only the valuation side changes. Here is the variant, written as the owner asked:
+  - **Recommended: 10% of the offline Cash counts toward the valuation.** That is the same share the away bank's payout gets (LG:24), so "away" means one thing whether you are offline or idle online. It is also a real but small part of the IPO pace: a full 8 h night pays 4 Income-hours of Cash and adds 0.4 Income-hours of valuation, about 30% of one engaged Garage hour (1.32, GAMEPLAY_FIRST_HOUR_PROPOSAL section 2). Today that night adds 4.0, three times an engaged hour, which is the AFK-beats-play problem.
+  - **The other option: 0%.** It is the simplest, but then the welcome-back message announces Cash that does nothing for the IPO, and Night Shift (an IPO perk) would only buy Cash.
+  - **The CLAIMLOAD block stays byte-identical in both options.** The block already calls `addEarnings(player, earned)` before `data.ready`. Since PR #61, `addEarnings` (outside the block) knows that call is the offline pay: it is the only earnings before `ready`. So the weight goes there: `IpoServer.addEarnings(player, amount, data.ready and kind or "offline")`. Nothing inside the markers moves, and `tools/lobby_test.py` keeps its pin.
+  - After G1, if the numbers say more is needed (a lower cap or a lower share), I propose it then, as the owner asked.
+- **Still open for the owner when item 4 starts:** pick the share, 10% (my recommendation) or 0%.
 
 ## Doing now
 
@@ -53,7 +58,21 @@ waiting for review of PR #61
 
 #61 `gameplay-welcome-back`, open since 2026-10-18. Before it: #52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
-## Last report (2026-10-18, PR #61 open)
+## Run (2026-10-18, manual fire: "continue with the next item of your backlog")
+
+- **No new PR.** PR #61 is still open with no review, and a lane keeps one PR at a time (docs/LANES.md rule 3). Every other item is blocked:
+  - Item 3 is ux's (request U2).
+  - Items 4 and 6 wait for gate G1.
+  - Items 5 and 8 change economy numbers or a paid item, so they need the owner.
+  - Item 9 waits until ux asks for it.
+- **What I did instead:** I wrote the D-C variant the owner asked for into the item 4 plan above. The offline Cash stays as it is, and I recommend that 10% of it counts toward the valuation (0% is the other option). The CLAIMLOAD block stays byte-identical, because the weight goes into `addEarnings` outside the block.
+- **Tests:** none run this time (docs only). **Studio steps:** none new.
+- **Waiting for the owner:**
+  - Review and merge of PR #61.
+  - Gate G1.
+  - The offline valuation share (10% or 0%), when item 4 starts.
+
+## Report (2026-10-18, PR #61 open)
 
 - **Read the overhaul report first.** The goal chain is already on (`ChainEnabled`, phase 4), and calls stay Studio-only. No lane has an open request for me.
 - **Built backlog item 7 as PR #61:** https://github.com/mattimarca02/startup-to-ipo/pull/61
