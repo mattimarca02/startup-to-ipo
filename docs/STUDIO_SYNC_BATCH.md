@@ -16,11 +16,11 @@ The older sync docs (docs/STUDIO_SYNC_MASTER.md, docs/STUDIO_SYNC_LOBBY.md, docs
 6. **Checks** and **playtests** of the batch, in order. Anything the batch tells you to delete (a preview folder, a check model) is deleted before saving.
 7. **Run the hash block again**, then **File > Save to Roblox**. Write the date and the result at the end of the batch ("Run on ..."); a playtest that was skipped or showed an error is written down as such, never as done.
 
-## Batch 1 (open: five scripts from PRs #35, #36 and #37; `main` at `853eaa3`)
+## Batch 1 (open: seven scripts from PRs #35, #36, #37 and #43; `main` at `f666726`)
 
-Opened 2026-10-17 by the quality lane. **Merged so far, in this order:** #38 (gameplay, `tools/lobby_test.py` only: nothing for Studio), #36 (building: the Garage's roof and sign), #35 (ux: the phone's "Claim garage" button), #41 (quality: this doc, README, CLAUDE.md, ROADMAP: nothing for Studio) and #37 (world: the ring plaza garden). Every row below was recomputed from `main` at `853eaa3` (the merge of #37) by the quality lane on 2026-10-17: `sha256sum` and `wc -c` of the five files, all equal to the hashes the lane files give. Run the batch at that commit or any later `main` whose five files still match (the hash block says).
+Opened 2026-10-17 by the quality lane. **Merged so far, in this order:** #38 (gameplay, `tools/lobby_test.py` only: nothing for Studio), #36 (building: the Garage's roof and sign), #35 (ux: the phone's "Claim garage" button), #41 (quality: this doc, README, CLAUDE.md, ROADMAP: nothing for Studio), #37 (world: the ring plaza garden), #43 (gameplay: the goal chain, off) and #45 (quality: docs only). Every row below was recomputed from `main` by the quality lane (`sha256sum` and `wc -c` of the file; the five of 2026-10-17 at `853eaa3`, #43's two on 2026-10-18 at `f666726`, all equal to the hashes the lane files give). Run the batch at `f666726` or any later `main` whose seven files still match (the hash block says).
 
-**What the owner sees after this batch:** with `ClaimEnabled` off (as it ships and as Studio has it), only PR #36 shows: the Garage has a pitched roof, stepped gables and a sign board over the door. The claim button (#35) and the garden (#37) show only with the claim on, which stays a Studio-only test (section 6). Nothing changes the save format; nothing needs a publish.
+**What the owner sees after this batch:** with `ClaimEnabled` off (as it ships and as Studio has it), only PR #36 shows: the Garage has a pitched roof, stepped gables and a sign board over the door. The claim button (#35) and the garden (#37) show only with the claim on, which stays a Studio-only test (section 6); the goal chain (#43) shows nothing while `OnboardingConfig.ChainEnabled` is false (the tracker keeps Hire 3 and Seed). Nothing changes the save format; nothing needs a publish.
 
 | PR | Lane | Script | Class, place | State | SHA-256 (`main` at `853eaa3`) | Bytes | Merged? |
 |---|---|---|---|---|---|---|---|
@@ -31,6 +31,9 @@ Opened 2026-10-17 by the quality lane. **Merged so far, in this order:** #38 (ga
 | #41 | quality | (none: docs only) | | | | | merged 22:42 UTC |
 | #37 | world | `WorldArt` | ModuleScript, ServerScriptService | changed | `7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f` | 17648 | merged 22:43 UTC |
 | #37 | world | `WorldVisuals` | ModuleScript, ServerScriptService | changed | `3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90` | 59866 | merged 22:43 UTC |
+| #43 | gameplay | `OnboardingServer` | ModuleScript, ServerScriptService | changed | `a77c805d733252ad7d4c90232092212fe872212686c74b96de6fa22ef9c0b2d7` | 16509 | merged 2026-10-18 08:19 UTC |
+| #43 | gameplay | `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `7406818ffa279b69487e73334ca1fb5dfe99e343912d1ab10301df753904f7f4` | 6883 | merged 2026-10-18 08:19 UTC |
+| #45 | quality | (none: docs only) | | | | | merged 2026-10-18 08:22 UTC |
 
 **Coming (open PRs, provisional, never paste from these rows):** the hash is the PR head's at review time; a rebase that changes the file changes it, and the row is rewritten from `main` after the merge.
 
@@ -38,12 +41,11 @@ Opened 2026-10-17 by the quality lane. **Merged so far, in this order:** #38 (ga
 |---|---|---|---|---|---|---|---|
 | #40 | interiors | `PlotArt` | ModuleScript, ServerScriptService | changed | `e1d3f7e0e6dd789c3d4a7135a474e8dc92eacdfb23d9c65fcc0599ea9dd2b0c6` | 63975 | open (head `1696f9c`, needs a rebase) |
 | #40 | interiors | `PlotVisuals` | ModuleScript, ServerScriptService | changed | `8eefee60866bb2ef0a31cbeda361e5f4bd145844d27644dd054e9e5951d8fcca` | 41197 | open (head `1696f9c`, needs a rebase) |
-| #43 | gameplay | `OnboardingServer` | ModuleScript, ServerScriptService | changed | `a77c805d733252ad7d4c90232092212fe872212686c74b96de6fa22ef9c0b2d7` | 16509 | open (head `b01d07c`) |
-| #43 | gameplay | `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `7406818ffa279b69487e73334ca1fb5dfe99e343912d1ab10301df753904f7f4` | 6883 | open (head `b01d07c`) |
+| #44 | ux | `ClaimButtonClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed (replaces #35's bytes) | `b00fcd8637d378eca02d3e6b4b856ee9fea8d184ea3086a2031d0eee124817c4` | 10261 | open (head `d960956`) |
 
 ### 1. Before you start
 
-The playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (the lobby-all sync of 2026-10-17 did everything but them). Do them before pasting anything new, so a problem is lobby-all's or the batch's, never a mix. Then: `git fetch`, `git worktree add ../studio-batch 853eaa3` (or a later `main`), and in Studio commit every Team Create draft (View > Drafts).
+The playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (the lobby-all sync of 2026-10-17 did everything but them). Do them before pasting anything new, so a problem is lobby-all's or the batch's, never a mix. Then: `git fetch`, `git worktree add ../studio-batch f666726` (or a later `main`), and in Studio commit every Team Create draft (View > Drafts).
 
 ### 2. Scripts to create by hand first
 
@@ -55,7 +57,7 @@ Hover **StarterPlayer > StarterPlayerScripts** in the Explorer, **+**, choose **
 
 ### 3. The list (paste in any order)
 
-Open each `.lua` in the worktree, select all, copy; in Studio double-click the script, select all, paste (or write the file's text with the MCP's script tool). The five rows are the same as in the table above, in the shape `tools/world_test.py` reads:
+Open each `.lua` in the worktree, select all, copy; in Studio double-click the script, select all, paste (or write the file's text with the MCP's script tool). The seven rows are the same as in the table above, in the shape `tools/world_test.py` reads:
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|
@@ -64,12 +66,14 @@ Open each `.lua` in the worktree, select all, copy; in Studio double-click the s
 | `ClaimButtonClient` | LocalScript, StarterPlayer > StarterPlayerScripts | new | `494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00` | 7525 |
 | `WorldArt` | ModuleScript, ServerScriptService | changed | `7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f` | 17648 |
 | `WorldVisuals` | ModuleScript, ServerScriptService | changed | `3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90` | 59866 |
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `a77c805d733252ad7d4c90232092212fe872212686c74b96de6fa22ef9c0b2d7` | 16509 |
+| `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `7406818ffa279b69487e73334ca1fb5dfe99e343912d1ab10301df753904f7f4` | 6883 |
 
-No other script changes: `PlotBuilding.KIT_FRONT_TURN` stays 180 (PR #34), `LobbyConfig` stays as it is (`ClaimEnabled = false`), TycoonCore is untouched by these PRs.
+`OnboardingServer` now requires `TaskConfig` (ReplicatedStorage), which exists since the task engine's sync. No other script changes: `PlotBuilding.KIT_FRONT_TURN` stays 180 (PR #34), `LobbyConfig` stays as it is (`ClaimEnabled = false`), TycoonCore is untouched by these PRs.
 
 ### 4. Hash check (command bar)
 
-Paste the whole block into **View > Command Bar** and press Enter (with the MCP: `execute_luau`). It changes nothing. It prints `OK`, `DIFFERENT`, `MISSING` or `WRONG CLASS` per script, then `ALL OK` or `NOT YET`. Studio may drop the file's last newline or add one; both are accepted. The `WANT` table is the batch's list (section 3), one row per script, `{ name, class, place, sha256, bytes }`, filled from `main` at `853eaa3`; it must print `ALL OK: 5 scripts match the repo (batch 1)`. (The quality lane ran this block in Luau 0.742 against the five files on `main`, in a fake place: `ALL OK`; with one byte changed: `DIFFERENT`; with the LocalScript missing: `MISSING`.)
+Paste the whole block into **View > Command Bar** and press Enter (with the MCP: `execute_luau`). It changes nothing. It prints `OK`, `DIFFERENT`, `MISSING` or `WRONG CLASS` per script, then `ALL OK` or `NOT YET`. Studio may drop the file's last newline or add one; both are accepted. The `WANT` table is the batch's list (section 3), one row per script, `{ name, class, place, sha256, bytes }`, filled from `main` at `853eaa3`; it must print `ALL OK: 7 scripts match the repo (batch 1)`. (The quality lane ran this block in Luau 0.742 against the seven files on `main`, in a fake place: `ALL OK`; with one byte changed: `DIFFERENT`; with the LocalScript missing: `MISSING`.)
 
 ```lua
 local K = {
@@ -121,12 +125,14 @@ local function folderOf(place)
 	return game:GetService(place)
 end
 local WANT = {
-	-- main at 853eaa3 (2026-10-17): { "Name", "Class", "Place", "sha256", bytes }
+	-- main at f666726 (2026-10-18): { "Name", "Class", "Place", "sha256", bytes }
 	{ "PlotBuilding", "ModuleScript", "ServerScriptService", "f04e3b89486a4b8a3656633029412c1e666df84432c9760639e89c9361ea5788", 42603 },
 	{ "PlotBuildingVisuals", "ModuleScript", "ServerScriptService", "2e956d553b0b5bd3ef51bf8db4b643634b86cca83111bdbe9fa7fec8405e5043", 27493 },
 	{ "ClaimButtonClient", "LocalScript", "StarterPlayerScripts", "494d14bdd2843e49606a7a339793e9b4c7840ea0cc08f967f5f7c3863bed2b00", 7525 },
 	{ "WorldArt", "ModuleScript", "ServerScriptService", "7c24e992b60c6319f309dbd7dfda2cafa201566afece96ddc5678e9d87c57d8f", 17648 },
 	{ "WorldVisuals", "ModuleScript", "ServerScriptService", "3547afbbecd30e01f65285b1c483932da30751db9fa328119a267126c7563a90", 59866 },
+	{ "OnboardingServer", "ModuleScript", "ServerScriptService", "a77c805d733252ad7d4c90232092212fe872212686c74b96de6fa22ef9c0b2d7", 16509 },
+	{ "OnboardingConfig", "ModuleScript", "ReplicatedStorage", "7406818ffa279b69487e73334ca1fb5dfe99e343912d1ab10301df753904f7f4", 6883 },
 }
 local problems = {}
 for _, w in ipairs(WANT) do
@@ -158,10 +164,10 @@ print(#problems == 0 and ("ALL OK: " .. #WANT .. " scripts match the repo (batch
 ### 5. Checks (after the paste)
 
 1. **The kit (PR #36):** run the KitModels check of docs/STUDIO_SYNC_LOBBY.md section 5 again: it must still print `KIT OK: 36 models`. #36 changes no model and no manifest row (its Blocks are plain Parts). The kit front check of the same section still says `KIT_FRONT_TURN = 180`.
-2. **The Output after F5 (all three PRs):** no red error and no warning that starts with `Plot buildings`, `Plot visuals` or `The plaza is off` (a `Plot buildings:` warning about a missing model means the kit folder lacks one: step 1).
-3. **No publish and no save change:** none of the three PRs adds a save section, a remote or a config key; `LobbyConfig` is not in this batch and stays `ClaimEnabled = false` (owner decision 9).
+2. **The Output after F5 (all four PRs):** no red error, no `OnboardingConfig` warning (#43: every goal of `Goals` and `Chain` has a known kind and an existing stage) and no warning that starts with `Plot buildings`, `Plot visuals` or `The plaza is off` (a `Plot buildings:` warning about a missing model means the kit folder lacks one: step 1).
+3. **No publish and no save change:** none of the four PRs adds a save section or a remote (#43's new config keys are read only by its own scripts); `LobbyConfig` is not in this batch and stays `ClaimEnabled = false` (owner decision 9).
 
-Expected later (from the open PRs' lane files; each becomes a step when its PR is merged): **#40:** the command-bar preview in docs/lanes/interiors.md ("Studio steps"): stage 1 prints `OK` with 39 kit MeshParts; delete `Workspace.PREVIEW_STAGES` after. **#43:** nothing beyond F5 (the tracker looks as before while `ChainEnabled` is false; no `OnboardingConfig` warning in the Output).
+Expected later (from the open PRs' lane files; each becomes a step when its PR is merged): **#40:** the command-bar preview in docs/lanes/interiors.md ("Studio steps"): stage 1 prints `OK` with 39 kit MeshParts; delete `Workspace.PREVIEW_STAGES` after. **#44:** the newer `ClaimButtonClient` replaces #35's row and `WANT` line (one file, the newer bytes).
 
 ### 6. Playtests
 
@@ -171,7 +177,8 @@ In this order, each written down as done, skipped or failed:
 2. **#35, claim off:** still in the same F5 (or a new one): nothing new shows on the screen, the HUD is as before, no error in the Output. Test > Device, a phone in portrait and landscape: still nothing new (the button needs the claim on).
 3. **#37, claim off:** the row world is unchanged: the street, the lounge, the hills as before.
 4. **Claim on, Studio only, never saved (#35 and #37):** set `ClaimEnabled = true` in `ReplicatedStorage > LobbyConfig` for the playtest only (docs/STUDIO_SYNC_LOBBY.md section 9 b says how and how to revert). F5: the garages stand in the ring; the plaza shows the paved square around the spawn pad, four spokes, the promenade along the garages' fronts, four lawn beds with kerbs, trees and bushes, the fountain on the north spoke, benches and lamps along the spokes; every garage walk ends on the promenade; no red error and no `The plaza is off` warning. Then Test > Device, a phone, portrait and landscape: walk to a free garage's post; the big green "Claim garage" button appears at the bottom center while the prompt shows, above the pop-ups, clear of the thumbstick and the jump button; tap it once: the garage is claimed exactly as the prompt would (the prompt and the button go away, the garage is yours). Open a window (SHOP): the button hides; close it: it is back only while a prompt shows. The plaza stays smooth on the phone (336 world parts, 4 lights).
-5. **Revert the switch, don't retype it** (docs/STUDIO_SYNC_LOBBY.md 9 b, step 8): in View > Drafts, right-click `LobbyConfig` and revert the draft (without Team Create, paste `LobbyConfig.lua` from the repo over the whole script). `LobbyConfig` is not in this batch's hash block, so open it and read `ClaimEnabled = false` by eye before saving.
+5. **#43, claim off, a new save (Debug > "Restart tutorial" or a fresh test account):** the goal tracker looks and behaves as before: Hire 3 employees, then Reach Seed stage, one row each; finishing one shows its tick; no new row, no `OnboardingConfig` warning in the Output (`ChainEnabled` is false, so the chain is not in use).
+6. **Revert the switch, don't retype it** (docs/STUDIO_SYNC_LOBBY.md 9 b, step 8): in View > Drafts, right-click `LobbyConfig` and revert the draft (without Team Create, paste `LobbyConfig.lua` from the repo over the whole script). `LobbyConfig` is not in this batch's hash block, so open it and read `ClaimEnabled = false` by eye before saving.
 
 ### 7. Saving
 
