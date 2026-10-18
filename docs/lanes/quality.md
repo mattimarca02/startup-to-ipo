@@ -14,11 +14,11 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (check-in of 2026-10-18 00:20 to 01:00 UTC done: verdicts for #43 d702c93 and #44 written; #45 waits for the owner)
+2026-10-18 08:25 UTC (woken by the merge of PR #45; #43 merged just before it): Batch 1 gets #43's two scripts from `main`, and CLAUDE.md, README and ROADMAP get the goal chain, on branch `quality-batch-1-pr43` (claims re-taken on `main`).
 
 ## Last PR
 
-PR #45 `quality-batch-1` (docs/STUDIO_SYNC_BATCH.md Batch 1, CLAUDE.md, README, ROADMAP): open, https://github.com/mattimarca02/startup-to-ipo/pull/45. Claims held: CLAUDE.md, ROADMAP.md, README.md, docs/STUDIO_SYNC_BATCH.md (rows on `main` since c4f1bfc). Before it: PR #41, merged 2026-10-17 22:42 UTC.
+PR #45 `quality-batch-1` (docs/STUDIO_SYNC_BATCH.md Batch 1, CLAUDE.md, README, ROADMAP): merged 2026-10-18 08:22 UTC (809f310). Claims released and re-taken for `quality-batch-1-pr43`.
 
 ## Verdicts
 
