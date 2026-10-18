@@ -13,14 +13,22 @@
 --   PlotVisuals.buildProp(parent, center, art, upgrade, slot)  -> Model named after the upgrade, or nil (no art)
 --   PlotVisuals.styleFloor(floor, art, stage)                   -> color and material only (name and size stay)
 --   PlotVisuals.buildRoom(parent, center, art, stage, kit)    -> the same room with its furniture from the 3D kit
+--   PlotVisuals.buildRoom(parent, center, art, stage, kit, desks) -> with a hire desk at the first `desks` hire spots only
+--                                                                (plus a see-through "next hire" desk at the spot after
+--                                                                them; nil = a desk at every spot, the full room)
+--   PlotVisuals.buildDesks(decor, origin, art, stage, kit, desks) -> the hire desks alone (what setDesks rebuilds)
 -- Furniture ("kit pieces" in the art: a kit key instead of a shape) comes from the 3D kit, kit = the folder
 -- ReplicatedStorage.KitModels (docs/KIT_MODELS.md): copies of a model's MeshParts, recolored per role, scaled, turned.
 -- Without the kit, or for a model that is missing or can't be used, the piece is built from Parts (PlotArt.Kit's
 -- fallback boxes, the same colors): the game looks right with no kit at all.
 -- TycoonCore keeps one plot table per player (in memory, never saved):
 --   PlotVisuals.newPlot(folder, center, art, floor, stage, kit) -> plot, with the room of that stage (kit: the folder,
---                                                                   or nil = PlotVisuals.findKit(art))
---   PlotVisuals.setStage(plot, stage, flash)                    -> swaps the room (quick flash), keeps the props
+--                                                                   or nil = PlotVisuals.findKit(art)) and no hire desk
+--                                                                   yet (setDesks puts one per hire)
+--   PlotVisuals.setStage(plot, stage, flash)                    -> swaps the room (quick flash), keeps the props and the desks
+--   PlotVisuals.setDesks(plot, count, popIn)                    -> a desk at the first `count` hire spots and a see-through
+--                                                                   one at the next (the office grows with the team,
+--                                                                   overhaul phase 3; derived from the team, never saved)
 --   PlotVisuals.addProp(plot, upgrade, slot, popIn)             -> the prop Model (pops in), or nil
 -- Checks (tools/daily_test.py and the Studio preview run them):
 --   PlotVisuals.validate(art)             -> list of problems in the data (empty = fine)
@@ -397,9 +405,41 @@ local function floorOrigin(center, art)
 	return CFrame.new(center.X, center.Y + art.Layout.floorTop, center.Z)
 end
 
--- The room of one funding stage: its shell, its decor (with a desk for every hire spot) and an
--- empty UpgradeProps model for the props of the upgrades bought. kit = ReplicatedStorage.KitModels or nil (Parts only).
-function PlotVisuals.buildRoom(parent, center, art, stage, kit)
+PlotVisuals.GHOST_TRANSPARENCY = 0.7 -- the "next hire" desk: see-through, no light, no shadow
+
+-- The hire desks (the office grows with the team, overhaul phase 3): a desk at the first `desks` hire spots
+-- (EmployeeServer's EMPLOYEE_SPOTS, copied in PlotArt.Layout; nil = every spot, the full room), each named HireDesk<i>, and
+-- after them one see-through "next hire" desk at the next spot (HireDesk<i> too, attribute Ghost = true, so it keeps its
+-- desk zone), none once every spot has a hire. Returns the index of the first new desk's Model (for the pop-in).
+function PlotVisuals.buildDesks(decor, origin, art, stage, kit, desks)
+	local look = art.Stages[stage]
+	local spots = art.Layout.employeeSpots
+	local count = desks == nil and #spots or math.clamp(math.floor(desks), 0, #spots)
+	local last = desks == nil and count or math.min(count + 1, #spots)
+	for i = 1, last do
+		local spot, desk = spots[i], art.Layout.desks[i]
+		local base = origin * CFrame.new(spot[1] + desk[1], 0, spot[2] + desk[2]) * CFrame.Angles(0, math.rad(desk[3]), 0)
+		local model = PlotVisuals.buildGroup(decor, "HireDesk" .. i, base, look.desk, art, kit)
+		model.WorldPivot = base -- the pop-in grows it from the floor
+		if i > count then -- the next hire's spot: the same desk, see-through
+			model:SetAttribute("Ghost", true)
+			for _, d in ipairs(model:GetDescendants()) do
+				if d:IsA("BasePart") then
+					d.Transparency = math.max(d.Transparency, PlotVisuals.GHOST_TRANSPARENCY)
+					d.CastShadow = false
+				elseif d:IsA("Light") then
+					d:Destroy()
+				end
+			end
+		end
+	end
+	return count
+end
+
+-- The room of one funding stage: its shell, its decor (with a desk for every hire spot, or for the first `desks` of
+-- them plus the next hire's see-through one: see buildDesks) and an empty UpgradeProps model for the props of the
+-- upgrades bought. kit = ReplicatedStorage.KitModels or nil (Parts only).
+function PlotVisuals.buildRoom(parent, center, art, stage, kit, desks)
 	local look = art.Stages[stage]
 	local origin = floorOrigin(center, art)
 	local room = Instance.new("Model")
@@ -408,12 +448,7 @@ function PlotVisuals.buildRoom(parent, center, art, stage, kit)
 	room:SetAttribute("StageKey", look.key)
 	PlotVisuals.buildGroup(room, "Shell", origin, look.shell, art, kit)
 	local decor = PlotVisuals.buildGroup(room, "Decor", origin, look.decor, art, kit)
-	-- Every hire stands at one of these (EmployeeServer's EMPLOYEE_SPOTS, copied in PlotArt.Layout)
-	for i, spot in ipairs(art.Layout.employeeSpots) do
-		local desk = art.Layout.desks[i]
-		local base = origin * CFrame.new(spot[1] + desk[1], 0, spot[2] + desk[2]) * CFrame.Angles(0, math.rad(desk[3]), 0)
-		PlotVisuals.buildGroup(decor, "HireDesk" .. i, base, look.desk, art, kit)
-	end
+	PlotVisuals.buildDesks(decor, origin, art, stage, kit, desks)
 	local props = Instance.new("Model")
 	props.Name = "UpgradeProps"
 	props.Parent = room
@@ -451,9 +486,37 @@ function PlotVisuals.newPlot(folder, center, art, floor, stage, kit)
 	if not kit then
 		warnOnce("no kit", "ReplicatedStorage." .. tostring(art.KIT_FOLDER) .. " is missing: the room furniture is built from Parts")
 	end
-	local plot = { folder = folder, center = center, frame = frame, art = art, floor = floor, kit = kit, room = nil, stage = nil }
+	local plot = { folder = folder, center = center, frame = frame, art = art, floor = floor, kit = kit, room = nil, stage = nil, desks = 0 }
 	PlotVisuals.setStage(plot, stage, false)
 	return plot
+end
+
+-- A desk for each of the first `count` hires and a see-through one at the next spot (the team's size, never saved).
+-- A desk that is new pops in (popIn); fewer desks (a hire poached or let go) just go. Nothing else of the room changes.
+function PlotVisuals.setDesks(plot, count, popIn)
+	local spots = plot.art.Layout.employeeSpots
+	count = math.clamp(math.floor(tonumber(count) or 0), 0, #spots)
+	local decor = plot.room and plot.room:FindFirstChild("Decor")
+	if not decor then
+		plot.desks = count
+		return
+	end
+	local before = plot.desks or 0
+	for _, child in ipairs(decor:GetChildren()) do
+		if string.find(child.Name, "HireDesk", 1, true) == 1 then
+			child:Destroy()
+		end
+	end
+	plot.desks = count
+	PlotVisuals.buildDesks(decor, floorOrigin(plot.frame, plot.art), plot.art, math.clamp(plot.stage or 1, 1, #plot.art.Stages), plot.kit, count)
+	if popIn then
+		for i = before + 1, count do
+			local desk = decor:FindFirstChild("HireDesk" .. i)
+			if desk then
+				task.spawn(PlotVisuals.popIn, desk)
+			end
+		end
+	end
 end
 
 -- Builds the room of `stage` and swaps it in. The props already bought move into the new room.
@@ -464,7 +527,7 @@ function PlotVisuals.setStage(plot, stage, flash)
 	local art = plot.art
 	local shown = math.clamp(stage, 1, #art.Stages)
 	local old = plot.room
-	local room = PlotVisuals.buildRoom(nil, plot.frame, art, shown, plot.kit)
+	local room = PlotVisuals.buildRoom(nil, plot.frame, art, shown, plot.kit, plot.desks or 0)
 	local props = room:FindFirstChild("UpgradeProps")
 	local oldProps = old and old:FindFirstChild("UpgradeProps")
 	if oldProps then

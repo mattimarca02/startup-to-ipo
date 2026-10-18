@@ -921,6 +921,14 @@ end
 
 -- Eggs and employees (milestone 2) --------------------------------------
 
+-- The office grows with the team (overhaul phase 3): a desk for each hire and a see-through one at the next spot,
+-- derived from the team's size every time it changes (looks only, never saved; nothing before the room exists)
+local function syncDesks(data, popIn)
+	if data.looks and data.team then
+		looks("desks", PlotVisuals.setDesks, data.looks, #data.team.employees, popIn)
+	end
+end
+
 EmployeeServer.init({
 	getData = function(player)
 		return playerData[player]
@@ -928,6 +936,9 @@ EmployeeServer.init({
 	save = save,
 	updateIncome = updateIncome,
 	plotFrame = plotFrame,
+	onTeamChanged = function(data)
+		syncDesks(data, true)
+	end,
 })
 
 -- Poaching (milestone 3 poaching) ---------------------------------------
@@ -1143,6 +1154,7 @@ local function claimGarage(player, slot)
 	data.ready = true -- the shop waits for this before granting purchases
 	-- CLAIMLOAD-END
 
+	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
 	setGarageState(slot, "Taken", player.DisplayName)
 	player.CharacterAdded:Connect(function(character)
 		teleportToPlot(character, slot)

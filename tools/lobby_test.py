@@ -617,9 +617,10 @@ end
 )
 
 
-# Overhaul phases 1 and 2's edits outside the CLAIMLOAD markers (phase 1: the facade sign over each garage's door, its text
-# following the garage's state and its building; phase 2: data.player and the funding-round toast in syncRoom;
-# docs/OVERHAUL_PLAN.md), applied after L4_EDITS, each old text found once.
+# Overhaul phases 1 to 3's edits outside the CLAIMLOAD markers (phase 1: the facade sign over each garage's door, its text
+# following the garage's state and its building; phase 2: data.player and the funding-round toast in syncRoom; phase 3: the
+# desks that follow the team, syncDesks and EmployeeServer's onTeamChanged; docs/OVERHAUL_PLAN.md), applied after L4_EDITS,
+# each old text found once.
 L5_EDITS = (
     ('''-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
 -- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
@@ -719,12 +720,42 @@ end
 		end
 	end
 '''),
+    ('''
+EmployeeServer.init({
+''',
+     '''
+-- The office grows with the team (overhaul phase 3): a desk for each hire and a see-through one at the next spot,
+-- derived from the team's size every time it changes (looks only, never saved; nothing before the room exists)
+local function syncDesks(data, popIn)
+	if data.looks and data.team then
+		looks("desks", PlotVisuals.setDesks, data.looks, #data.team.employees, popIn)
+	end
+end
+
+EmployeeServer.init({
+'''),
+    ('''	plotFrame = plotFrame,
+})
+''',
+     '''	plotFrame = plotFrame,
+	onTeamChanged = function(data)
+		syncDesks(data, true)
+	end,
+})
+'''),
     ('''	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	playerData[player] = data
 ''',
      '''	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
 	data.player = player -- the stage-up toast names the player (syncRoom); never saved
 	playerData[player] = data
+'''),
+    ('''
+	setGarageState(slot, "Taken", player.DisplayName)
+''',
+     '''
+	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
+	setGarageState(slot, "Taken", player.DisplayName)
 '''),
 )
 
