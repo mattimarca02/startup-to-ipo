@@ -15,7 +15,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-waiting for review of PR #44 (backlog item 5 is built on `ux-sync-history`; its PR opens once #44 is merged)
+ux-sync-history - started 2026-10-18 08:55 UTC (backlog item 5; PR #44 merged 2026-10-18 08:53 UTC)
 
 ## Last PR
 
