@@ -617,8 +617,9 @@ end
 )
 
 
-# Overhaul phase 1's edits outside the CLAIMLOAD markers (the facade sign over each garage's door: its text follows the
-# garage's state and its building, docs/OVERHAUL_PLAN.md phase 1 point 3), applied after L4_EDITS, each old text found once.
+# Overhaul phases 1 and 2's edits outside the CLAIMLOAD markers (phase 1: the facade sign over each garage's door, its text
+# following the garage's state and its building; phase 2: data.player and the funding-round toast in syncRoom;
+# docs/OVERHAUL_PLAN.md), applied after L4_EDITS, each old text found once.
 L5_EDITS = (
     ('''-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
 -- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
@@ -678,8 +679,54 @@ end
 end
 
 '''),
-)
+    ('''
+-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
+''',
+     '''
+-- A funding round reached (overhaul phase 2): one pop-up that says what just happened and what the player sees now
+-- ("Seed reached! Your Garage becomes a Small Office"). Looks only; the client's own look at the facade is BuildingClient's.
+local function stageUpToast(data, from, to)
+	local player = data.player
+	local stage = IpoConfig.Stages[to]
+	if not (player and stage and player.Parent) then return end
+	local was = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(from)] and PlotBuilding.Stages[PlotBuilding.shownStage(from)].name
+	local now = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(to)] and PlotBuilding.Stages[PlotBuilding.shownStage(to)].name
+	local text = string.format("%s %s reached!", stage.icon or "", stage.name)
+	if was and now and was ~= now then
+		text ..= string.format(" Your %s becomes a %s", was, now)
+	end
+	if to == #IpoConfig.Stages then
+		text ..= " · tap IPO to go public"
+	end
+	ShopServer.notify(player, text)
+end
 
+-- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
+'''),
+    ('''	if data.looks and data.looks.stage ~= stage then
+		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+''',
+     '''	if data.looks and data.looks.stage ~= stage then
+		local from = data.looks.stage
+		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+'''),
+    ('''		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+	end
+''',
+     '''		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+		if type(from) == "number" and stage > from then
+			stageUpToast(data, from, stage) -- a round reached, never the Garage after an IPO
+		end
+	end
+'''),
+    ('''	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
+	playerData[player] = data
+''',
+     '''	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
+	data.player = player -- the stage-up toast names the player (syncRoom); never saved
+	playerData[player] = data
+'''),
+)
 
 def with_l1_edits(base):
     """BASE's TycoonCore.lua (bytes) with L1_EDITS to L5_EDITS applied, or None when an old text is not there exactly once."""

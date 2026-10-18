@@ -810,7 +810,7 @@ for s = 1, 5 do
 					for _, z in ipairs(zones) do if overlaps(b, z.box) then zone = zone or (d.Name .. " in " .. z.name) end end
 					-- at full fade: the shell reaches 1, the boxes are 1 already (the camera ignores both)
 					if d.Parent.Name == "Fade" then
-						if PBV.transparencyAt(d.Transparency, PB.Fade.levels, PB.Fade.levels) < 0.25 then hidden = hidden or d.Name end
+						if PBV.occludedTransparency(d.Transparency, 1, PB.Fade.occluded) < 0.25 then hidden = hidden or d.Name end
 					elseif isSolid and d.Transparency < 0.25 then hidden = hidden or d.Name end
 					for _, r in ipairs(rb) do
 						local mark = r.box[4] - r.box[3] <= 0.25 and r.box[3] <= PB.GROUND + 0.3
@@ -827,7 +827,7 @@ for s = 1, 5 do
 			check("landing: " .. tag .. ": the respawn landing is clear", land == nil, land)
 			check("zones: " .. tag .. ": no part in a reserved zone (signs, spawn, lane, incubators, hire spots and desks, upgrade slots, aisles)", zone == nil, zone)
 			check("room: " .. tag .. ": no part goes into a part of the room or the six props (stage 1's flat yard marks aside)", room == nil, room)
-			check("fade: " .. tag .. ": at full fade every shell part and every box is at least 0.25 transparent", hidden == nil, hidden)
+			check("fade: " .. tag .. ": in the camera's way (occluded) every shell part is at least 0.25 transparent, every box is 1 (the camera's popper ignores both)", hidden == nil, hidden)
 			check("budget: " .. tag .. ": " .. count .. " parts, at most " .. PB.Budget.parts, count <= PB.Budget.parts, count)
 			check("materials: " .. tag .. ": allowed materials only", mats == nil, mats)
 			if s == 2 or s == 3 then
@@ -1186,15 +1186,19 @@ do
 	end
 	check("fade: 3,000 random inputs always give a value in 0..1", bad == nil, bad)
 end
-check("quantize: 0 is step 0, 1 is the last step, 0.5 is half, below 0 and above 1 clamp", M.quantize(0, 20) == 0 and M.quantize(1, 20) == 20 and M.quantize(0.5, 20) == 10
-	and M.quantize(-3, 20) == 0 and M.quantize(3, 20) == 20 and M.quantize(0 / 0, 20) == 0)
-check("quantize: a step number of 0, NaN or below counts as one step", M.quantize(1, 0) == 1 and M.quantize(1, 0 / 0) == 1 and M.quantize(1, -4) == 1)
 do
-	local t = M.transparencyAt
-	check("transparency: step 0 gives the part's own value back (glass stays 0.3, solid stays 0)", t(0.3, 0, 20) == 0.3 and t(0, 0, 20) == 0)
-	check("transparency: the last step is 1 (gone) whatever the base, glass included", t(0.3, 20, 20) == 1 and t(0, 20, 20) == 1 and t(1, 20, 20) == 1 and t(0.9, 20, 20) == 1)
-	check("transparency: halfway between the base and 1", math.abs(t(0.4, 10, 20) - 0.7) < 1e-9 and math.abs(t(0, 10, 20) - 0.5) < 1e-9)
-	check("transparency: a base outside 0..1 is clamped, NaN is 0", t(-1, 0, 20) == 0 and t(2, 0, 20) == 1 and t(0 / 0, 0, 20) == 0)
+	local hit = M.segmentHitsBox
+	check("segment: a segment through a 2x2x2 box at the origin hits it (edges count)", hit(-5, 0, 0, 5, 0, 0, 1, 1, 1) and hit(-5, 1, 0, 5, 1, 0, 1, 1, 1))
+	check("segment: a segment beside, above or short of the box misses it", not hit(-5, 2, 0, 5, 2, 0, 1, 1, 1) and not hit(-5, 0, 0, -2, 0, 0, 1, 1, 1) and not hit(2, 0, 0, 5, 0, 0, 1, 1, 1))
+	check("segment: a diagonal through the box hits, one that passes its corner misses", hit(-3, -3, -3, 3, 3, 3, 1, 1, 1) and not hit(-3, 3, 0, 3, 3.5, 0, 1, 1, 1))
+	check("segment: a segment that starts or ends inside the box hits it", hit(0, 0, 0, 5, 5, 5, 1, 1, 1) and hit(5, 5, 5, 0.5, 0, 0, 1, 1, 1))
+	check("segment: a thin wall (0.2) is hit by a segment crossing it and missed by one running beside it", hit(0, 0, -5, 0, 0, 5, 8, 7, 0.1) and not hit(9, 0, -5, 9, 0, 5, 8, 7, 0.1))
+	check("segment: NaN or infinity in a point never hits", not hit(0 / 0, 0, 0, 5, 0, 0, 1, 1, 1) and not hit(0, 0, 0, math.huge, 0, 0, 1, 1, 1))
+	local o = M.occludedTransparency
+	check("occluded: fade 0 gives the part's own value back (glass stays 0.3, solid stays 0)", o(0.3, 0, 0.8) == 0.3 and o(0, 0, 0.8) == 0)
+	check("occluded: fade 1 gives the occluded value whatever the base, never below the base", o(0.3, 1, 0.8) == 0.8 and o(0, 1, 0.8) == 0.8 and o(0.9, 1, 0.8) == 0.9)
+	check("occluded: halfway between the base and the occluded value", math.abs(o(0.2, 0.5, 0.8) - 0.5) < 1e-9 and math.abs(o(0, 0.5, 0.8) - 0.4) < 1e-9)
+	check("occluded: values outside 0..1 are clamped, NaN is 0", o(-1, 0, 0.8) == 0 and o(2, 0, 0.8) == 1 and o(0 / 0, 0, 0.8) == 0 and o(0, 0 / 0, 0.8) == 0 and o(0, 1, 0 / 0) == 0)
 end
 """
 
@@ -1209,7 +1213,8 @@ end
 
 CLIENT_TESTS = r"""
 -- The real BuildingClient against a fake world: tagged buildings (the real ones PBV builds, kit MeshParts with glass at
--- 0.3), a Heartbeat the test fires, a local character the test moves. Expected values are written out here.
+-- 0.3), a Heartbeat the test fires, a local character and a camera the test moves. The rule (overhaul phase 2): only the
+-- shell parts between the camera and the character fade (to Occluded, 0.8), everything else stays as built.
 local WORLD
 local function newWorld()
 	local w = { tagged = {}, added = newSignal(), removed = newSignal(), heartbeat = newSignal() }
@@ -1220,7 +1225,14 @@ local function newWorld()
 	}
 	w.root = { Position = vec(0, 0, 0), Parent = {} }
 	w.character = { root = w.root, FindFirstChild = function(self, name) if name == "HumanoidRootPart" then return self.root end return nil end }
-	w.players = { LocalPlayer = { Character = w.character } }
+	w.camera = { CFrame = cf(0, 0, 0), CameraType = "Custom" }
+	w.workspace = { CurrentCamera = w.camera }
+	w.gui = nil -- a fake PlayerGui with an OpenPanel attribute, when a scenario sets one
+	w.player = { Character = w.character, _attrs = {} }
+	function w.player.GetAttribute(self, k) return self._attrs[k] end
+	function w.player.FindFirstChild(self, name) if name == "PlayerGui" then return w.gui end return nil end
+	function w.player.WaitForChild(self, name) return self:FindFirstChild(name) end
+	w.players = { LocalPlayer = w.player }
 	w.run = { Heartbeat = w.heartbeat }
 	return w
 end
@@ -1230,25 +1242,27 @@ local clientGame = { GetService = function(_, name)
 end }
 local function startClient()
 	local game = clientGame
-	local task = { spawn = function(f, ...) f(...) end, wait = function() end }
+	local workspace = WORLD.workspace
+	local task = { spawn = function(f, ...) f(...) end, wait = function() end, delay = function() end }
 __CLIENT__
-	return { isInside = isInside, fadeStep = fadeStep, quantize = quantize, transparencyAt = transparencyAt }
+	return { isInside = isInside, segmentHitsBox = segmentHitsBox, fadeStep = fadeStep, occludedTransparency = occludedTransparency,
+		looks = function() return looksStarted end }
 end
-local function fresh() WORLD = newWorld() startClient() return WORLD end
+local CLIENT_API
+local function fresh() WORLD = newWorld() CLIENT_API = startClient() return WORLD end
 local function frames(n, dt) for _ = 1, n do WORLD.heartbeat:Fire(dt or 1 / 60) end end
 
 local TURN = 90 -- a garage turned to face +X: world axes are not the garage's
 local frame = frameAt(TURN, -135, 150)
 local origin = PBV.originOf(frame, PB)
-local function place(x, y, z) WORLD.root.Position = origin * Vector3.new(x, y, z) end -- a spot in the garage's frame
-local INSIDE = { 0, 3, 12 }
-local OUTSIDE = { 0, 3, 90 }
-local function putInside() place(INSIDE[1], INSIDE[2], INSIDE[3]) end
-local function putOutside() place(OUTSIDE[1], OUTSIDE[2], OUTSIDE[3]) end
+local function place(x, y, z) WORLD.root.Position = origin * Vector3.new(x, y, z) end -- the character, in the garage's frame
+local function look(x, y, z) WORLD.camera.CFrame = origin * CFrame.new(x, y, z) end -- the camera, in the garage's frame
 local KIT = makeKit(0)
+local OCC = PB.Fade.occluded
 
-local function addBuilding(world, stage, fr)
+local function addBuilding(world, stage, fr, garage)
 	local m = PBV.build(nil, fr or frame, PB, stage, KIT)
+	if garage then m.Parent = garage end
 	local fade, static, solid = {}, {}, {}
 	for _, d in ipairs(m:FindFirstChild("Fade"):GetDescendants()) do if d:IsA("BasePart") then fade[d] = d.Transparency end end
 	for _, d in ipairs(m:FindFirstChild("Static"):GetDescendants()) do if d:IsA("BasePart") then static[d] = d.Transparency end end
@@ -1257,14 +1271,42 @@ local function addBuilding(world, stage, fr)
 	world.added:Fire(m)
 	return m, fade, static, solid
 end
-local function expected(base, level) return base + (1 - base) * level / 20 end
-local function allAt(bases, level)
+local function allAt(bases, fade)
 	local worst = 0
-	for part, base in pairs(bases) do worst = math.max(worst, math.abs(part.Transparency - expected(base, level))) end
+	for part, base in pairs(bases) do worst = math.max(worst, math.abs(part.Transparency - PBV.occludedTransparency(base, fade, OCC))) end
 	return worst < 1e-9, worst
 end
 local function untouched(bases) for part, base in pairs(bases) do if part.Transparency ~= base then return false end end return true end
 local function count(t) local n = 0 for _ in pairs(t) do n += 1 end return n end
+-- Is a part crossed by one of the two segments from the camera to the character (its root, its head 2.2 above)? The
+-- test's own copy of the rule, with the module's pure segmentHitsBox: the client must fade exactly these parts.
+local HEAD = 2.2
+local function crossed(part)
+	local a, b1 = WORLD.camera.CFrame.Position, WORLD.root.Position
+	local b2 = b1 + Vector3.new(0, HEAD, 0)
+	local cf, size = part.CFrame, part.Size
+	local function hit(p, q)
+		local la, lb = cf:PointToObjectSpace(p), cf:PointToObjectSpace(q)
+		return PBV.segmentHitsBox(la.X, la.Y, la.Z, lb.X, lb.Y, lb.Z, size.X / 2, size.Y / 2, size.Z / 2)
+	end
+	return hit(a, b1) or hit(a, b2)
+end
+-- every part at its expected value (occluded if crossed, else its base): ok, how many are crossed, the worst difference
+local function exact(bases)
+	local worst, n = 0, 0
+	for part, base in pairs(bases) do
+		local c = crossed(part)
+		if c then n += 1 end
+		worst = math.max(worst, math.abs(part.Transparency - PBV.occludedTransparency(base, c and 1 or 0, OCC)))
+	end
+	return worst < 1e-9, n, worst
+end
+-- the parts of a piece group by the start of their Piece attribute (M1S1Back*, M1S1Front*, M1Roof)
+local function piecesNamed(bases, prefix)
+	local out = {}
+	for part, base in pairs(bases) do if string.sub(tostring(part:GetAttribute("Piece")), 1, #prefix) == prefix then out[part] = base end end
+	return out
+end
 local function snapshot(m)
 	local out = {}
 	for _, d in ipairs(m:GetDescendants()) do
@@ -1276,102 +1318,134 @@ local function snapshot(m)
 	return table.concat(out, "\n")
 end
 
--- 1. Walking in and out of a turned garage ---------------------------------------------------------------------------
+-- 1. Outside, then the camera behind the back wall of a turned garage ---------------------------------------------
 do
 	fresh()
-	putOutside()
+	place(0, 3, 90)
+	look(0, 8, 110) -- behind the character, both outside: nothing of the building between them
 	local m, fade, static, solid = addBuilding(WORLD, 4)
 	local glass = 0
 	for part, base in pairs(fade) do if near(base, 0.3) then glass += 1 end end
 	check("client: the stage-4 building has kit glass at 0.3, furniture and solid boxes", glass >= 5 and count(static) >= 5 and count(solid) >= 7, glass)
 	local before = snapshot(m)
 	frames(120)
-	check("client: outside, the shell stays at its own Transparency", allAt(fade, 0))
+	check("client: outside with nothing between the camera and the character, the shell stays at its own Transparency", allAt(fade, 0))
 	local writes = WRITES
 	frames(300)
 	check("client: nothing is written while it holds still (300 frames)", WRITES == writes, WRITES - writes)
-	putInside()
-	frames(40)
-	check("client: inside a garage turned 90 degrees (the check in the garage's frame), the whole shell is gone (1)", allAt(fade, 20))
-	local glassDone = true
-	for part, base in pairs(fade) do if near(base, 0.3) and part.Transparency ~= 1 then glassDone = false end end
-	check("client: glass fades from 0.3 to 1 like the rest", glassDone)
-	check("client: the furniture (Static) and the solid boxes are never touched", untouched(static) and untouched(solid))
-	putOutside()
+	place(6, 3, 12) -- inside, 6 to the right of the lane (world axes and the garage's differ)
+	look(6, 8, -70) -- the camera outside, behind the back wall: the back wall is in the way, the front wall is not
 	frames(60)
+	local back, front = piecesNamed(fade, "M1S1Back"), piecesNamed(fade, "M1S1Front")
+	local okAll, crossedCount = exact(fade)
+	local _, crossedBack = exact(back)
+	check("client: at 90 degrees (each part tested in its own frame), exactly the parts of the back wall the camera's line crosses go to the occluded transparency (" .. OCC .. "), nothing else",
+		okAll and crossedCount >= 1 and crossedBack == crossedCount, crossedCount)
+	check("client: the front wall, the roof and the sides, not in the way, stay as built", count(front) >= 1 and allAt(front, 0) and allAt(piecesNamed(fade, "M1Roof"), 0))
+	check("client: the furniture (Static) and the solid boxes are never touched", untouched(static) and untouched(solid))
+	look(6, 6, 22) -- the camera inside too, in front of the character: nothing in the way
+	frames(90)
+	check("client: with the camera inside the room nothing is in the way: every shell part is back at exactly its own Transparency", allAt(fade, 0))
+	look(6, 70, 12) -- straight above the tower's roof (top 55), looking down through the roof and the ground floor's ceiling
+	frames(60)
+	local okRoof, crossedRoof = exact(fade)
+	local _, roofCrossed = exact(piecesNamed(fade, "M1Roof"))
+	check("client: the camera above the roof: the roof piece over the character fades, the walls do not", okRoof and crossedRoof >= 1 and roofCrossed >= 1 and allAt(back, 0) and allAt(front, 0))
+	place(0, 3, 90)
+	look(0, 8, 110)
+	frames(90)
 	check("client: walking out, every shell part is back at exactly its own Transparency (glass 0.3)", allAt(fade, 0))
 	check("client: a full cycle changed nothing but Transparency (collision, size, position as built)", snapshot(m) == before)
 end
--- 2. The door, the apron, the corners, in the garage's frame ------------------------------------------------------------
+-- 2. Glass, the apron and the claim post -----------------------------------------------------------------------------
 do
 	fresh()
-	putOutside()
-	local m, fade = addBuilding(WORLD, 2)
-	local b = PB.layout(2).inside
-	place(0, 3, b.maxZ + b.doorDepth + 0.2)
+	place(12, 3, 12)
+	look(12, 8, 70) -- outside in front: the front wall's WallGlass right of the open entrance is in the way
+	local m, fade = addBuilding(WORLD, 4)
 	frames(60)
-	check("client: in front of the door past the apron: solid", allAt(fade, 0))
-	place(0, 3, b.maxZ + b.doorDepth - 0.2)
-	frames(60)
-	check("client: on the apron: faded before you cross the door", allAt(fade, 20))
-	place(b.doorMaxX + 1.5, 3, b.maxZ + 3)
-	frames(60)
-	check("client: beside the door, in front of the wall: solid", allAt(fade, 0))
-	place(0, 3, b.minZ - 3)
-	frames(60)
-	check("client: behind the back wall (the apron is only at the front): solid", allAt(fade, 0))
-	place(b.maxX, 3, b.maxZ)
-	frames(60)
-	check("client: in a corner of the inside: faded", allAt(fade, 20))
-	place(0, b.maxY + 5, 0)
-	frames(60)
-	check("client: above the ground floor's ceiling: solid", allAt(fade, 0))
+	local front = piecesNamed(fade, "M1S1Front")
+	local glassOk = false
+	for part, base in pairs(front) do if crossed(part) and near(base, 0.3) and near(part.Transparency, OCC) then glassOk = true end end
+	local okG = exact(fade)
+	check("client: glass in the way fades from 0.3 to the occluded transparency like the rest", glassOk and okG)
+	place(0, 3, 34) -- on the apron, the camera behind: nothing in the way
+	look(0, 8, 60)
+	frames(90)
+	check("client: on the apron with the camera behind you nothing fades (no apron rule: only what is in the way)", allAt(fade, 0))
 end
 do
-	-- world axes are not the garage's: 3 studs past the front wall along WORLD +Z is the apron only for a garage facing +Z;
-	-- this one faces +X, so that spot is outside its left wall (the Garage: inner faces at x -32 and 32)
-	fresh()
-	putOutside()
-	local m, fade = addBuilding(WORLD, 1)
-	local b = PB.layout(1).inside
-	WORLD.root.Position = origin.Position + Vector3.new(0, 3, b.maxZ + 3)
-	frames(60)
-	check("client: at 90 degrees, the world's +Z side of the garage is its left wall, not its door: solid", allAt(fade, 0))
+	-- standing at the claim post with the camera behind: the shell is solid at every stage and turn
+	local faded = nil
+	for s = 1, 5 do
+		for _, turn in ipairs({ 0, 90, 180, 270 }) do
+			fresh()
+			local fr = frameAt(turn, -135, 150)
+			local o = PBV.originOf(fr, PB)
+			WORLD.root.Position = o * Vector3.new(LOBBY_POST.x, 2, LOBBY_POST.z)
+			WORLD.camera.CFrame = o * CFrame.new(LOBBY_POST.x, 9, LOBBY_POST.z + 18)
+			local _, fade = addBuilding(WORLD, s, fr)
+			frames(60)
+			if not allAt(fade, 0) then faded = faded or ("stage " .. s .. " at " .. turn) end
+		end
+	end
+	check("claim post: standing at the claim post with the camera behind you, the shell is solid at every stage and turn", faded == nil, faded)
 end
--- 3. Arriving inside, a stage change, no character, two garages --------------------------------------------------------
+-- 3. Arriving in the way, a late part, no character, a building removed, two garages, no Frame -------------------------
 do
 	fresh()
-	putInside()
+	place(6, 3, 12)
+	look(6, 8, -70)
 	local m, fade = addBuilding(WORLD, 1)
-	check("client: a building that arrives while you stand inside is faded at once", allAt(fade, 20))
+	frames(60)
+	local okA, nA = exact(fade)
+	check("client: a building that arrives between the camera and the character fades exactly its parts in the way", okA and nA >= 1, nA)
+	local late = Instance.new("MeshPart")
+	late.Transparency = 0.3
+	late.Size = Vector3.new(16, 14, 2)
+	late.CFrame = origin * CFrame.new(0, 6, -37) -- another piece of the back wall
+	late.Parent = m:FindFirstChild("Fade")
+	frames(60)
+	check("client: a MeshPart that streams in late is tested like the rest (in the way: faded from its own 0.3)", near(late.Transparency, OCC))
+	WORLD.players.LocalPlayer.Character = nil
+	local snap = {}
+	for part in pairs(fade) do snap[part] = part.Transparency end
+	local writes = WRITES
+	frames(120)
+	local held = WRITES == writes
+	for part, t in pairs(snap) do if part.Transparency ~= t then held = false end end
+	check("client: with no character the shell holds its state (nothing written)", held and near(late.Transparency, OCC))
+	WORLD.players.LocalPlayer.Character = WORLD.character
+	look(6, 6, 22)
+	frames(90)
+	check("client: the character back, the camera inside: everything as built again, the late part at its own 0.3", allAt(fade, 0) and near(late.Transparency, 0.3))
+	look(6, 8, -70)
+	frames(60)
 	for i, c in ipairs(WORLD.tagged) do if c == m then table.remove(WORLD.tagged, i) break end end
 	WORLD.removed:Fire(m)
-	m.Parent = nil
-	local m2, fade2 = addBuilding(WORLD, 5)
-	check("client: a new stage replaces the building and is faded at once for someone inside", allAt(fade2, 20))
-	WORLD.players.LocalPlayer.Character = nil
-	frames(120)
-	check("client: with no character the shell holds its state", allAt(fade2, 20))
-	WORLD.players.LocalPlayer.Character = WORLD.character
-	putOutside()
-	frames(60)
-	check("client: the character back outside: solid again", allAt(fade2, 0))
+	check("client: a building removed while its parts were faded is left as built (never half see-through)", untouched(fade) and near(late.Transparency, 0.3))
 end
 do
 	fresh()
-	putInside()
+	place(6, 3, 12)
+	look(6, 8, -70)
 	local a, fadeA = addBuilding(WORLD, 1)
 	local other = frameAt(270, 300, 150)
 	local bm, fadeB = addBuilding(WORLD, 3, other)
 	frames(60)
-	check("client: two garages: inside one fades only that one", allAt(fadeA, 20) and allAt(fadeB, 0))
-	WORLD.root.Position = PBV.originOf(other, PB) * Vector3.new(0, 3, 5)
-	frames(60)
-	check("client: walking into the other garage (turned 270): the first goes solid, the second fades", allAt(fadeA, 0) and allAt(fadeB, 20))
+	local okA2, nA2 = exact(fadeA)
+	check("client: two garages: only the one between the camera and the character fades", okA2 and nA2 >= 1 and allAt(fadeB, 0))
+	local o2 = PBV.originOf(other, PB)
+	WORLD.root.Position = o2 * Vector3.new(6, 3, 5)
+	WORLD.camera.CFrame = o2 * CFrame.new(6, 8, -70)
+	frames(90)
+	local okB2, nB2 = exact(fadeB)
+	check("client: in the other garage (turned 270): the first is as built again, the second's parts in the way fade", allAt(fadeA, 0) and okB2 and nB2 >= 1)
 end
 do
 	fresh()
-	putInside()
+	place(6, 3, 12)
+	look(6, 8, -70)
 	local m = PBV.build(nil, frame, PB, 2, KIT)
 	m:SetAttribute("Frame", nil)
 	local bases = {}
@@ -1381,35 +1455,34 @@ do
 	frames(60)
 	check("client: a building without its Frame is left alone (no error, nothing faded)", allAt(bases, 0))
 end
+-- 4. The stage-up look: only the local player's own garage, only a higher stage, never with a window open ---------------
 do
 	fresh()
-	putInside()
-	local m, fade = addBuilding(WORLD, 3)
-	local late = Instance.new("MeshPart")
-	late.Transparency = 0.3
-	late.Parent = m:FindFirstChild("Fade")
-	check("client: a MeshPart that streams in late takes the current fade at once", late.Transparency == 1)
-	putOutside()
-	frames(60)
-	check("client: and goes back to its own 0.3 with the rest", math.abs(late.Transparency - 0.3) < 1e-9 and allAt(fade, 0))
-end
--- 4. Standing at the claim post (x 7, 3 in front of the wall): the shell stays solid at every stage and turn
-do
-	local faded = nil
-	for s = 1, 5 do
-		for _, turn in ipairs({ 0, 90, 180, 270 }) do
-			fresh()
-			local fr = frameAt(turn, -135, 150)
-			local o = PBV.originOf(fr, PB)
-			WORLD.root.Position = o * Vector3.new(0, 3, 12) -- inside first (the margin is on)
-			local _, fade = addBuilding(WORLD, s, fr)
-			frames(40)
-			WORLD.root.Position = o * Vector3.new(LOBBY_POST.x, 2, LOBBY_POST.z) -- walked out to the post, on the ground
-			frames(60)
-			if not allAt(fade, 0) then faded = faded or ("stage " .. s .. " at " .. turn) end
-		end
-	end
-	check("claim post: standing at the claim post the shell is solid (not faded) at every stage and turn, coming from inside", faded == nil, faded)
+	place(0, 3, 90)
+	look(0, 8, 110)
+	local garage = Instance.new("Model")
+	garage.Name = "Garage2"
+	garage:SetAttribute("Slot", 2)
+	WORLD.player._attrs.Garage = 2
+	local m1 = addBuilding(WORLD, 1, frame, garage)
+	check("client: the first building of a garage starts no look (nothing to compare with)", CLIENT_API.looks() == 0)
+	local m2 = addBuilding(WORLD, 2, frame, garage)
+	check("client: the player's own garage at a higher stage starts the look (the camera flies to the facade; the fake has no camera API, so it ends at once)", CLIENT_API.looks() == 1)
+	local m3 = addBuilding(WORLD, 1, frame, garage)
+	check("client: back to the Garage (an IPO) starts no look", CLIENT_API.looks() == 1)
+	local other = Instance.new("Model")
+	other.Name = "Garage5"
+	other:SetAttribute("Slot", 5)
+	addBuilding(WORLD, 1, frameAt(270, 300, 150), other)
+	addBuilding(WORLD, 3, frameAt(270, 300, 150), other)
+	check("client: another player's garage going up starts no look", CLIENT_API.looks() == 1)
+	WORLD.gui = { GetAttribute = function(_, k) if k == "OpenPanel" then return "Shop" end return nil end }
+	addBuilding(WORLD, 3, frame, garage)
+	check("client: a window open: no look (the toast still comes from the server)", CLIENT_API.looks() == 1)
+	WORLD.gui = nil
+	addBuilding(WORLD, 4, frame, garage)
+	check("client: the window closed: the next stage up gets its look", CLIENT_API.looks() == 2)
+	check("client: the camera is back to Custom after a look that could not run", WORLD.camera.CameraType == "Custom")
 end
 do
 	fresh()
@@ -1757,9 +1830,9 @@ def static_checks(sources):
     a, b = math_block(mod), math_block(client)
     add("client: the inside check and fade maths in BuildingClient are the same text as in PlotBuildingVisuals", a is not None and a == b)
     cc = code_only(client)
-    add("client: never fires a remote, never touches collision, anchoring or position", not re.search(
-        r"FireServer|InvokeServer|RemoteEvent|RemoteFunction|\.CanCollide\s*=|\.CanTouch\s*=|\.CanQuery\s*=|\.Anchored\s*=|\.CFrame\s*=|\.Position\s*=|\.Size\s*=", cc))
-    add("client: reads the garage's frame and checks the character in it (PointToObjectSpace)", "PointToObjectSpace(root.Position)" in cc and 'GetAttribute("Frame")' in cc)
+    add("client: never fires a remote, never touches collision, anchoring or a part's position (only the camera's CFrame, during the look)", not re.search(
+        r"FireServer|InvokeServer|RemoteEvent|RemoteFunction|\.CanCollide\s*=|\.CanTouch\s*=|\.CanQuery\s*=|\.Anchored\s*=|(?<!camera)\.CFrame\s*=|\.Position\s*=|\.Size\s*=", cc))
+    add("client: tests each shell part in its own frame (PointToObjectSpace) and reads the garage's Frame for the look", "PointToObjectSpace(a)" in cc and 'GetAttribute("Frame")' in cc)
     add("client: fades only the Fade group", cc.count('FindFirstChild("Fade")') >= 1 and "Static" not in cc and '"Solid"' not in cc)
     for name, text in (("BuildingClient", client), ("PlotBuildingVisuals", mod), ("PlotBuilding", sources["PlotBuilding.lua"]), ("TycoonCore", core)):
         add("source: %s has no word \"Touched\" (nothing is bought or opened by touching the world)" % name, "Touched" not in text)
@@ -1767,7 +1840,8 @@ def static_checks(sources):
     add("data: PlotBuilding is data and pure layout (no Instance, no service, no require)", not re.search(r"Instance\.new|GetService|require\(|workspace", pb))
     add("data: no asset id anywhere (rbxassetid, MeshId, TextureID)", not re.search(r"rbxassetid|MeshId|TextureI[Dd]", sources["PlotBuilding.lua"] + mod))
     pbv = code_only(mod)
-    add("builder: no light, no particle emitter is ever made", not re.search(r'Instance\.new\("(PointLight|SpotLight|SurfaceLight|ParticleEmitter)"', pbv))
+    add("builder: the one Light it makes is the ceiling's PointLight (never a spot or surface light, never an emitter)",
+        pbv.count('Instance.new("PointLight")') == 1 and not re.search(r'Instance\.new\("(SpotLight|SurfaceLight|ParticleEmitter)"', pbv))
     # TycoonCore's L2 wiring
     add("core: PlotBuilding and PlotBuildingVisuals are required inside pcall (5 s wait), and set to nil when either fails",
         'pcall(require, script.Parent:WaitForChild("PlotBuildingVisuals", 5))' in core and 'pcall(require, script.Parent:WaitForChild("PlotBuilding", 5))' in core
@@ -1806,8 +1880,8 @@ MUTANTS = [
     ("a box in the lane (FrontLeft reaches the middle)", PB, 'solid("FrontLeft", -h + W, -door.half,', 'solid("FrontLeft", -h + W, 0,', "lane:", ("data", "build")),
     ("a kit MeshPart left solid", PBV, "\t\t\tlookFlags(part)\n\t\t\tpaint(part, building, stage, piece, role)\n\t\t\ttag(part, piece, role)\n\t\t\tpart.Parent = parent\n\t\t\ttable.insert(made, part)",
      "\t\t\tlookFlags(part)\n\t\t\tpart.CanCollide = true\n\t\t\tpaint(part, building, stage, piece, role)\n\t\t\ttag(part, piece, role)\n\t\t\tpart.Parent = parent\n\t\t\ttable.insert(made, part)", "solid:", ("build",)),
-    ("the fade skips glass (the client remembers only opaque parts)", CLIENT, "\tif item:IsA(\"BasePart\") then\n\t\tstate.parts[item] = item.Transparency",
-     "\tif item:IsA(\"BasePart\") and item.Transparency == 0 then\n\t\tstate.parts[item] = item.Transparency", "client: glass fades", ("client",)),
+    ("the client remembers only opaque parts (glass never fades)", CLIENT, "\tif item:IsA(\"BasePart\") then\n\t\tstate.parts[item] = { base = item.Transparency, fade = 0 }",
+     "\tif item:IsA(\"BasePart\") and item.Transparency == 0 then\n\t\tstate.parts[item] = { base = item.Transparency, fade = 0 }", "client: glass in the way", ("client",)),
     ("a stage over the budget (Big Corporate gets 12 more columns)", PB, '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n',
      '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n' + "".join('\t\t\t{ key = "Column", x = %d, y = -1, z = -50, turn = 0 },\n' % x for x in range(-33, 39, 6)), "budget:", ("data",)),
     ("the front moves at stage 4 (z 33.2 instead of 32.2)", PB, "masses = { { half = 40, back = -40, front = 32.2,", "masses = { { half = 40, back = -40, front = 33.2,", "front:", ("data",)),
@@ -1815,13 +1889,17 @@ MUTANTS = [
     ("the fallback missing a wall (Wall has no Parts version)", PB, '\tWall = { box("main", 16, 13, 2, 0, 6.5, 0), box("trim", 16, 1, 2, 0, 13.5, 0) },', '\tWall = {},', "fallback:", ("data", "build")),
     ("a stretched Column (STRETCH lets Column stretch, the pillars made 6 wide)", PB, "PlotBuilding.STRETCH = { Wall = { x = true },", "PlotBuilding.STRETCH = { Column = { x = true }, Wall = { x = true },", "stretch:", ("data", "build")),
     ("the kit front turn ignored", PBV, "local target = pieceFrame(origin, piece) * CFrame.Angles(0, math.rad(building.KIT_FRONT_TURN), 0)", "local target = pieceFrame(origin, piece)", "kit front:", ("build",)),
-    ("the client checks in world axes (no garage frame)", CLIENT, "local p = state.frame:PointToObjectSpace(root.Position) -- the character in the garage's frame", "local p = root.Position - state.frame.Position", "client: at 90 degrees", ("client",)),
+    ("the client tests a part in world axes (its own frame ignored)", CLIENT, "\tlocal la, lb = cframe:PointToObjectSpace(a), cframe:PointToObjectSpace(b)", "\tlocal la, lb = a - cframe.Position, b - cframe.Position", "client: at 90 degrees", ("client",)),
+    ("the client fades the whole shell whenever the camera's line crosses the building (not only the parts in the way)", CLIENT, "\t\tlocal inWay = part.Parent ~= nil and (hitsPart(part, a, b1) or hitsPart(part, a, b2))", "\t\tlocal inWay = part.Parent ~= nil", "client: the front wall", ("client",)),
+    ("the look plays for every garage (not only the player's own)", CLIENT, "\tif before and stage > before and player:GetAttribute(\"Garage\") == slot then", "\tif before and stage > before then", "client: another player's garage", ("client",)),
+    ("the look plays after an IPO too (any stage change)", CLIENT, "\tif before and stage > before and player:GetAttribute(\"Garage\") == slot then", "\tif before and stage ~= before and player:GetAttribute(\"Garage\") == slot then", "client: back to the Garage", ("client",)),
+    ("a second light on every building (a spot light on the sign)", PBV, "\tlight.Parent = roof\n\treturn light", "\tlight.Parent = roof\n\tlocal extra = Instance.new(\"PointLight\")\n\textra.Parent = roof\n\treturn light", "check:", ("build",)),
     ("the apron on the wrong side (behind the back wall)", PBV, "return z > b.maxZ and z <= b.maxZ + b.doorDepth + m", "return z < b.minZ and z >= b.minZ - b.doorDepth - m", "inside:", ("math",)),
     ("a door jamb in the lane (a Corner at x 3 in front of the Small Office's door)", PB,
      '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},',
      '\t\t\t{ key = "Plant", x = 15.5, y = -1, z = 34, turn = 0 },\n\t\t\t{ key = "Corner", x = 3, y = -1, z = 33.2, turn = 0 },\n\t\t},\n\t\tfurniture = {\n\t\t\t{ key = "ReceptionDesk", side = "left", along = 16 },\n\t\t\t{ key = "Plant", side = "left", along = 26.5 },\n\t\t\t{ key = "Sofa", side = "right", along = 16 },\n\t\t},', "lane:", ("build",)),
     ("an inner part solid (the fallback's Parts collide)", PBV, "\t\tlookFlags(part)\n\t\tpaint(part, building, stage, piece, b.role)", "\t\tlookFlags(part)\n\t\tpart.CanCollide = true\n\t\tpaint(part, building, stage, piece, b.role)", "solid:", ("build",)),
-    ("the fade capped at 0.2", PBV, "\treturn clamp01(b + (1 - b) * clamp01(level / n))", "\treturn math.min(0.2, clamp01(b + (1 - b) * clamp01(level / n)))", "fade:", ("build", "math")),
+    ("the occluded transparency capped at 0.2 (the camera's popper would pull in on a shell part in the way)", PBV, "\treturn clamp01(b + (t - b) * clamp01(fade))", "\treturn math.min(0.2, clamp01(b + (t - b) * clamp01(fade)))", "fade:", ("build", "math")),
     ("the roof left unfaded (in Static)", PB, '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof" })',
      '"M" .. m .. "Roof", key = "Floor", x = 0, y = top - 1, z = cz, turn = 0, sx = innerW / fw, sz = innerD / fw, look = "roof", group = "Static" })', "fade:", ("data",)),
     ("a label per owner (the join adds a billboard again)", CORE, "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n", "\tsetGarageSign(slot, player.DisplayName .. \"'s Startup\")\n\taddLabel(floor, player.DisplayName .. \"'s Startup\", 12)\n", "core: the claim names the garage once", ()),
@@ -1841,8 +1919,8 @@ MUTANTS = [
      "streaming:", ("build",)),
     ("the lintel box starts at 5 (the doorway only 6 high)", PB, 'solid("Lintel", -door.half, door.half, door.top, top1,', 'solid("Lintel", -door.half, door.half, 5, top1,', "doorway:", ("data",)),
     # PR #32 review fixes
-    ("the apron as wide as the door again (the Garage's 20: the shell fades at the claim post)", PB,
-     "doorMinX = -PlotBuilding.Lane.half, doorMaxX = PlotBuilding.Lane.half,", "doorMinX = -door.half, doorMaxX = door.half,", "claim post:", ("data", "client")),
+    ("the apron as wide as the door again (the Garage's 20: the inside box reaches the claim post)", PB,
+     "doorMinX = -PlotBuilding.Lane.half, doorMaxX = PlotBuilding.Lane.half,", "doorMinX = -door.half, doorMaxX = door.half,", "claim post:", ("data",)),
     ("the Small Office's WallDoor at its kit size (its jambs 1.5 into the lane)", PB,
      '\t\t\t{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },\n\t\t\t{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open',
      '\t\t\t{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, lane = true },\n\t\t\t{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 }, -- open',

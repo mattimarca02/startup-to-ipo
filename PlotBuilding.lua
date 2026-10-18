@@ -47,9 +47,11 @@ PlotBuilding.ClaimPost = { x0 = 6, x1 = 10, z0 = 34.2, z1 = 36.2, top = 9 } -- P
 PlotBuilding.Landing = { x = 0, z = 12, half = 2.5, top = 8 } -- where TycoonCore's teleportToPlot lands a player
 PlotBuilding.CLEAR_ABOVE = 12.5 -- a solid part over the 60 x 60 floor stays this high or higher (a jump reaches about 12.3)
 PlotBuilding.ROOF = 0.5 -- the roof's solid box: this thick, under the top of the outer mass (12.5 to 13 on one story)
-PlotBuilding.Budget = { parts = 160 } -- per building: kit MeshParts (or fallback Parts) plus the solid boxes. No lights.
-PlotBuilding.Inside = { floorBelow = 3, margin = 1 } -- the fade's inside box (PlotBuildingVisuals.isInside)
-PlotBuilding.Fade = { seconds = 0.4, levels = 20 }
+PlotBuilding.Budget = { parts = 160, lights = 1 } -- per building: kit MeshParts (or fallback Parts) plus the solid boxes; one light (the ceiling's)
+PlotBuilding.Inside = { floorBelow = 3, margin = 1 } -- the ground floor's inside box (PlotBuildingVisuals.isInside; the server's unstick and the tests)
+-- The occlusion fade (BuildingClient, overhaul phase 2): a shell part between the camera and the player goes to `occluded`
+-- (from its own transparency) in `seconds`, and comes back 1.5 times slower
+PlotBuilding.Fade = { seconds = 0.3, occluded = 0.8 }
 PlotBuilding.MATERIALS = {
 	Concrete = true, CorrodedMetal = true, Metal = true, DiamondPlate = true, Wood = true, WoodPlanks = true, Brick = true,
 	Fabric = true, Plastic = true, SmoothPlastic = true, Glass = true, Neon = true, Marble = true, Slate = true,
@@ -222,6 +224,7 @@ PlotBuilding.Styles = {
 		looks = { roof = { main = S(rgb(84, 86, 92), "Concrete") }, pitch = { main = S(rgb(128, 84, 62), "CorrodedMetal"), dark = S(rgb(60, 62, 68), "Metal") },
 			sign = { dark = S(rgb(40, 42, 48), "Metal"), trim = S(rgb(214, 210, 200), "Concrete") } },
 		furniture = "SmoothPlastic",
+		light = { color = rgb(255, 214, 160), brightness = 0.8, range = 44 }, -- a warm bulb under the garage's roof
 	},
 	{ -- 2 Small Office: white walls, mint trim, clear glass
 		roles = {
@@ -230,6 +233,7 @@ PlotBuilding.Styles = {
 		},
 		looks = { roof = { main = S(rgb(150, 156, 160), "Concrete") }, floor = { main = S(rgb(200, 204, 210), "SmoothPlastic") } },
 		furniture = "SmoothPlastic",
+		light = { color = rgb(255, 246, 230), brightness = 0.9, range = 48 }, -- white office light
 	},
 	{ -- 3 Big Office: white and warm wood
 		roles = {
@@ -238,6 +242,7 @@ PlotBuilding.Styles = {
 		},
 		looks = { roof = { main = S(rgb(120, 124, 130), "Concrete") }, floor = { main = S(rgb(196, 160, 118), "WoodPlanks") } },
 		furniture = "SmoothPlastic",
+		light = { color = rgb(255, 240, 214), brightness = 0.9, range = 50 }, -- warm white, the loft's wood
 	},
 	{ -- 4 Small Corporate: blue glass, a darker crown band
 		roles = {
@@ -247,6 +252,7 @@ PlotBuilding.Styles = {
 		keys = { RoofEdge = { trim = S(rgb(22, 28, 44), "Metal") } },
 		looks = { roof = { main = S(rgb(60, 66, 80), "Concrete") }, floor = { main = S(rgb(150, 156, 166), "Slate") } },
 		furniture = "SmoothPlastic",
+		light = { color = rgb(236, 244, 255), brightness = 1, range = 52 }, -- cool white, the glass tower
 	},
 	{ -- 5 Big Corporate: marble and dark glass with gold accents; the tower is dark glass
 		roles = {
@@ -257,6 +263,7 @@ PlotBuilding.Styles = {
 		looks = { tower = { main = S(rgb(30, 40, 62), "Glass"), trim = S(rgb(255, 196, 60), "Metal") }, roof = { main = S(rgb(48, 50, 58), "Concrete") },
 			floor = { main = S(rgb(214, 210, 200), "Marble") } },
 		furniture = "SmoothPlastic",
+		light = { color = rgb(255, 236, 200), brightness = 1, range = 54 }, -- gold-white, the marble lobby
 	},
 }
 

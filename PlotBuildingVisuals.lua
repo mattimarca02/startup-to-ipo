@@ -7,7 +7,9 @@
 -- through a remote or read back by the game. Every kit MeshPart and every fallback Part is anchored with CanCollide,
 -- CanTouch and CanQuery off and no shadow: it never decides collision, touch, rays or the camera. The solid boxes are
 -- anchored Parts with CanCollide on, CanTouch off, Transparency 1 (Roblox's camera ignores a part that transparent).
--- The client script BuildingClient fades the "Fade" group when the local player is inside; the server never learns it.
+-- The client script BuildingClient fades the parts of the "Fade" group that stand between the camera and the local
+-- player (an occlusion fade, overhaul phase 2); the server never learns it. The one light of a building (its ceiling
+-- light, a PointLight on the roof piece: PlotBuilding.Styles[stage].light) is the only Light it ever makes.
 --
 --   PlotBuildingVisuals.build(parent, frame, building, stage, kit) -> Model "PlotBuilding": Fade, Static, Solid
 --   PlotBuildingVisuals.sync(garage, frame, building, stage, kit)  -> the Model of that stage in the garage, changed
@@ -17,8 +19,8 @@
 --   PlotBuildingVisuals.checkKit(folder, manifest)                 -> problems of ReplicatedStorage.KitModels (empty = fine)
 --   PlotBuildingVisuals.check(model, frame, building, opts)        -> problems of a built Model (budget, flags, lane...)
 --   Pure maths, the same text as BuildingClient (a test compares them):
---   isInside(bounds, x, y, z, wasInside), fadeStep(fade, target, dt, seconds), quantize(fade, levels),
---   transparencyAt(base, level, levels)
+--   isInside(bounds, x, y, z, wasInside), segmentHitsBox(ax, ay, az, bx, by, bz, hx, hy, hz),
+--   fadeStep(fade, target, dt, seconds), occludedTransparency(base, fade, top)
 --
 -- frame = the garage's frame (TycoonCore plotFrame(slot), a CFrame: the plot center, turned). Every number of the
 -- layout is in it, from the Floor's top (frame * (0, FLOOR_TOP, 0)). kit = the KitModels folder, or nil (all Parts).
@@ -34,7 +36,8 @@ local PIVOT_EPS = 0.05 -- checkKit: a model's WorldPivot this close to the botto
 
 -- The pure maths ---------------------------------------------------------------------------------------------------
 -- No services, no Instances: they run the same in the tests (a fake Roblox) and in BuildingClient, which carries a copy
--- of this block (tools/building_test.py fails if the two texts differ). The bounds are in the garage's frame.
+-- of this block (tools/building_test.py fails if the two texts differ). isInside's bounds are in the garage's frame;
+-- segmentHitsBox works in a part's own frame.
 
 -- BUILDINGMATH-START
 local function clamp01(n)
@@ -55,9 +58,8 @@ end
 
 -- Is a point inside the building? b = { minX, maxX, minY, maxY, minZ, maxZ, doorMinX, doorMaxX, doorDepth, margin }
 -- (the garage's frame; maxY is the ground floor's ceiling; the door is on the +Z side). Edges count as inside. The
--- doorway and the apron in front of it count too, so the front wall starts to fade as you walk up to the
--- door. Above the ceiling is outside. wasInside makes the box `margin` bigger (no flicker on a wall line).
--- A coordinate that is NaN or infinite is never inside.
+-- doorway and the apron in front of it count too. Above the ceiling is outside. wasInside makes the box `margin`
+-- bigger (no flicker on a wall line). A coordinate that is NaN or infinite is never inside.
 local function isInside(b, x, y, z, wasInside)
 	if not (finite(x) and finite(y) and finite(z)) then
 		return false
@@ -72,7 +74,36 @@ local function isInside(b, x, y, z, wasInside)
 	return z > b.maxZ and z <= b.maxZ + b.doorDepth + m and x >= b.doorMinX - m and x <= b.doorMaxX + m
 end
 
--- Moves the fade (0 = solid, 1 = gone) toward the target by dt / seconds, never past it, always in 0..1.
+-- Does the segment from a to b (both in a box's own frame, as numbers) pass through the box of half sizes hx, hy, hz
+-- centered on the origin? The slab test, edges count. A NaN or infinite coordinate never hits.
+local function segmentHitsBox(ax, ay, az, bx, by, bz, hx, hy, hz)
+	if not (finite(ax) and finite(ay) and finite(az) and finite(bx) and finite(by) and finite(bz)) then
+		return false
+	end
+	local t0, t1 = 0, 1
+	local as, bs, hs = { ax, ay, az }, { bx, by, bz }, { hx, hy, hz }
+	for axis = 1, 3 do
+		local a, d, h = as[axis], bs[axis] - as[axis], hs[axis]
+		if math.abs(d) < 1e-9 then
+			if a < -h or a > h then
+				return false
+			end
+		else
+			local ta, tb = (-h - a) / d, (h - a) / d
+			if ta > tb then
+				ta, tb = tb, ta
+			end
+			t0 = math.max(t0, ta)
+			t1 = math.min(t1, tb)
+			if t0 > t1 then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+-- Moves the fade (0 = as built, 1 = fully in the way) toward the target by dt / seconds, never past it, always in 0..1.
 -- A dt that is zero, negative or NaN changes nothing; seconds that are zero, negative or NaN jump to the target.
 local function fadeStep(fade, target, dt, seconds)
 	fade, target = clamp01(fade), clamp01(target)
@@ -91,24 +122,21 @@ local function fadeStep(fade, target, dt, seconds)
 	return fade
 end
 
--- The fade as a whole step 0..levels (Transparency is only written when this changes)
-local function quantize(fade, levels)
-	local n = math.max(1, math.floor(levels + 0.5))
-	return math.floor(clamp01(fade) * n + 0.5)
-end
-
--- A part's Transparency at a step: its own base value at step 0, 1 (gone) at the last step, in 0..1
-local function transparencyAt(base, level, levels)
-	local n = math.max(1, math.floor(levels + 0.5))
-	local b = clamp01(base)
-	return clamp01(b + (1 - b) * clamp01(level / n))
+-- A part's Transparency at a fade: its own base value at 0, `top` (the occluded transparency, never below its base)
+-- at 1, in 0..1
+local function occludedTransparency(base, fade, top)
+	local b, t = clamp01(base), clamp01(top)
+	if t < b then
+		t = b
+	end
+	return clamp01(b + (t - b) * clamp01(fade))
 end
 -- BUILDINGMATH-END
 
 PlotBuildingVisuals.isInside = isInside
+PlotBuildingVisuals.segmentHitsBox = segmentHitsBox
 PlotBuildingVisuals.fadeStep = fadeStep
-PlotBuildingVisuals.quantize = quantize
-PlotBuildingVisuals.transparencyAt = transparencyAt
+PlotBuildingVisuals.occludedTransparency = occludedTransparency
 
 -- Helpers ------------------------------------------------------------------------------------------------------------
 
@@ -383,6 +411,34 @@ function PlotBuildingVisuals.buildPiece(parent, frame, building, stage, piece, k
 	return model, made ~= nil and made ~= false
 end
 
+-- The building's one light: a PointLight under the ground floor's ceiling (on the outer mass's roof piece, a part of the
+-- Fade group), styled per stage (PlotBuilding.Styles[stage].light); none when the stage has no light or no roof part
+local function addCeilingLight(fadeGroup, building, stage)
+	local style = building.Styles[stage]
+	local spec = style and style.light
+	if type(spec) ~= "table" then
+		return nil
+	end
+	local roof = nil
+	for _, part in ipairs(fadeGroup:GetChildren()) do
+		if part:IsA("BasePart") and part:GetAttribute("Piece") == "M1Roof" then
+			roof = part
+			break
+		end
+	end
+	if not roof then
+		return nil
+	end
+	local light = Instance.new("PointLight")
+	light.Name = "CeilingLight"
+	light.Color = rgb(spec.color)
+	light.Brightness = spec.brightness
+	light.Range = spec.range
+	light.Shadows = false
+	light.Parent = roof
+	return light
+end
+
 -- The attribute names the client reads (the inside box, in the garage's frame) and the frame itself
 PlotBuildingVisuals.ATTRIBUTES = {
 	minX = "MinX", maxX = "MaxX", minY = "MinY", maxY = "MaxY", minZ = "MinZ", maxZ = "MaxZ",
@@ -406,7 +462,7 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 		model:SetAttribute(attribute, layout.inside[field])
 	end
 	model:SetAttribute("FadeSeconds", building.Fade.seconds)
-	model:SetAttribute("FadeLevels", building.Fade.levels)
+	model:SetAttribute("Occluded", building.Fade.occluded)
 	local groups = {}
 	for _, name in ipairs({ "Fade", "Static", "Solid" }) do
 		local g = Instance.new("Model")
@@ -445,6 +501,7 @@ function PlotBuildingVisuals.build(parent, frame, building, stage, kit)
 	for _, b in ipairs(layout.boxes) do
 		buildBox(groups.Solid, origin, b)
 	end
+	addCeilingLight(groups.Fade, building, layout.stage)
 	model:SetAttribute("KitPieces", fromKit) -- kit pieces built from the kit
 	model:SetAttribute("PartPieces", fromParts) -- kit pieces built from Parts (their model missing or unusable)
 	model:SetAttribute("BlockPieces", blocks) -- Blocks (always one Part each)
@@ -622,8 +679,13 @@ function PlotBuildingVisuals.check(model, frame, building, opts)
 	end
 	local parts, lights = {}, 0
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("Light") or d:IsA("ParticleEmitter") then
+		if d:IsA("ParticleEmitter") then
+			lights += 1000 -- never: an emitter is not a light
+		elseif d:IsA("Light") then
 			lights += 1
+			if d.Parent == nil or d.Parent:GetAttribute("Piece") ~= "M1Roof" or d.Parent.Parent ~= model:FindFirstChild("Fade") then
+				problem(d.Name .. ": a light anywhere but on the roof piece (the ceiling light)")
+			end
 		elseif d:IsA("BasePart") then
 			table.insert(parts, d)
 		end
@@ -631,8 +693,8 @@ function PlotBuildingVisuals.check(model, frame, building, opts)
 	if #parts > building.Budget.parts then
 		problem(string.format("%d parts (budget %d)", #parts, building.Budget.parts))
 	end
-	if lights > 0 then
-		problem(lights .. " lights or emitters (a building has none)")
+	if lights > building.Budget.lights then
+		problem(lights .. " lights or emitters (a building has at most " .. building.Budget.lights .. ": its ceiling light)")
 	end
 	local solids = 0
 	for _, part in ipairs(parts) do

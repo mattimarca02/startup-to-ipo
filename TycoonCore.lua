@@ -417,13 +417,35 @@ if LobbyConfig.ClaimEnabled then
 	end
 end
 
+-- A funding round reached (overhaul phase 2): one pop-up that says what just happened and what the player sees now
+-- ("Seed reached! Your Garage becomes a Small Office"). Looks only; the client's own look at the facade is BuildingClient's.
+local function stageUpToast(data, from, to)
+	local player = data.player
+	local stage = IpoConfig.Stages[to]
+	if not (player and stage and player.Parent) then return end
+	local was = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(from)] and PlotBuilding.Stages[PlotBuilding.shownStage(from)].name
+	local now = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(to)] and PlotBuilding.Stages[PlotBuilding.shownStage(to)].name
+	local text = string.format("%s %s reached!", stage.icon or "", stage.name)
+	if was and now and was ~= now then
+		text ..= string.format(" Your %s becomes a %s", was, now)
+	end
+	if to == #IpoConfig.Stages then
+		text ..= " · tap IPO to go public"
+	end
+	ShopServer.notify(player, text)
+end
+
 -- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
 -- swaps the room with a quick flash (the bought props move along) and the building around it.
 -- data.debugStage is the Studio Debug button's (in memory only, never saved): it only changes what is shown.
 local function syncRoom(data)
 	local stage = data.debugStage or stageOf(data)
 	if data.looks and data.looks.stage ~= stage then
+		local from = data.looks.stage
 		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+		if type(from) == "number" and stage > from then
+			stageUpToast(data, from, stage) -- a round reached, never the Garage after an IPO
+		end
 	end
 	syncBuilding(data.slot, stage)
 end
@@ -1017,6 +1039,7 @@ local function claimGarage(player, slot)
 	folder.Parent = garages[slot] -- the owner's room, props, employees and signs stand in their garage
 
 	local data = { owned = {}, items = {}, slot = slot, folder = folder, cash = cash, income = income, unknownSections = {}, loaded = false }
+	data.player = player -- the stage-up toast names the player (syncRoom); never saved
 	playerData[player] = data
 
 	local floor = garages[slot].Floor -- permanent (buildGarages): the room takes its turn from it
