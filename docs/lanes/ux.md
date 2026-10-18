@@ -15,7 +15,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (PR #48 merged; next run: backlog item 2, U1, now unblocked)
+ux-goal-chain - started 2026-10-18 10:07 UTC
 
 ## Last PR
 
