@@ -617,10 +617,74 @@ end
 )
 
 
+# Overhaul phase 1's edits outside the CLAIMLOAD markers (the facade sign over each garage's door: its text follows the
+# garage's state and its building, docs/OVERHAUL_PLAN.md phase 1 point 3), applied after L4_EDITS, each old text found once.
+L5_EDITS = (
+    ('''-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), and the claim post's
+-- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on
+''',
+     '''-- The sign over each garage's door (the building's one text, PlotBuildingVisuals.setSign; overhaul phase 1): the owner's
+-- company name and the stage's name while someone plays there ("Moving in..." or "Closing..." while their save runs),
+-- FREE and "Claim this garage" while it is free. Looks only, in memory only; written again whenever the state or the
+-- building changes. A building without a sign (the kit's fallback included) just shows none.
+local facadeTitle = {} -- slot -> the owner's company name, or "" (a free garage)
+local function applyFacadeSign(slot)
+	local building = PlotBuildingVisuals and garages[slot] and garages[slot]:FindFirstChild("PlotBuilding")
+	if not building then return end
+	local state, title, subtitle = garageState[slot], facadeTitle[slot] or "", nil
+	if state == "MovingIn" then
+		subtitle = LobbyConfig.Texts.MovingIn
+	elseif state == "Closing" then
+		subtitle = LobbyConfig.Texts.Closing
+	elseif state == "Taken" then
+		subtitle = building:GetAttribute("StageName")
+	else
+		title, subtitle = LobbyConfig.Texts.Free, LobbyConfig.Texts.SignFree
+	end
+	pcall(PlotBuildingVisuals.setSign, building, title, subtitle)
+end
+
+-- What a garage shows: its State and OwnerName attributes (for display: nothing reads them back), the claim post's
+-- prompt, FREE sign and lamp, which only a Free garage has, and only while the claim is on, and the facade sign's text
+'''),
+    ('''	garage:SetAttribute("OwnerName", ownerName or "")
+	local free = state == "Free" and LobbyConfig.ClaimEnabled
+''',
+     '''	garage:SetAttribute("OwnerName", ownerName or "")
+	applyFacadeSign(slot)
+	local free = state == "Free" and LobbyConfig.ClaimEnabled
+'''),
+    ('''		pcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing
+	end
+''',
+     '''		pcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing
+		applyFacadeSign(slot) -- a new building: its sign is blank until it is written again
+	end
+'''),
+    ('''-- The name over a garage ("" hides it): set when someone moves in, cleared when they leave
+''',
+     '''-- The name over a garage ("" hides it): set when someone moves in, cleared when they leave. It is the label over the roof
+-- (seen across the plaza) and the first line of the facade sign over the door.
+'''),
+    ('''		gui.Enabled = text ~= ""
+	end
+end
+
+''',
+     '''		gui.Enabled = text ~= ""
+	end
+	facadeTitle[slot] = text
+	applyFacadeSign(slot)
+end
+
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L4_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L5_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
@@ -1181,6 +1245,10 @@ CLIENT_MUTANTS = [
      '\tParent = gui,\n})\nmake("TextLabel", {', "client: the marker is a BillboardGui straight in PlayerGui"),
     ("the post looked for on the garage itself (not in its ClaimSpot: no marker ever)", 'local post = spot and spot:FindFirstChild("ClaimPost")',
      'local post = garage:FindFirstChild("ClaimPost")', "client: the marker is over the nearest FREE"),
+    ("LobbyClient leaves the FREE signs and prompts shown after the claim (overhaul phase 1, point 6)", "\tshowClaimSpots(show)\n", "\tshowClaimSpots(true)\n",
+     "client: with a garage every FREE sign"),
+    ("LobbyClient hides the FREE lamps on the plaza too", "\t\t\tlocal free = show and state == \"Free\"\n", "\t\t\tlocal free = false\n",
+     "client: on the plaza the other garages' FREE signs"),
 ]
 CLEAN_CHECK = "client: ran without an error"
 DONE_CHECK = "client: the program ran to the end"

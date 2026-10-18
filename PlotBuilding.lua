@@ -64,6 +64,9 @@ PlotBuilding.STRETCH = { Wall = { x = true }, RoofEdge = { x = true }, Floor = {
 -- size is its size. Roofs, signs, sills, gutters and pipes are Blocks: details the kit has no piece for.
 PlotBuilding.BLOCK = "Block"
 PlotBuilding.PITCH_THICK = 1 -- a pitched roof's sheets are this thick
+-- The sign's text (the only gui of a building): a SurfaceGui on the board's +Z face (NormalId Back: toward the plaza), its
+-- label in the right part of the board (the emblem's bars take the left), white, two lines at most, no decal, no asset
+PlotBuilding.SIGN_TEXT = { name = "SignText", face = "Back", pixelsPerStud = 40, area = { 0.5, 0.08, 0.47, 0.84 }, font = "GothamBold", color = { 246, 246, 242 } }
 
 -- The kit, copied from docs/KIT_MODELS.md (tools/building_test.py compares the two) -----------------------------
 -- size = { width (X), height (Y), depth (Z) }. roles = the MeshParts of the model, one per role, with the file's colors.
@@ -297,8 +300,11 @@ end
 -- A building is one or more masses (a box of stories: half-width, back face, front face, first and last story, corner
 -- posts or not), the sequence of pieces along each wall of each story, the door, the pieces outside, and the furniture.
 -- A mass may have a pitched roof (pitch = { slope, overhang }: two sheets from the side eaves to a ridge along Z, brick
--- gables stepped front and back, a ridge cap, gutters) and a stage a sign over its door (sign = { y, w, h }: a board on the
--- facade with a growth-chart emblem, no text). Both are Blocks. Extras may be Blocks too: { block = { x, y, z }, role, name }.
+-- gables stepped front and back, a ridge cap, gutters) and every stage has a sign over its door (sign = { y, w, h [, z] }:
+-- a plate and a board on the facade (z = the plate's back face, FRONT_OUT unless the sign sits on a band in front of it),
+-- a growth-chart emblem on the board's left and, on its right, the one text a building carries: a SurfaceGui the server
+-- writes through PlotBuildingVisuals.setSign (the owner's company name and the stage, or FREE on a free garage; overhaul
+-- phase 1, the owner's point 7). Both are Blocks. Extras may be Blocks too: { block = { x, y, z }, role, name }.
 -- Walls: doorWall (the front of the ground story), frontWall (the front above it), sideWall, backWall. A wall sequence lists pieces from one end to the other: { key = "WallWindow" } (its kit width), { fill = true } (a
 -- Wall stretched to share what is left), { gap = 10 } (nothing in the wall run: the doorway, or the room an extra fills,
 -- like the offices' stretched WallDoor).
@@ -339,6 +345,7 @@ PlotBuilding.Stages = {
 			doorWall = { F, K("WallWindow"), gap(24), K("WallWindow"), F }, sideWall = { F, K("WallWindow"), K("WallWindow"), F },
 			backWall = { F, K("WallWindow"), F } } },
 		door = { half = 4.5, top = 9 }, -- the WallDoor (an extra, stretched to 24) has a 9-wide opening, its frame on the lane's edges (P1)
+		sign = { y = 10.2, w = 18, h = 2.6 }, -- over the door, under the roof edge (13)
 		extras = {
 			-- in the wall's 24-stud gap; lane = true only because the kit's one wall mesh spans its own opening
 			{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },
@@ -358,6 +365,7 @@ PlotBuilding.Stages = {
 			doorWall = { F, K("WallGlass"), gap(24), K("WallGlass"), F }, frontWall = { F, K("WallWindow"), K("WallWindow"), K("WallWindow"), F },
 			sideWall = { F, K("WallWindow"), K("WallWindow"), F }, backWall = { F, K("WallWindow"), F } } },
 		door = { half = 4.5, top = 9 }, -- the stretched WallDoor, as in the Small Office
+		sign = { y = 10.2, w = 18, h = 2.6 }, -- over the door, on the ground story
 		extras = {
 			{ key = "WallDoor", x = 0, y = -1, z = 31.2, turn = 0, width = 24, lane = true },
 			{ key = "DoorLeaf", x = -9.1, y = -1, z = 32.45, turn = 0, width = 9 },
@@ -381,6 +389,7 @@ PlotBuilding.Stages = {
 		-- An open entrance 10 wide. No RevolvingDoor: on the lane players walked through its middle post, and beside the
 		-- doorway (10 x 10) it would cut through the glass wall or reach past z 40.
 		door = { half = 5, top = 11 },
+		sign = { y = 11.3, w = 14, h = 2.4, z = 32.7 }, -- on the band over the door (its front face is z 32.7)
 		extras = {
 			{ key = "RoofEdge", x = 0, y = 11, z = 31.7, turn = 0, width = 10 }, -- a band over the door (P3: pillars below)
 			{ key = "Corner", x = -6, y = -1, z = 33.2, turn = 0 },
@@ -410,6 +419,7 @@ PlotBuilding.Stages = {
 		},
 		-- an open entrance 12 wide under a RoofEdge lintel, between two columns standing in the wall's gap (x 6 to 9 each side)
 		door = { half = 6, top = 10, lintel = true },
+		sign = { y = 13.2, w = 16, h = 2.6 }, -- on the podium's roof edge (13 to 16), above the columns (14 high from the ground)
 		extras = {
 			{ key = "Column", x = -7.5, y = -1, z = 31.7, turn = 0 },
 			{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },
@@ -452,7 +462,7 @@ local function widthOf(key)
 end
 
 -- One piece: name, key, x y z (bottom-center), turn, tilt (about its own X), sx sz (stretch: 1 = kit size), look,
--- size and role (a Block only),
+-- size and role (a Block only), text (a Block only: the sign board, it carries the building's SurfaceGui),
 -- group ("Fade": the shell, it fades; "Static": the furniture, it stays), lane (a door piece, allowed in the doorway lane)
 local function addPiece(out, p)
 	p.sx = p.sx or 1
@@ -535,15 +545,16 @@ local function pitchedRoof(out, m, mass, top)
 	end
 end
 
--- The sign on the facade over the door: a plate, the board on it and a growth chart of three bars (the emblem; no text,
--- no odds). Its bottom at sign.y, centered, standing out of the front face (from FRONT_OUT to 0.7 in front of it).
+-- The sign on the facade over the door: a plate, the board on it (it carries the text, PlotBuilding.SIGN_TEXT) and a growth
+-- chart of three bars on the board's left (the emblem; no odds). Its bottom at sign.y, centered, standing out of the front
+-- face (from sign.z, FRONT_OUT by default, to 0.7 in front of it). The bars are drawn for an 18-wide board and shrink with it.
 local function addSign(out, sign)
-	local w, h, y, z = sign.w, sign.h, sign.y, PlotBuilding.FRONT_OUT
-	local B = PlotBuilding.BLOCK
+	local w, h, y, z = sign.w, sign.h, sign.y, sign.z or PlotBuilding.FRONT_OUT
+	local B, k = PlotBuilding.BLOCK, sign.w / 18
 	addPiece(out, { name = "SignPlate", key = B, size = { w + 0.6, h + 0.6, 0.3 }, role = "trim", look = "sign", x = 0, y = y - 0.3, z = z + 0.15, turn = 0 })
-	addPiece(out, { name = "SignBoard", key = B, size = { w, h, 0.2 }, role = "dark", look = "sign", x = 0, y = y, z = z + 0.4, turn = 0 })
+	addPiece(out, { name = "SignBoard", key = B, size = { w, h, 0.2 }, role = "dark", look = "sign", x = 0, y = y, z = z + 0.4, turn = 0, text = true })
 	for i, share in ipairs({ 0.28, 0.48, 0.68 }) do
-		addPiece(out, { name = "SignBar" .. i, key = B, size = { 2, h * share, 0.2 }, role = "accent", look = "sign", x = (i - 2) * 3, y = y + 0.9, z = z + 0.6, turn = 0 })
+		addPiece(out, { name = "SignBar" .. i, key = B, size = { 2 * k, h * share, 0.2 }, role = "accent", look = "sign", x = -w / 2 + k * (2.2 + (i - 1) * 2.6), y = y + h * 0.16, z = z + 0.6, turn = 0 })
 	end
 end
 

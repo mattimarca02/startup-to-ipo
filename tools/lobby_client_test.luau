@@ -75,6 +75,19 @@ local function world(claimOn, garageAttr)
 		post.Name = "ClaimPost"
 		post.Position = vec(spot[1], 0, spot[2])
 		post.Parent = claimSpot
+		-- the server's FREE sign, prompt and lamp, as TycoonCore's setGarageState leaves them for this State
+		local free = slot ~= 1
+		local sign = new("BillboardGui")
+		sign.Enabled = free
+		sign.Parent = post
+		local prompt = new("ProximityPrompt")
+		prompt.Enabled = free
+		prompt.Parent = post
+		local lamp = new("Part")
+		lamp.Name = "FreeLamp"
+		lamp.Transparency = free and 0 or 1
+		lamp.Parent = claimSpot
+		W["sign" .. slot], W["prompt" .. slot], W["lamp" .. slot] = sign, prompt, lamp
 		g.Parent = garages
 		W["post" .. slot] = post
 		W["garage" .. slot] = g
@@ -135,8 +148,12 @@ do
 	W.garage3:SetAttribute("State", "MovingIn")
 	frames(W, 6)
 	check("client: a garage someone is moving into is no longer marked", W.marker ~= nil and W.marker.Adornee == W.post2)
+	check("client: on the plaza the other garages' FREE signs, prompts and lamps stay as the server set them",
+		W.sign2.Enabled == true and W.prompt2.Enabled == true and W.lamp2.Transparency == 0 and W.sign1.Enabled == false and W.prompt1.Enabled == false and W.lamp1.Transparency == 1)
 	W.player:SetAttribute("Garage", 2)
 	check("client: with a garage the banner and the marker go at once", W.gui ~= nil and W.gui.Enabled == false and W.marker ~= nil and W.marker.Enabled == false)
+	check("client: with a garage every FREE sign, prompt and lamp is hidden on this client (the server still refuses a second claim)",
+		W.sign2.Enabled == false and W.prompt2.Enabled == false and W.lamp2.Transparency == 1 and W.sign3.Enabled == false and W.prompt3.Enabled == false and W.lamp3.Transparency == 1)
 	check("client: it makes no remote and sends nothing", REMOTES == 0)
 	ranClean(W, "on the plaza, then a garage")
 end
@@ -150,8 +167,12 @@ do
 	local W = start(world(true, 0))
 	W.garage2:SetAttribute("State", "Taken")
 	W.garage3:SetAttribute("State", "Closing")
+	W.sign2.Enabled, W.prompt2.Enabled, W.lamp2.Transparency = false, false, 1 -- as the server sets a Taken garage
+	W.prompt3.Enabled, W.lamp3.Transparency = false, 1 -- a Closing garage: the sign stays, saying Closing
 	frames(W, 6)
 	check("client: no Free garage: the banner stays, no marker", shown(W.gui) and W.marker ~= nil and W.marker.Enabled == false)
+	check("client: on the plaza a Closing garage keeps its sign and a Taken one shows nothing (the server's values, untouched)",
+		W.sign3.Enabled == true and W.prompt3.Enabled == false and W.lamp3.Transparency == 1 and W.sign2.Enabled == false)
 	ranClean(W, "no Free garage")
 end
 print_real(string.format("%d passed, %d failed", passed, failed))

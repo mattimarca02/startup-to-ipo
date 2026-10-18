@@ -5,6 +5,10 @@
 -- attribute Garage = 0), it shows a banner ("Walk to a free garage to start your company") and a marker over the
 -- claim post of the nearest garage whose State is Free. It never fires a remote and never names a garage to the server:
 -- claiming is the server's prompt on the post. With the claim off it shows nothing.
+-- Once this player has a garage (Garage ~= 0), the other garages' FREE signs, green lamps and "Claim garage" prompts are
+-- hidden on this client only (overhaul phase 1, the owner's point 6): a property set here never reaches the server or
+-- another player, and the server still refuses every claim from a player who has a garage. A player still on the plaza
+-- sees them exactly as the server sets them (State Free: shown; MovingIn or Closing: the sign only; Taken: nothing).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -114,12 +118,39 @@ local function nearestFreePost()
 	return best
 end
 
+-- The claim spots as this client sees them: with a garage, every FREE sign, lamp and prompt is hidden here; without one,
+-- what the server set (the same rule as TycoonCore's setGarageState, from the garage's State attribute)
+local function showClaimSpots(show)
+	local garages = workspace:FindFirstChild("Garages")
+	if not garages then return end
+	for _, garage in ipairs(garages:GetChildren()) do
+		local spot = garage:FindFirstChild("ClaimSpot")
+		local post = spot ~= nil and spot:FindFirstChild("ClaimPost") or nil
+		if post then
+			local state = garage:GetAttribute("State")
+			local free = show and state == "Free"
+			for _, child in ipairs(post:GetChildren()) do
+				if child.ClassName == "ProximityPrompt" then
+					child.Enabled = free
+				elseif child.ClassName == "BillboardGui" then
+					child.Enabled = show and state ~= "Taken"
+				end
+			end
+			local lamp = spot:FindFirstChild("FreeLamp")
+			if lamp then
+				lamp.Transparency = free and 0 or 1
+			end
+		end
+	end
+end
+
 local function refresh()
 	local show = onPlaza()
 	gui.Enabled = show
 	local post = show and nearestFreePost() or nil
 	marker.Adornee = post
 	marker.Enabled = post ~= nil
+	showClaimSpots(show)
 end
 
 player:GetAttributeChangedSignal("Garage"):Connect(refresh)

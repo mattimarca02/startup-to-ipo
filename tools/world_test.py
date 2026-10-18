@@ -423,7 +423,7 @@ end)()
 section("data", function()
 	local problems = WorldVisuals.validate(WorldArt)
 	check("data: WorldVisuals.validate finds no problem in WorldArt", #problems == 0, problems[1])
-	check("data: every named check exists, in order", table.concat(WorldVisuals.CHECKS, ",") == "data,budget,flags,keepouts,floating,zfighting,baseplate,connected,palette,texts")
+	check("data: every named check exists, in order", table.concat(WorldVisuals.CHECKS, ",") == "data,budget,flags,solid,keepouts,floating,zfighting,baseplate,connected,palette,texts")
 	check("data: the budget is 600 parts and 8 lights (placeholders)", WorldArt.Budget.parts == 600 and WorldArt.Budget.lights == 8)
 	check("data: the only fixed text is BUILD YOUR STARTUP", #WorldArt.Texts == 1 and WorldArt.Texts[1] == "BUILD YOUR STARTUP")
 	check("data: layers are ground 0.04, path 0.16, kerb 0.4 (at least 0.04 apart, and never the stage 1 dirt's 0.06)",
@@ -585,19 +585,26 @@ section("default site", function()
 	end
 	check("default site: " .. PARTS .. " parts, within 600", PARTS <= 600 and PARTS > 100, PARTS)
 	check("default site: " .. LIGHTS .. " lights, within 8", LIGHTS <= 8 and LIGHTS == 6, LIGHTS)
-	check("default site: the World Model holds Paths, Kerbs, Ground, Decor and Hills", world.Name == "World" and world:FindFirstChild("Paths") and world:FindFirstChild("Kerbs")
-		and world:FindFirstChild("Ground") and world:FindFirstChild("Decor") and world:FindFirstChild("Hills"))
+	check("default site: the World Model holds Paths, Kerbs, Ground, Decor, Solid and Hills", world.Name == "World" and world:FindFirstChild("Paths") and world:FindFirstChild("Kerbs")
+		and world:FindFirstChild("Ground") and world:FindFirstChild("Decor") and world:FindFirstChild("Solid") and world:FindFirstChild("Hills"))
 	check("default site: knows its spacing and plot count", world:GetAttribute("Spacing") == 90 and world:GetAttribute("Plots") == 6)
 	do
-		local collide, touch, query, anchored, scripts = 0, 0, 0, 0, 0
+		local collide, touch, query, anchored, scripts, solids, badSolid = 0, 0, 0, 0, 0, 0, 0
 		for _, p in ipairs(partsOf(world)) do
-			if p.CanCollide then collide += 1 end
-			if p.CanTouch then touch += 1 end
-			if p.CanQuery then query += 1 end
+			if p.Parent.Name == "Solid" then
+				solids += 1
+				if not (p.CanCollide and p.Anchored and p.Transparency == 1 and not p.CanTouch and p.CanQuery) then badSolid += 1 end
+			else
+				if p.CanCollide then collide += 1 end
+				if p.CanTouch then touch += 1 end
+				if p.CanQuery then query += 1 end
+			end
 			if not p.Anchored then anchored += 1 end
 		end
 		for _, d in ipairs(world:GetDescendants()) do if d:IsA("LuaSourceContainer") then scripts += 1 end end
 		check("default site: no decor collides, is touched or stops a ray; every part is anchored; no script", collide + touch + query + anchored + scripts == 0)
+		check("default site: the Solid group's invisible boxes are the only parts that collide (the lamps, trees, benches, planters, signs, the arch: overhaul phase 1)",
+			solids > 0 and badSolid == 0, solids .. " solids, " .. badSolid .. " bad")
 		local atomic = 0
 		for _, m in ipairs(world:FindFirstChild("Decor"):GetChildren()) do if m.ModelStreamingMode == Enum.ModelStreamingMode.Atomic then atomic += 1 end end
 		check("default site: every decor item streams whole (ModelStreamingMode Atomic)", atomic == #world:FindFirstChild("Decor"):GetChildren() and atomic > 0)
@@ -1085,7 +1092,7 @@ do
 	for _, c in ipairs(saved) do c.Parent = SSS end
 	runPreview()
 end
-check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 268 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
+check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 320 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
 check("preview: the SpawnLocation and the Baseplate were not changed", spawnPad.CFrame == spawnBefore and baseplate.Size == baseBefore and spawnPad.Parent == workspace and baseplate.Parent == workspace)
 check("preview: the ghosts are see-through and never solid", (function()
 	for _, g in ipairs(folder:FindFirstChild("Ghosts"):GetChildren()) do
@@ -1934,9 +1941,9 @@ def static_checks():
     check("WorldArt.lua is pure data: no Instance.new, GetService, require or function call on the game", not any(w in art for w in ("Instance.new", "GetService", "require(", "game", "workspace")))
     check("WorldVisuals.lua asks for no service and requires nothing (art and site are passed in)", "GetService" not in vis and "require(" not in vis)
     check("WorldVisuals.lua never reads or writes the Workspace by itself", "workspace" not in vis and "game." not in vis and "game:" not in vis)
-    check("WorldVisuals.lua sets every part's CanCollide, CanTouch and CanQuery to false in one place",
+    check("WorldVisuals.lua sets every look part's CanCollide, CanTouch and CanQuery to false in one place, and only the Solid group's boxes to collide",
           vis.count("part.CanCollide = false") == 1 and vis.count("part.CanTouch = false") == 1 and vis.count("part.CanQuery = false") == 1
-          and "CanCollide = true" not in vis)
+          and vis.count("CanCollide = true") == 1 and vis.count("box.CanCollide = true") == 1)
 
     return passed, failed
 

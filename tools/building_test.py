@@ -867,9 +867,26 @@ for s = 1, 5 do
 				check("fallback: " .. tag .. ": every piece is built from Parts, with one warning for the missing kit",
 					m:GetAttribute("PartPieces") == #L.pieces - countBlocks(L) and m:GetAttribute("BlockPieces") == countBlocks(L) and #WARNED >= 1)
 			end
-			local text = nil
+			-- The sign's text (overhaul phase 1): the building's one gui is the SurfaceGui on the sign board, with one empty TextLabel until
+			-- the server writes it (setSign); no other gui, no decal, no texture anywhere
+			local text, guis, labels, board = nil, 0, 0, nil
 			for _, d in ipairs(m:GetDescendants()) do
-				if d.ClassName == "SurfaceGui" or d.ClassName == "BillboardGui" or d.ClassName == "TextLabel" or d.ClassName == "Decal" or d.ClassName == "Texture" then text = text or d.Name end
+				if d.ClassName == "SurfaceGui" then
+					guis += 1
+					if d.Name == PBV.SIGN_TEXT_NAME and d.Parent and d.Parent:GetAttribute("Piece") == "SignBoard" and d.Parent.Parent == m:FindFirstChild("Fade") then board = d end
+				elseif d.ClassName == "TextLabel" then
+					labels += 1
+					if d.Text ~= "" then text = text or (d.Name .. "=" .. d.Text) end
+				elseif d.ClassName == "BillboardGui" or d.ClassName == "Decal" or d.ClassName == "Texture" then text = text or d.Name end
+			end
+			local signOk = guis == 1 and labels == 1 and board ~= nil and board.Label ~= nil and text == nil
+			if signOk then
+				PBV.setSign(m, "Ana's Startup", "Small Office")
+				signOk = board.Label.Text == "Ana's Startup\nSmall Office"
+				PBV.setSign(m, "FREE", "Claim this garage")
+				signOk = signOk and board.Label.Text == "FREE\nClaim this garage"
+				PBV.setSign(m, "", nil)
+				signOk = signOk and board.Label.Text == ""
 			end
 			local byPiece, blockBad = {}, nil
 			for _, d in ipairs(m:GetDescendants()) do
@@ -886,7 +903,7 @@ for s = 1, 5 do
 				end
 			end
 			check("block: " .. tag .. ": every Block is one Part at its size, where the layout puts it, painted by its role", blockBad == nil, blockBad)
-			check("text: " .. tag .. ": no gui, text, decal or texture (the sign is Parts only: no odds text, no assets)", text == nil, text)
+			check("text: " .. tag .. ": the one gui is the sign board's SurfaceGui (one TextLabel, empty until the server writes it with setSign); no other gui, decal or texture", signOk, text or (guis .. " guis, " .. labels .. " labels"))
 		end
 		-- The kit and the fallback build the same pieces (same roles, same boxes): the turn of the kit's front is right
 		local a, b = piecesOf(built["kit"], frame), piecesOf(built["no kit"], frame)
@@ -953,7 +970,7 @@ do
 	local m = PBV.build(nil, frameAt(0), PB, 2, kit)
 	local foreign = nil
 	for _, d in ipairs(m:GetDescendants()) do
-		if d.ClassName == "Script" or d.Name == "Sneaky" or (d:IsA("BasePart") and d.Parent.Name == "Fade" and d.ClassName ~= "MeshPart") then foreign = foreign or d.Name end
+		if d.ClassName == "Script" or d.Name == "Sneaky" or (d:IsA("BasePart") and d.Parent.Name == "Fade" and d.ClassName ~= "MeshPart" and d:GetAttribute("Key") ~= PB.BLOCK) then foreign = foreign or d.Name end
 	end
 	local warnings = 0
 	for _, w in ipairs(WARNED) do if string.find(w, "only MeshParts", 1, true) then warnings += 1 end end

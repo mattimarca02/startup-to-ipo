@@ -188,7 +188,7 @@ In this order, each written down as done, skipped or failed:
 
 Delete every preview or check object the batch made. Run the hash block (section 4) again: `ALL OK`. **File > Save to Roblox.** Write "Run on <date>: <result>" below.
 
-Run on: (not yet)
+Run on 2026-10-18 (written down by the owner session, docs/OVERHAUL_PLAN.md A1): the hash check of every script in Studio found the nine scripts of this batch in place, `ClaimEnabled = true` and the SpawnLocation on the plaza, so the batch had been run before the owner's playtest of 2026-10-18 (claim on, 2 players). Its playtests 1 to 7 were not written down as done or skipped; the owner session's own 1-player playtest (Batch 3) covers 1, 2 and 6 in part. Not run: the Test > Device steps and the 2-player step of 6.
 
 ## Batch 2 (the claim on: `LobbyConfig` only, the owner's request of 2026-10-18)
 
@@ -307,7 +307,33 @@ Each written down as done, skipped or failed. **Test > Clients and Servers** (Lo
 
 Commit the `LobbyConfig` draft (Team Create: View > Drafts); this time it **is** saved with `ClaimEnabled = true`. Run the spawn check (`ON THE PLAZA`) and the hash block (`ALL OK: 1`) again. **File > Save to Roblox.** Never Publish in this session: publishing with **Shut down all servers** (old servers keep the old flow until they restart, docs/PUBLISH_RULES.md, and Max Players stays 6) is the owner's separate decision after these playtests. To turn the claim off again: docs/STUDIO_SYNC_LOBBY.md section 10, step 4 (`false`, and the SpawnLocation back to (-1, 0.5, -1)).
 
-Run on: (not yet)
+Run on 2026-10-18 (written down by the owner session): `LobbyConfig` with `ClaimEnabled = true` was in Studio and the SpawnLocation at (0, 0.5, 175) before the owner's 2-player playtest of 2026-10-18 (claim on; the owner's feedback is docs/OVERHAUL_PLAN.md section 1). Playtest 3 (2 players) was played by the owner, not written down step by step; step 6 (3 players) not run.
+
+## Batch 3 (overhaul phase 1: FREE hidden after the claim, the facade sign, the plaza's collision, the four scripts of PRs #51 to #53; branch `overhaul-phase1`)
+
+Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 1). **The owner session pushes every script through the Studio MCP itself** and runs the hash block; this batch is the record of it, and what to check by hand.
+
+**What the owner sees after this batch:** (1) after claiming a garage, the other garages' FREE signs, green lamps and "Claim garage" prompts are gone for that player (a player still on the plaza sees them as before); (2) every garage has a sign over its door with text: FREE and "Claim this garage" on a free one, "<Name>'s Startup" and the stage's name ("Garage", "Small Office", ...) on a taken one, "Moving in..." / "Closing..." while a save runs; the growth-chart bars moved to the board's left; (3) trees, lamp posts, benches, planters, the number signs' posts, the fountain and the arch's posts are solid on the plaza (bushes and hedges still are not); (4) the Day 1 gift opens at the first pause and the Goals card draws only the goals the server shows (PRs #51 to #53, pasted at last); (5) `Clouds` moved from `Lighting.Sky` to `Workspace.Terrain` (a Studio object: no more "Cloud instance must exist under Terrain" in the Output). No save change, no new remote, no publish.
+
+| Script | Studio | State | sha256 (`overhaul-phase1`) | bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `a9f0e78ef3108ba2d150a77adc79145612ae388fefef849c9c724580ef330d1b` | 54986 |
+| `LobbyClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed | `52af70d7d377fe9a382a9bbf273fa99547bca92fecc09ed09ecaddc4cfced48e` | 6262 |
+| `LobbyConfig` | ModuleScript, ReplicatedStorage | changed | `f626f3845e1db493983f86cdb41463546a705c88389aa1d191a36ecaf875c669` | 6429 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `cb93ae6588f05e4aad4086effa9ae48e2cea287c7f797560d4ed375a575c526d` | 44040 |
+| `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `ef06d4f6d6e6da486a476cb6ba7793594889bca8f81b6f3a320c75d6ba782d8f` | 29591 |
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `0ce4baa6c69e4d50c5f72da819b5aa935c8971c8f1abb03379c108f98fbf4a33` | 19117 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `b769a59be882252ba39eb6281a1f069de454bc857cf9f77668050ba51e06fb7e` | 64360 |
+| `DailyConfig` | ModuleScript, ReplicatedStorage | changed (PR #52, never pasted) | `9a7a6820182ab984e36a153e983833b991d2f4a90c1d8088dea15d982a1a8693` | 7290 |
+| `DailyServer` | ModuleScript, ServerScriptService | changed (PRs #51, #52, never pasted) | `3527123c3f33bc7f4b43cd89cddd9d9eb08aa3fc026d3a7a99ebad1e308e1ba1` | 17574 |
+| `OnboardingClient` | LocalScript, StarterPlayer > StarterPlayerScripts | changed (PR #53, never pasted) | `7c69d99f8c2c02667100c0538b238250e7f6a71c0713cdb090dfc7862cdffdb5` | 14691 |
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed (PR #51, never pasted) | `e6ae15bcb7d7b7a6f89ae22102ffab04fb695e31ea548a4e08a7c81bcb58b5af` | 17546 |
+
+The hash block is Batch 1's with these eleven `WANT` rows (`{ "Name", "Class", "Place", "sha256", bytes }` from the table); it must print `ALL OK: 11 scripts match the repo`. Studio objects: `Lighting.Sky.Clouds` moved to `Workspace.Terrain` (done by the owner session through the MCP); **Max Players = 6** is still to set by hand (File > Game Settings > Places > Max Players; and in Creator Hub).
+
+Playtests (each written down as done, skipped or failed): (a) 1 player, F5: spawn on the plaza, every free garage's sign reads "FREE / Claim this garage"; walk into a tree, a lamp, a bench: you stop; walk across every path and spoke: nothing blocks you; claim a garage: the other FREE signs, lamps and prompts disappear, your sign reads "<Name>'s Startup / Garage"; Debug > "Building: next stage": the sign's second line follows ("Small Office", ...). (b) 2 players (Test > Clients and Servers): player 2 still sees the FREE signs of the free garages after player 1's claim, and not player 1's; player 1 leaves: the sign says "Closing...", then "FREE / Claim this garage". (c) Test > Device, a phone: the sign reads on the facade from the walk.
+
+Run on: (see the pull request of `overhaul-phase1`)
 
 ## How the quality lane fills a batch
 

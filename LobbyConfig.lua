@@ -57,6 +57,7 @@ LobbyConfig.Texts = {
 	Banner = "Walk to a free garage to start your company",
 	Prompt = "Claim garage",
 	Free = "FREE",
+	SignFree = "Claim this garage", -- the facade sign's second line on a free garage (overhaul phase 1)
 	MovingIn = "Moving in...",
 	Closing = "Closing...",
 	Off = "Claiming garages is off",
