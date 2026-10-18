@@ -3,16 +3,17 @@
 -- tools/lobby_test.py runs it outside Studio. Nothing here is saved: the garage a player claims is never written to
 -- the save (the company lives in the save, not the garage).
 --
--- ClaimEnabled (owner decision 9: it ships OFF):
+-- ClaimEnabled (it ships ON since 2026-10-18, owner decision 9 revised; it shipped OFF before):
 --   false  as before: every joining player gets the first free garage and is sent into it; no prompt, no banner.
 --   true   a joining player stays on the plaza and walks to a free garage to claim it (a "Claim garage" prompt by its
 --          door); the garages stand in a ring around the plaza (PR L4).
--- It is not live: a ModuleScript is read when a server starts. Turning it on is a Studio edit plus a publish with
--- "Shut down all servers" (docs/STUDIO_SYNC_LOBBY.md says how, and how to test it in Studio first).
+-- It is not live: a ModuleScript is read when a server starts. Changing it is a Studio paste plus a publish with
+-- "Shut down all servers" (docs/STUDIO_SYNC_BATCH.md Batch 2 turns it on; docs/STUDIO_SYNC_LOBBY.md section 10 says
+-- how to turn it off again: false, and the SpawnLocation back to (-1, 0.5, -1)).
 
 local LobbyConfig = {}
 
-LobbyConfig.ClaimEnabled = false
+LobbyConfig.ClaimEnabled = true
 
 -- The garages, one per slot: the center of the Floor (x, z; y is 0.5) and its turn in degrees (quarter turns: the
 -- front, +Z in the garage's frame, turned like TycoonCore's plotFrame: 90 faces world +X). Row = today's six plots
