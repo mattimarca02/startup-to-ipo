@@ -170,7 +170,7 @@ print(#problems == 0 and ("ALL OK: " .. #WANT .. " scripts match the repo (batch
 
 4. **The rooms (PR #40), optional:** paste the preview block of docs/lanes/interiors.md ("Studio steps") into the command bar: it builds the five rooms in `Workspace.PREVIEW_STAGES` far from the garages and prints one line per stage; stage 1 must print `OK` with `kit MeshParts: 39` and `kit found: true`. **Delete `Workspace.PREVIEW_STAGES` before saving.**
 
-Nothing is expected later in this batch: no lane PR is open. The next merge with Studio steps opens Batch 2 once this one has been run.
+Nothing is expected later in this batch. Batch 2 (below, the claim on) comes after it.
 
 ### 6. Playtests
 
@@ -182,11 +182,130 @@ In this order, each written down as done, skipped or failed:
 4. **#35 and #44, claim off:** still in the same F5 (or a new one): nothing new shows on the screen, the HUD is as before, no error in the Output. Test > Device, a phone in portrait and landscape: still nothing new (the button needs the claim on).
 5. **#37, claim off:** the row world is unchanged: the street, the lounge, the hills as before.
 6. **Claim on, Studio only, never saved (#35, #44 and #37):** set `ClaimEnabled = true` in `ReplicatedStorage > LobbyConfig` for the playtest only (docs/STUDIO_SYNC_LOBBY.md section 9 b says how and how to revert). F5: the garages stand in the ring; the plaza shows the paved square around the spawn pad, four spokes, the promenade along the garages' fronts, four lawn beds with kerbs, trees and bushes, the fountain on the north spoke, benches and lamps along the spokes; every garage walk ends on the promenade; no red error and no `The plaza is off` warning. Then Test > Device, a phone, portrait and landscape: walk to a free garage's post; the big green "Claim garage" button appears at the bottom center while the prompt shows, above the pop-ups, clear of the thumbstick and the jump button; tap it once: the garage is claimed exactly as the prompt would (the prompt and the button go away, the garage is yours). #44: in a second F5 (or Test > Clients and Servers, 2 players, so a garage stays free), stand between two free garages' posts so both prompts show: the button stays up, and moving toward one post makes the button press that one (the nearest); walk away from one post only: the button stays while the other prompt still shows. Open a window (SHOP): the button hides; close it: it is back only while a prompt shows. The plaza stays smooth on the phone (336 world parts, 4 lights).
-7. **Revert the switch, don't retype it** (docs/STUDIO_SYNC_LOBBY.md 9 b, step 8): in View > Drafts, right-click `LobbyConfig` and revert the draft (without Team Create, paste `LobbyConfig.lua` from the repo over the whole script). `LobbyConfig` is not in this batch's hash block, so open it and read `ClaimEnabled = false` by eye before saving.
+7. **Revert the switch, don't retype it** (docs/STUDIO_SYNC_LOBBY.md 9 b, step 8): in View > Drafts, right-click `LobbyConfig` and revert the draft (without Team Create, paste `LobbyConfig.lua` from the batch's worktree at `2c3a415` over the whole script: a `main` with Batch 2 has `ClaimEnabled = true`). `LobbyConfig` is not in this batch's hash block, so open it and read `ClaimEnabled = false` by eye before saving.
 
 ### 7. Saving
 
 Delete every preview or check object the batch made. Run the hash block (section 4) again: `ALL OK`. **File > Save to Roblox.** Write "Run on <date>: <result>" below.
+
+Run on: (not yet)
+
+## Batch 2 (the claim on: `LobbyConfig` only, the owner's request of 2026-10-18)
+
+Opened 2026-10-18 by the quality lane, for the owner's written OK in docs/lanes/owner.md ("quality: turn the claim on", owner decision 9 revised). **Run Batch 1 first** (in the same session is fine): Batch 2 assumes Batch 1's nine scripts are in Studio, its playtests done and `LobbyConfig` reverted to `ClaimEnabled = false` (Batch 1, section 6, step 7: if you paste it, paste it from `git show 2c3a415:LobbyConfig.lua`, not from a later `main`, which has `true`). Run this batch at the `main` commit that merges PR `quality-claim-on`, or any later `main` whose `LobbyConfig.lua` still matches (the hash block says).
+
+**What the owner sees after this batch:** players no longer land in a garage. They spawn on the plaza, with the banner "Walk to a free garage to start your company" and a green FREE marker over the nearest free garage; they walk to a garage and hold its "Claim garage" prompt (on a phone: the big green button). The six garages stand in the ring around the plaza (west, north, east), with the plaza's garden (#37). The save loads at the claim. Nothing else changes: no save change, no new remote, no other script.
+
+**Not tested yet, said plainly:** playtest 9 (b) of docs/STUDIO_SYNC_LOBBY.md (the claim on with 2 and then 3 players) **has never been run**. Section 3 below is that test; until it passes, do not publish.
+
+### 1. The list (paste)
+
+| Script | Studio | State | sha256 | bytes |
+|---|---|---|---|---|
+| `LobbyConfig` | ModuleScript, ReplicatedStorage | changed | `c97ccf91a787f103ad4d3fcd766141510c84e9a7d579db67f4b34694befa1ffe` | 6327 |
+
+The only change is `LobbyConfig.ClaimEnabled = true` and its comment (before: `3d8890c670d89f9829a469866f75d6aa9e765880168c81e6364271fe1725789e`, 6184 bytes, the file Studio has since the sync of 2026-10-17). TycoonCore, LobbyClient, ClaimButtonClient, WorldArt and WorldVisuals already read the switch; none of them changes.
+
+Then **move the SpawnLocation** to the plaza (docs/STUDIO_SYNC_LOBBY.md section 7): Explorer > **Workspace > SpawnLocation**, Properties > **Position** `0, 0.5, 175` (size stays 12 x 1 x 12). Run that section's spawn check in the command bar: it must print `ON THE PLAZA (right for ClaimEnabled = true)`.
+
+### 2. Hash check (command bar)
+
+The same block as Batch 1's, with one `WANT` row. It must print `ALL OK: 1 scripts match the repo (batch 2)`. (Batch 1's block still prints `ALL OK: 9` after this batch: `LobbyConfig` is not in it.)
+
+```lua
+local K = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+}
+local function sha256(msg)
+	local h = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
+	local len = #msg
+	msg ..= "\128" .. string.rep("\0", (55 - len) % 64) .. string.pack(">I8", len * 8)
+	local w = {}
+	for chunk = 1, #msg, 64 do
+		for i = 0, 15 do w[i] = string.unpack(">I4", msg, chunk + i * 4) end
+		for i = 16, 63 do
+			local a, b = w[i - 15], w[i - 2]
+			local s0 = bit32.bxor(bit32.rrotate(a, 7), bit32.rrotate(a, 18), bit32.rshift(a, 3))
+			local s1 = bit32.bxor(bit32.rrotate(b, 17), bit32.rrotate(b, 19), bit32.rshift(b, 10))
+			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) % 2 ^ 32
+		end
+		local a, b, c, d, e, f, g, hh = table.unpack(h)
+		for i = 0, 63 do
+			local S1 = bit32.bxor(bit32.rrotate(e, 6), bit32.rrotate(e, 11), bit32.rrotate(e, 25))
+			local ch = bit32.bxor(bit32.band(e, f), bit32.band(bit32.bnot(e), g))
+			local t1 = (hh + S1 + ch + K[i + 1] + w[i]) % 2 ^ 32
+			local S0 = bit32.bxor(bit32.rrotate(a, 2), bit32.rrotate(a, 13), bit32.rrotate(a, 22))
+			local maj = bit32.bxor(bit32.band(a, b), bit32.band(a, c), bit32.band(b, c))
+			local t2 = (S0 + maj) % 2 ^ 32
+			hh, g, f, e, d, c, b, a = g, f, e, (d + t1) % 2 ^ 32, c, b, a, (t1 + t2) % 2 ^ 32
+		end
+		local r = { a, b, c, d, e, f, g, hh }
+		for i = 1, 8 do h[i] = (h[i] + r[i]) % 2 ^ 32 end
+	end
+	local out = {}
+	for i = 1, 8 do out[i] = string.format("%08x", h[i]) end
+	return table.concat(out)
+end
+
+-- STUDIO_SYNC_BATCH batch 2 hash check: LobbyConfig with ClaimEnabled = true. Changes nothing.
+local function folderOf(place)
+	if place == "StarterPlayerScripts" then
+		return game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+	end
+	return game:GetService(place)
+end
+local WANT = {
+	-- main with PR quality-claim-on (2026-10-18): { "Name", "Class", "Place", "sha256", bytes }
+	{ "LobbyConfig", "ModuleScript", "ReplicatedStorage", "c97ccf91a787f103ad4d3fcd766141510c84e9a7d579db67f4b34694befa1ffe", 6327 },
+}
+local problems = {}
+for _, w in ipairs(WANT) do
+	local name, class, place, hash, bytes = w[1], w[2], w[3], w[4], w[5]
+	local folder = folderOf(place)
+	local script = folder and folder:FindFirstChild(name)
+	local result
+	if not script then
+		result = "MISSING (create a " .. class .. " in " .. place .. ")"
+	elseif script.ClassName ~= class then
+		result = "WRONG CLASS (it is a " .. script.ClassName .. ", it must be a " .. class .. ")"
+	else
+		local source = script.Source
+		local function matches(text)
+			return #text == bytes and sha256(text) == hash
+		end
+		-- the file as it is, or with its last newline dropped by Studio, or with one newline added by Studio
+		local ok = matches(source) or matches(source .. "\n") or (string.sub(source, -2) == "\n\n" and matches(string.sub(source, 1, -2)))
+		result = (ok and "OK" or "DIFFERENT") .. " " .. #source .. " bytes"
+	end
+	print(name, result)
+	if string.sub(result, 1, 2) ~= "OK" then
+		table.insert(problems, name)
+	end
+end
+print(#problems == 0 and ("ALL OK: " .. #WANT .. " scripts match the repo (batch 2)") or ("NOT YET: fix " .. table.concat(problems, ", ")))
+```
+
+### 3. Playtests (Test > Local Server, 2 players)
+
+Each written down as done, skipped or failed. **Test > Clients and Servers** (Local Server), **2** players, Start:
+
+1. **Both players spawn on the plaza**, never inside a garage. Each sees the banner and a green "▼ FREE" marker over the nearest free garage's claim post. No red error and no `Infinite yield` warning in the server's or either client's Output; no `The plaza is off` warning.
+2. **Each player gets a prompt:** player 1 walks to a garage's claim post: "Claim garage" shows. Player 2 at another garage: it shows there too.
+3. **Each claims a different garage:** player 1 holds it (0.5 s): "Moving in...", then their name; the banner goes; the save loads (Cash, upgrades). Player 2 walks to player 1's garage: no prompt (a taken garage has none). Player 2 claims another one. The shop's Robux buttons said "Claim garage" before the claim and show prices after.
+4. **The phone button shows:** in one client, Test > Device, a phone (portrait, then landscape), with that player still without a garage (or in a new Local Server): walk to a free post: the big green "Claim garage" button shows at the bottom center, clear of the thumbstick and the jump button; tap it once: the garage is claimed as with the prompt.
+5. **One player leaves and the garage frees up:** close player 1's window: their garage shows "Closing..." while the leave save runs, then the Free room, the FREE sign and the prompt come back; player 2 (or a new player) can claim it.
+6. **Then 3 players** (docs/STUDIO_SYNC_LOBBY.md 9 b, step 5): a third joins while a garage is closing; everyone gets a garage; the garages face the plaza. Walk the doorway of a west, a north and an east garage with Debug > "Building: next stage".
+
+### 4. Saving
+
+Commit the `LobbyConfig` draft (Team Create: View > Drafts); this time it **is** saved with `ClaimEnabled = true`. Run the spawn check (`ON THE PLAZA`) and the hash block (`ALL OK: 1`) again. **File > Save to Roblox.** Never Publish in this session: publishing with **Shut down all servers** (old servers keep the old flow until they restart, docs/PUBLISH_RULES.md, and Max Players stays 6) is the owner's separate decision after these playtests. To turn the claim off again: docs/STUDIO_SYNC_LOBBY.md section 10, step 4 (`false`, and the SpawnLocation back to (-1, 0.5, -1)).
 
 Run on: (not yet)
 

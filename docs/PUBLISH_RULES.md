@@ -10,7 +10,7 @@ The game has 6 garages (`MAX_PLOTS = 6` in TycoonCore, `#LobbyConfig.Garages`: *
 - Check it again after every publish: the setting belongs to the place, not to the scripts.
 - If the plot count ever changes, change Max Players in the same release.
 - Same tab, **Social Slots**: Roblox optimized; if live servers log cap kicks, switch to the option that fills to the maximum. Other places in the universe that players can reach get the same value (docs/LOBBY_GARAGE_PROPOSAL.md section 4.4).
-- **The lobby (branch `lobby-all`):** no new save section and no rollback change. `LobbyConfig.ClaimEnabled` ships **false** (nothing moves for live players). Turning it on later is a publish with **Shut down all servers** (old servers keep the old flow until they restart), with the SpawnLocation moved to the plaza first (docs/STUDIO_SYNC_LOBBY.md, section "Lobby all" 10).
+- **The lobby (branch `lobby-all`):** no new save section and no rollback change. `LobbyConfig.ClaimEnabled` is **true in the repo since 2026-10-18** (owner decision 9 revised; before, it shipped false and nothing moved for live players). Turning it on in the live game is a publish with **Shut down all servers** (old servers keep the old flow until they restart), with the SpawnLocation moved to the plaza first (docs/STUDIO_SYNC_LOBBY.md, section "Lobby all" 10).
 
 ## 2. Rollback floor: never restore a version older than M4
 
