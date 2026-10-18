@@ -322,7 +322,7 @@ Opened 2026-10-18 by the owner session (docs/OVERHAUL_PLAN.md phase 1). **The ow
 | `LobbyConfig` | ModuleScript, ReplicatedStorage | changed | `f626f3845e1db493983f86cdb41463546a705c88389aa1d191a36ecaf875c669` | 6429 |
 | `PlotBuilding` | ModuleScript, ServerScriptService | changed | `cb93ae6588f05e4aad4086effa9ae48e2cea287c7f797560d4ed375a575c526d` | 44040 |
 | `PlotBuildingVisuals` | ModuleScript, ServerScriptService | changed | `ef06d4f6d6e6da486a476cb6ba7793594889bca8f81b6f3a320c75d6ba782d8f` | 29591 |
-| `WorldArt` | ModuleScript, ServerScriptService | changed | `aca925cad8b84e6e0da54025957296c9105483a72d74691810c2c141650774c6` | 19047 |
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `0ce4baa6c69e4d50c5f72da819b5aa935c8971c8f1abb03379c108f98fbf4a33` | 19117 |
 | `WorldVisuals` | ModuleScript, ServerScriptService | changed | `b769a59be882252ba39eb6281a1f069de454bc857cf9f77668050ba51e06fb7e` | 64360 |
 | `DailyConfig` | ModuleScript, ReplicatedStorage | changed (PR #52, never pasted) | `9a7a6820182ab984e36a153e983833b991d2f4a90c1d8088dea15d982a1a8693` | 7290 |
 | `DailyServer` | ModuleScript, ServerScriptService | changed (PRs #51, #52, never pasted) | `3527123c3f33bc7f4b43cd89cddd9d9eb08aa3fc026d3a7a99ebad1e308e1ba1` | 17574 |

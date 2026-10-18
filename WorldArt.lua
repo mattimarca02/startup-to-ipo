@@ -197,13 +197,13 @@ WorldArt.Pieces = {
 		P("BenchBack", "Block", { 4, 1.1, 0.3 }, { 0, 1.85, -0.5 }, "Bench", "WoodPlanks"),
 		P("BenchLegLeft", "Block", { 0.3, 1, 1.1 }, { -1.6, 0.5, 0 }, "BenchLeg", "Metal"),
 		P("BenchLegRight", "Block", { 0.3, 1, 1.1 }, { 1.6, 0.5, 0 }, "BenchLeg", "Metal"),
-		solid = { solid(4, 2.4, 1.2, 0, -0.05) }, -- the whole bench (seat and back)
+		solid = { solid(4, 2.6, 1.2, 0, -0.05) }, -- the whole bench (seat and back; taller than a step, so nobody climbs it)
 	},
 	-- A round planter with a ball of flowers
 	Planter = {
 		upright("PlanterPot", 1.2, 2.6, 0, 0, 0, "Planter", "SmoothPlastic"),
 		P("PlanterFlowers", "Ball", { 2.2, 2.2, 2.2 }, { 0, 1.6, 0 }, "Flower", "Fabric"),
-		solid = { solid(2.6, 2.4, 2.6) }, -- the pot and the flowers
+		solid = { solid(2.6, 2.8, 2.6) }, -- the pot and the flowers (taller than a step)
 	},
 	-- A street sign: a post and a green board with the plot's number on both faces, a ball on top
 	Sign = {
@@ -230,7 +230,7 @@ WorldArt.Pieces = {
 		upright("FountainBowl", 0.5, 4.4, 0, 3.2, 0, "Stone", "Concrete"),
 		upright("FountainBowlWater", 0.5, 3.8, 0, 3.3, 0, "Water", "SmoothPlastic"),
 		P("FountainSpout", "Ball", { 1.2, 1.2, 1.2 }, { 0, 4.3, 0 }, "WaterLight", "SmoothPlastic"),
-		solid = { solid(10.4, 1.2, 10.4), solid(1.6, 4.2, 1.6) }, -- the basin (a low step: nobody walks into the water) and the pillar
+		solid = { solid(10.4, 2.6, 10.4), solid(1.6, 4.2, 1.6) }, -- the basin (taller than a step: nobody walks into the water) and the pillar
 	},
 }
 
