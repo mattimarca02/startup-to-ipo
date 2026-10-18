@@ -119,11 +119,11 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| README.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -180,4 +180,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1-pr43 | 2026-10-18 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
