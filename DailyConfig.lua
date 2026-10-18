@@ -44,7 +44,11 @@ DailyConfig.ClaimDebounce = 1 -- seconds between two Claim requests from one pla
 -- player is in (never in the M5 first minute, never over another window or a poach panel)
 DailyConfig.AutoOpen = true
 DailyConfig.AutoOpenDelay = 3 -- seconds after the screen is ready
-DailyConfig.AutoOpenWithin = 60 -- after this many seconds it no longer opens by itself (the chip stays)
+DailyConfig.AutoOpenWithin = 1800 -- after this many seconds it no longer opens by itself (the chip stays). Long enough for the first pause below
+-- A brand-new player's first gift (no claim ever, onboarding on) waits for the first pause of session 1
+-- instead of the first minute: FirstPause.delay seconds after they have FirstPause.employees employees
+-- (docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md, TUT 6: about minute 10, when the gift speeds up the Server Rack)
+DailyConfig.FirstPause = { employees = 3, delay = 10 }
 
 -- The gift chip next to the valuation bar (pixels). IpoClient leaves this much room for it.
 DailyConfig.ChipSize = 48

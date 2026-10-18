@@ -37,18 +37,20 @@ local os = { time = function() return NOW end, clock = function() return CLOCK e
 local function warn(...) local t = table.concat({...}, " "); table.insert(WARNINGS, t) end
 local function print(...) end
 local function token(name) return { Name = name, WaitForChild = function(self, n) return token(n) end } end
+local DAILY_PLAYERS = {}
 local MODULES = {}
 local function require(x) return assert(MODULES[x.Name], "no module " .. tostring(x.Name)) end
 local SERVICES = {
 	ReplicatedStorage = token("ReplicatedStorage"),
 	RunService = { IsStudio = function() return IS_STUDIO end },
-	Players = { GetPlayers = function() return {} end },
+	Players = { GetPlayers = function() return DAILY_PLAYERS end },
 }
 local game = { GetService = function(_, n) return SERVICES[n] end }
 local script = { Parent = token("ServerScriptService") }
 local CREATED = {}
 local Instance = { new = function(c) local i = { ClassName = c }; table.insert(CREATED, i); return i end }
-local task = { spawn = function() end, wait = function() end }
+local DAILY_LOOP -- the server's every-second loop, run by hand (tick)
+local task = { spawn = function(f) DAILY_LOOP = coroutine.create(f) end, wait = function() if coroutine.isyieldable() then coroutine.yield() end end }
 
 MODULES.CreatureConfig = { getEgg = function(k) local e = ({ Garage = 1, Startup = 1, Unicorn = 1 })[k]; return e and { key = k, name = k .. " Egg" } end }
 MODULES.OnboardingConfig = { Enabled = true }
@@ -236,8 +238,44 @@ check("1 day ahead: not ready", p.attrs.DailyReady == false and not tap(p))
 -- 10. Auto-open only after the M5 first minute
 p = newPlayer(nil, { onboarding = { legacy = false, arrowDone = false } })
 check("first minute: no auto-open", p.attrs.DailyAutoOpen == false)
-p = newPlayer(nil, { onboarding = { legacy = false, arrowDone = true } })
-check("after arrow: auto-open", p.attrs.DailyAutoOpen == true)
+p = newPlayer({ lastClaimDay = DailyConfig.dayNumber(NOW) - 1, streak = 1, best = 1, claims = 1 }, { onboarding = { legacy = false, arrowDone = true } })
+check("after arrow: auto-open (claimed before)", p.attrs.DailyAutoOpen == true)
+-- The first gift of a brand-new player waits for the first pause (TUT 6): FirstPause.employees hires, then FirstPause.delay seconds
+do
+	local pause = DailyConfig.FirstPause
+	check("first pause: 3 employees, 10 s (TUT 6)", pause and pause.employees == 3 and pause.delay == 10)
+	check("first pause: the client keeps trying long enough (AutoOpenWithin >= 20 min)", DailyConfig.AutoOpenWithin >= 1200, DailyConfig.AutoOpenWithin)
+	local np, nd = newPlayer(nil, { onboarding = { legacy = false, arrowDone = true } })
+	nd.team.employees = {}
+	table.clear(DAILY_PLAYERS); table.insert(DAILY_PLAYERS, np)
+	check("first pause: the every-second loop exists", DAILY_LOOP ~= nil)
+	local function again() assert(coroutine.resume(DAILY_LOOP)) end
+	again()
+	check("first pause: no hires, no auto-open", np.attrs.DailyAutoOpen == false)
+	nd.team.employees = { {}, {} }; again()
+	check("first pause: 2 hires, still waiting", np.attrs.DailyAutoOpen == false)
+	nd.team.employees = { {}, {}, {} }; again()
+	check("first pause: the third hire starts the 10 s", nd.daily.pauseAt == NOW + 10 and np.attrs.DailyAutoOpen == false, nd.daily.pauseAt)
+	NOW += 9; again()
+	check("first pause: 9 s later still waiting", np.attrs.DailyAutoOpen == false)
+	nd.team.employees = { {} } -- a poach after the pause started doesn't undo it
+	NOW += 1; again()
+	check("first pause: 10 s after the third hire it may open", np.attrs.DailyAutoOpen == true)
+	check("first pause: nothing new is saved", DailyServer.serialize(nd).pauseAt == nil)
+	-- the ready check: the gift is still the normal Day 1 claim
+	check("first pause: Day 1 is ready", np.attrs.DailyReady == true and np.attrs.DailyDay == 1)
+	-- a legacy player (or onboarding off) is not held back
+	local lp = newPlayer(nil, { onboarding = { legacy = true } })
+	check("first pause: legacy players open on join", lp.attrs.DailyAutoOpen == true)
+	MODULES.OnboardingConfig.Enabled = false
+	local op = newPlayer(nil, { onboarding = { legacy = false, arrowDone = false } })
+	check("first pause: onboarding off opens on join", op.attrs.DailyAutoOpen == true)
+	MODULES.OnboardingConfig.Enabled = true
+	-- a player in the first minute still waits for the arrow (unchanged)
+	local fp, fd = newPlayer(nil, { onboarding = { legacy = false, arrowDone = false } })
+	check("first pause: the first minute still blocks it", fp.attrs.DailyAutoOpen == false)
+	table.clear(DAILY_PLAYERS)
+end
 
 -- 11. Studio debug: next day and reset
 p, d = newPlayer(nil)
