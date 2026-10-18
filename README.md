@@ -58,7 +58,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `ChatTags.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Shows the `[VIP]` tag in chat |
 | `BuildingClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Fades the shell of a garage's building while you are inside it (looks only) |
 | `LobbyClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | With the claim on: the plaza's banner and a marker over the nearest free garage (shows nothing with it off) |
-| `ClaimButtonClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Phones, with the claim on: a big "Claim garage" button while the server's claim prompt is shown and you have no garage; tapping it presses that prompt (display only, no remote; shows nothing with the claim off) |
+| `ClaimButtonClient.lua` | StarterPlayer > StarterPlayerScripts | LocalScript | Phones, with the claim on: a big "Claim garage" button while a server claim prompt is shown and you have no garage; tapping it presses that prompt (the nearest one when several show) (display only, no remote; shows nothing with the claim off) |
 
 Other files:
 
@@ -81,7 +81,8 @@ Other files:
 | `docs/STUDIO_SYNC_LOBBY.md` | The Studio steps of the lobby and garages (section "Lobby all": every script, the hash, kit and front checks, the playtests, turning the claim on). Run on 2026-10-17 (docs/LOBBY_ALL_PROGRESS.md: `ALL OK`, `KIT OK`, `KIT_FRONT_TURN = 180`); its playtests 9 (a) to (c) are still to do |
 | `docs/PLOT_VISUALS.md` | The five plot rooms, the rules every room keeps and how to add one |
 | `docs/STUDIO_SYNC.md` | What exists only in Studio (script hashes, Lighting and Baseplate settings) and the Mac steps to sync it |
-| `CONTRIBUTING.md` | How we work together, plus the **Ownership** table (who is editing which script) |
+| `CONTRIBUTING.md` | How we work together |
+| `docs/lanes/claims.md` | The **Ownership** table (who is editing which script right now): pushed straight to `main`, never changed by a pull request |
 | `CLAUDE.md` | Rules Claude Code follows in this project |
 | `.env` | Your Roblox API key. You create it yourself, and it is never committed. |
 
@@ -195,7 +196,7 @@ This is a personal game, so normally only its owner can create a key that works 
 
 7. **Open the place in Studio:** start Studio and sign in. Open **Build your Startup!** from the games shared with you, or from Creator Hub use the game's **Edit in Studio**. It opens as a Team Create session: you both edit the same live place.
 
-8. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** before your first change. Claim your scripts in the Ownership table first.
+8. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** before your first change. Claim your scripts in the Ownership table ([docs/lanes/claims.md](docs/lanes/claims.md)) first.
 
 **Mac note:** `.bat` files only work on Windows. On Mac, run `python3 sync_monetization.py` instead.
 
@@ -223,4 +224,4 @@ With the Roblox Studio MCP connected, Claude Code can read the place and push `.
 3. **Restart Claude Code** (in VS Code: **Cmd+Shift+P → Developer: Reload Window**).
 4. **Check it works:** with Studio open on the place, ask Claude Code to list the scripts in the place. It should find **Build your Startup! (placeId: 86395856666175)** and list scripts such as `ServerScriptService.TycoonCore`.
 
-**Rules still apply:** Claude Code only pushes scripts claimed by the person it's working for (see the Ownership table in [CONTRIBUTING.md](CONTRIBUTING.md)), and the `.lua` file in the repo stays the official copy. The MCP needs no API key.
+**Rules still apply:** Claude Code only pushes scripts claimed by the person it's working for (see the Ownership table in [docs/lanes/claims.md](docs/lanes/claims.md)), and the `.lua` file in the repo stays the official copy. The MCP needs no API key.

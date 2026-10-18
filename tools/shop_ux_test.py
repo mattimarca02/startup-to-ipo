@@ -3329,16 +3329,40 @@ print_real(string.format("%d passed, %d failed", passed, failed))
 """
 
 
+# docs/STUDIO_SYNC_SHOP.md is history: it was last brought up to date with ShopClient.lua and ShopLayout.lua at
+# SYNC_COMMIT (lobby L3, which changed all three), and later Studio steps go to docs/STUDIO_SYNC_BATCH.md. So its table
+# and hash block are checked against the two files as they were at that commit (read with git show), never today's
+# files: a later edit of ShopClient or ShopLayout never fails this suite (ux backlog item 5, like tools/lobby_test.py).
+SYNC_COMMIT = "645393a"
+def git_show(rev, path):
+    """The bytes of path at rev, or None if git or the commit is missing (a copy without the history, a shallow clone)."""
+    try:
+        got = subprocess.run(["git", "show", "%s:%s" % (rev, path)], cwd=ROOT, capture_output=True)
+    except OSError:
+        return None
+    return got.stdout if got.returncode == 0 else None
+
+
+def synced(path):
+    """path's text at SYNC_COMMIT, or None."""
+    raw = git_show(SYNC_COMMIT, path)
+    return raw.decode("utf-8") if raw is not None else None
+
+
 def hash_source():
     doc = read("docs/STUDIO_SYNC_SHOP.md")
     start = doc.index("```lua\n", doc.index("## (d) Hash check (command bar)")) + len("```lua\n")
     block = doc[start:doc.index("```", start)]
-    sources = "{ ShopLayout = %s, ShopClient = %s }" % (long_string(read(LAYOUT)), long_string(read(CLIENT)))
+    layout, client = synced(LAYOUT), synced(CLIENT)
+    if layout is None or client is None:
+        return 'print("FAIL: hash block: ShopLayout.lua and ShopClient.lua at %s can be read (git show)")\nprint("0 passed, 1 failed")\n' % SYNC_COMMIT
+    sources = "{ ShopLayout = %s, ShopClient = %s }" % (long_string(layout), long_string(client))
     return HASH_TESTS.replace("__SOURCES__", sources).replace("__HASHBLOCK__", block)
 
 
 def sync_table_checks():
-    """docs/STUDIO_SYNC_SHOP.md's table and hash block give each file's real SHA-256 and size (Python's hashlib)."""
+    """docs/STUDIO_SYNC_SHOP.md's table and hash block give each file's SHA-256 and size at SYNC_COMMIT (Python's hashlib);
+    today's files must still use \n line endings."""
     import hashlib
     passed, failed = 0, 0
 
@@ -3354,10 +3378,13 @@ def sync_table_checks():
     for name, kind, place, state, where in (("ShopLayout", "ModuleScript", "ReplicatedStorage", "new", "ReplicatedStorage"),
                                             ("ShopClient", "LocalScript", "StarterPlayer > StarterPlayerScripts", "changed", "StarterPlayerScripts")):
         raw = open(os.path.join(ROOT, name + ".lua"), "rb").read()
-        h = hashlib.sha256(raw).hexdigest()
-        row = "| `%s` | %s, %s | %s | `%s` | %d |" % (name, kind, place, state, h, len(raw))
-        check("STUDIO_SYNC_SHOP.md: the table row of %s has its real SHA-256 and size" % name, row in doc, "%s %d" % (h, len(raw)))
-        check("STUDIO_SYNC_SHOP.md: the hash block expects %s's real SHA-256 and size" % name, ('%s = { "%s", %d, "%s" },' % (name, h, len(raw), where)) in doc)
+        old = git_show(SYNC_COMMIT, name + ".lua")
+        check("STUDIO_SYNC_SHOP.md: %s.lua at %s can be read (git show; a copy without the git history lacks it)" % (name, SYNC_COMMIT), old is not None)
+        old = old or b""
+        h = hashlib.sha256(old).hexdigest()
+        row = "| `%s` | %s, %s | %s | `%s` | %d |" % (name, kind, place, state, h, len(old))
+        check("STUDIO_SYNC_SHOP.md: the table row of %s has its SHA-256 and size at %s" % (name, SYNC_COMMIT), row in doc, "%s %d" % (h, len(old)))
+        check("STUDIO_SYNC_SHOP.md: the hash block expects %s's SHA-256 and size at %s" % (name, SYNC_COMMIT), ('%s = { "%s", %d, "%s" },' % (name, h, len(old), where)) in doc)
         check("%s.lua uses \\n line endings and ends with one newline" % name, b"\r" not in raw and raw.endswith(b"\n") and not raw.endswith(b"\n\n"))
     check("STUDIO_SYNC_SHOP.md: ShopLayout is created before ShopClient is pasted",
           doc.index("**Create `ShopLayout`:**") < doc.index("**Paste `ShopClient`:**"))
@@ -3385,7 +3412,7 @@ def main():
     if static_failed:
         code = 1
     result = run_luau(luau, hash_source())
-    print("Hash block (docs/STUDIO_SYNC_SHOP.md) on the real files: " + (result.stdout.strip() or result.stderr.strip()))
+    print("Hash block (docs/STUDIO_SYNC_SHOP.md) on the files at %s: " % SYNC_COMMIT + (result.stdout.strip() or result.stderr.strip()))
     m = re.search(r"^(\d+) passed, (\d+) failed$", result.stdout, re.M)
     if not m or m.group(2) != "0":
         code = 1

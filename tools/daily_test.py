@@ -62,7 +62,10 @@ MODULES.EmployeeServer = { grantEgg = function(player, key)
 end }
 MODULES.IpoServer = {
 	isBusy = function(data) return data ~= nil and data.ipo ~= nil and data.ipo.busy == true end,
-	grantShares = function(player, n) player.data.ipo.shares += n; return true end, -- raw, like the real one
+	grantShares = function(player, n) -- raw, like the real one: refused while the IPO is filing
+		if player.data.ipo.busy then return false end
+		player.data.ipo.shares += n; return true
+	end,
 }
 """
 
@@ -195,6 +198,22 @@ _, m = tap(p)
 check("IPO busy refused", m == DailyConfig.Texts.IpoBusy, m)
 check("bad action refused", not onAction(p, "GiveMeCash") and not onAction(p, 42))
 check("extra args ignored", true)
+-- M6 F2: a Shares day while the IPO is filing is refused before anything is granted (the claim itself, past onAction's gate)
+do
+	local week = { lastClaimDay = DailyConfig.dayNumber(NOW) - 1, streak = 6, best = 6, claims = 6 }
+	local p7, d7 = newPlayer(week)
+	check("Day 7 is the Shares day", p7.attrs.DailyDay == 7, p7.attrs.DailyDay)
+	-- ready but busy: onAction's gate lets it through, so the claim's own check decides
+	d7.ipo.busy = true
+	local before = d7.cash.Value
+	local okBusy, msgBusy = tap(p7)
+	check("M6 F2: Day 7 refused while the IPO files", okBusy == false and msgBusy == DailyConfig.Texts.IpoBusy, msgBusy)
+	check("M6 F2: no egg and no Cash given", d7.team.incubators[1] == false and d7.cash.Value == before)
+	check("M6 F2: the day is not used up", d7.daily.lastClaimDay == week.lastClaimDay and d7.daily.streak == 6)
+	d7.ipo.busy = false
+	local okAfter = tap(p7)
+	check("M6 F2: after the IPO the whole day is given", okAfter and d7.ipo.shares == 3 and d7.team.incubators[1] and d7.team.incubators[1].egg == "Unicorn")
+end
 
 -- 9. Bad and unknown values
 WARNINGS = {}

@@ -120,7 +120,7 @@ It changes **nothing players can see or earn**: the picker is off (`SectorConfig
 ## 4. Publish order (place with no live players: the launch)
 
 **Before publishing day**
-1. All blockers done; `prepublish-fixes` and the fixes merged into `main` through a PR; every claim in CONTRIBUTING.md released.
+1. All blockers done; `prepublish-fixes` and the fixes merged into `main` through a PR; every claim in docs/lanes/claims.md released.
 2. Studio matches `main` exactly: compare every script (read only, Studio MCP or by hand). Commit all drafts.
 3. `python3 tools/daily_test.py` passes ("N passed, 0 failed" on every line).
 4. In Creator Hub, open the place's **Version History** and write down the live version as `V_old` (section 2).

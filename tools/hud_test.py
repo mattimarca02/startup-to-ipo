@@ -1362,15 +1362,31 @@ def static_checks(client_text):
     return out
 
 
+# docs/STUDIO_SYNC_HUD.md is history: it was last brought up to date with IpoClient.lua at SYNC_COMMIT (lobby L3, which
+# changed both), and later Studio steps go to docs/STUDIO_SYNC_BATCH.md. So its hash and size are checked against
+# IpoClient.lua as it was at that commit (read with git show), never today's file: a later edit of IpoClient never fails
+# this suite (ux backlog item 5, like tools/lobby_test.py's L1_COMMIT and ALL_COMMIT).
+SYNC_COMMIT = "645393a"
+def git_show(rev, path):
+    """The bytes of path at rev, or None if git or the commit is missing (a copy without the history, a shallow clone)."""
+    try:
+        got = subprocess.run(["git", "show", "%s:%s" % (rev, path)], cwd=ROOT, capture_output=True)
+    except OSError:
+        return None
+    return got.stdout if got.returncode == 0 else None
+
+
 def doc_checks():
-    """The hash and size in docs/STUDIO_SYNC_HUD.md are those of IpoClient.lua (so the doc can't go stale)."""
-    with open(os.path.join(ROOT, CLIENT), "rb") as f:
-        raw = f.read()
+    """The hash and size in docs/STUDIO_SYNC_HUD.md are those of IpoClient.lua at SYNC_COMMIT (the doc is history)."""
+    raw = git_show(SYNC_COMMIT, CLIENT)
+    if raw is None:
+        return [("doc: IpoClient.lua at %s can be read (git show; a copy without the git history or a shallow clone lacks it)" % SYNC_COMMIT,
+                 False, SYNC_COMMIT)]
     digest = hashlib.sha256(raw).hexdigest()
     doc = read("docs/STUDIO_SYNC_HUD.md")
     return [
-        ("doc: docs/STUDIO_SYNC_HUD.md has the SHA-256 of IpoClient.lua (%s)" % digest[:12], doc.count(digest) >= 2, digest),
-        ("doc: docs/STUDIO_SYNC_HUD.md has the size of IpoClient.lua (%d bytes)" % len(raw), "| %d |" % len(raw) in doc and ", %d }" % len(raw) in doc, len(raw)),
+        ("doc: docs/STUDIO_SYNC_HUD.md has the SHA-256 of IpoClient.lua at %s (%s)" % (SYNC_COMMIT, digest[:12]), doc.count(digest) >= 2, digest),
+        ("doc: docs/STUDIO_SYNC_HUD.md has the size of IpoClient.lua at %s (%d bytes)" % (SYNC_COMMIT, len(raw)), "| %d |" % len(raw) in doc and ", %d }" % len(raw) in doc, len(raw)),
         ("doc: docs/STUDIO_SYNC_HUD.md has the section \"What this rule depends on\" (the coupling, the 30 s delay, the test, the owner defaults)",
          "## (h) What this rule depends on" in doc and "tools/hud_test.py" in doc.split("## (h) What this rule depends on")[1] and "MONEY_WAIT" in doc.split("## (h) What this rule depends on")[1]
          and "OWNER DEFAULTS" in doc.split("## (h) What this rule depends on")[1], None),

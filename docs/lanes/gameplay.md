@@ -15,7 +15,7 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
    - No save change: finished keys go into the existing `onboarding.goals` list, which already keeps keys it doesn't know.
    - New `tools/onboarding_test.py`: 61 checks pass, and the test breaks the code on purpose 10 ways and catches all 10. All the other suites pass.
    - Turning `ChainEnabled` on needs the ux request below; that is a one-line config PR afterwards.
-2. **Small first-hour fixes in my files** (part of build item 12):
+2. **Small first-hour fixes in my files** (part of build item 12). **PR #51 (`gameplay-first-hour-fixes`): F7, F9, F4 and M6 F2, F4 built.** The Day 1 gift at the first pause is left for its own PR (it needs the DailyClient half from ux):
    - The free-egg toast after `data.ready` (M5 F7).
    - Warnings for bad onboarding values (M5 F9).
    - `OnboardingConfig.Enabled = false` treated as legacy (M5 F4).
@@ -47,13 +47,27 @@ Decisions I need from the owner:
 
 ## Doing now
 
-idle (PR #43 merged; next run: backlog item 2. Item 4 waits for the owner's D-A to D-C)
+gameplay-gift-first-pause - started 2026-10-18 10:02 UTC (backlog item 2, last part: the Day 1 gift at the first pause)
 
 ## Last PR
 
-#43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
 
-## Last report (2026-10-17)
+## Last report (2026-10-18 10:01 UTC, PR #51 open)
+
+- **The owner answered D-A to D-C** (owner.md): G1 first, the `away` section as a new top-level section, and the offline Cash stays (only part of it may count toward the valuation). So I built nothing of backlog item 4; it waits for G1's numbers in ROADMAP.
+- **Built backlog item 2 as PR #51:** https://github.com/mattimarca02/startup-to-ipo/pull/51
+  - The free-egg pop-up now waits until the player has finished loading, and is sent once (M5 F7).
+  - A save with progress but no free egg on record counts as an old player, also when onboarding was switched off when it was written (M5 F4).
+  - Bad values in the saved onboarding section now give a warning instead of being changed silently (M5 F9).
+  - Day 7 (the Shares day) is refused before anything is given while an IPO is being filed, so the day is never used up with half its reward (M6 F2).
+  - The Studio Debug calendar buttons now say they write the real save (M6 F4).
+- **Tests:** onboarding 78 checks, 16 of 16 mutants caught; the daily calendar 102 checks (5 new); every other part of daily_test, and hud, world, icon, shop_ux, lobby and building all pass on main 68f0937.
+- **Studio steps:** the two rows below, once it is merged.
+- **Requests made:** none. **Waiting for the owner:** gate G1 (for backlog item 4); a merge of PR #51 after quality's review.
+- **Claims held** (docs/lanes/claims.md): OnboardingServer, DailyServer, tools/onboarding_test.py, daily_test.py (checks of gameplay: daily).
+
+## Report (2026-10-17)
 
 - **Handled the ux lane's request R1 first.** In `tools/lobby_test.py`, the "Lobby all" sync-doc hash checks now read the scripts as they were at the lobby-all merge (`ALL_COMMIT = 2df1410`, using `git show`), like the L1 section already does. Before this, any edit to TycoonCore, ShopServer, IpoClient, ShopClient and ten more scripts failed lobby_test in every lane. Now it doesn't: I added a comment to IpoClient and ShopServer as a test, and it stayed green.
   - lobby_test: 155 checks pass and it catches 63 of 63 broken versions. I removed one broken version because it no longer applies: it tested that the doc's hash goes stale.
@@ -115,6 +129,17 @@ idle (PR #43 merged; next run: backlog item 2. Item 4 waits for the owner's D-A 
 - **To quality:** PR #43's Studio steps for the batch, once it's merged: the rows under "Studio steps" below.
 
 ## Studio steps (merged PRs not yet in Studio)
+
+PR #51 (open; for the batch once merged):
+
+| Script | Studio | State | sha256 | bytes |
+|---|---|---|---|---|
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `e6ae15bcb7d7b7a6f89ae22102ffab04fb695e31ea548a4e08a7c81bcb58b5af` | 17546 |
+| `DailyServer` | ModuleScript, ServerScriptService | changed | `4df0c1d0d0d715a8ed1d9a221dbfa5f65d7654d13efc2bb80a69b2a32a38b517` | 16381 |
+
+Playtest: Debug > Onboarding restart shows the free-egg pop-up about a second later, once.
+
+(PR #43's rows below are already in Batch 1.)
 
 PR #43 (merged 2026-10-18), for docs/STUDIO_SYNC_BATCH.md:
 
