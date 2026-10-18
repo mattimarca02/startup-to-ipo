@@ -14,9 +14,11 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-2026-10-18 10:24 UTC, scheduled run: reviewing PR #52 (gameplay, 5d6c3c9) and PR #53 (ux, 819e3a6); then the owner's request "turn the claim on" (branch `quality-claim-on`: LobbyConfig `ClaimEnabled = true`, its pins, CLAUDE.md, docs/PLOT_VISUALS.md, Batch 2).
+idle (2026-10-18 11:15 UTC). PR #54 `quality-claim-on` is open, waiting for the owner; its files stay claimed until it merges.
 
 ## Last PR
+
+PR #54 `quality-claim-on` (the owner's request: `LobbyConfig.ClaimEnabled = true`, the docs, Batch 2): opened 2026-10-18 about 11:10 UTC. Before it: #50 merged 09:51 UTC (68f0937). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
 PR #50 `quality-claims-file` (claim rows moved to docs/lanes/claims.md): merged 2026-10-18 09:51 UTC (68f0937). Before it, the owner carried gameplay's four new claim rows into claims.md in the merge (ce24994). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
@@ -60,6 +62,8 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 
 ## Last report
 
+2026-10-18, 10:24 to 11:15 UTC, scheduled run. Two lane PRs were open and both are MERGE. PR #52 (gameplay) makes a brand-new player's Day 1 gift open by itself at the first pause, 10 seconds after their third hire. It saves nothing new, and players who claimed before, legacy players and onboarding off behave as today. One side effect for the owner to know (the PR says so too): the Daily window can now auto-open up to 30 minutes into a join for everyone, instead of only in the first minute. PR #53 (ux) makes the Goals card draw only the goals the server shows. It is display only. One small visible change even with the chain off: 3 seconds after "Hire 3" is done its row goes and the card keeps one empty row until Seed. The two PRs merge cleanly together, and all eight suites pass on main with both. Their Studio hashes match. Then I did the owner's request and opened PR #54. It sets `LobbyConfig.ClaimEnabled = true`, updates the "ships false" wording in CLAUDE.md, README, ROADMAP and PUBLISH_RULES, and adds Batch 2 to docs/STUDIO_SYNC_BATCH.md. Batch 2 means: paste LobbyConfig, move the SpawnLocation to the plaza, run a hash block (ALL OK in Luau, NOT YET when broken), the 2-player Local Server playtests, then Save to Roblox. No test needed changing: no suite pins the default, and every suite passes with the switch on. The CLAIMLOAD block is unchanged. docs/PLOT_VISUALS.md needed no edit. **Playtest 9 (b), the claim on with 2 to 3 players, has never been run**; nothing is published. No lane is stuck on another lane. Nothing merged or deleted by me. #52 and #53 get their Studio rows in a later batch after they merge.
+
 2026-10-18, 09:51 UTC: PR #50 is merged, so the claim rows now live in docs/lanes/claims.md and a PR never carries claim edits. The owner resolved the one conflict himself by carrying gameplay's new rows into the claims file. I cancelled my check-in and released the files I held for #50. Nothing else is waiting on the quality lane.
 
 2026-10-18, 09:37 to 09:45 UTC, manual run from the manager asking for the owner's claim-rows request now. PR #49 had already been merged (09:27), so Batch 1 of docs/STUDIO_SYNC_BATCH.md is final on main and the owner can run it. I rebased my prepared branch on main, checked that the 93 claim rows are copied byte for byte from main's CONTRIBUTING.md, and opened PR #50. It moves the Ownership table to docs/lanes/claims.md, which is pushed straight to main only. CONTRIBUTING.md, CLAUDE.md, README and PUBLISH_RULES now point there. LANES.md gets the rule that a PR never carries claim-row edits. The PR text lists what each lane, the manager and the owner change, and how to resolve a CONTRIBUTING.md conflict if a lane claims there before the merge. No script or test changed; the world, icon, lobby and building suites pass on the branch. Nothing merged or deleted by me.
@@ -81,5 +85,7 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 **The runs before (2026-10-17, 16:45 to 22:45 UTC):** the five first lane PRs (#35, #36, #37, #38, #40) were reviewed (verdicts: all MERGE, #38 first; #36 FIX FIRST once, fixed by a rebase), PR #41 opened the batch doc and was merged; the full text is in this file's history (commits 57ef19a and 9105aea).
 
 ## Studio steps (merged PRs not yet in Studio)
+
+**Batch 2** (PR #54, open): `LobbyConfig` only (`c97ccf91…`, 6327), the SpawnLocation to (0, 0.5, 175), the hash block `ALL OK: 1`, playtests with 2 and 3 players (9 b, never run yet), Save to Roblox; publishing is the owner's decision. Run after Batch 1. #52's DailyServer/DailyConfig and #53's OnboardingClient go into the next batch once merged.
 
 docs/STUDIO_SYNC_BATCH.md, **Batch 1** (complete on `main` since #47, e38eab4; ready to run): nine scripts from `main` cac89d9: `ClaimButtonClient` (new LocalScript, #35), `PlotBuilding` and `PlotBuildingVisuals` (#36), `WorldArt` and `WorldVisuals` (#37), `OnboardingServer` and `OnboardingConfig` (#43), `PlotArt` and `PlotVisuals` (#40); the hash block prints `ALL OK: 9 scripts`; checks (`KIT OK: 36 models`, a clean Output, the optional room preview) and seven playtests in order (claim off: the Garage's roof and furniture, the unchanged tracker; then, in Studio only, the claim on: the garden and the phone button; revert the switch). Before any batch: the playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (docs/LOBBY_ALL_PROGRESS.md, 2026-10-17). #44's newer ClaimButtonClient (`b00fcd86…`, 10261) replaces #35's bytes in PR #49, which makes Batch 1 final at `main` 2c3a415 (#48 adds nothing for Studio).

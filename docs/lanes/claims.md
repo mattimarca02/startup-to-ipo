@@ -82,7 +82,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/SHOP_BUILD_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_MASTER.md | (repo only) | free | | |
 | docs/LOBBY_GARAGE_PROPOSAL.md | (repo only) | free | | |
-| tools/lobby_test.py | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| tools/lobby_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_LOBBY.md | (repo only) | free | | |
 | docs/BUILDING_STAGES_PROPOSAL.md | (repo only) | free | | |
 | docs/MODEL_ASSETS_PLAN.md | (repo only) | free | | |
