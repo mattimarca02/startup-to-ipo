@@ -35,17 +35,17 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_client_test.luau | (repo only) | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
-| docs/PUBLISH_RULES.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| docs/PUBLISH_RULES.md | (repo only) | free | | |
 | docs/ACTIVE_LOOPS_PROPOSAL.md | (repo only) | free | | |
 | docs/LONG_GAME_PROPOSAL.md | (repo only) | free | | |
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
-| README.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -94,7 +94,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/BUILDING_PASS_NOTES.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
-| LobbyConfig | ReplicatedStorage | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| LobbyConfig | ReplicatedStorage | free | | |
 | LobbyClient | StarterPlayerScripts | free | | |
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
@@ -102,4 +102,4 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-claim-on | 2026-10-18 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |

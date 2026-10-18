@@ -14,11 +14,11 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (2026-10-18 11:00 UTC). PR #54 `quality-claim-on` is open, waiting for the owner; its files stay claimed until it merges.
+idle (2026-10-18 11:50 UTC). PR #54 is merged; its claim rows are released.
 
 ## Last PR
 
-PR #54 `quality-claim-on` (the owner's request: `LobbyConfig.ClaimEnabled = true`, the docs, Batch 2): opened 2026-10-18 about 10:58 UTC. Before it: #50 merged 09:51 UTC (68f0937). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
+PR #54 `quality-claim-on` (the owner's request: `LobbyConfig.ClaimEnabled = true`, the docs, Batch 2): opened 2026-10-18 about 10:58 UTC, merged 11:49 UTC. Before it: #50 merged 09:51 UTC (68f0937). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
 PR #50 `quality-claims-file` (claim rows moved to docs/lanes/claims.md): merged 2026-10-18 09:51 UTC (68f0937). Before it, the owner carried gameplay's four new claim rows into claims.md in the merge (ce24994). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
@@ -62,6 +62,8 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 
 ## Last report
 
+2026-10-18, 11:50 UTC: PR #54 (the claim on) is merged. Batch 2 of docs/STUDIO_SYNC_BATCH.md is on main and can be run after Batch 1. I released its six claim rows and cancelled my check-in. Still not done: playtest 9 (b) with 2 to 3 players, and any publish (the owner's call).
+
 2026-10-18, 11:05 UTC, a manual fire asking for the claim-on PR: it is already open as PR #54 (head cfafef3), unchanged; `main` has not moved since and the PR still merges cleanly. Nothing new to do; it waits for the owner.
 
 2026-10-18, 10:24 to 11:00 UTC, scheduled run. Two lane PRs were open and both are MERGE. PR #52 (gameplay) makes a brand-new player's Day 1 gift open by itself at the first pause, 10 seconds after their third hire. It saves nothing new, and players who claimed before, legacy players and onboarding off behave as today. One side effect for the owner to know (the PR says so too): the Daily window can now auto-open up to 30 minutes into a join for everyone, instead of only in the first minute. PR #53 (ux) makes the Goals card draw only the goals the server shows. It is display only. One small visible change even with the chain off: 3 seconds after "Hire 3" is done its row goes and the card keeps one empty row until Seed. The two PRs merge cleanly together, and all eight suites pass on main with both. Their Studio hashes match. Then I did the owner's request and opened PR #54. It sets `LobbyConfig.ClaimEnabled = true`, updates the "ships false" wording in CLAUDE.md, README, ROADMAP and PUBLISH_RULES, and adds Batch 2 to docs/STUDIO_SYNC_BATCH.md. Batch 2 means: paste LobbyConfig, move the SpawnLocation to the plaza, run a hash block (ALL OK in Luau, NOT YET when broken), the 2-player Local Server playtests, then Save to Roblox. No test needed changing: no suite pins the default, and every suite passes with the switch on. The CLAIMLOAD block is unchanged. docs/PLOT_VISUALS.md needed no edit. **Playtest 9 (b), the claim on with 2 to 3 players, has never been run**; nothing is published. No lane is stuck on another lane. Nothing merged or deleted by me. #52 and #53 get their Studio rows in a later batch after they merge.
@@ -88,6 +90,6 @@ Written 2026-10-17, 23:30 UTC (Luau 0.742; the suites run one at a time, each PR
 
 ## Studio steps (merged PRs not yet in Studio)
 
-**Batch 2** (PR #54, open): `LobbyConfig` only (`c97ccf91…`, 6327), the SpawnLocation to (0, 0.5, 175), the hash block `ALL OK: 1`, playtests with 2 and 3 players (9 b, never run yet), Save to Roblox; publishing is the owner's decision. Run after Batch 1. #52's DailyServer/DailyConfig and #53's OnboardingClient go into the next batch once merged.
+**Batch 2** (PR #54, merged 11:49 UTC; ready to run after Batch 1): `LobbyConfig` only (`c97ccf91…`, 6327), the SpawnLocation to (0, 0.5, 175), the hash block `ALL OK: 1`, playtests with 2 and 3 players (9 b, never run yet), Save to Roblox; publishing is the owner's decision. Run after Batch 1. #52's DailyServer/DailyConfig and #53's OnboardingClient go into the next batch once merged.
 
 docs/STUDIO_SYNC_BATCH.md, **Batch 1** (complete on `main` since #47, e38eab4; ready to run): nine scripts from `main` cac89d9: `ClaimButtonClient` (new LocalScript, #35), `PlotBuilding` and `PlotBuildingVisuals` (#36), `WorldArt` and `WorldVisuals` (#37), `OnboardingServer` and `OnboardingConfig` (#43), `PlotArt` and `PlotVisuals` (#40); the hash block prints `ALL OK: 9 scripts`; checks (`KIT OK: 36 models`, a clean Output, the optional room preview) and seven playtests in order (claim off: the Garage's roof and furniture, the unchanged tracker; then, in Studio only, the claim on: the garden and the phone button; revert the switch). Before any batch: the playtests 9 (a), (b) and (c) of docs/STUDIO_SYNC_LOBBY.md (docs/LOBBY_ALL_PROGRESS.md, 2026-10-17). #44's newer ClaimButtonClient (`b00fcd86…`, 10261) replaces #35's bytes in PR #49, which makes Batch 1 final at `main` 2c3a415 (#48 adds nothing for Studio).
