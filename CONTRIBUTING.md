@@ -102,13 +102,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | PoachClient | StarterPlayerScripts | free | | |
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
+| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
 | DailyConfig | ReplicatedStorage | free | | |
 | DailyClient | StarterPlayerScripts | free | | |
-| OnboardingServer | ServerScriptService | gameplay lane | gameplay-goal-chain | 2026-10-17 |
-| OnboardingConfig | ReplicatedStorage | gameplay lane | gameplay-goal-chain | 2026-10-17 |
+| OnboardingServer | ServerScriptService | free | | |
+| OnboardingConfig | ReplicatedStorage | free | | |
 | OnboardingClient | StarterPlayerScripts | free | | |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
@@ -118,12 +119,12 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskConfig | ReplicatedStorage | free | | |
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
-| ROADMAP.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| CLAUDE.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| PlotVisuals | ServerScriptService | free | | |
-| PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
-| docs/PLOT_VISUALS.md | (repo only) | free | | |
+| ROADMAP.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | free | | |
+| PlotVisuals | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| PlotArt | ServerScriptService | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
+| README.md | (repo only) | free | | |
+| docs/PLOT_VISUALS.md | (repo only) | Claude (interiors lane) | interiors-kit-garage | 2026-10-17 |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
@@ -139,14 +140,14 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
 | tools/hud_test.py | (repo only) | free | | |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
-| WorldArt | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
-| WorldVisuals | ServerScriptService | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| WorldArt | ServerScriptService | free | | |
+| WorldVisuals | ServerScriptService | free | | |
 | IconArt | ReplicatedStorage | free | | |
 | IconVisuals | ReplicatedStorage | free | | |
-| tools/world_test.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| tools/world_test.py | (repo only) | free | | |
 | tools/icon_test.py | (repo only) | free | | |
-| tools/render_previews.py | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
-| docs/previews/*.svg | (repo only) | Claude (world lane) | world-ring-plaza | 2026-10-17 |
+| tools/render_previews.py | (repo only) | free | | |
+| docs/previews/*.svg | (repo only) | free | | |
 | docs/SHOP_UX_PROPOSAL.md | (repo only) | free | | |
 | docs/WORLD_PASS_PROPOSAL.md | (repo only) | free | | |
 | docs/STUDIO_SYNC_WORLD.md | (repo only) | free | | |
@@ -176,7 +177,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
 | tools/lobby_client_test.luau | (repo only) | free | | |
-| tools/onboarding_test.py | (repo only) | gameplay lane | gameplay-goal-chain | 2026-10-17 |
+| tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
-| docs/STUDIO_SYNC_BATCH.md | (repo only) | Claude (quality lane) | quality-batch-1 | 2026-10-17 |
+| docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
