@@ -8,18 +8,18 @@ Only the ux lane edits this file. See docs/LANES.md.
 2. **BUILT (branch `ux-goal-chain`, pushed, head e665149; PR after item 5's).** **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). `activeGoals` and `ShowAtOnce` are on main since PR #43. Item 4's X fix goes in the same file, so it waits until this one is done.
 3. **DONE (PR #44, merged 2026-10-18 08:53 UTC).** **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
 4. **Tap targets at least 40 x 40 everywhere.** The Goals tracker's X (OnboardingClient, 30 x 26 today) gets a 44 x 44 hit area without moving the card; a static check in tools/hud_test.py that every TextButton/ImageButton with a fixed size in the clients is at least 40 px on each side.
-5. **IN REVIEW (PR #48, `ux-sync-history`).** **Unpin my tests' Studio-sync hashes.** tools/hud_test.py (IpoClient in docs/STUDIO_SYNC_HUD.md) and tools/shop_ux_test.py (ShopClient and ShopLayout in docs/STUDIO_SYNC_SHOP.md) compare those docs with today's files, so any later edit of IpoClient or ShopClient fails them. Check them against the files at the commit the doc was written for (like lobby_test's L1 section), so the docs stay history. Needed before items 6 to 8 (which touch IpoClient and ShopClient); also needs R1.
+5. **DONE (PR #48, merged 2026-10-18 09:18 UTC).** **Unpin my tests' Studio-sync hashes.** tools/hud_test.py (IpoClient in docs/STUDIO_SYNC_HUD.md) and tools/shop_ux_test.py (ShopClient and ShopLayout in docs/STUDIO_SYNC_SHOP.md) compare those docs with today's files, so any later edit of IpoClient or ShopClient fails them. Check them against the files at the commit the doc was written for (like lobby_test's L1 section), so the docs stay history. Needed before items 6 to 8 (which touch IpoClient and ShopClient); also needs R1.
 6. **One place for pop-ups.** Seven toasts sit at seven heights today (Shop, IPO and Task at -16, Employee -72, Poach -128, Onboarding -184, Daily -240) with different sizes and fonts. Give them one style (size, font, colour, time) and a fixed stack so two never cover each other, on both phone sizes.
 7. **Clearer HUD buttons.** EGGS, SHOP, TEAM, POACH, IPO: the same size, icon plus a short label that fits at 64 x 64 (short screens) and 76 x 76, one badge style for "something is waiting".
 8. **A first-time hint for each HUD button.** A one-time pulse and a short line ("Hire your first employee here") the first time a button matters. Showing it only once across sessions needs saved data: request to gameplay (R2) before building; a session-only version can come first.
 
 ## Doing now
 
-waiting for review of PR #48
+idle (PR #48 merged; next run: backlog item 2, U1, now unblocked)
 
 ## Last PR
 
-PR #48 (`ux-sync-history`), open: https://github.com/mattimarca02/startup-to-ipo/pull/48. Before it: PR #44 (`ux-claim-prompts`), merged 2026-10-18.
+PR #48 (`ux-sync-history`), merged 2026-10-18 09:18 UTC: https://github.com/mattimarca02/startup-to-ipo/pull/48. Before it: PR #44, merged 2026-10-18.
 
 ## Last report
 
@@ -28,6 +28,8 @@ PR #48 (`ux-sync-history`), open: https://github.com/mattimarca02/startup-to-ipo
 Tests (Luau 0.742, one at a time, with main 244fbd7 merged in): hud 1073 (69/69, coupling 26/26), claim button 129 (28/28), daily 2980 (294/294), world 380 (101/101), icon 371 (68/68), shop_ux 6308 (103/103), lobby 155 (63/63), building 1407 (46/46), onboarding 61 (10/10). All green. No Studio steps for #48 (test files only). #44's step is below and in quality's Batch 1.
 
 Next: backlog item 2 (U1). PR #43 is merged, so `OnboardingConfig.activeGoals` is on main and U1 is no longer blocked. I'll build it when #48 is merged. Requests: none new. Waiting for the owner: the review and merge of PR #48.
+
+2026-10-18 10:05 UTC: the owner merged PR #48 at 09:18 UTC. I released my two claim rows (tools/hud_test.py, tools/shop_ux_test.py) and stopped the check-ins. #48 has no Studio steps. The next run starts backlog item 2 (U1: the Goals card draws only the goals the server marks as shown, in `activeGoals()` order); the gameplay lane waits for it before turning `ChainEnabled` on.
 
 ## Requests to other lanes
 
