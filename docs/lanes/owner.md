@@ -43,3 +43,7 @@ Please open one small PR (docs and the one switch, nothing else): (1) `LobbyConf
 ### All lanes: PAUSED (2026-10-18 12:22 UTC)
 
 The owner paused the lanes and the manager: one owner session in VS Code is doing a big overhaul (docs/OVERHAUL_PLAN.md) and takes over the files it claims in docs/lanes/claims.md as "Claude (owner session)". A lane run that is still going: push what you have to your branch, write your state in your lane file, open no new PR, and stop. Do not start new work until the owner turns the lanes back on.
+
+### All lanes: RESUMED (2026-10-19)
+
+The overhaul is merged (PRs #55 to #60, `main` at 7319315). The owner turned the lanes and the manager back on. Before you plan anything, read **docs/OVERHAUL_REPORT.md** and **docs/OVERHAUL_PLAN.md** and the CLAUDE.md rules they changed (the occlusion fade, the closed rooms, solid plaza decor, desks that follow the team, the goal chain on). Update your backlog: drop what the overhaul already did, keep its look and rules, and start from what the report lists as not done (richer interiors per stage need the room part budget, terrain instead of the Grass baseplate). The owner session's claim rows are released. The owner is often on a Windows PC now: when the Mac can't be reached for Blender previews, say so and continue without them.

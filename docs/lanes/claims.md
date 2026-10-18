@@ -23,7 +23,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | IpoServer | ServerScriptService | free | | |
 | tools/daily_test.py | (repo only) | free | | |
 | tools/daily_test.py (checks of gameplay: daily) | (repo only) | free | | |
-| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | Claude (owner session), took over from Claude (interiors lane) (lanes paused, owner decision 2026-10-18) | overhaul-phase1 | 2026-10-18 |
+| tools/daily_test.py (checks of interiors: plot visuals) | (repo only) | free | | |
 | IpoConfig | ReplicatedStorage | free | | |
 | IpoClient | StarterPlayerScripts | free | | |
 | DailyServer | ServerScriptService | free | | |
@@ -43,10 +43,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
 | CLAUDE.md | (repo only) | free | | |
-| PlotVisuals | ServerScriptService | Claude (owner session), took over from Claude (interiors lane) (lanes paused, owner decision 2026-10-18) | overhaul-phase1 | 2026-10-18 |
-| PlotArt | ServerScriptService | Claude (owner session), took over from Claude (interiors lane) (lanes paused, owner decision 2026-10-18) | overhaul-phase1 | 2026-10-18 |
+| PlotVisuals | ServerScriptService | free | | |
+| PlotArt | ServerScriptService | free | | |
 | README.md | (repo only) | free | | |
-| docs/PLOT_VISUALS.md | (repo only) | Claude (owner session), took over from Claude (interiors lane) (lanes paused, owner decision 2026-10-18) | overhaul-phase1 | 2026-10-18 |
+| docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
 | docs/FUNDING_ROUNDS_PROPOSAL.md | (repo only) | free | | |
