@@ -1727,10 +1727,51 @@ O5_EDITS = (
 )
 
 
+# The world signs pass (2026-10-19, after overhaul 2): the owner's name over each garage is a world sign (not drawn on top of
+# walls, MaxDistance, over the building's roof); applied after O5_EDITS.
+S1_EDITS = (
+    ('''local function addLabel(part, text, height)
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(220, 50)
+	gui.StudsOffset = Vector3.new(0, height or 3, 0)
+	gui.AlwaysOnTop = true
+''',
+     '''local LABEL_DISTANCE = 220 -- studs: the owner's name reads from across the plaza (the garages' fronts are 95 from its center)
+local function addLabel(part, text, height)
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(220, 50)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, height or 3, 0)
+	gui.AlwaysOnTop = false -- a sign in the world: walls and roofs hide it (it was drawn on top, seen through walls)
+	gui.MaxDistance = LABEL_DISTANCE
+'''),
+    ('''-- The building of a garage at a funding stage (nothing to do when it already shows it).''',
+     '''-- The owner's name floats 3 studs over the roof of the building the garage shows (it is not drawn on top of walls, so
+-- it must stand above the roof to be seen from the plaza). Keeps its height when the building can't be measured.
+local function placeGarageLabel(slot, model)
+	local sign = garages[slot] and garages[slot]:FindFirstChild("GarageSign")
+	local gui = sign and sign:FindFirstChildOfClass("BillboardGui")
+	if not (gui and model) then return end
+	local ok, box, size = pcall(function()
+		return model:GetBoundingBox()
+	end)
+	if ok and box and size then
+		gui.StudsOffsetWorldSpace = Vector3.new(0, box.Position.Y + size.Y / 2 - sign.Position.Y + 3, 0)
+	end
+end
+
+-- The building of a garage at a funding stage (nothing to do when it already shows it).'''),
+    ('''		applyFacadeSign(slot) -- a new building: its sign is blank until it is written again
+''',
+     '''		applyFacadeSign(slot) -- a new building: its sign is blank until it is written again
+		placeGarageLabel(slot, model)
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS, O1_EDITS to O3_EDITS and O5_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS, O1_EDITS to O3_EDITS, O5_EDITS and S1_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS + O3_EDITS + O5_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS + O3_EDITS + O5_EDITS + S1_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
