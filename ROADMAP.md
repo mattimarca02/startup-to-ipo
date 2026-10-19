@@ -4,6 +4,7 @@
 About $5,000/month in DevEx payouts. That needs about $19,000/month of player spending, roughly 1,000–2,500 players online. Plan: live by week 7, then one update every week, review at day 90.
 
 ## Status (update at the end of every milestone)
+- **Overhaul 2 (2026-10-19, the owner's 18 points; docs/OVERHAUL2_PLAN.md, docs/OVERHAUL2_REPORT.md): six stacked PRs #65 to #70 plus the report #71, not merged yet, not published.** The new economy (six stages, Series C, HQ Tower, buildings bought, 63 office items, workstations, direct hires, offline and Cash packs at 10% of the valuation), the room (seated hires, solid boxes, items in their rooms, Reset my save in Studio), calls live with the economy core and the four founder activities (sprint, bug, brainstorm, pitch; the `founder` section), the chalk blackboard, the hatch reveal by rarity, the Roman arch, fountain, join cinematic, FREE board, the VIP Lounge's inside and the Investor dinner, and building materials. Studio matches the last branch (Batches 8 to 13). Still to do by the owner: merge in order, 2-player and phone tests, phone FPS, Max Players 6, then publish with **Shut down all servers** (new `office` and `founder` sections).
 - DONE M1: garage, pads, cash, saving
 - DONE Shop: passes 2x Cash 199, VIP 249, Extra Employee Slots 149, Auto-Hatch 199, Headhunter 149. Products: Pile/Bag/Vault of Cash 29/99/299, Luck Boost 49, Instant Hatch 25, Poach Shield 49. All exist on Roblox.
 - DONE M2: recruiting eggs, creature employees. ShopConfig.EggsEnabled = false and the 4 egg items are off sale until launch.
