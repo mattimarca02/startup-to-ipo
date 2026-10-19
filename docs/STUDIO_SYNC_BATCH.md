@@ -522,6 +522,21 @@ Playtest (owner session, 1 player, on the owner's save): the cinematic ran (came
 
 Run on: 2026-10-19 by the owner session 2 (MCP), the 11 hashes checked.
 
+## Batch 13 (overhaul 2 phase 6: building and room quality; branch `overhaul2-phase6`, on top of Batch 12)
+
+Opened 2026-10-19 by the owner session 2. Pushed through the Studio MCP from commits `8d8ae46` and `24c1f22` (`HttpEnabled` back to false); both hashes read back from Studio match.
+
+**What the owner sees after this batch:** the Small Office's walls look like white plaster (Concrete) and the Big Office's like white-painted brick (both were flat plastic), the Small Corporate's frames are metal, the Seed room's walls plaster, and the HQ Tower has two gold fins up its glass front. The kit's 99 MeshParts in `ReplicatedStorage.KitModels` were checked: all RenderFidelity Automatic, none DoubleSided, so nothing in Studio was changed. **Save change: none.**
+
+| Script | Studio | State | sha256 (`overhaul2-phase6`) | bytes |
+|---|---|---|---|---|
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `6eb43cf2d3ffdf6ca81df32d844514093009fd00a5c5602f8888e546b5710640` | 52189 |
+| `PlotArt` | ModuleScript, ServerScriptService | changed | `0a6592378b70b49f39ac368e3bb9f7f0b352363921d96f7dbdf98cd83a7f7913` | 100872 |
+
+Playtest (owner session, 1 player, the owner's HQ Tower): the building has 173 parts with both fins (Metal, gold, top 97). Workspace 2,290 parts with one player; the server steps at 60.1 Hz. The client's rate in Studio stays meaningless (14.9 FPS with Studio in the background). **The frame rate on a phone was not measured: the owner should open the game on a phone, press the Roblox menu > Settings > Performance Stats (or Shift+F5 on a PC) in a full server, and write the FPS here.** The part budgets did not rise (six garages at the biggest stage plus the plaza: 3,994 of 4,000).
+
+Run on: 2026-10-19 by the owner session 2 (MCP), the 2 hashes checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

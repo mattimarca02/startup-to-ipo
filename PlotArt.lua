@@ -442,13 +442,13 @@ garage.desk = {
 local seed = { key = "Seed", floor = { color = { 190, 188, 180 }, material = "Concrete" } }
 
 seed.shell = {
-	-- Back wall (12 high): mint paint, a dark baseboard and cap
-	B("BackWall", 0, 5.8, -29.7, 60, 11.6, 0.6, C.mint, "SmoothPlastic"),
+	-- Back wall (12 high): mint paint on plaster (Concrete since overhaul 2 phase 6, like the Small Office's facade), a dark baseboard and cap
+	B("BackWall", 0, 5.8, -29.7, 60, 11.6, 0.6, C.mint, "Concrete"),
 	B("BackBase", 0, 0.35, -29.34, 60, 0.7, 0.12, C.mintDark, "SmoothPlastic"),
 	B("BackCap", 0, 11.8, -29.7, 60, 0.4, 0.9, C.mintDark, "Metal"),
 	-- Side walls (5.5 high, the camera looks in over them)
-	B("SideWallL", -29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "SmoothPlastic"),
-	B("SideWallR", 29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "SmoothPlastic"),
+	B("SideWallL", -29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "Concrete"),
+	B("SideWallR", 29.7, 2.75, 0.3, 0.6, 5.5, 59.4, C.mint, "Concrete"),
 	B("SideBaseL", -29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.mintDark, "SmoothPlastic"),
 	B("SideBaseR", 29.34, 0.35, 0.3, 0.12, 0.7, 59.4, C.mintDark, "SmoothPlastic"),
 	B("SideCapL", -29.7, 5.65, 0.3, 0.9, 0.3, 59.4, C.mintDark, "Metal"),
