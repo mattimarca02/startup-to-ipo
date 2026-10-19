@@ -20,3 +20,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Obsidian (the owner reads docs/ as a vault; its settings stay local)
+.obsidian/
+.trash/
