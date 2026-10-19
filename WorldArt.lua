@@ -129,6 +129,9 @@ WorldArt.Palette = {
 	ArchPost = { 40, 44, 54 },
 	ArchBeam = { 26, 34, 60 },
 	ArchText = { 255, 196, 60 },
+	Marble = { 242, 240, 234 }, -- overhaul 2 phase 5: the triumphal arch's white marble
+	MarbleShade = { 222, 218, 208 }, -- its mouldings and column shafts
+	Inscription = { 70, 64, 56 }, -- the carved letters on the attic
 	Hill = { 104, 162, 92 },
 	HillFar = { 122, 170, 118 },
 	Stone = { 214, 208, 196 }, -- the fountain's stone
@@ -174,14 +177,14 @@ end
 -- The pieces ---------------------------------------------------------------------
 WorldArt.Pieces = {
 	-- A street lamp: a dark post with a glowing lantern on top (the lantern carries the light when the layout lights it)
-	Lamp = {
+	Lamp = { -- overhaul 2 phase 5: 12 high, a street lamp at a character's scale
 		P("LampBase", "Block", { 1.4, 0.6, 1.4 }, { 0, 0.3, 0 }, "LampPost", "Metal"),
-		upright("LampPole", 7, 0.5, 0, 0.6, 0, "LampPost", "Metal"),
-		P("LampCollar", "Block", { 1, 0.3, 1 }, { 0, 7.75, 0 }, "LampCap", "Metal"),
-		P("LampGlow", "Block", { 1.2, 1.4, 1.2 }, { 0, 8.6, 0 }, "LampGlow", "Neon"),
-		P("LampRoof", "Block", { 1.7, 0.35, 1.7 }, { 0, 9.475, 0 }, "LampCap", "Metal"),
-		P("LampFinial", "Ball", { 0.5, 0.5, 0.5 }, { 0, 9.9, 0 }, "LampCap", "Metal"),
-		solid = { solid(1.4, 9.5, 1.4) }, -- the post, base to lantern
+		upright("LampPole", 9, 0.5, 0, 0.6, 0, "LampPost", "Metal"),
+		P("LampCollar", "Block", { 1, 0.3, 1 }, { 0, 9.75, 0 }, "LampCap", "Metal"),
+		P("LampGlow", "Block", { 1.2, 1.4, 1.2 }, { 0, 10.6, 0 }, "LampGlow", "Neon"),
+		P("LampRoof", "Block", { 1.7, 0.35, 1.7 }, { 0, 11.475, 0 }, "LampCap", "Metal"),
+		P("LampFinial", "Ball", { 0.5, 0.5, 0.5 }, { 0, 11.9, 0 }, "LampCap", "Metal"),
+		solid = { solid(1.4, 11.5, 1.4) }, -- the post, base to lantern
 	},
 	TreeA = tree(5, 7, 4.6, "LeafA"),
 	TreeB = tree(4, 6, 4, "LeafB"),
@@ -195,13 +198,18 @@ WorldArt.Pieces = {
 	Hedge = {
 		P("HedgeBall", "Ball", { 2.6, 2.6, 2.6 }, { 0, 1, 0 }, "Bush", "Grass"),
 	},
-	-- A bench facing +Z: a plank seat and back on two dark legs
+	-- A bench facing +Z at a character's scale (overhaul 2 phase 5: the seat's top 2 high, for a 5-stud character): a plank
+	-- seat and back on two dark legs, with arm rests
 	Bench = {
-		P("BenchSeat", "Block", { 4, 0.3, 1.3 }, { 0, 1.15, 0 }, "Bench", "WoodPlanks"),
-		P("BenchBack", "Block", { 4, 1.1, 0.3 }, { 0, 1.85, -0.5 }, "Bench", "WoodPlanks"),
-		P("BenchLegLeft", "Block", { 0.3, 1, 1.1 }, { -1.6, 0.5, 0 }, "BenchLeg", "Metal"),
-		P("BenchLegRight", "Block", { 0.3, 1, 1.1 }, { 1.6, 0.5, 0 }, "BenchLeg", "Metal"),
-		solid = { solid(4, 2.6, 1.2, 0, -0.05) }, -- the whole bench (seat and back; taller than a step, so nobody climbs it)
+		P("BenchSeat", "Block", { 4.6, 0.3, 1.6 }, { 0, 1.85, 0 }, "Bench", "WoodPlanks"),
+		P("BenchBack", "Block", { 4.6, 1.4, 0.3 }, { 0, 2.7, -0.65 }, "Bench", "WoodPlanks"),
+		P("BenchLegLeft", "Block", { 0.3, 1.7, 1.4 }, { -2, 0.85, 0 }, "BenchLeg", "Metal"),
+		P("BenchLegRight", "Block", { 0.3, 1.7, 1.4 }, { 2, 0.85, 0 }, "BenchLeg", "Metal"),
+		P("BenchArmLeft", "Block", { 0.3, 0.2, 1.4 }, { -2, 2.6, 0 }, "BenchLeg", "Metal"),
+		P("BenchArmRight", "Block", { 0.3, 0.2, 1.4 }, { 2, 2.6, 0 }, "BenchLeg", "Metal"),
+		P("BenchArmPostLeft", "Block", { 0.3, 0.6, 0.3 }, { -2, 2.2, 0.5 }, "BenchLeg", "Metal"),
+		P("BenchArmPostRight", "Block", { 0.3, 0.6, 0.3 }, { 2, 2.2, 0.5 }, "BenchLeg", "Metal"),
+		solid = { solid(4.6, 3.3, 1.5, 0, -0.05) }, -- the whole bench (seat and back; taller than a step, so nobody climbs it)
 	},
 	-- A round planter with a ball of flowers
 	Planter = {
@@ -217,24 +225,83 @@ WorldArt.Pieces = {
 		P("SignCap", "Ball", { 0.6, 0.6, 0.6 }, { 0, 6.5, 0 }, "SignPost", "Metal"),
 		solid = { solid(0.6, 6.4, 0.6) }, -- the post
 	},
-	-- The welcome arch over the avenue: two posts and a navy beam with the game's name in gold on both faces
+	-- The welcome gate (overhaul 2 phase 5, the owner's point 1): a Roman triumphal arch in white marble at human scale,
+	-- about 42 wide and 34 high: a central archway 12 wide and 20 high (its curve in steps: quarter turns only), two side
+	-- passages 5 wide and 10 high, four piers on plinths, eight engaged columns (base, shaft, capital) on its two faces,
+	-- the entablature (architrave, frieze, cornice) and the attic with BUILD YOUR STARTUP carved in a serif on both faces.
+	-- Solid: the four piers only (every passage stays open).
 	Arch = {
-		P("ArchPostLeft", "Block", { 1.2, 9, 1.2 }, { -6.6, 4.5, 0 }, "ArchPost", "Metal"),
-		P("ArchPostRight", "Block", { 1.2, 9, 1.2 }, { 6.6, 4.5, 0 }, "ArchPost", "Metal"),
-		P("ArchBeam", "Block", { 14.4, 1.8, 0.8 }, { 0, 9.9, 0 }, "ArchBeam", "SmoothPlastic",
-			{ text = { value = "BUILD YOUR STARTUP", font = "FredokaOne", color = "ArchText", faces = { "Front", "Back" }, glow = true } }),
-		solid = { solid(1.2, 9, 1.2, -6.6, 0), solid(1.2, 9, 1.2, 6.6, 0) }, -- the two posts (the beam is far overhead)
+		P("ArchPlinthInLeft", "Block", { 4.6, 1, 5 }, { -8, 0.5, 0 }, "MarbleShade", "Marble"),
+		P("ArchPlinthOutLeft", "Block", { 5.6, 1, 5 }, { -17.5, 0.5, 0 }, "MarbleShade", "Marble"),
+		P("ArchPierInLeft", "Block", { 4, 23, 4 }, { -8, 12.5, 0 }, "Marble", "Marble"),
+		P("ArchPierOutLeft", "Block", { 5, 23, 4 }, { -17.5, 12.5, 0 }, "Marble", "Marble"),
+		P("ArchSideLintelLeft", "Block", { 5, 14, 4 }, { -12.5, 17, 0 }, "Marble", "Marble"),
+		P("ArchPlinthInRight", "Block", { 4.6, 1, 5 }, { 8, 0.5, 0 }, "MarbleShade", "Marble"),
+		P("ArchPlinthOutRight", "Block", { 5.6, 1, 5 }, { 17.5, 0.5, 0 }, "MarbleShade", "Marble"),
+		P("ArchPierInRight", "Block", { 4, 23, 4 }, { 8, 12.5, 0 }, "Marble", "Marble"),
+		P("ArchPierOutRight", "Block", { 5, 23, 4 }, { 17.5, 12.5, 0 }, "Marble", "Marble"),
+		P("ArchSideLintelRight", "Block", { 5, 14, 4 }, { 12.5, 17, 0 }, "Marble", "Marble"),
+		P("ArchFrontInLeftBase", "Block", { 2, 2, 2 }, { -8, 1, -2.3 }, "MarbleShade", "Marble"),
+		upright("ArchFrontInLeftShaft", 20.6, 1.4, -8, 2, -2.3, "MarbleShade", "Marble"),
+		P("ArchFrontInLeftCapital", "Block", { 2.2, 1, 2.2 }, { -8, 23.1, -2.3 }, "MarbleShade", "Marble"),
+		P("ArchFrontOutLeftBase", "Block", { 2, 2, 2 }, { -17.5, 1, -2.3 }, "MarbleShade", "Marble"),
+		upright("ArchFrontOutLeftShaft", 20.6, 1.4, -17.5, 2, -2.3, "MarbleShade", "Marble"),
+		P("ArchFrontOutLeftCapital", "Block", { 2.2, 1, 2.2 }, { -17.5, 23.1, -2.3 }, "MarbleShade", "Marble"),
+		P("ArchFrontInRightBase", "Block", { 2, 2, 2 }, { 8, 1, -2.3 }, "MarbleShade", "Marble"),
+		upright("ArchFrontInRightShaft", 20.6, 1.4, 8, 2, -2.3, "MarbleShade", "Marble"),
+		P("ArchFrontInRightCapital", "Block", { 2.2, 1, 2.2 }, { 8, 23.1, -2.3 }, "MarbleShade", "Marble"),
+		P("ArchFrontOutRightBase", "Block", { 2, 2, 2 }, { 17.5, 1, -2.3 }, "MarbleShade", "Marble"),
+		upright("ArchFrontOutRightShaft", 20.6, 1.4, 17.5, 2, -2.3, "MarbleShade", "Marble"),
+		P("ArchFrontOutRightCapital", "Block", { 2.2, 1, 2.2 }, { 17.5, 23.1, -2.3 }, "MarbleShade", "Marble"),
+		P("ArchBackInLeftBase", "Block", { 2, 2, 2 }, { -8, 1, 2.3 }, "MarbleShade", "Marble"),
+		upright("ArchBackInLeftShaft", 20.6, 1.4, -8, 2, 2.3, "MarbleShade", "Marble"),
+		P("ArchBackInLeftCapital", "Block", { 2.2, 1, 2.2 }, { -8, 23.1, 2.3 }, "MarbleShade", "Marble"),
+		P("ArchBackOutLeftBase", "Block", { 2, 2, 2 }, { -17.5, 1, 2.3 }, "MarbleShade", "Marble"),
+		upright("ArchBackOutLeftShaft", 20.6, 1.4, -17.5, 2, 2.3, "MarbleShade", "Marble"),
+		P("ArchBackOutLeftCapital", "Block", { 2.2, 1, 2.2 }, { -17.5, 23.1, 2.3 }, "MarbleShade", "Marble"),
+		P("ArchBackInRightBase", "Block", { 2, 2, 2 }, { 8, 1, 2.3 }, "MarbleShade", "Marble"),
+		upright("ArchBackInRightShaft", 20.6, 1.4, 8, 2, 2.3, "MarbleShade", "Marble"),
+		P("ArchBackInRightCapital", "Block", { 2.2, 1, 2.2 }, { 8, 23.1, 2.3 }, "MarbleShade", "Marble"),
+		P("ArchBackOutRightBase", "Block", { 2, 2, 2 }, { 17.5, 1, 2.3 }, "MarbleShade", "Marble"),
+		upright("ArchBackOutRightShaft", 20.6, 1.4, 17.5, 2, 2.3, "MarbleShade", "Marble"),
+		P("ArchBackOutRightCapital", "Block", { 2.2, 1, 2.2 }, { 17.5, 23.1, 2.3 }, "MarbleShade", "Marble"),
+		P("ArchLintel", "Block", { 12, 4, 4 }, { 0, 22, 0 }, "Marble", "Marble"),
+		P("ArchCurve2Left", "Block", { 0.28, 1.2, 4 }, { -5.86, 15.8, 0 }, "Marble", "Marble"),
+		P("ArchCurve2Right", "Block", { 0.28, 1.2, 4 }, { 5.86, 15.8, 0 }, "Marble", "Marble"),
+		P("ArchCurve3Left", "Block", { 0.8, 1.2, 4 }, { -5.6, 17, 0 }, "Marble", "Marble"),
+		P("ArchCurve3Right", "Block", { 0.8, 1.2, 4 }, { 5.6, 17, 0 }, "Marble", "Marble"),
+		P("ArchCurve4Left", "Block", { 1.72, 1.2, 4 }, { -5.14, 18.2, 0 }, "Marble", "Marble"),
+		P("ArchCurve4Right", "Block", { 1.72, 1.2, 4 }, { 5.14, 18.2, 0 }, "Marble", "Marble"),
+		P("ArchCurve5Left", "Block", { 3.38, 1.2, 4 }, { -4.31, 19.4, 0 }, "Marble", "Marble"),
+		P("ArchCurve5Right", "Block", { 3.38, 1.2, 4 }, { 4.31, 19.4, 0 }, "Marble", "Marble"),
+		P("ArchKeystone", "Block", { 1.4, 2.2, 4.4 }, { 0, 19.9, 0 }, "MarbleShade", "Marble"),
+		P("ArchArchitrave", "Block", { 41, 1.2, 4.8 }, { 0, 24.6, 0 }, "MarbleShade", "Marble"),
+		P("ArchFrieze", "Block", { 40.4, 1.4, 4.4 }, { 0, 25.9, 0 }, "Marble", "Marble"),
+		P("ArchCornice", "Block", { 42.4, 0.8, 5.4 }, { 0, 27, 0 }, "MarbleShade", "Marble"),
+		P("ArchAttic", "Block", { 30, 6, 4 }, { 0, 30.4, 0 }, "Marble", "Marble"),
+		P("ArchInscription", "Block", { 26, 3.4, 4.3 }, { 0, 30.6, 0 }, "Marble", "Marble",
+			{ text = { value = "BUILD YOUR STARTUP", font = "Garamond", color = "Inscription", faces = { "Front", "Back" } } }),
+		P("ArchAtticCornice", "Block", { 31, 0.6, 4.6 }, { 0, 33.7, 0 }, "MarbleShade", "Marble"),
+		solid = { solid(4, 24, 4, -8, 0), solid(4, 24, 4, 8, 0), solid(5, 24, 4, -17.5, 0), solid(5, 24, 4, 17.5, 0) },
 	},
-	-- The plaza's fountain (the ring only): a low stone basin full of water, a pillar with a bowl and a ball of water on
-	-- top. Solid colours only (no glass, no particles); the water's top stands just above the basin's rim.
+	-- The plaza's fountain (overhaul 2 phase 5, the owner's point 2): a round stone basin on a low step with a moulded rim,
+	-- full of water, and a two-tier centre (a pedestal, a big bowl of water, a slimmer pedestal, a small bowl, a finial and a
+	-- jet of water). The splash and the sound are the client's (IntroClient: a ParticleEmitter and a Sound on the jet, local).
 	Fountain = {
-		upright("FountainBasin", 0.7, 12, 0, 0, 0, "Stone", "Concrete"),
-		upright("FountainWater", 0.9, 10.4, 0, 0, 0, "Water", "SmoothPlastic"),
-		upright("FountainPillar", 3.2, 1.4, 0, 0, 0, "Stone", "Concrete"),
-		upright("FountainBowl", 0.5, 4.4, 0, 3.2, 0, "Stone", "Concrete"),
-		upright("FountainBowlWater", 0.5, 3.8, 0, 3.3, 0, "Water", "SmoothPlastic"),
-		P("FountainSpout", "Ball", { 1.2, 1.2, 1.2 }, { 0, 4.3, 0 }, "WaterLight", "SmoothPlastic"),
-		solid = { solid(10.4, 2.6, 10.4), solid(1.6, 4.2, 1.6) }, -- the basin (taller than a step: nobody walks into the water) and the pillar
+		upright("FountainStep", 0.3, 15.6, 0, 0, 0, "Stone", "Concrete"),
+		upright("FountainBasin", 1.2, 14, 0, 0, 0, "Stone", "Concrete"),
+		upright("FountainRim", 0.3, 14.8, 0, 1, 0, "Stone", "Concrete"),
+		upright("FountainWater", 1.45, 13, 0, 0, 0, "Water", "SmoothPlastic"),
+		upright("FountainPillar", 3.4, 2, 0, 0, 0, "Stone", "Concrete"),
+		upright("FountainBowl", 0.6, 7, 0, 3.4, 0, "Stone", "Concrete"),
+		upright("FountainBowlRim", 0.2, 7.4, 0, 3.85, 0, "Stone", "Concrete"),
+		upright("FountainBowlWater", 0.65, 6.4, 0, 3.5, 0, "Water", "SmoothPlastic"),
+		upright("FountainUpperPillar", 2, 1.2, 0, 4, 0, "Stone", "Concrete"),
+		upright("FountainUpperBowl", 0.5, 3.4, 0, 6, 0, "Stone", "Concrete"),
+		upright("FountainUpperWater", 0.5, 3, 0, 6.1, 0, "Water", "SmoothPlastic"),
+		P("FountainFinial", "Ball", { 1, 1, 1 }, { 0, 7, 0 }, "Stone", "Concrete"),
+		upright("FountainSpout", 1.4, 0.5, 0, 7.4, 0, "WaterLight", "SmoothPlastic"),
+		solid = { solid(13.6, 2.6, 13.6), solid(2, 7.5, 2) }, -- the basin (taller than a step: nobody walks into the water) and the pedestals
 	},
 }
 
@@ -253,7 +320,7 @@ WorldArt.Hills = {
 }
 
 -- The only words the world shows (the street signs show their plot's number: 1, 2, 3...). No odds text (D9).
-WorldArt.Texts = { "BUILD YOUR STARTUP" }
+WorldArt.Texts = { "BUILD YOUR STARTUP" } -- the arch's attic (overhaul 2 phase 5: carved in Garamond)
 
 -- The ring (lobby L4, only with LobbyConfig.ClaimEnabled on): the plaza in front of the lounge's door and the six garages
 -- around it. The garages' places come from LobbyConfig.Ring; the numbers marked "copied" are compared with the real
@@ -302,6 +369,6 @@ WorldArt.Ring = {
 
 -- For the whole world (placeholders until a phone test). ringParts: the ring world's own budget, so six garages at their
 -- biggest stage plus the plaza stay under 3,000 parts (tools/building_test.py).
-WorldArt.Budget = { parts = 600, lights = 8, ringParts = 480 }
+WorldArt.Budget = { parts = 600, lights = 8, ringParts = 520 } -- ringParts 480 -> 520: the triumphal arch (overhaul 2 phase 5; the ring world has 502)
 
 return WorldArt

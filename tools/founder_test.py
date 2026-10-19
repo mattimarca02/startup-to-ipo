@@ -81,6 +81,7 @@ local core = {
 }
 EARNINGS = {}
 TaskServer.init(core)
+MODULES.ShopServer.isVip = function(p) return p.vip == true end -- the VIP pass (phase 5: the investor dinner)
 local function loadFounder()
 __FOUNDERSERVER__
 end
@@ -401,6 +402,40 @@ do
 	check("cancel: a pitch closed after an answer is done for the round", d.founder.pitched.Seed == true)
 end
 
+-- 7c. The VIP Investor dinner (phase 5) --------------------------------------------------------------------------------
+do
+	local p, d = newPlayer()
+	local function atTable(dx)
+		local at = FC.Dinner.at
+		local pos = Vector3.new(at.x + dx, 3, at.z)
+		p.Character = { FindFirstChild = function(_, n) return n == "HumanoidRootPart" and { Position = pos } or nil end }
+	end
+	atTable(1)
+	step(p)
+	check("dinner: no VIP pass, no dinner (and nothing about it in the state)", select(2, act(p, "Start", "dinner")) == FC.Texts.DinnerVip and lastState(p).dinner == nil)
+	p.vip = true
+	step(p)
+	check("dinner: a VIP sees it ready", lastState(p).dinner ~= nil and lastState(p).dinner.ready == true)
+	atTable(30)
+	check("dinner: only at the lounge's table", select(2, act(p, "Start", "dinner")) == FC.Texts.TooFar)
+	atTable(1)
+	check("dinner: starts at the table", act(p, "Start", "dinner") == true and #d.founder.live.activity.questions == FC.Dinner.questions)
+	d.tasks.run.bank = 0
+	local cash0 = d.cash.Value
+	local live = d.founder.live
+	advance(2); act(p, "Pick", live.activity.good)
+	advance(2)
+	local ok, text, info = act(p, "Pick", live.activity.good)
+	check("dinner: 2 good answers pay 2 x 60 s of Income, in full with an empty bank", ok and info.hits == 2 and d.cash.Value - cash0 == 1200, d.cash.Value - cash0)
+	check("dinner: once a day (saved), and the round's pitch is untouched", d.founder.dinnerDay == MODULES.DailyConfig.dayNumber(NOW)
+		and Founder.serialize(d).dinnerDay == d.founder.dinnerDay and next(d.founder.pitched) == nil)
+	advance(5)
+	check("dinner: not again today", select(2, act(p, "Start", "dinner")) == FC.Texts.DinnerTomorrow)
+	advance(86400)
+	step(p)
+	check("dinner: the next day it is ready again", lastState(p).dinner.ready == true and act(p, "Start", "dinner") == true)
+end
+
 -- 8. Requests ------------------------------------------------------------------------------------------------------------
 do
 	local p, d = newPlayer()
@@ -454,6 +489,16 @@ def outcome(result):
     return (int(m.group(1)) if m else 0), fails, done, result.stderr.strip()[-400:]
 
 
+def dinner_matches():
+    shop, config = read("ShopServer.lua"), read("FounderConfig.lua")
+    c = re.search(r"local LOUNGE_CENTER = Vector3\.new\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)", shop)
+    o = re.search(r"local DINNER_OFFSET = Vector3\.new\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)", shop)
+    a = re.search(r"FounderConfig\.Dinner = \{ at = \{ x = (-?[\d.]+), y = (-?[\d.]+), z = (-?[\d.]+) \}", config)
+    if not (c and o and a):
+        return False
+    return all(abs(float(c.group(i)) + float(o.group(i)) - float(a.group(i))) < 1e-9 for i in (1, 2, 3))
+
+
 def source_pins():
     """[(name, ok)]: the wiring that the Luau tests can't reach."""
     core, client, shop = read("TycoonCore.lua"), read("FounderClient.lua"), read("ShopClient.lua")
@@ -483,6 +528,9 @@ def source_pins():
         ("client: the phone tray still answers from anywhere (TaskClient unchanged in what it sends)", 'taskAction:InvokeServer("Answer", call.id)' in task_client),
         ("debug: the founder buttons are in the Studio Debug tab",
          all('"%s"' % a in shop for a in ("FounderBugNow", "FounderReady", "FounderPitchAgain"))),
+        ("dinner: FounderConfig.Dinner.at is the lounge's table (ShopServer LOUNGE_CENTER + DINNER_OFFSET)", dinner_matches()),
+        ("dinner: the client puts the dinner's prompt at that table and shows it only when the server says ready",
+         "stations.dinner.prompt.Enabled = free and s.dinner ~= nil and s.dinner.ready == true or false" in client),
         ("server only: the code lines and the pitch answers are in FounderServer, never in ReplicatedStorage",
          "Hire engineers and grow sales" in read("FounderServer.lua") and "Hire engineers and grow sales" not in read("FounderConfig.lua")),
     ]
@@ -522,6 +570,10 @@ MUTANTS = [
      "save: kept as it was"),
     ("closing a sprint at once starts its cooldown", "FounderServer.lua", '(activity.kind == "sprint" and activity.round == 1) or ', "",
      "cancel: a sprint closed before"),
+    ("the dinner twice a day", "FounderServer.lua", "\t\tif data.founder.dinnerDay >= today() then return false, TEXTS.DinnerTomorrow end\n", "",
+     "dinner: not again today"),
+    ("the dinner without the VIP pass", "FounderServer.lua", "\t\tif not (ShopServer.isVip and ShopServer.isVip(player)) then return false, TEXTS.DinnerVip end\n", "",
+     "dinner: no VIP pass"),
     ("the Income boost never ends", "FounderServer.lua", "\tif boost and now >= boost.untilAt then\n\t\tlive.boost = nil",
      "\tif false then\n\t\tlive.boost = nil", "brainstorm: when it runs out"),
 ]

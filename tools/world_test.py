@@ -178,7 +178,7 @@ local Enum = {
 	PartType = enumType({ "Block", "Cylinder", "Ball", "Wedge", "CornerWedge" }),
 	SurfaceType = enumType({ "Smooth", "Studs" }),
 	NormalId = enumType({ "Top", "Bottom", "Left", "Right", "Front", "Back" }),
-	Font = enumType({ "GothamBold", "GothamBlack", "Gotham", "FredokaOne", "LuckiestGuy", "PermanentMarker", "IndieFlower" }),
+	Font = enumType({ "GothamBold", "GothamBlack", "Gotham", "FredokaOne", "LuckiestGuy", "PermanentMarker", "IndieFlower", "Garamond" }),
 	SurfaceGuiSizingMode = enumType({ "PixelsPerStud", "FixedSize" }),
 	ModelStreamingMode = enumType({ "Default", "Atomic", "Persistent", "PersistentPerPlayer", "Nonatomic" }),
 }
@@ -893,7 +893,7 @@ section("negative tests", function()
 		bad.Pieces.Bench[1].material = "Neon"
 		check("negative data: Neon on a bench is caught", anyMatch(WorldVisuals.validate(bad), "Neon is only for lights"))
 		bad = deepCopy(WorldArt)
-		bad.Pieces.Arch[3].text.value = "WIN"
+		for _, spec in ipairs(bad.Pieces.Arch) do if spec.text then spec.text.value = "WIN" end end -- the attic's inscription
 		check("negative data: a text that is not in WorldArt.Texts is caught", anyMatch(WorldVisuals.validate(bad), "text must be"))
 		bad = deepCopy(WorldArt)
 		bad.Pieces.Sign[1].collide = true
@@ -1118,7 +1118,7 @@ do
 	for _, c in ipairs(saved) do c.Parent = SSS end
 	runPreview()
 end
-check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 320 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
+check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 381 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
 check("preview: the SpawnLocation and the Baseplate were not changed", spawnPad.CFrame == spawnBefore and baseplate.Size == baseBefore and spawnPad.Parent == workspace and baseplate.Parent == workspace)
 check("preview: the ghosts are see-through and never solid", (function()
 	for _, g in ipairs(folder:FindFirstChild("Ghosts"):GetChildren()) do
@@ -2073,16 +2073,16 @@ MUTANTS_A = [
 # Group B: WorldArt.lua. The data breaks a rule, or a copied number or a Studio fact stops matching the real thing.
 MUTANTS_B = [
     ("a palette color removed", A, "\tKerb = { 246, 246, 240 },\n", "", "default site: check palette"),
-    ("a part names a color the palette lacks", A, 'upright("LampPole", 7, 0.5, 0, 0.6, 0, "LampPost", "Metal"),',
-     'upright("LampPole", 7, 0.5, 0, 0.6, 0, "LampPoles", "Metal"),', "default site: check palette"),
+    ("a part names a color the palette lacks", A, 'upright("LampPole", 9, 0.5, 0, 0.6, 0, "LampPost", "Metal"),',
+     'upright("LampPole", 9, 0.5, 0, 0.6, 0, "LampPoles", "Metal"),', "default site: check palette"),
     ("the arch says something else", A, 'value = "BUILD YOUR STARTUP", font', 'value = "FREE CASH", font', "default site: check data"),
-    ("a bench seat in Neon", A, '{ 0, 1.15, 0 }, "Bench", "WoodPlanks"),', '{ 0, 1.15, 0 }, "Bench", "Neon"),', "default site: check flags"),
+    ("a bench seat in Neon", A, '{ 0, 1.85, 0 }, "Bench", "WoodPlanks"),', '{ 0, 1.85, 0 }, "Bench", "Neon"),', "default site: check flags"),
     ("a Wedge for a bush", A, 'P("BushBig", "Ball",', 'P("BushBig", "Wedge",', "default site: check flags"),
     ("a squashed bush ball", A, 'P("BushBig", "Ball", { 3, 3, 3 }', 'P("BushBig", "Ball", { 3, 2, 3 }', "default site: check data"),
     ("every upright cylinder tilted 10 degrees", A, "color, material, { rot = { 0, 0, 90 } })", "color, material, { rot = { 0, 0, 80 } })",
      "default site: check flags"),
-    ("a parts budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 480 }", "Budget = { parts = 200, lights = 8, ringParts = 480 }", "default site: check budget"),
-    ("a lights budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 480 }", "Budget = { parts = 600, lights = 5, ringParts = 480 }", "default site: check budget"),
+    ("a parts budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 520 }", "Budget = { parts = 200, lights = 8, ringParts = 520 }", "default site: check budget"),
+    ("a lights budget too small for the world", A, "Budget = { parts = 600, lights = 8, ringParts = 520 }", "Budget = { parts = 600, lights = 5, ringParts = 520 }", "default site: check budget"),
     ("the plaza reaching over the spawn pad", A, "spawnMargin = 1,", "spawnMargin = -1,", "default site: check keepouts"),
     ("paths on the lawn layer", A, "pathTop = 0.16,", "pathTop = 0.04,", "default site: check data"),
     ("lawns on the Baseplate's top plane", A, "groundTop = 0.04,", "groundTop = 0.001,", "default site: check zfighting"),
@@ -2096,7 +2096,7 @@ MUTANTS_B = [
     ("the plots' reach smaller than the rooms", A, "plotReach = { side = 36,", "plotReach = { side = 30,", "rooms: every room fits"),
     ("a text on a face that doesn't exist", A, 'color = "SignText", faces = { "Front", "Back" } } }),', 'color = "SignText", faces = { "Inside" } } }),',
      "default site: check data"),
-    ("the arch's beam lifted off its posts", A, '{ 0, 9.9, 0 }, "ArchBeam"', '{ 0, 12, 0 }, "ArchBeam"', "default site: check floating"),
+    ("the arch's attic cornice lifted off the attic", A, '{ 31, 0.6, 4.6 }, { 0, 33.7, 0 }', '{ 31, 0.6, 4.6 }, { 0, 36, 0 }', "default site: check floating"),
     ("the drop spot copied wrong from ShopServer", A, "dropOut = 6 }", "dropOut = 3 }", "copied: lounge sign height and the drop spot"),
     ("walks too narrow to walk through", A, "walkWidth = 6,", "walkWidth = 3,", "default site: check connected"),
     ("the garage sign board copied wrong", A, "signBoard = { 8, 2.6, 0.3 },", "signBoard = { 6, 2.6, 0.3 },", "copied: the signs' board and post"),
@@ -2670,7 +2670,7 @@ RING_MUTANTS = [
     ("the ring's lot smaller than PlotBuilding's", "WorldArt.lua", "lot = { half = 41.3, front = 32.3, back = -54.3, top = 120 },", "lot = { half = 36, front = 32.3, back = -54.3, top = 120 },", "ring copied: WorldArt.Ring.lot"),
     ("the walks start at the floor's edge, not the front wall", "WorldArt.lua", "frontLine = 32.2,", "frontLine = 30,", "ring copied: the facade strip"),
     ("a tree inside a lot (the gap trees moved)", "WorldArt.lua", "gapTrees = { { -140, 175 }, { 140, 175 } },", "gapTrees = { { -140, 160 }, { 140, 175 } },", "ring world: every named check passes"),
-    ("the ring world over its budget (the ring budget lowered to 100)", "WorldArt.lua", "ringParts = 480", "ringParts = 100", "ring world: every named check passes"),
+    ("the ring world over its budget (the ring budget lowered to 100)", "WorldArt.lua", "ringParts = 520", "ringParts = 100", "ring world: every named check passes"),
     # the plaza garden (world-ring-plaza)
     ("a bed reaching the spokes (bed from 2)", "WorldArt.lua", "bed = { from = 26, to = 72 },", "bed = { from = 2, to = 72 },", "ring garden: every bed lies inside the promenade"),
     ("a bed short of its kerbs (the east kerb left out)", "WorldVisuals.lua", '\t\trect(plan.kerbs, "KerbBed" .. name .. "East", bx1, bx1 + kw, bz0, bz1)\n', "", "ring garden: four lawn beds with four kerbs"),

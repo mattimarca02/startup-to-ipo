@@ -67,6 +67,12 @@ FounderConfig.Pitch = {
 	minStage = 2, -- Seed: every funding round from here offers one pitch per run
 }
 
+-- The VIP Investor dinner (overhaul 2 phase 5, the owner's point 18): VIP pass holders, once a day (the daily calendar's
+-- day, 08:00 UTC: saved as founder.dinnerDay), at the table in the VIP Lounge (world position: ShopServer LOUNGE_CENTER +
+-- DINNER_OFFSET, checked by tools/founder_test.py). A short pitch: `questions` questions; each good answer pays `reward`
+-- seconds of Income (a bonus outside the reward bank, inside the daily cap).
+FounderConfig.Dinner = { at = { x = -6, y = 1, z = 74 }, reach = 12, questions = 2, reward = 60, questionSeconds = 25 }
+
 -- The state the server sends at most this often while nothing changes (seconds)
 FounderConfig.TickSeconds = 0.5
 FounderConfig.RateLimit = { burst = 6, perSecond = 4 }
@@ -84,6 +90,12 @@ FounderConfig.Texts = {
 	BoardTitle = "Brainstorm",
 	BoardHelp = "Pick one idea",
 	PitchTitle = "Investor pitch",
+	DinnerTitle = "Investor dinner",
+	DinnerPrompt = "Investor dinner",
+	DinnerDone = "Dinner done: %d/%d good answers · +%s",
+	DinnerNone = "Dinner done: the investors enjoyed the food",
+	DinnerVip = "The investor dinner is for VIP pass holders",
+	DinnerTomorrow = "The investors come back tomorrow",
 	PitchOffer = "💼 Investors want your %s pitch! Go to your desk",
 	PitchPrompt = "Investor pitch",
 	PitchButton = "Pitch now",

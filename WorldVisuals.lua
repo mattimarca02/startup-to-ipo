@@ -35,10 +35,10 @@ local WorldVisuals = {}
 -- What the art may use. Neon only on lights: the part's name must say so (LIGHT_WORDS).
 WorldVisuals.MATERIALS = {
 	SmoothPlastic = true, Plastic = true, Concrete = true, Cobblestone = true, Brick = true, Wood = true, WoodPlanks = true,
-	Metal = true, Fabric = true, Grass = true, Neon = true,
+	Metal = true, Fabric = true, Grass = true, Neon = true, Marble = true, -- Marble: the triumphal arch (overhaul 2 phase 5)
 }
 WorldVisuals.SHAPES = { Block = true, Cylinder = true, Ball = true }
-WorldVisuals.FONTS = { GothamBold = true, FredokaOne = true, GothamBlack = true }
+WorldVisuals.FONTS = { GothamBold = true, FredokaOne = true, GothamBlack = true, Garamond = true } -- Garamond: the arch's inscription
 WorldVisuals.FACES = { Front = true, Back = true, Left = true, Right = true, Top = true }
 WorldVisuals.LIGHT_WORDS = { "Lamp", "Light", "Glow", "Bulb" }
 WorldVisuals.RESERVED_NAMES = { Floor = true, Baseplate = true, SpawnLocation = true, VipDoor = true, VipLounge = true }

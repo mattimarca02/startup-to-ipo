@@ -1320,6 +1320,7 @@ if debugRemote then
 	debugRow("🚨", "Founder: production bug now", "The Server Rack's alarm rings in a moment (needs the Server Rack).", "Ring", "FounderBugNow")
 	debugRow("⏱️", "Founder: sprint and brainstorm ready", "Skips the coding sprint's and the brainstorm's wait.", "Ready", "FounderReady")
 	debugRow("💼", "Founder: pitch again", "Offers this funding round's investor pitch again (saved, like a real pitch).", "Offer", "FounderPitchAgain")
+	debugRow("🍽️", "Founder: dinner again", "Offers today's VIP investor dinner again (saved; needs the VIP pass).", "Offer", "FounderDinnerAgain")
 end
 
 -- Tabs, opening and closing ---------------------------------------------

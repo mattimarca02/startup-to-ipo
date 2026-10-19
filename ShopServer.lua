@@ -27,6 +27,8 @@ local PhysicsService = game:GetService("PhysicsService")
 local PolicyService = game:GetService("PolicyService")
 
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
+local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- the lounge's podium (overhaul 2 phase 5)
+local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
 
 local MAX_RECEIPTS = 100 -- PurchaseIds remembered per player, so a repeated receipt never pays twice
 local DATA_WAIT_SECONDS = 30 -- how long a receipt waits for a player's save to load, from their garage claim (lobby L3)
@@ -156,6 +158,11 @@ end
 -- A message in the shop's pop-up, for other systems (TycoonCore: "saving is having trouble")
 function ShopServer.notify(player, text)
 	notify(player, text)
+end
+
+-- A VIP pass holder (the lounge and the investor dinner, overhaul 2 phase 5)
+function ShopServer.isVip(player)
+	return hasEffect(player, "vipLounge")
 end
 
 function ShopServer.hasPass(player, key)
@@ -709,6 +716,157 @@ local function buildVipLounge()
 	end)
 end
 
+-- The lounge's inside (overhaul 2 phase 5, the owner's point 18): sofas around the two seats, a bar along the right wall
+-- with stools and bottles, floor lamps, the investor dinner's table (FounderServer: FounderConfig.Dinner.at is this table)
+-- and the showcase: a podium with the rarest employee of the richest VIP in the server and a board with their company
+-- and valuation, on the back wall facing the door, so everyone on the plaza sees it through the glass. Looks only:
+-- nothing collides but the seats, nothing is saved, nothing is bought here. Built once; the showcase is rewritten every
+-- SHOWCASE_SECONDS.
+local SHOWCASE_SECONDS = 10
+local DINNER_OFFSET = Vector3.new(-6, 0.5, 4) -- the dinner table from LOUNGE_CENTER (FounderConfig.Dinner.at, checked by tools/founder_test.py)
+local showcase = {} -- { podiumTop, board, model, key }
+
+local function furnishVipLounge()
+	local folder = workspace:FindFirstChild("VipLounge")
+	if not folder then return end
+	local inside = Instance.new("Model")
+	inside.Name = "LoungeInside"
+	local c = LOUNGE_CENTER + Vector3.new(0, 0.5, 0) -- the floor's top
+	local velvet, wood, marble, gold = Color3.fromRGB(110, 40, 90), Color3.fromRGB(70, 44, 28), Color3.fromRGB(236, 232, 224), Color3.fromRGB(255, 200, 60)
+	local function piece(name, size, offset, color, material)
+		local part = makePart(inside, name, size, c + offset, color, material)
+		part.CanCollide, part.CanTouch, part.CanQuery = false, false, false
+		return part
+	end
+	-- Sofas: a velvet back and two arms around each of the two gold seats
+	for i = -1, 1, 2 do
+		piece("SofaBack", Vector3.new(5.4, 2.6, 1), Vector3.new(i * 8, 1.3, -9.5), velvet, Enum.Material.Fabric)
+		piece("SofaArmL", Vector3.new(0.8, 1.6, 4), Vector3.new(i * 8 - 2.6, 0.8, -7), velvet, Enum.Material.Fabric)
+		piece("SofaArmR", Vector3.new(0.8, 1.6, 4), Vector3.new(i * 8 + 2.6, 0.8, -7), velvet, Enum.Material.Fabric)
+	end
+	piece("CoffeeTable", Vector3.new(4, 0.3, 2.4), Vector3.new(0, 1.2, -7), marble, Enum.Material.Marble)
+	piece("CoffeeTableLeg", Vector3.new(0.8, 1.05, 0.8), Vector3.new(0, 0.525, -7), gold, Enum.Material.Metal)
+	-- The bar along the right wall, its stools and the bottles on a shelf behind it
+	piece("BarCounter", Vector3.new(2, 3.4, 12), Vector3.new(15.6, 1.7, 2), wood, Enum.Material.Wood)
+	piece("BarTop", Vector3.new(2.6, 0.3, 12.4), Vector3.new(15.4, 3.55, 2), marble, Enum.Material.Marble)
+	piece("BarShelf", Vector3.new(0.6, 0.2, 10), Vector3.new(17.1, 5.4, 2), wood, Enum.Material.Wood)
+	for k = 1, 5 do
+		piece("Bottle" .. k, Vector3.new(0.4, 1.1, 0.4), Vector3.new(17.1, 6.05, -2 + k * 1.6), Color3.fromHSV(k / 6, 0.6, 0.8), Enum.Material.Glass)
+	end
+	for k = -1, 1 do
+		piece("BarStool", Vector3.new(1.4, 0.3, 1.4), Vector3.new(13.4, 2.6, 2 + k * 4), velvet, Enum.Material.Fabric)
+		piece("BarStoolPost", Vector3.new(0.3, 2.45, 0.3), Vector3.new(13.4, 1.225, 2 + k * 4), gold, Enum.Material.Metal)
+	end
+	-- Warm floor lamps in the four corners
+	for _, at in ipairs({ { -16, -10 }, { 16, -10 }, { -16, 10 }, { 16, 10 } }) do
+		piece("FloorLampPole", Vector3.new(0.3, 6, 0.3), Vector3.new(at[1], 3, at[2]), gold, Enum.Material.Metal)
+		local shade = piece("FloorLampGlow", Vector3.new(1.4, 1, 1.4), Vector3.new(at[1], 6.5, at[2]), Color3.fromRGB(255, 226, 170), Enum.Material.Neon)
+		local light = Instance.new("PointLight")
+		light.Color, light.Brightness, light.Range, light.Shadows = Color3.fromRGB(255, 214, 160), 1.2, 14, false
+		light.Parent = shade
+	end
+	-- The investor dinner's table (FounderServer) and its two chairs
+	local d = DINNER_OFFSET - Vector3.new(0, 0.5, 0)
+	piece("DinnerTable", Vector3.new(4.4, 0.3, 4.4), d + Vector3.new(0, 2.6, 0), Color3.fromRGB(245, 245, 240), Enum.Material.Fabric)
+	piece("DinnerTableLeg", Vector3.new(0.6, 2.45, 0.6), d + Vector3.new(0, 1.225, 0), gold, Enum.Material.Metal)
+	piece("DinnerCandle", Vector3.new(0.3, 0.7, 0.3), d + Vector3.new(0, 3.1, 0), Color3.fromRGB(255, 230, 190), Enum.Material.Neon)
+	for k = -1, 1, 2 do
+		piece("DinnerChair", Vector3.new(1.6, 0.3, 1.6), d + Vector3.new(k * 3.2, 1.6, 0), velvet, Enum.Material.Fabric)
+		piece("DinnerChairBack", Vector3.new(0.3, 2, 1.6), d + Vector3.new(k * 4, 2.6, 0), velvet, Enum.Material.Fabric)
+		piece("DinnerChairLeg", Vector3.new(0.3, 1.45, 0.3), d + Vector3.new(k * 3.2, 0.725, 0), gold, Enum.Material.Metal)
+	end
+	-- The showcase: a marble podium with a gold ring, and the board on the back wall facing the door (+Z)
+	piece("Podium", Vector3.new(4, 1.6, 4), Vector3.new(-12, 0.8, 5), marble, Enum.Material.Marble)
+	piece("PodiumRing", Vector3.new(4.4, 0.25, 4.4), Vector3.new(-12, 1.5, 5), gold, Enum.Material.Metal)
+	local board = piece("ShowcaseBoard", Vector3.new(12, 4.6, 0.3), Vector3.new(0, 6.4, -11.2), Color3.fromRGB(24, 24, 32), Enum.Material.SmoothPlastic)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Back -- faces the door and the plaza (+Z)
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0
+	gui.Parent = board
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(0.92, 0.88)
+	label.Position = UDim2.fromScale(0.04, 0.06)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font.GothamBold
+	label.TextColor3 = gold
+	label.Text = ""
+	label.Parent = gui
+	inside.Parent = folder
+	showcase.podiumTop = c + Vector3.new(-12, 1.6, 5)
+	showcase.label = label
+	showcase.folder = inside
+end
+
+local RARITY_RANK = {}
+for i, rarity in ipairs(CreatureConfig.Rarities) do
+	RARITY_RANK[rarity.key] = i
+end
+
+-- The richest VIP in the server (by valuation) and their rarest employee: what the showcase shows (nil when no VIP plays)
+local function showcaseChoice()
+	local best, bestValue
+	for _, player in ipairs(Players:GetPlayers()) do
+		local data = core and core.getData(player)
+		if data and data.ready and data.ipo and hasEffect(player, "vipLounge") and (not bestValue or data.ipo.valuation > bestValue) then
+			best, bestValue = player, data.ipo.valuation
+		end
+	end
+	if not best then return nil end
+	local data = core.getData(best)
+	local top, topRank = nil, 0
+	for _, employee in ipairs(data.team and data.team.employees or {}) do
+		local creature = CreatureConfig.getCreature(employee.creature)
+		local rank = creature and RARITY_RANK[creature.rarity] or 0
+		if rank > topRank then
+			top, topRank = creature, rank
+		end
+	end
+	return best, bestValue, top
+end
+
+local function money(n)
+	for _, unit in ipairs({ { 1e12, "T" }, { 1e9, "B" }, { 1e6, "M" }, { 1e3, "K" } }) do
+		if n >= unit[1] then
+			return "$" .. string.format("%.1f", n / unit[1]):gsub("%.0$", "") .. unit[2]
+		end
+	end
+	return "$" .. math.floor(n)
+end
+
+local function refreshShowcase()
+	if not showcase.label then return end
+	local player, valuation, creature = showcaseChoice()
+	local key = player and (player.UserId .. ":" .. (creature and creature.key or "-")) or "none"
+	if player then
+		showcase.label.Text = string.format("👑 %s's Startup\nValuation %s", player.DisplayName, money(valuation))
+	else
+		showcase.label.Text = "👑 VIP LOUNGE\nYour startup could be on this wall"
+	end
+	if key ~= showcase.key then
+		showcase.key = key
+		if showcase.model then
+			showcase.model:Destroy()
+			showcase.model = nil
+		end
+		if creature then
+			local ok, model = pcall(CreatureModels.build, creature)
+			if ok and model then
+				for _, part in ipairs(model:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.Anchored, part.CanCollide, part.CanTouch, part.CanQuery = true, false, false, false
+					end
+				end
+				model:PivotTo(CFrame.new(showcase.podiumTop) * CFrame.Angles(0, math.pi, 0)) -- models face -Z: turned to the door
+				model.Parent = showcase.folder
+				showcase.model = model
+			end
+		end
+	end
+end
+
 -- Office tab -------------------------------------------------------------
 
 -- SHOPACTION-START
@@ -847,6 +1005,16 @@ function ShopServer.init(coreApi)
 	end
 	PhysicsService:CollisionGroupSetCollidable(DOOR_GROUP, VIP_GROUP, false)
 	buildVipLounge()
+	local furnished, why = pcall(furnishVipLounge) -- looks only: a failure never stops the shop
+	if not furnished then
+		warn("The VIP Lounge's inside could not be built: " .. tostring(why))
+	end
+	task.spawn(function()
+		while true do
+			pcall(refreshShowcase)
+			task.wait(SHOWCASE_SECONDS)
+		end
+	end)
 
 	MarketplaceService.ProcessReceipt = processReceipt
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(onPassPromptFinished)

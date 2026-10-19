@@ -61,6 +61,7 @@ LobbyConfig.Texts = {
 	WelcomeButton = "Got it",
 	Prompt = "Claim garage",
 	Free = "FREE",
+	FreeSign = "FREE OFFICE · walk here to claim", -- the board on a free garage's claim post (overhaul 2 phase 5)
 	SignFree = "Claim this garage", -- the facade sign's second line on a free garage (overhaul phase 1)
 	MovingIn = "Moving in...",
 	Closing = "Closing...",

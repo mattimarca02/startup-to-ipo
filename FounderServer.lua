@@ -8,7 +8,8 @@
 -- The client sends only "start this activity", "I pressed button N" or "close it" (FounderRemotes.FounderAction):
 --   FounderAction("Sync")              -> the state, once, when the screen starts
 --   FounderAction("Start", which)      -> "sprint" (at the desk), "bug" (at the rack, while the alarm rings),
---                                         "brainstorm" (at the blackboard), "pitch" (at the desk, while one is offered)
+--                                         "brainstorm" (at the blackboard), "pitch" (at the desk, while one is offered),
+--                                         "dinner" (VIP pass holders, once a day, at the VIP Lounge's table: phase 5)
 --   FounderAction("Pick", n)           -> the button pressed in the running activity (1 to 4)
 --   FounderAction("Cancel")            -> close it: a sprint or pitch ends with what it has (closed before the first
 --                                         answer: nothing happens, no cooldown, the pitch stays offered); a bug can be
@@ -33,6 +34,7 @@ local RunService = game:GetService("RunService")
 local FounderConfig = require(ReplicatedStorage:WaitForChild("FounderConfig"))
 local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- item effects and unlocks
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- stage names
+local DailyConfig = require(ReplicatedStorage:WaitForChild("DailyConfig")) -- dayNumber: the dinner's day
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig")) -- money format, DebugInStudio
 local IpoServer = require(script.Parent:WaitForChild("IpoServer")) -- isBusy
 local TaskServer = require(script.Parent:WaitForChild("TaskServer")) -- payReward, setCallsBoost
@@ -156,6 +158,18 @@ local function pitchOffered(data)
 	return info
 end
 
+-- The VIP Investor dinner: a VIP pass holder who has not had today's (phase 5)
+local function today()
+	return DailyConfig.dayNumber(os.time())
+end
+local function dinnerReady(player, data)
+	return ShopServer.isVip ~= nil and ShopServer.isVip(player) and data.founder ~= nil and data.founder.dinnerDay < today()
+end
+local function dinnerPosition()
+	local at = FounderConfig.Dinner.at
+	return Vector3.new(at.x, at.y, at.z)
+end
+
 local function effect(data, kind)
 	return OfficeConfig.effect(data.owned or {}, kind)
 end
@@ -207,6 +221,7 @@ local function snapshot(data, live, now)
 		board = { on = boardOn(data), readyIn = math.max(0, live.boardReadyAt - now) },
 		boost = boost and now < boost.untilAt and { kind = boost.kind, name = boost.name, left = boost.untilAt - now } or nil,
 		pitch = pitch and pitch.name or nil,
+		dinner = live.vip and { ready = live.dinnerReady == true } or nil, -- VIP only: the table's prompt
 		activity = activityView(live.activity, now),
 	}
 end
@@ -270,7 +285,8 @@ local function newPitchQuestion(activity, now)
 		end
 	end
 	activity.question, activity.options = row[1], options
-	activity.openedAt, activity.limit, activity.deadline = now, p.questionSeconds, now + p.questionSeconds
+	local seconds = activity.dinner and FounderConfig.Dinner.questionSeconds or p.questionSeconds
+	activity.openedAt, activity.limit, activity.deadline = now, seconds, now + seconds
 end
 
 local function finishSprint(player, data, live, now)
@@ -290,6 +306,16 @@ local function finishPitch(player, data, live, now)
 	local activity = live.activity
 	live.activity = nil
 	live.changed = true
+	if activity.dinner then -- the VIP dinner: once a day, saved
+		data.founder.dinnerDay = today()
+		data.founder.dirty = true
+		local seconds = activity.hits * FounderConfig.Dinner.reward * (1 + effect(data, "pitch"))
+		if seconds <= 0 then
+			return true, TEXTS.DinnerNone
+		end
+		local cash = TaskServer.payReward(player, seconds, "bonus")
+		return true, string.format(TEXTS.DinnerDone, activity.hits, #activity.questions, money(cash)), { cash = cash, hits = activity.hits }
+	end
 	data.founder.pitched[activity.stageKey] = true
 	data.founder.dirty = true
 	local seconds = activity.hits * FounderConfig.Pitch.reward * (1 + effect(data, "pitch"))
@@ -413,6 +439,15 @@ local function start(player, data, live, which, now)
 		if not closeEnough(player, data, "Desk") then return false, TEXTS.TooFar end
 		live.activity = { kind = "pitch", stageKey = stage.key, stageName = stage.name, q = 1, hits = 0,
 			questions = pickDistinct(#PITCH, FounderConfig.Pitch.questions) }
+		newPitchQuestion(live.activity, now)
+	elseif which == "dinner" then
+		if not (ShopServer.isVip and ShopServer.isVip(player)) then return false, TEXTS.DinnerVip end
+		if data.founder.dinnerDay >= today() then return false, TEXTS.DinnerTomorrow end
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local offset = root and (root.Position - dinnerPosition())
+		if not offset or Vector3.new(offset.X, 0, offset.Z).Magnitude > FounderConfig.Dinner.reach then return false, TEXTS.TooFar end
+		live.activity = { kind = "pitch", dinner = true, stageKey = "Dinner", stageName = TEXTS.DinnerTitle, q = 1, hits = 0,
+			questions = pickDistinct(#PITCH, FounderConfig.Dinner.questions) }
 		newPitchQuestion(live.activity, now)
 	else
 		return false, "Bad request"
@@ -565,9 +600,12 @@ function FounderServer.step(player, now)
 		end
 	end
 
-	-- Unlocks and the pitch offer: a change sends a new state
+	-- Unlocks, the pitch offer and the VIP dinner: a change sends a new state
 	local pitch = pitchOffered(data)
+	live.vip = ShopServer.isVip ~= nil and ShopServer.isVip(player) or false
+	live.dinnerReady = live.vip and dinnerReady(player, data) or false
 	local sign = (sprintOn(data) and "s" or "") .. (bugOn(data) and "b" or "") .. (boardOn(data) and "w" or "") .. (pitch and pitch.key or "")
+		.. (live.vip and "v" or "") .. (live.dinnerReady and "d" or "")
 	if sign ~= live.sign then
 		if pitch and live.sign ~= nil and not string.find(live.sign, pitch.key, 1, true) then
 			core.notify(player, string.format(TEXTS.PitchOffer, pitch.name))
@@ -689,6 +727,13 @@ local function addDebugActions()
 		live.sprintReadyAt, live.boardReadyAt = 0, 0
 		live.changed = true
 		return "Sprint and brainstorm are ready"
+	end)
+	ShopServer.addDebugAction("FounderDinnerAgain", function(player, data)
+		if not allowed() or not data.founder then return "Debug is disabled" end
+		data.founder.dinnerDay = 0
+		data.founder.dirty = true
+		data.founder.live.changed = true
+		return "Today's investor dinner is offered again (saved; VIP pass needed)"
 	end)
 	ShopServer.addDebugAction("FounderPitchAgain", function(player, data)
 		if not allowed() or not data.founder then return "Debug is disabled" end

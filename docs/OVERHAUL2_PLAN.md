@@ -108,7 +108,7 @@ Both new sections: in `KNOWN_SECTIONS`, optional on load (a missing one is a new
 | 2 | `overhaul2-phase2` | 5, 8, 9, 16 (in the room) | workstations (the `office` section), employees sit at their desk, collision boxes per furniture piece, catalog items placed in the office; plus the Studio-only Reset my save (owner, 2026-10-19). **Done: PR #66** |
 | 3 | `overhaul2-phase3` | 6, 10, 14 | the economy core and calls live, the answer at the desk, the four founder activities (the `founder` section), the blackboard. **Done: PR #67** (the blackboard hangs over the lane where the old sign stood, facing the spawn: every back wall has windows or decor; the pitch is at the founder desk) |
 | 4 | `overhaul2-phase4` | 7 | the egg and the hatch reveal. **Done: PR #68** |
-| 5 | `overhaul2-phase5` | 1, 2, 3, 4, 18 | the Roman arch, the plaza and fountain, the join cinematic, the FREE sign, the VIP Lounge and the Investor dinner |
+| 5 | `overhaul2-phase5` | 1, 2, 3, 4, 18 | the Roman arch, the plaza and fountain, the join cinematic, the FREE sign, the VIP Lounge and the Investor dinner. **Done: PR #69** (the arch's curve is stepped: world parts turn in quarter turns only; the fountain's splash and sound are client-side) |
 | 6 | `overhaul2-phase6` | 15 | buildings and interiors quality, the HQ Tower's detail, frame rate on a phone |
 | end | | | docs/OVERHAUL2_REPORT.md, ROADMAP Status, CLAUDE.md, the publish checklist |
 

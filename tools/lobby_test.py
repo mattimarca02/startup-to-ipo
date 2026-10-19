@@ -1671,10 +1671,66 @@ FounderServer.init({
 )
 
 
+# Overhaul 2 phase 5's edits outside the CLAIMLOAD markers (docs/OVERHAUL2_PLAN.md: the FREE sign is a board with a SurfaceGui on each face, never a BillboardGui), applied after O3_EDITS (phase 4 did not edit TycoonCore).
+O5_EDITS = (
+    ('''		if prompt then prompt.Enabled = free end
+		local gui = post:FindFirstChildOfClass("BillboardGui")
+		if gui then
+			gui.Enabled = LobbyConfig.ClaimEnabled and state ~= "Taken"
+			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+		end
+''',
+     '''		if prompt then prompt.Enabled = free end
+	end
+	local board = claimPart(slot, "FreeSign") -- overhaul 2 phase 5: a board with a SurfaceGui on each face
+	if board then
+		local shown = LobbyConfig.ClaimEnabled and state ~= "Taken"
+		board.Transparency = shown and 0 or 1
+		for _, gui in ipairs(board:GetChildren()) do
+			if gui.ClassName == "SurfaceGui" then
+				gui.Enabled = shown
+				gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.FreeSign) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+			end
+		end
+'''),
+    ('''		end)
+		local freeSign = addLabel(post, LobbyConfig.Texts.Free, 4)
+		freeSign.TextColor3 = Color3.fromRGB(90, 230, 120)
+		freeSign.Parent.Enabled = false
+		garage.Parent = root
+''',
+     '''		end)
+		-- The FREE sign (overhaul 2 phase 5, the owner's point 4): a board on the post with the text on both faces, a SurfaceGui
+		-- (hidden by walls like any part, never drawn on top); setGarageState shows it and writes its text
+		local board = makePart(spot, "FreeSign", Vector3.new(4.6, 2, 0.2), postAt * CFrame.new(0, 0.9, 0), Color3.fromRGB(28, 60, 40), Enum.Material.SmoothPlastic)
+		board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
+		for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+			local gui = Instance.new("SurfaceGui")
+			gui.Face = face
+			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			gui.PixelsPerStud = 50
+			gui.LightInfluence = 0
+			gui.Enabled = false
+			gui.Parent = board
+			local label = Instance.new("TextLabel")
+			label.Name = "TextLabel"
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundTransparency = 1
+			label.TextScaled = true
+			label.Font = Enum.Font.GothamBold
+			label.TextColor3 = Color3.fromRGB(110, 240, 140)
+			label.Text = LobbyConfig.Texts.FreeSign
+			label.Parent = gui
+		end
+		garage.Parent = root
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS and O1_EDITS to O3_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS, O1_EDITS to O3_EDITS and O5_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS + O3_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS + O3_EDITS + O5_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)
