@@ -1,8 +1,8 @@
 World pass integration (branch world-icons-pass): NOT APPLIED. It needs the owner's approval.
 
-Made for: TycoonCore.lua sha256 2a8b3c3057fd3ab259fee890f6217742ca6f34811eca559a568eec2b2df8d691, 73997 bytes (main at overhaul2-phase3).
-Result:   TycoonCore.lua sha256 514e77f1698ebeb17de98716903582207725b38928da3ad190203bc42a9b14fc, 75175 bytes.
-Both hashes, the line numbers below and the hunk headers are valid for that TycoonCore.lua only (main at overhaul2-phase3).
+Made for: TycoonCore.lua sha256 a3b063c8f826b72643bd22c3c886e4ec66bdc4a9ba311524a277fca6daaa83fc, 75145 bytes (main at overhaul2-phase5).
+Result:   TycoonCore.lua sha256 368bf9b46ee7f78ff20875892d22eb85c336af49c38323ba83ae5a6eec01466f, 76323 bytes.
+Both hashes, the line numbers below and the hunk headers are valid for that TycoonCore.lua only (main at overhaul2-phase5).
 On any other TycoonCore.lua (main moved on), regenerate them at merge time, in the repo folder, on the branch that
 claims TycoonCore:
   python3 tools/world_test.py --regen-patch
@@ -16,10 +16,10 @@ those ever change. Both modules are required inside pcall with a 5 second wait, 
 PlotArt: if either is missing or broken there is one warning and the game runs exactly as today. No save, no
 remote, no player data, no touch handler, nothing runs per player.
 
-The two edits, in TycoonCore.lua at main overhaul2-phase3 (TycoonCore is the only file this changes):
+The two edits, in TycoonCore.lua at main overhaul2-phase5 (TycoonCore is the only file this changes):
   E1  after line 66 (the end of the "Plot visuals are off" block, lines 61-66): 10 lines that require
       WorldVisuals and WorldArt inside pcall and warn if they are missing.
-  E2  between line 1602 (the end of onPlayerAdded) and line 1603 (Players.PlayerAdded:Connect(onPlayerAdded)):
+  E2  between line 1627 (the end of onPlayerAdded) and line 1628 (Players.PlayerAdded:Connect(onPlayerAdded)):
       12 lines that build the world once inside pcall, from PLOT_SPACING (line 89), MAX_PLOTS (line 91) and
       plotCenter (lines 154-161).
 
@@ -55,7 +55,7 @@ passes tools/daily_test.py and tools/world_test.py, and the two inserted blocks 
  -- The office catalog (overhaul 2): OfficeConfig.Items, bought in the shop's Office tab (ShopClient), any order inside
  -- the funding stages reached (the Desk first). name = the key saved in `owned`, cost = Cash, income = Cash per second
  -- before the building's office multiplier, stage = the funding stage that unlocks it. Only the six old garage upgrades
-@@ -1600,6 +1610,18 @@ local function onPlayerAdded(player)
+@@ -1625,6 +1635,18 @@ local function onPlayerAdded(player)
  		autoClaim(player)
  	end
  end

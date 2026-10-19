@@ -298,10 +298,16 @@ local function setGarageState(slot, state, ownerName)
 		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
 		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
 		if prompt then prompt.Enabled = free end
-		local gui = post:FindFirstChildOfClass("BillboardGui")
-		if gui then
-			gui.Enabled = LobbyConfig.ClaimEnabled and state ~= "Taken"
-			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+	end
+	local board = claimPart(slot, "FreeSign") -- overhaul 2 phase 5: a board with a SurfaceGui on each face
+	if board then
+		local shown = LobbyConfig.ClaimEnabled and state ~= "Taken"
+		board.Transparency = shown and 0 or 1
+		for _, gui in ipairs(board:GetChildren()) do
+			if gui.ClassName == "SurfaceGui" then
+				gui.Enabled = shown
+				gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.FreeSign) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+			end
 		end
 	end
 	local lamp = claimPart(slot, "FreeLamp")
@@ -408,9 +414,28 @@ local function buildGarages()
 		prompt.Triggered:Connect(function(player)
 			requestClaim(player, slot)
 		end)
-		local freeSign = addLabel(post, LobbyConfig.Texts.Free, 4)
-		freeSign.TextColor3 = Color3.fromRGB(90, 230, 120)
-		freeSign.Parent.Enabled = false
+		-- The FREE sign (overhaul 2 phase 5, the owner's point 4): a board on the post with the text on both faces, a SurfaceGui
+		-- (hidden by walls like any part, never drawn on top); setGarageState shows it and writes its text
+		local board = makePart(spot, "FreeSign", Vector3.new(4.6, 2, 0.2), postAt * CFrame.new(0, 0.9, 0), Color3.fromRGB(28, 60, 40), Enum.Material.SmoothPlastic)
+		board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
+		for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+			local gui = Instance.new("SurfaceGui")
+			gui.Face = face
+			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			gui.PixelsPerStud = 50
+			gui.LightInfluence = 0
+			gui.Enabled = false
+			gui.Parent = board
+			local label = Instance.new("TextLabel")
+			label.Name = "TextLabel"
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundTransparency = 1
+			label.TextScaled = true
+			label.Font = Enum.Font.GothamBold
+			label.TextColor3 = Color3.fromRGB(110, 240, 140)
+			label.Text = LobbyConfig.Texts.FreeSign
+			label.Parent = gui
+		end
 		garage.Parent = root
 		garages[slot] = garage
 	end

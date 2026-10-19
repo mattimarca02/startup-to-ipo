@@ -204,7 +204,13 @@ end
 local stations = {
 	sprint = anchorAt("Desk", 3.5), pitch = anchorAt("DeskPitch", 5),
 	bug = anchorAt("Rack", 4), brainstorm = anchorAt("Board", 3),
+	dinner = anchorAt("Dinner", 3), -- the VIP Lounge's table (a fixed place in the world, phase 5)
 }
+stations.dinner.prompt.ActionText, stations.dinner.prompt.ObjectText = TEXTS.DinnerPrompt, "VIP Lounge"
+do
+	local at = FounderConfig.Dinner.at
+	stations.dinner.part.Position = Vector3.new(at.x, at.y + stations.dinner.up, at.z)
+end
 stations.sprint.prompt.ActionText, stations.sprint.prompt.ObjectText = TEXTS.SprintPrompt, "Founder desk"
 stations.pitch.prompt.ActionText, stations.pitch.prompt.ObjectText = TEXTS.PitchPrompt, "Founder desk"
 stations.pitch.prompt.KeyboardKeyCode, stations.pitch.prompt.GamepadKeyCode = Enum.KeyCode.F, Enum.KeyCode.ButtonY
@@ -214,7 +220,7 @@ local ATTRIBUTE = { sprint = "FounderDesk", pitch = "FounderDesk", bug = "Founde
 
 local function placeStations()
 	for which, station in pairs(stations) do
-		local at = player:GetAttribute(ATTRIBUTE[which])
+		local at = ATTRIBUTE[which] and player:GetAttribute(ATTRIBUTE[which])
 		if typeof(at) == "Vector3" then
 			station.part.Position = at + Vector3.new(0, station.up, 0)
 		end
@@ -278,6 +284,7 @@ local function refreshPrompts()
 	stations.pitch.prompt.Enabled = free and s.pitch ~= nil or false
 	stations.bug.prompt.Enabled = free and s.bug and s.bug.alarm or false
 	stations.brainstorm.prompt.Enabled = free and ready(s.board) or false
+	stations.dinner.prompt.Enabled = free and s.dinner ~= nil and s.dinner.ready == true or false
 	if s and s.sprint and s.sprint.on and not stations.sprint.prompt.Enabled and free then
 		-- cooling down: the prompt shows the wait instead (still visible, tapping it says "Ready in ...")
 		local left = math.ceil((s.sprint.readyIn or 0) - (now - stateAt))
