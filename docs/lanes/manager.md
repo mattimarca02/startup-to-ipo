@@ -112,3 +112,9 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-19 06:43 world start FAILED (permission denied by the run classifier, second time in a row since 03:44): no PR, lane file still idle; stop trying, sent to the owner.
 2026-10-19 06:43 ux not started: PR #63 MERGE at its head 97d015c, mergeable clean; sent to the owner.
 2026-10-19 06:43 notified owner: #63 ready to merge (clean; #61 and #62 still clean and waiting); world start denied twice (start it himself).
+2026-10-19 09:45 idea: none (idee.md "Nuove" empty).
+2026-10-19 09:45 building started: started by the manager at 03:44 (over 3 h), no PR, no new branch, lane file still idle; "previous run stopped" restart (cloud only, no Mac approval).
+2026-10-19 09:45 gameplay not started: PR #61 merged 08:59; idle, every next item waits for the owner (gate G1 for items 4 and 6, offline valuation share 10% or 0%, written OKs for items 5 and 8); sent to the owner.
+2026-10-19 09:45 ux not started: PR #64 open (head 1674636), no verdict yet; goes to quality.
+2026-10-19 09:45 quality start FAILED (permission denied by the run classifier): review PR #64 (ux, head 1674636).
+2026-10-19 09:46 notified owner: #61, #62, #63 merged; quality start denied (#64 needs a review); gameplay waits for his G1 and decisions.
