@@ -1469,10 +1469,14 @@ def preview_source():
 
 
 def upgrades_lua():
+    # overhaul 2: the six upgrades with a station prop (TycoonCore's OLD_STATIONS, in slot order) keep their icons
     core = read("TycoonCore.lua")
-    names = re.findall(r'\{ name = "([^"]+)",\s+cost = ', core)
+    block = core[core.index("local OLD_STATIONS = {"):]
+    block = block[:block.index("\n}")]
+    rows = re.findall(r'(?:\["([^"]+)"\]|(\w+)) =\s+\{ slot = (\d)', block)
+    names = [n for _, n in sorted((int(slot), a or b) for a, b, slot in rows)]
     if len(names) != 6:
-        raise SystemExit("icon_test: TycoonCore's UPGRADES changed (%d found): the Office icons must be checked again" % len(names))
+        raise SystemExit("icon_test: TycoonCore's OLD_STATIONS changed (%d found): the Office icons must be checked again" % len(names))
     return "{ " + ", ".join('"%s"' % n for n in names) + " }"
 
 

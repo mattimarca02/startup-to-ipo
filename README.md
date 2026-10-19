@@ -38,6 +38,7 @@ Every Studio script has one `.lua` file here with exactly the same name. The rep
 | `WorldVisuals.lua` | ServerScriptService | ModuleScript | Builds the ring's plaza from `WorldArt` and checks it (TycoonCore calls it in pcall, only with the claim on) |
 | `PlotArt.lua` | ServerScriptService | ModuleScript | The art as data: one room per funding stage (Garage, Seed, Series A, Series B, IPO-ready, on the same 60 x 60 plot, built from Parts and from the 3D kit's furniture: `PlotArt.Kit`), the hire desks, the six upgrade props |
 | `LobbyConfig.lua` | ReplicatedStorage | ModuleScript | The lobby: the claim switch `ClaimEnabled` (on since 2026-10-18), the garages (the ring around the plaza with the claim on; the old row with it off), the claim rule `canClaim`, the texts. Create it before pasting TycoonCore |
+| `OfficeConfig.lua` | ReplicatedStorage | ModuleScript | The office (overhaul 2): the 63-item catalog by funding stage, the six buildings and their multipliers, the workstation desks, direct hires, the 10% valuation share of gifts, the frozen old stages for the migration, and the pure purchase checks. Create it before pasting TycoonCore |
 | `ShopConfig.lua` | ReplicatedStorage | ModuleScript | Every pass and product: name, price, ID, plus the `EggsEnabled` switch |
 | `CreatureConfig.lua` | ReplicatedStorage | ModuleScript | Creatures, rarities, eggs, odds, slot counts, poaching rules (`CreatureConfig.Poaching`). Game balance lives here. |
 | `CreatureModels.lua` | ReplicatedStorage | ModuleScript | Builds each creature's placeholder 3D model |
@@ -64,6 +65,7 @@ Other files:
 
 | File | What it is |
 |---|---|
+| `tools/office_test.py` | Overhaul 2's office: the catalog, the ladder, the purchase checks, workstations and the pass, direct hires, the `office` save section and the one-time building move (real OfficeConfig, CompanyConfig, CompanyServer and TycoonCore's own functions, with mutants) |
 | `sync_monetization.py`, `sync_monetization.bat` | Create and update the passes and products on Roblox from `ShopConfig` |
 | `icons/` | Pass icons that `sync_monetization` uploads |
 | `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |

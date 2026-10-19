@@ -969,32 +969,56 @@ local function newWorld(opts)
 		debugRemote.Parent = folder
 		rawset(debugRemote, "_methods", { InvokeServer = function(_, ...) return w.invoke("ShopDebug", ...) end })
 	end
-	-- A fake server for the Office: the same order, Cash and messages as TycoonCore.buyUpgrade
+	-- A fake server for the Office and Hire tabs (overhaul 2): the same rules and messages as TycoonCore's buyUpgrade,
+	-- buyBuilding, buyDesk and hireDirect (OfficeConfig's checks), and the "Office" answer
+	local OCS = assert(loadstring(MODULE_SOURCES.OfficeConfig, "=OfficeConfig"))()
+	local function stageNow()
+		local IC = assert(loadstring(MODULE_SOURCES.IpoConfig, "=IpoConfig"))()
+		return IC.stageIndex(player:GetAttribute("IpoValuation") or 0, player:GetAttribute("IpoCount") or 0)
+	end
+	local function ownedSet()
+		local owned = {}
+		for i, u in ipairs(UPGRADES) do if player:GetAttribute("Upgrade" .. i) then owned[u.name] = true end end
+		return owned
+	end
+	w.desks, w.team = 0, 0
 	w.handlers = {
 		ShopAction = function(action, id)
 			if action == "Upgrades" then
-				if w.failUpgrades then
-					return false, "not ready"
-				end
 				local list = {}
 				for _, u in ipairs(UPGRADES) do
 					table.insert(list, { name = u.name, cost = u.cost, income = u.income, icon = u.icon })
 				end
 				return true, list
-			elseif action == "BuyUpgrade" then
+			elseif action == "Office" then
+				if w.failUpgrades then return false, "not ready" end
+				return true, { stage = stageNow(), building = player:GetAttribute("Building") or 1, desks = w.desks,
+					capacity = OCS.workstations(w.desks, 0), team = w.team, owned = {}, hires = {} }
+			elseif action == "BuyUpgrade" or action == "Hire" then
 				if typeof(id) ~= "number" then return false, "Bad request" end
 				if w.refuseWith then return false, w.refuseWith end
-				local upg = UPGRADES[id]
-				if not upg or id % 1 ~= 0 then return false, "Unknown upgrade" end
-				if player:GetAttribute("Upgrade" .. id) then return false, upg.name .. " is already yours" end
-				for i = 1, id - 1 do
-					if not player:GetAttribute("Upgrade" .. i) then return false, "Buy " .. UPGRADES[i].name .. " first" end
+				if action == "Hire" then
+					w.team += 1
+					return true, "Hired"
 				end
-				if w.cash.Value < upg.cost then return false, "You need $" .. upg.cost .. " for " .. upg.name end
-				w.cash.Value -= upg.cost
-				w.income.Value += upg.income
+				local item, why = OCS.checkItem(id, stageNow(), ownedSet(), w.cash.Value)
+				if not item then return false, why end
+				w.cash.Value -= item.price
+				w.income.Value += item.income
 				player:SetAttribute("Upgrade" .. id, true)
-				return true, "Bought " .. upg.name
+				return true, "Bought " .. item.key
+			elseif action == "BuyBuilding" then
+				local building, n = OCS.checkBuilding(player:GetAttribute("Building") or 1, stageNow(), w.cash.Value)
+				if not building then return false, n end
+				w.cash.Value -= building.price
+				player:SetAttribute("Building", n)
+				return true, "Your new " .. building.name
+			elseif action == "BuyDesk" then
+				local desk, why = OCS.checkDesk(w.desks, stageNow(), w.cash.Value, OCS.workstations(w.desks, 0))
+				if not desk then return false, why end
+				w.cash.Value -= desk.price
+				w.desks += 1
+				return true, "New desk"
 			end
 			return false, "Unknown action"
 		end,
@@ -1346,6 +1370,11 @@ end
 """
 
 LADDER_TESTS = r"""-- Tests: the Office ladder's pure functions (ShopLayout.ladder, barFill, timeText, officeRow, hero, stack) ---------
+-- Overhaul 2: the Office tab is the catalog by stage now (OFFICE_TESTS); the ladder's pure functions stay in ShopLayout and
+-- are still checked here on the six garage upgrades as they were (name, price, income), their own fixed list.
+local UPGRADES = { { name = "Desk", cost = 0, income = 1, icon = "🪑" }, { name = "Coffee Machine", cost = 25, income = 2, icon = "☕" },
+	{ name = "Laptop", cost = 100, income = 5, icon = "💻" }, { name = "Server Rack", cost = 400, income = 15, icon = "🗄️" },
+	{ name = "Whiteboard", cost = 1500, income = 40, icon = "📋" }, { name = "Neon Logo", cost = 5000, income = 120, icon = "💡" } }
 do
 	local ShopConfigPure = (function()
 		local fn = assert(loadstring(MODULE_SOURCES.ShopConfig, "=ShopConfig"))
@@ -1354,7 +1383,7 @@ do
 	end)()
 	local money = ShopConfigPure.formatCash
 	local N = #UPGRADES
-	check("ladder: the upgrade list is TycoonCore's six", N == 6 and UPGRADES[1].name == "Desk" and UPGRADES[1].cost == 0)
+	check("ladder: the fixed list is the six garage upgrades", N == 6 and UPGRADES[1].name == "Desk" and UPGRADES[1].cost == 0)
 	local function ownedPrefix(k)
 		local owned = {}
 		for i = 1, N do owned[i] = i <= k end
@@ -2042,14 +2071,15 @@ do
 	local w = startShop({ w = 667, h = 375, bar = 36, cash = 0, income = 0 })
 	openShop(w, label)
 	local window = win(w)
-	local only = #w.invokes == 1 and w.invokes[1].remote == "ShopAction" and w.invokes[1].args.n == 1 and w.invokes[1].args[1] == "Upgrades"
-	check(label .. ": at start the Office asks the server only for \"Upgrades\", once", only, #w.invokes)
+	local only = #w.invokes >= 1 and w.invokes[1].remote == "ShopAction" and w.invokes[1].args.n == 1 and w.invokes[1].args[1] == "Office"
+	check(label .. ": opening the shop asks the server for \"Office\" (the building, the desks), nothing else", only, #w.invokes)
 	local desk = find(window, "Office1")
 	tap(desk and desk:FindFirstChild("BuyButton"), label .. ": buy the Desk")
 	run(0.2)
-	local last = w.invokes[#w.invokes]
-	check(label .. ": a Buy tap sends only \"BuyUpgrade\" and the upgrade's number (no price, no Cash)",
-		last and last.args[1] == "BuyUpgrade" and last.args.n == 2 and last.args[2] == 1 and typeOf(last.args[2]) == "number", last and last.args.n)
+	local last
+	for k = #w.invokes, 1, -1 do if w.invokes[k].args[1] == "BuyUpgrade" then last = w.invokes[k] break end end
+	check(label .. ": a Buy tap sends only \"BuyUpgrade\" and the item's number (no price, no Cash)",
+		last and last.args.n == 2 and last.args[2] == 1 and typeOf(last.args[2]) == "number", last and last.args.n)
 	check(label .. ": the server's answer reaches the player (the Desk is bought)", w.player:GetAttribute("Upgrade1") == true)
 	local seen = {}
 	for _, call in ipairs(w.invokes) do
@@ -2059,9 +2089,9 @@ do
 	end
 	local others
 	for key in pairs(seen) do
-		if key ~= "Upgrades/1" and key ~= "BuyUpgrade/2" then others = key end
+		if key ~= "Office/1" and key ~= "BuyUpgrade/2" then others = key end
 	end
-	check(label .. ": the Office only ever sends \"Upgrades\" and \"BuyUpgrade\", index", others == nil, others)
+	check(label .. ": the Office only ever sends \"Office\" and \"BuyUpgrade\", index here", others == nil, others)
 	noErrors(label)
 end
 
@@ -2195,501 +2225,202 @@ do
 end
 """
 
-OFFICE_TESTS = r"""-- Tests: the Office ladder in the real ShopClient ---------------------------------------------------------------
-local REFUSAL = Color3.fromRGB(255, 120, 120)
+OFFICE_TESTS = r"""-- Tests: the Office and Hire tabs in the real ShopClient (overhaul 2: the catalog by funding stage) ---------------
+local OC = assert(loadstring(MODULE_SOURCES.OfficeConfig, "=OfficeConfig"))()
 local function officeOf(w) return find(win(w), "OfficePage") end
-local function rung(w, i) return kid(officeOf(w), "Office" .. i) end
--- The rung that shows the hero card (its bar is shown)
-local function heroOf(w)
-	local page = officeOf(w)
-	for i = 1, #UPGRADES do
-		local r = kid(page, "Office" .. i)
-		if r and r.Visible and prop(kid(r, "Bar"), "Visible", false) then return r, i end
-	end
-	return nil, nil
-end
+local function hireOf(w) return find(win(w), "OfficePage") end -- the Hire chip's cards are on the Office page
+local function card(w, i) return kid(officeOf(w), "Office" .. i) end
 local function startOffice(opts)
 	local w = startShop(opts)
 	openShop(w, "office")
 	tap(find(win(w), "TabOffice"), "the Office tab")
+	run(0.3) -- the "Office" answer
 	return w
 end
-local function ladderFor(w, bought, busy)
-	local owned = {}
-	for i = 1, #UPGRADES do owned[i] = w.player:GetAttribute("Upgrade" .. i) == true end
-	return ShopLayout.ladder(UPGRADES, owned, w.cash.Value, w.income.Value, w.module("ShopConfig").formatCash, bought, busy)
-end
--- Every request the Office sent: "Upgrades", or "BuyUpgrade" with a whole number, nothing else
+-- Every request the shop's Office and Hire tabs sent: "Office", "BuyBuilding", "BuyDesk", or "BuyUpgrade" / "Hire" with a whole number
 local function officeWiring(w, label)
 	local bad
 	for _, call in ipairs(w.invokes) do
 		if call.remote == "ShopAction" then
 			local a = call.args
-			local fine = (a.n == 1 and a[1] == "Upgrades") or (a.n == 2 and a[1] == "BuyUpgrade" and typeOf(a[2]) == "number" and a[2] % 1 == 0)
+			local fine = (a.n == 1 and (a[1] == "Office" or a[1] == "BuyBuilding" or a[1] == "BuyDesk"))
+				or (a.n == 2 and (a[1] == "BuyUpgrade" or a[1] == "Hire") and typeOf(a[2]) == "number" and a[2] % 1 == 0)
 			if not fine then bad = tostring(a[1]) .. " with " .. a.n .. " values" end
 		end
 	end
-	check(label .. ": the Office only ever sends \"Upgrades\" and \"BuyUpgrade\", index", bad == nil, bad)
+	check(label .. ": the Office and Hire tabs only send Office, BuyBuilding, BuyDesk, BuyUpgrade index, Hire index (never a price)", bad == nil, bad)
 end
-local function buyCalls(w)
+local function lastCall(w, action)
+	for k = #w.invokes, 1, -1 do
+		local call = w.invokes[k]
+		if call.remote == "ShopAction" and call.args[1] == action then return call end
+	end
+	return nil
+end
+-- Scrolls the Office page so this card shows whole at its top (a player scrolls the list the same way)
+local function scrollTo(w, c)
+	local page = officeOf(w)
+	if page and c then
+		page.CanvasPosition = Vector2.new(0, 0)
+		run(0.05)
+		page.CanvasPosition = Vector2.new(0, math.max(0, rectOf(c).y - rectOf(page).y))
+		run(0.05)
+	end
+end
+local function calls(w, action)
 	local n = 0
 	for _, call in ipairs(w.invokes) do
-		if call.remote == "ShopAction" and call.args[1] == "BuyUpgrade" then n += 1 end
+		if call.remote == "ShopAction" and call.args[1] == action then n += 1 end
 	end
 	return n
 end
 local function d9Office(w, label)
 	local word
-	for _, d in ipairs(officeOf(w) and officeOf(w):GetDescendants() or {}) do
-		if TEXTCLASS[d.ClassName] and d9Word(d.Text) then word = d:GetFullName() .. ": " .. d.Text end
+	for _, page in ipairs({ officeOf(w), hireOf(w) }) do
+		for _, d in ipairs(page and page:GetDescendants() or {}) do
+			if TEXTCLASS[d.ClassName] and d9Word(d.Text) then word = d:GetFullName() .. ": " .. d.Text end
+		end
 	end
-	check(label .. ": no Office text uses the words odds, chance, luck or random", word == nil, word)
+	check(label .. ": no Office or Hire text uses the words odds, chance, luck or random", word == nil, word)
 end
+local STAGE_AT = { 0, 30000, 10000000, 100000000, 300000000, 1000000000 }
 
--- Every owned prefix (0 to 6) and Cash below, at and above the next price, in landscape and portrait --------------
+-- Every stage reached, in landscape and portrait: the stage shown, the cards of that stage only, locked and owned states ---
 for _, size in ipairs({ { 667, 375, 36 }, { 320, 568, 36 } }) do
-	for k = 0, #UPGRADES do
-		local nextUpg = UPGRADES[k + 1]
-		for _, cash in ipairs(nextUpg and { math.max(0, nextUpg.cost - 1), nextUpg.cost, nextUpg.cost + 100 } or { 0 }) do
-			local label = "office " .. size[1] .. "x" .. size[2] .. ", " .. k .. " owned, $" .. cash
-			local w = startOffice({ w = size[1], h = size[2], bar = size[3], owned = k, cash = cash, income = 3 })
-			run(1.1)
-			noErrors(label)
-			local S = ladderFor(w)
-			local page = officeOf(w)
-			local hero, heroIndex = heroOf(w)
-			if nextUpg then
-				check(label .. ": the hero card is the next upgrade, Office" .. (k + 1), heroIndex == k + 1, heroIndex)
-				local b = kid(hero, "BuyButton")
-				check(label .. ": the hero's button says what ShopLayout.ladder says (" .. S.hero.button .. ")",
-					prop(b, "Text") == S.hero.button and prop(b, "Visible", false), prop(b, "Text"))
-				check(label .. ": Buy shows only with the Cash there (or free); else a gray Need $X more",
-					(prop(b, "Text", ""):sub(1, 4) == "Buy " or prop(b, "Text") == "Get it free") == (nextUpg.cost == 0 or cash >= nextUpg.cost))
-				local fill = kid(kid(hero, "Bar"), "Fill")
-				check(label .. ": the bar's fill is the ladder's, clamped to 0..1",
-					fill ~= nil and math.abs(fill.Size.X.Scale - S.hero.fill) < 1e-9 and fill.Size.X.Scale >= 0 and fill.Size.X.Scale <= 1)
-				local time = kid(hero, "Time")
-				check(label .. ": the bar text and the time (none when the Cash is there)",
-					prop(kid(hero, "Progress"), "Text") == S.hero.progress
-						and ((S.hero.time == nil and not prop(time, "Visible", true)) or (prop(time, "Visible", false) and prop(time, "Text") == S.hero.time)))
-				check(label .. ": the hero shows whole on the page", hero ~= nil and inside(visibleRect(hero), rectOf(hero)) and visibleRect(hero).h == rectOf(hero).h)
-			else
-				local banner = kid(page, "OfficeComplete")
-				check(label .. ": all six bought: no hero, the Office complete banner shows at the top",
-					hero == nil and prop(banner, "Visible", false) and prop(kid(banner, "BannerTitle"), "Text") == "Office complete"
-						and prop(kid(banner, "BannerInfo"), "Text") == "Your next step: the IPO window" and visibleRect(banner).h == rectOf(banner).h)
+	for stage = 1, 6 do
+		local label = "office " .. size[1] .. "x" .. size[2] .. ", stage " .. stage
+		local w = startOffice({ w = size[1], h = size[2], bar = size[3], owned = 1, cash = 1e12, income = 3,
+			attrs = { IpoValuation = STAGE_AT[stage], IpoCount = 0, Building = 1 } })
+		noErrors(label)
+		local visibleOk, why = true, nil
+		for i, item in ipairs(OC.Items) do
+			local c = card(w, i)
+			if not c then visibleOk, why = false, "no card Office" .. i break end
+			if prop(c, "Visible", false) ~= (item.stage == stage) then visibleOk, why = false, "Office" .. i .. " visible = " .. tostring(prop(c, "Visible")) end
+		end
+		check(label .. ": the shop opens on the stage reached, and shows that stage's items only", visibleOk, why)
+		local chip = find(officeOf(w), "Stage" .. stage)
+		check(label .. ": its stage chip is the green one", chip ~= nil and chip.BackgroundColor3 == Color3.fromRGB(0, 200, 90))
+		local priceOk, pwhy = true, nil
+		for i, item in ipairs(OC.Items) do
+			if item.stage == stage and i ~= 1 then
+				local text = prop(kid(card(w, i), "BuyButton"), "Text")
+				if text ~= OC.money(item.price) then priceOk, pwhy = false, "Office" .. i .. ": " .. tostring(text) end
 			end
-			local rowsOk, why = true, nil
-			for i = 1, #UPGRADES do
-				local r = rung(w, i)
-				local b = kid(r, "BuyButton")
-				if i <= k then
-					if prop(r, "Visible", true) then rowsOk, why = false, "Office" .. i .. " is owned but not folded" end
-				elseif i > k + 1 then
-					if not prop(r, "Visible", false) or prop(b, "Visible", true) then rowsOk, why = false, "Office" .. i .. " locked: shown with no button" end
-					if prop(kid(r, "Info"), "Text") ~= "Unlocks after " .. UPGRADES[i - 1].name then rowsOk, why = false, "Office" .. i .. ": " .. tostring(prop(kid(r, "Info"), "Text")) end
-					if not prop(kid(kid(r, "Badge"), "Lock"), "Visible", false) then rowsOk, why = false, "Office" .. i .. " has no padlock" end
-				end
-			end
-			check(label .. ": owned rungs fold into the summary row; locked rungs are shown, a padlock, Unlocks after <the one before>, no button", rowsOk, why)
-			local summary = kid(page, "OfficeSummary")
-			check(label .. ": the summary row says k of 6 bought (none while nothing is owned)",
-				(k == 0 and not prop(summary, "Visible", true)) or (k > 0 and prop(summary, "Visible", false) and prop(kid(summary, "SummaryTitle"), "Text") == k .. " of 6 bought"))
-			screenChecks(w, label)
-			officeWiring(w, label)
+		end
+		check(label .. ": every item of the stage shows its price from OfficeConfig", priceOk, pwhy)
+		local building = kid(officeOf(w), "OfficeBuilding")
+		local bText = prop(kid(building, "BuyButton"), "Text")
+		if stage == 1 then
+			check(label .. ": the Garage is yours", bText == "Yours", bText)
+		elseif stage == 2 then
+			check(label .. ": the Small Office can be bought at its price", bText == OC.money(OC.Buildings[2].price), bText)
+		else
+			check(label .. ": a building two steps ahead waits (Later)", bText == "Later", bText)
+		end
+		screenChecks(w, label)
+		officeWiring(w, label)
+		d9Office(w, label)
+	end
+end
+
+-- A stage not reached: its chip shows its items greyed and Locked ------------------------------------------------------
+do
+	local label = "office locked stage"
+	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 1e12, income = 3, attrs = { IpoValuation = 0, IpoCount = 0, Building = 1 } })
+	tap(find(officeOf(w), "Stage3"), label .. ": the Series A chip")
+	local locked, why = true, nil
+	for i, item in ipairs(OC.Items) do
+		if item.stage == 3 then
+			local c = card(w, i)
+			if not prop(c, "Visible", false) or prop(kid(c, "BuyButton"), "Text") ~= "Locked" then locked, why = false, "Office" .. i end
+			if not string.find(prop(kid(c, "Description"), "Text", ""), "Unlocks at Series A", 1, true) then locked, why = false, "Office" .. i .. " says no Unlocks at Series A" end
 		end
 	end
-end
-
--- Unfolding the owned rungs ------------------------------------------------------------------------------------------
-do
-	local label = "office unfold"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 3, cash = 0, income = 8 })
-	local summary = kid(officeOf(w), "OfficeSummary")
-	tap(summary, label .. ": tap the summary")
-	local shown = true
-	for i = 1, 3 do
-		local r = rung(w, i)
-		if not (prop(r, "Visible", false) and prop(kid(r, "BuyButton"), "Text") == "Owned" and prop(kid(kid(r, "Badge"), "Check"), "Visible", false)) then shown = false end
+	check(label .. ": Series A's items are shown, Locked, with Unlocks at Series A", locked, why)
+	local before = calls(w, "BuyUpgrade")
+	for i, item in ipairs(OC.Items) do
+		if item.stage == 3 then tap(kid(card(w, i), "BuyButton"), label .. ": a locked Buy") break end
 	end
-	check(label .. ": a tap on the summary shows the owned rungs, each with a check mark and Owned", shown and prop(kid(summary, "SummaryToggle"), "Text") == "Hide")
-	local before = buyCalls(w)
-	tap(kid(rung(w, 1), "BuyButton"), label .. ": an owned rung's button")
-	check(label .. ": an owned rung's button sends nothing", buyCalls(w) == before)
-	screenChecks(w, label .. " open")
-	tap(summary, label .. ": tap it again")
-	check(label .. ": a second tap folds them again", not prop(rung(w, 1), "Visible", true) and prop(kid(summary, "SummaryToggle"), "Text") == "Show")
+	run(0.3)
+	check(label .. ": a locked item's button sends nothing", calls(w, "BuyUpgrade") == before)
+	check(label .. ": the Big Office says Locked", prop(kid(kid(officeOf(w), "OfficeBuilding"), "BuyButton"), "Text") == "Locked")
 	noErrors(label)
 end
 
--- Loading: three gray rungs while "Upgrades" is asked ------------------------------------------------------------
-do
-	local label = "office skeleton"
-	local w = newWorld({ w = 667, h = 375, bar = 36 })
-	w.hold = true
-	w.start()
-	run(0.2)
-	openShop(w, label)
-	local page = officeOf(w)
-	local shownRows = 0
-	for i = 1, 3 do
-		if prop(kid(page, "OfficeSkeleton" .. i), "Visible", false) then shownRows += 1 end
-	end
-	check(label .. ": three gray skeleton rungs while Upgrades is asked (no rung, no error yet)",
-		shownRows == 3 and kid(page, "Office1") == nil and not prop(kid(page, "OfficeError"), "Visible", false) and not prop(kid(page, "RetryButton"), "Visible", false))
-	screenChecks(w, label)
-	w.hold = false
-	w.release(w.handlers.ShopAction("Upgrades"))
-	run(0.1)
-	local gone = true
-	for i = 1, 3 do
-		if prop(kid(page, "OfficeSkeleton" .. i), "Visible", false) then gone = false end
-	end
-	check(label .. ": the skeleton rungs go away once the list arrives, and the six rungs exist", gone and kid(page, "Office6") ~= nil and heroOf(w) ~= nil)
-	noErrors(label)
-end
-
--- After 5 failed tries: the sentence and a Retry button (the same 5 tries again) ------------------------------------
-do
-	local label = "office retry"
-	local w = newWorld({ w = 320, h = 568, bar = 36 })
-	w.failUpgrades = true
-	w.start()
-	openShop(w, label)
-	run(12)
-	local function asks()
-		local n = 0
-		for _, call in ipairs(w.invokes) do
-			if call.remote == "ShopAction" and call.args[1] == "Upgrades" then n += 1 end
-		end
-		return n
-	end
-	local page = officeOf(w)
-	local retry, err = kid(page, "RetryButton"), kid(page, "OfficeError")
-	check(label .. ": the Office asks 5 times, 2 s apart, before it gives up", asks() == 5, asks())
-	check(label .. ": after the 5 tries: the sentence and a Retry button (44 px or more)",
-		prop(err, "Visible", false) and prop(err, "Text") == "The office upgrades aren't available right now." and prop(retry, "Visible", false)
-			and rectOrEmpty(retry).h >= 44 and rectOrEmpty(retry).w >= 44)
-	check(label .. ": no skeleton rungs once it gave up", not prop(kid(page, "OfficeSkeleton1"), "Visible", true))
-	screenChecks(w, label .. " failed")
-	tap(retry, label .. ": tap Retry")
-	check(label .. ": Retry shows the gray rungs again while it asks", prop(kid(page, "OfficeSkeleton1"), "Visible", false) and not prop(err, "Visible", true))
-	run(12)
-	check(label .. ": Retry asks the same 5 times again", asks() == 10 and prop(retry, "Visible", false), asks())
-	w.failUpgrades = false
-	tap(retry, label .. ": Retry once the server answers")
-	run(0.2)
-	check(label .. ": then the rungs come, the sentence and Retry go", kid(page, "Office6") ~= nil and not prop(err, "Visible", true) and not prop(retry, "Visible", true) and asks() == 11)
-	officeWiring(w, label)
-	noErrors(label)
-end
-
--- Buying: one tap sends only the number; "...", then "Bought!", the icon pops, +$X/s floats up, the card folds --------
+-- Buying: an item sends only its number; the building sends only BuyBuilding -------------------------------------------
 do
 	local label = "office buy"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 30, income = 1 })
-	run(1.1)
-	local hero = rung(w, 2)
-	local b = kid(hero, "BuyButton")
-	local before = buyCalls(w)
-	check(label .. ": the Coffee Machine is the hero with Buy $25", prop(b, "Text") == "Buy $25")
-	tap(b, label .. ": Buy $25")
-	check(label .. ": one tap sends the buy at once: an Office upgrade never asks for a confirmation", buyCalls(w) == before + 1)
-	check(label .. ": while the request runs the button says ...", prop(b, "Text") == "...")
-	tap(b, label .. ": a second tap while it runs")
-	check(label .. ": a second tap while the request runs sends nothing", buyCalls(w) == before + 1)
-	local last = w.invokes[#w.invokes]
-	check(label .. ": the request is BuyUpgrade and the upgrade's number, nothing else (no price)", last.args[1] == "BuyUpgrade" and last.args[2] == 2 and last.args.n == 2)
-	run(0.1)
-	check(label .. ": the server said yes: the card says Bought! a moment", prop(b, "Text") == "Bought!" and heroOf(w) == hero)
-	local popped, floated = false, nil
-	for _, tw in ipairs(w.tweens) do
-		if tw.inst.Name == "Pop" and tw.goals.Scale == 1.08 and tw.inst.Parent == kid(hero, "Icon") then popped = true end
+	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 0, cash = 100000, income = 3, attrs = { IpoValuation = 30000, IpoCount = 0, Building = 1 } })
+	tap(find(officeOf(w), "Stage1"), label .. ": the Garage chip")
+	tap(kid(card(w, 1), "BuyButton"), label .. ": the free Desk")
+	run(0.3)
+	local last = lastCall(w, "BuyUpgrade")
+	check(label .. ": the Desk's Buy sends BuyUpgrade, 1 (no price)", last and last.args[2] == 1 and last.args.n == 2, last and last.args.n)
+	check(label .. ": the server's answer reaches the player (the Desk is bought)", w.player:GetAttribute("Upgrade1") == true)
+	check(label .. ": the Desk now says Owned", prop(kid(card(w, 1), "BuyButton"), "Text") == "Owned")
+	local before = calls(w, "BuyUpgrade")
+	scrollTo(w, card(w, 2))
+	tap(kid(card(w, 2), "BuyButton"), label .. ": Coffee Machine")
+	tap(kid(card(w, 2), "BuyButton"), label .. ": Coffee Machine again, at once")
+	run(0.3)
+	check(label .. ": a second tap while the request runs sends nothing", calls(w, "BuyUpgrade") == before + 1, calls(w, "BuyUpgrade") - before)
+	scrollTo(w, find(officeOf(w), "StageChips"))
+	tap(find(officeOf(w), "Stage2"), label .. ": the Seed chip")
+	tap(kid(kid(officeOf(w), "OfficeBuilding"), "BuyButton"), label .. ": buy the Small Office")
+	run(0.3)
+	local b = lastCall(w, "BuyBuilding")
+	check(label .. ": the building's Buy sends BuyBuilding only", b and b.args.n == 1)
+	check(label .. ": after the purchase the Small Office says Yours", prop(kid(kid(officeOf(w), "OfficeBuilding"), "BuyButton"), "Text") == "Yours")
+	officeWiring(w, label)
+	noErrors(label)
+end
+
+-- Hire tab: the desk card and the direct hires ------------------------------------------------------------------------
+for _, size in ipairs({ { 667, 375, 36 }, { 320, 568, 36 } }) do
+	local label = "hire " .. size[1] .. "x" .. size[2]
+	local w = startOffice({ w = size[1], h = size[2], bar = size[3], owned = 1, cash = 1e9, income = 3, attrs = { IpoValuation = 0, IpoCount = 0, Building = 1 } })
+	tap(find(officeOf(w), "StageHire"), label .. ": the Hire chip")
+	run(0.2)
+	local page = hireOf(w)
+	local desk = kid(page, "HireDesk")
+	check(label .. ": the desk card offers desk 2 at its price", prop(kid(desk, "BuyButton"), "Text") == OC.money(OC.Bought[1].price), prop(kid(desk, "BuyButton"), "Text"))
+	local list = OC.hireList(w.module("CreatureConfig"))
+	local hiresOk, why = #list > 0, nil
+	for i, offer in ipairs(list) do
+		local c = kid(page, "Hire" .. i)
+		if not c or prop(kid(c, "BuyButton"), "Text") ~= OC.money(offer.price) then hiresOk, why = false, "Hire" .. i .. ": " .. tostring(prop(kid(c, "BuyButton"), "Text")) end
+		if c and not string.find(prop(kid(c, "Description"), "Text", ""), OC.money(offer.eggAverage), 1, true) then hiresOk, why = false, "Hire" .. i .. " shows no egg comparison" end
 	end
-	for _, d in ipairs(hero and hero:GetChildren() or {}) do
-		if d.Name == "Float" then floated = d.Text end
-	end
-	check(label .. ": on success the icon pops (1 to 1.08 and back) and +$2/s floats up from the button", popped and floated == "+$2/s", floated)
-	check(label .. ": the feedback is in the card: no toast, no status line", not prop(kid(shopGui(w), "Toast"), "Visible", true) and not prop(kid(win(w), "StatusLine"), "Visible", true))
-	run(1)
-	local _, newHero = heroOf(w)
-	check(label .. ": then it folds into the summary (2 of 6 bought) and the Laptop is the hero",
-		not prop(hero, "Visible", true) and newHero == 3 and prop(kid(kid(officeOf(w), "OfficeSummary"), "SummaryTitle"), "Text") == "2 of 6 bought")
-	check(label .. ": the floating text is gone", kid(hero, "Float") == nil)
+	check(label .. ": every direct hire shows its price and what an egg pays on average for the same rarity", hiresOk, why)
+	check(label .. ": the Hire chip shows no item and no building", not prop(card(w, 1), "Visible", true) and not prop(kid(page, "OfficeBuilding"), "Visible", true))
+	scrollTo(w, desk)
+	tap(kid(desk, "BuyButton"), label .. ": buy a desk")
+	run(0.3)
+	local d = lastCall(w, "BuyDesk")
+	check(label .. ": a desk's Buy sends BuyDesk only", d and d.args.n == 1)
+	scrollTo(w, kid(page, "Hire1"))
+	tap(kid(kid(page, "Hire1"), "BuyButton"), label .. ": hire the first")
+	run(0.3)
+	local h = lastCall(w, "Hire")
+	check(label .. ": a hire's Buy sends Hire and its number only", h and h.args[2] == 1 and h.args.n == 2)
+	screenChecks(w, label)
+	officeWiring(w, label)
 	d9Office(w, label)
-	officeWiring(w, label)
 	noErrors(label)
 end
 
--- The last buy: the page was scrolled down to the hero; once all six are bought it goes back to its top ------------
+-- The server says no: the message shows, nothing is pretended ---------------------------------------------------------
 do
-	local label = "office complete after the last buy"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 5, cash = 6000, income = 63 })
-	tap(kid(officeOf(w), "OfficeSummary"), label .. ": unfold the five owned rungs")
-	local hero = rung(w, 6)
-	scrollTo(hero)
-	local function scrollY() return prop(officeOf(w), "CanvasPosition", v2(0, -1)).Y end
-	check(label .. ": the page is scrolled down to the Neon Logo", scrollY() > 100, scrollY())
-	tap(kid(hero, "BuyButton"), label .. ": Buy $5,000")
-	run(1.2)
-	local banner = kid(officeOf(w), "OfficeComplete")
-	check(label .. ": the Office complete banner shows at the top (the page scrolled back up)",
-		prop(banner, "Visible", false) and visibleRect(banner).h == rectOrEmpty(banner).h and scrollY() == 0, scrollY())
-	screenChecks(w, label)
-	noErrors(label)
-end
-
--- The free Desk: "Get it free" -------------------------------------------------------------------------------------
-do
-	local label = "office desk"
-	local w = startOffice({ w = 320, h = 568, bar = 0, owned = 0, cash = 0, income = 0 })
-	local b = kid(rung(w, 1), "BuyButton")
-	check(label .. ": the free Desk says Get it free, its bar full, Free", prop(b, "Text") == "Get it free" and prop(kid(rung(w, 1), "Progress"), "Text") == "Free")
-	tap(b, label .. ": Get it free")
-	run(1.2)
-	check(label .. ": the Desk is bought and the Coffee Machine is next", w.player:GetAttribute("Upgrade1") == true and select(2, heroOf(w)) == 2)
-	noErrors(label)
-end
-
--- A refusal shows the server's text in the card, in red, for 3 s (and a failed call says so) -------------------------
-for _, case in ipairs({ { "Too fast", "Too fast" }, { "error", "Couldn't buy that. Please try again." } }) do
-	local label = "office refusal (" .. case[1] .. ")"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 30, income = 1 })
-	if case[1] == "error" then
-		local old = w.handlers.ShopAction
-		w.handlers.ShopAction = function(action, id)
-			if action == "BuyUpgrade" then error("the network dropped") end
-			return old(action, id)
-		end
-	else
-		w.refuseWith = case[1]
-	end
-	local hero = rung(w, 2)
-	tap(kid(hero, "BuyButton"), label .. ": Buy")
-	run(0.2)
-	local status = kid(hero, "Status")
-	check(label .. ": the card shows the answer in red", prop(status, "Visible", false) and prop(status, "Text") == case[2] and prop(status, "TextColor3") == REFUSAL, prop(status, "Text"))
-	check(label .. ": no toast, no status line (the message is in the card)", not prop(kid(shopGui(w), "Toast"), "Visible", true) and not prop(kid(win(w), "StatusLine"), "Visible", true))
-	check(label .. ": the upgrade is not bought and stays the hero", w.player:GetAttribute("Upgrade2") == false and heroOf(w) == hero and prop(kid(hero, "BuyButton"), "Text") == "Buy $25")
-	screenChecks(w, label)
-	run(3.1)
-	check(label .. ": the red line goes away after 3 s", not prop(status, "Visible", true))
-	noErrors(label)
-end
-
--- "Need $X more" sends nothing: the bar shakes and the card says how long at the Income ---------------------------
-for _, case in ipairs({ { 3, "about 5 s at your Income" }, { 0, "Your Income is $0 a second right now" } }) do
-	local label = "office need more (Income $" .. case[1] .. ")"
-	local w = startOffice({ w = 320, h = 568, bar = 36, owned = 1, cash = 10, income = case[1] })
-	local hero = rung(w, 2)
-	local b = kid(hero, "BuyButton")
-	check(label .. ": short of Cash the button says Need $15 more", prop(b, "Text") == "Need $15 more")
-	local before = #w.invokes
-	tap(b, label .. ": Need $15 more")
-	check(label .. ": Need more sends nothing", #w.invokes == before)
-	local shook = false
-	for _, tw in ipairs(w.tweens) do
-		if tw.inst == kid(hero, "Bar") then shook = true end
-	end
-	local status = kid(hero, "Status")
-	check(label .. ": the bar shakes and the card says " .. case[2], shook and prop(status, "Visible", false) and prop(status, "Text") == case[2], prop(status, "Text"))
-	screenChecks(w, label)
-	noErrors(label)
-end
-
--- The soft pulse every 4 s on an affordable Buy (never on Need more) ------------------------------------------------
-for _, case in ipairs({ { 30, true }, { 10, false } }) do
-	local label = "office pulse ($" .. case[1] .. ")"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = case[1], income = 0 })
-	run(4.2)
-	local pulses = 0
-	for _, tw in ipairs(w.tweens) do
-		if tw.inst.Name == "Pulse" and tw.goals.Scale == 1.05 then pulses += 1 end
-	end
-	check(label .. ": a soft pulse every 4 s on an affordable Buy, none on Need more", pulses == (case[2] and 1 or 0), pulses)
-	noErrors(label)
-end
-
--- The hero's lines fit their boxes on one line at 16 px, at every phone and top bar: "+$40 every second" where it
--- fits, "+$40/s" in a narrow box (568 x 320) ----------------------------------------------------------------------
-for _, size in ipairs(SIZES) do
-	for _, bar in ipairs(BARS) do
-		local label = "office hero lines " .. size[1] .. "x" .. size[2] .. "/" .. bar
-		local over, form
-		for k = 0, #UPGRADES - 1 do
-			local w = startOffice({ w = size[1], h = size[2], bar = bar, owned = k, cash = 1, income = 1 })
-			local hero = heroOf(w)
-			for _, name in ipairs({ "ItemName", "Info", "Progress", "Time" }) do
-				local l = kid(hero, name)
-				if l and l.Visible and l.Text ~= "" and measure(l.Text, 16, l.Font, math.huge).X > rectOf(l).w then
-					over = "Office" .. (k + 1) .. " " .. name .. " '" .. l.Text .. "' " .. measure(l.Text, 16, l.Font, math.huge).X .. " px in " .. rectOf(l).w
-				end
-			end
-			local info, H = kid(hero, "Info"), ladderFor(w).hero
-			local long = measure(H.info, 16, prop(info, "Font", Enum.Font.Gotham), math.huge).X <= rectOrEmpty(info).w
-			if prop(info, "Text") ~= (long and H.info or H.infoShort) then form = "Office" .. (k + 1) .. ": " .. tostring(prop(info, "Text")) end
-		end
-		check(label .. ": every line of the hero card fits its box on one line at 16 px (the name, what it earns, the bar text, the time)", over == nil, over)
-		check(label .. ": what it earns is +$X every second where that fits, +$X/s only where it does not", form == nil, form)
-	end
-end
-
--- The hero shows whole above the TutorialStrip, on every phone and top bar (the strip was up when it became the hero:
--- a strip that appears later never moves the page, see "office scroll") ------------------------------------------
-for _, size in ipairs(SIZES) do
-	for _, bar in ipairs(BARS) do
-		for _, k in ipairs({ 0, 1, 3, 5 }) do
-			local label = "office strip " .. size[1] .. "x" .. size[2] .. "/" .. bar .. ", " .. k .. " owned"
-			local w = newWorld({ w = size[1], h = size[2], bar = bar, owned = k, cash = 0, income = 1 })
-			w.playerGui:SetAttribute("TutorialBanner", "Tap the hero's button.")
-			w.start()
-			run(0.3)
-			openShop(w, label)
-			tap(find(win(w), "TabOffice"), label .. ": the Office tab")
-			local hero = heroOf(w)
-			local strip = kid(win(w), "TutorialStrip")
-			check(label .. ": the hero is fully visible above TutorialStrip",
-				hero ~= nil and prop(strip, "Visible", false) and visibleRect(hero).h == rectOf(hero).h and visibleRect(hero).w == rectOf(hero).w
-					and not overlaps(visibleRect(hero), rectOf(strip)), hero and rectText(visibleRect(hero)))
-			screenChecks(w, label)
-		end
-	end
-end
-
--- The Office page moves by itself only after a buy or a hero change: never on a message line, the tutorial's strip, a
--- tab, opening the shop, the refresh every second or a new screen size (decided by the owner) --------------------------
-for _, case in ipairs({ { 667, 375, 36, 320, 568 }, { 320, 568, 36, 667, 375 }, { 568, 320, 58, 844, 390 } }) do
-	local label = "office scroll " .. case[1] .. "x" .. case[2] .. "/" .. case[3]
-	local w = startOffice({ w = case[1], h = case[2], bar = case[3], owned = 2, cash = 0, income = 1 })
-	run(1.1)
-	local page = officeOf(w)
-	local function y() return prop(page, "CanvasPosition", v2(0, -1)).Y end
-	local function maxY() return page and math.max(0, page.CanvasSize.Y.Offset - rectOf(page).h) or -1 end
-	if page then page.CanvasPosition = v2(0, maxY()) end -- the player scrolls down to the locked rungs
-	run(0)
-	local bottom = y()
-	check(label .. ": the player can scroll the Office page down to the locked rungs", bottom > 0, bottom)
-	w.notify.OnClientEvent:Fire("2x Cash unlocked!")
-	run(0)
-	check(label .. ": a message line appearing never moves the Office page (the player's place is kept, clamped)",
-		prop(kid(win(w), "StatusLine"), "Visible", false) and y() == math.min(bottom, maxY()), y() .. " of " .. maxY())
-	local during = y()
-	run(4)
-	check(label .. ": the message line going away 3.5 s later never moves the Office page", not prop(kid(win(w), "StatusLine"), "Visible", true) and y() == during, y())
-	w.playerGui:SetAttribute("TutorialBanner", "Tap the hero's button.")
-	run(0)
-	check(label .. ": the TutorialStrip appearing never moves the Office page (kept, clamped)", y() == math.min(during, maxY()), y())
-	local withStrip = y()
-	w.playerGui:SetAttribute("TutorialBanner", nil)
-	run(0)
-	check(label .. ": the TutorialStrip going away never moves the Office page", y() == withStrip, y())
-	page.CanvasPosition = v2(0, 0) -- the player scrolls back up to the summary
-	run(0)
-	tap(find(win(w), "TabCash"), label .. ": the Cash tab")
-	tap(find(win(w), "TabOffice"), label .. ": back to the Office tab")
-	check(label .. ": a tab tap never moves the Office page", y() == 0, y())
-	tap(kid(win(w), "CloseButton"), label .. ": close")
-	tap(shopButtonOf(w), label .. ": reopen")
-	run(2.1)
-	check(label .. ": closing and opening the shop, and the refresh every second, never move it", y() == 0, y())
-	page.CanvasPosition = v2(0, maxY())
-	run(0)
-	local before = y()
-	w.resize(case[4], case[5], case[3])
-	check(label .. ": a new screen size keeps the player's place, clamped to the new canvas",
-		y() == math.min(before, maxY()) and y() >= 0, before .. " -> " .. y() .. " of " .. maxY())
-	screenChecks(w, label)
-	noErrors(label)
-end
-
--- A buy shows the card whole ("Bought!"), even when the player had scrolled part of it away. Both orders of the
--- server's two signals: the Upgrade attribute before the answer (TycoonCore sets it first), or the answer first --------
-for _, order in ipairs({ "attribute first", "answer first" }) do
-	local label = "office buy reveal (" .. order .. ")"
-	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 30, income = 1 })
-	local real = w.handlers.ShopAction
-	w.handlers.ShopAction = function(action, id)
-		if action ~= "BuyUpgrade" then return real(action, id) end
-		w.cash.Value -= UPGRADES[id].cost
-		w.income.Value += UPGRADES[id].income
-		if order == "attribute first" then
-			w.player:SetAttribute("Upgrade" .. id, true)
-			task.wait(0.05) -- the answer arrives a moment later
-		else
-			task.delay(0.05, function() w.player:SetAttribute("Upgrade" .. id, true) end)
-		end
-		return true, "Bought " .. UPGRADES[id].name
-	end
-	local hero = rung(w, 2)
-	local page = officeOf(w)
-	page.CanvasPosition = v2(0, rectOf(hero).y - canvasOf(page).y + 10) -- the card's top 10 px scrolled away, its button shows
-	run(0)
-	local startY = page.CanvasPosition.Y
-	check(label .. ": the hero is partly scrolled away, its button shows", visibleRect(hero).h < rectOf(hero).h and visibleRect(kid(hero, "BuyButton")).h > 0)
-	tap(kid(hero, "BuyButton"), label .. ": Buy $25")
-	run(0.07) -- the server has done one of its two things, not yet the other
-	local _, between = heroOf(w)
-	check(label .. ": while the request runs the rung stays the hero (never the next one for a moment, then back)",
-		between == 2 and prop(kid(hero, "BuyButton"), "Text") ~= "" and (order == "answer first" or page.CanvasPosition.Y == startY), tostring(between))
-	run(0.05)
-	check(label .. ": after the buy the card says Bought! whole (the page scrolled just enough)",
-		prop(kid(hero, "BuyButton"), "Text") == "Bought!" and visibleRect(hero).h == rectOf(hero).h, rectText(visibleRect(hero)))
-	run(1)
-	local next, nextIndex = heroOf(w)
-	check(label .. ": then the next hero shows whole (a hero change)", nextIndex == 3 and visibleRect(next).h == rectOf(next).h, tostring(nextIndex))
-	officeWiring(w, label)
-	noErrors(label)
-end
-
--- After a Retry the hero shows whole (the list arriving is a hero change) ---------------------------------------------
-do
-	local label = "office retry reveal"
-	local w = newWorld({ w = 568, h = 320, bar = 58, owned = 3, cash = 0, income = 1 })
-	w.failUpgrades = true
-	w.start()
-	openShop(w, label)
-	run(12)
-	w.failUpgrades = false
-	tap(kid(officeOf(w), "RetryButton"), label .. ": Retry")
-	run(0.2)
-	local hero = heroOf(w)
-	check(label .. ": after the Retry the hero shows whole (the page scrolled to it)", hero ~= nil and visibleRect(hero).h == rectOf(hero).h and prop(officeOf(w), "CanvasPosition", v2()).Y > 0,
-		hero and rectText(visibleRect(hero)))
-	noErrors(label)
-end
-
--- BEST VALUE on the Cash pack ShopLayout.bestValue picks; only factual badges -----------------------------------------
-do
-	local label = "BEST VALUE"
-	local w = startShop({ w = 667, h = 375, bar = 36, cash = 0, income = 40 })
-	local SC = w.module("ShopConfig")
-	openShop(w, label)
-	tap(find(win(w), "TabCash"), label .. ": Cash")
-	local function badged()
-		local list = {}
-		for _, key in ipairs({ "CashSmall", "CashMedium", "CashLarge" }) do
-			local badge = kid(find(win(w), key), "Badge")
-			if prop(badge, "Visible", false) then table.insert(list, key .. ":" .. badge.Text) end
-		end
-		return table.concat(list, ",")
-	end
-	check(label .. ": the Vault (most minutes of Income per Robux) has the badge, alone", badged() == "CashLarge:BEST VALUE", badged())
-	screenChecks(w, label)
-	local medium = SC.getProduct("CashMedium")
-	medium.effect.incomeMinutes = 400
-	run(1.1)
-	check(label .. ": change the config's minutes and the badge moves (Bag of Cash at 400 minutes)", badged() == "CashMedium:BEST VALUE", badged())
-	medium.effect.incomeMinutes = 45
-	SC.getProduct("CashLarge").id = 0
-	run(1.1)
-	check(label .. ": never on a Coming soon item (the Vault with id 0: the Bag gets it)",
-		badged() == "CashMedium:BEST VALUE" and prop(kid(find(win(w), "CashLarge"), "BuyButton"), "Text") == "Coming soon", badged())
-	local allowed = { OWNED = true, ACTIVE = true, LEFT = true, ["BEST VALUE"] = true, ["COMING SOON"] = true }
-	local other
-	for _, d in ipairs(shopGui(w) and shopGui(w):GetDescendants() or {}) do
-		if d.Name == "Badge" and TEXTCLASS[d.ClassName] and not allowed[d.Text] then other = d.Text end
-	end
-	check(label .. ": no badge text but OWNED, ACTIVE, LEFT, BEST VALUE or COMING SOON (factual badges only)", other == nil, other)
+	local label = "office refused"
+	local w = startOffice({ w = 667, h = 375, bar = 36, owned = 1, cash = 0, income = 3, attrs = { IpoValuation = 0, IpoCount = 0, Building = 1 } })
+	w.refuseWith = "You need $120 for Coffee Machine"
+	tap(find(officeOf(w), "Stage1"), label .. ": the Garage chip")
+	scrollTo(w, card(w, 2))
+	tap(kid(card(w, 2), "BuyButton"), label .. ": a Buy the server refuses")
+	run(0.3)
+	check(label .. ": the server's reason shows in the window", prop(find(win(w), "StatusLine"), "Text") == "You need $120 for Coffee Machine", prop(find(win(w), "StatusLine"), "Text"))
+	check(label .. ": nothing is bought", w.player:GetAttribute("Upgrade2") ~= true)
 	noErrors(label)
 end
 """
@@ -2697,15 +2428,16 @@ end
 
 
 def upgrades_lua():
-    """TycoonCore's UPGRADES (name, cost, income, icon) as a Luau table: the list the server sends to the Office tab."""
-    core = read("TycoonCore.lua")
-    rows = re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+),\s+income = (\d+),.*?icon = "([^"]*)" \}', core)
-    if len(rows) != 6:
-        raise SystemExit("shop_ux_test: TycoonCore's UPGRADES changed (%d rows found): the Office tests must be checked again" % len(rows))
-    return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s, icon = "%s" }' % r for r in rows) + " }"
+    """The office catalog (overhaul 2: OfficeConfig.Items, what TycoonCore's UPGRADES is built from) as a Luau table."""
+    text = read("OfficeConfig.lua")
+    block = text[text.index("--ITEMS-START"):text.index("--ITEMS-END")]
+    rows = re.findall(r'key = "([^"]+)", icon = "([^"]*)", stage = (\d), price = (\d+), income = (\d+)', block)
+    if len(rows) < 60:
+        raise SystemExit("shop_ux_test: OfficeConfig.Items changed (%d rows found): the Office tests must be checked again" % len(rows))
+    return "{ " + ", ".join('{ name = "%s", icon = "%s", stage = %s, cost = %s, income = %s }' % r for r in rows) + " }"
 
 
-MODULES = ("ShopConfig", "CreatureConfig", "IpoConfig", "TaskConfig")
+MODULES = ("ShopConfig", "CreatureConfig", "IpoConfig", "TaskConfig", "OfficeConfig")
 
 
 def screen_guis(client=None):
@@ -2823,31 +2555,41 @@ def toast_texts():
             continue
         rows.append(("TycoonCore.lua:%d" % (core.count("\n", 0, m.start()) + 1), m.group(1)))
         at("TycoonCore.lua", core, "ShopServer.notify(player, %s)" % const)
-    # overhaul phase 2: the funding-round toast (TycoonCore stageUpToast): "<icon> <stage> reached! Your <building> becomes a
-    # <building>", and " · tap IPO to go public" on the last stage; the stage names from IpoConfig, the buildings' from PlotBuilding
-    ipo, pb = read("IpoConfig.lua"), read("PlotBuilding.lua")
+    # overhaul 2: the funding-round toast (TycoonCore stageUpToast): "<icon> <stage> reached! The <building> is in SHOP > Office",
+    # and " · tap IPO to go public" on the last stage; the stage names from IpoConfig, the buildings' from OfficeConfig
+    ipo, office = read("IpoConfig.lua"), read("OfficeConfig.lua")
     stages = re.findall(r'\{ key = "(\w+)", name = "([^"]+)", icon = "([^"]+)", valuation = \d+ \}', ipo)
-    buildings = re.findall(r'^\t\tkey = "(\w+)",[^\n]*?name = "([^"]+)",', pb[pb.index("PlotBuilding.Stages = {"):], re.M)
+    buildings = re.findall(r'\{ stage = \d, name = "([^"]+)", price = \d+', office)
     where = at("TycoonCore.lua", core, "ShopServer.notify(player, text)")
     if len(stages) < 2 or len(buildings) != len(stages):
-        problems.append("the stage-up toast rows need IpoConfig's stages and PlotBuilding's buildings (%d, %d)" % (len(stages), len(buildings)))
+        problems.append("the stage-up toast rows need IpoConfig's stages and OfficeConfig's buildings (%d, %d)" % (len(stages), len(buildings)))
     for i in range(1, len(stages)):
         text = "%s %s reached!" % (stages[i][2], stages[i][1])
-        if buildings and buildings[i - 1][1] != buildings[i][1]:
-            text += " Your %s becomes a %s" % (buildings[i - 1][1], buildings[i][1])
+        if i < len(buildings):
+            text += " The %s is in SHOP > Office" % buildings[i]
         if i == len(stages) - 1:
             text += " · tap IPO to go public"
         rows.append((where, text))
     for text in ("Couldn't open the purchase. Please try again.", "Couldn't buy that. Please try again."):
         rows.append((at(CLIENT, client, '"%s"' % text), text))
-    upgrade_names = [r[0] for r in re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+)', core)]
-    costs = dict(re.findall(r'\{ name = "([^"]+)",\s+cost = (\d+)', core))
+    # the Office refusals (overhaul 2): TycoonCore's request checks, and OfficeConfig.checkItem's (names and prices from the catalog)
+    items = re.findall(r'key = "([^"]+)", icon = "[^"]*", stage = (\d), price = (\d+)', office)
+    stage_names = re.findall(r'"([^"]+)"', office[office.index("OfficeConfig.StageNames = {"):office.index("}", office.index("OfficeConfig.StageNames = {"))])
+
+    def money(amount):
+        for limit, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+            if amount >= limit:
+                return "$" + ("%.1f" % (amount / limit)).replace(".0", "") + suffix
+        return "$%d" % amount
     for fragment, texts in (('"Still loading, try again in a moment"', ["Still loading, try again in a moment"]),
-                            ('"Unknown upgrade"', ["Unknown upgrade"]), ('"Too fast"', ["Too fast"]),
-                            ('upg.name .. " is already yours"', [n + " is already yours" for n in upgrade_names]),
-                            ('"Buy " .. earlier.name .. " first"', ["Buy " + n + " first" for n in upgrade_names]),
-                            ('"You need $" .. upg.cost .. " for " .. upg.name', ["You need $" + costs[n] + " for " + n for n in upgrade_names])):
+                            ('"Unknown upgrade"', ["Unknown upgrade"]), ('"Too fast"', ["Too fast"])):
         where = at("TycoonCore.lua", core, fragment)
+        rows += [(where, x) for x in texts]
+    for fragment, texts in (('item.key .. " is already yours"', [k + " is already yours" for k, _, _ in items]),
+                            ('"Buy the " .. OfficeConfig.FirstItem .. " first"', ["Buy the Desk first"]),
+                            ('"Unlocks at " .. (OfficeConfig.StageNames[stage] or "?")', ["Unlocks at " + n for n in stage_names]),
+                            ('"You need " .. money(item.price) .. " for " .. item.key', ["You need " + money(int(p)) + " for " + k for k, _, p in items])):
+        where = at("OfficeConfig.lua", office, fragment)
         rows += [(where, x) for x in texts]
     for text in ("Bad request", "Unknown action"):
         rows.append((at("ShopServer.lua", server, '"%s"' % text), text))
@@ -2980,8 +2722,8 @@ def static_checks(layout=None, client=None, out=None):
         check("%s: every string with odds, chance, luck or random was already there (luckText, Debug rows, attribute names; D9)" % name,
               not offending, offending[:3])
     invokes = re.findall(r"actionRemote:InvokeServer\(([^)]*)\)", cli)
-    check("ShopClient.lua: the Office sends only \"Upgrades\" and \"BuyUpgrade\", index (never a price)",
-          sorted(invokes) == ['"BuyUpgrade", index', '"Upgrades"'], invokes)
+    check("ShopClient.lua: the Office sends only \"Office\", an action alone (BuyBuilding, BuyDesk) or an action and a number (never a price)",
+          sorted(invokes) == ['"Office"', 'action', 'action, index'], invokes)
     others = [a for a in re.findall(r"(\w+):InvokeServer\(([^)]*)\)", cli) if a[0] != "actionRemote"]
     check("ShopClient.lua: the only other request is the Studio Debug tab's (debugRemote, action and key)", others == [("debugRemote", "action, key")], others)
     names = sorted(set(re.findall(r'remotes:(?:WaitForChild|FindFirstChild)\("(\w+)"', cli)))
@@ -3050,7 +2792,7 @@ MUTANTS = [
     ("tab buttons without the Tab prefix", C, 'Name = "Tab" .. name,', "Name = name,", "every Name exists after the Office list arrives"),
     ("pages without their names", C, 'Name = name .. "Page",', "Name = name,", "every Name exists after the Office list arrives"),
     ("cards' buttons not named BuyButton", C, 'Name = "BuyButton",', 'Name = "Button",', "every card's button is named BuyButton"),
-    ("Office cards without their names", C, 'Name = "Office" .. i,', 'Name = "Card" .. i,', "every Name exists after the Office list arrives"),
+    ("Office cards without their names", C, 'item.key, "Office" .. i)', 'item.key, "Card" .. i)', "every Name exists after the Office list arrives"),
     ("the help button without its name", C, 'Name = "HelpButton",', 'Name = "Help",', "every Name exists after the Office list arrives"),
     ("TutorialStrip shown with no banner", C, "tutorialStrip.Visible = banner ~= nil and statusText == nil", "tutorialStrip.Visible = statusText == nil",
      "TutorialStrip is inert while TutorialBanner is unset"),
@@ -3080,8 +2822,8 @@ MUTANTS = [
      "\t\t\telseif not ShopConfig.isForSale(product) then", "No garage yet: a product is never prompted before a garage"),
     ("an unknown RandomRestricted counted as not restricted", C, 'return player:GetAttribute("RandomRestricted") ~= false',
      'return player:GetAttribute("RandomRestricted") == true', "Luck Boost hidden while RandomRestricted is not false"),
-    ("a price sent from the client", C, 'actionRemote:InvokeServer("BuyUpgrade", index)', 'actionRemote:InvokeServer("BuyUpgrade", index, 25)',
-     "a Buy tap sends only \"BuyUpgrade\" and the upgrade's number"),
+    ("a price sent from the client", C, 'return office.actionRemote:InvokeServer(action, index)\n', 'return office.actionRemote:InvokeServer(action, index, 25)\n',
+     "a Buy tap sends only \"BuyUpgrade\" and the item's number"),
     ("a new text with the word chance", C, 'Text = "How the shop works",', 'Text = "How the shop works (chance)",',
      "ShopClient.lua: every string with odds, chance, luck or random was already there"),
     ("luckText reworded", C, 'string.format("Odds weight x%s for %s hires."', 'string.format("Weight x%s for %s hires."',
@@ -3093,20 +2835,6 @@ MUTANTS = [
     ("the bar not clamped", L, "return math.clamp(cash / price, 0, 1)", "return cash / price", "barFill stays in 0..1"),
     ("Buy shown when the Cash is short", L, "\t\telseif cash >= cost then\n", "\t\telseif true then\n",
      "the hero's button (Get it free, Buy $X, or Need $X more"),
-    ("Need more sends the buy anyway", C, '\tif hero.action == "buy" then\n\t\tbuyOffice(office.actionRemote, i)',
-     '\tif hero.action == "buy" or hero.action == "short" then\n\t\tbuyOffice(office.actionRemote, i)', "Need more sends nothing"),
-    ("the strip over the hero (a hero too tall for the page)", L, "ShopLayout.HERO_WIDE = 132", "ShopLayout.HERO_WIDE = 190",
-     "the hero is fully visible above TutorialStrip"),
-    ("the hero never scrolled into view", C,
-     "\t\tofficePage.CanvasPosition = Vector2.new(0, ShopLayout.revealScroll(office.heroY, office.heroH, pagesHeight, office.total or 0))\n", "",
-     "the hero is fully visible above TutorialStrip"),
-    ("a missing Retry", C, "\tretryButton.Visible = office.failed\n", "\tretryButton.Visible = false\n", "a Retry button (44 px or more)"),
-    ("Retry does nothing", C, "retryButton.Activated:Connect(function()\n\tfetchOffice()\nend)", "retryButton.Activated:Connect(function() end)",
-     "Retry shows the gray rungs again while it asks"),
-    ("only one try before the error", C, "\tfor _ = 1, 5 do\n", "\tfor _ = 1, 1 do\n", "the Office asks 5 times, 2 s apart, before it gives up"),
-    ("no skeleton rungs while loading", C, "\t\trow.Visible = loading\n", "\t\trow.Visible = false\n", "three gray skeleton rungs while Upgrades is asked"),
-    ("the skeleton rungs stay after the list arrives", C, "local loading = office.list == nil and not office.failed", "local loading = not office.failed",
-     "the skeleton rungs go away once the list arrives"),
     ("minutes shown as seconds", L, "\tif seconds < 120 then\n", "\tif seconds < 1e9 then\n", "timeText: 5,000 s reads about 84 min"),
     ("the time rounded down", L, "local seconds = math.ceil(need / income)", "local seconds = math.floor(need / income)",
      "timeText: $25 at $1/s is about 25 s, at $2/s about 13 s"),
@@ -3114,28 +2842,13 @@ MUTANTS = [
      "Unlocks after <the one before>"),
     ("the summary counts one too many", L, 'S.summary = { title = S.owned .. " of "', 'S.summary = { title = (S.owned + 1) .. " of "',
      "the summary says k of 6 bought"),
-    ("a locked rung offers a button", C, 'button.Visible = row.state ~= "locked"', "button.Visible = true",
-     "locked rungs are shown, a padlock, Unlocks after <the one before>, no button"),
-    ("owned rungs never fold", C, 'local shown = row.state ~= "owned" or office.unfolded', "local shown = true", "owned rungs fold into the summary row"),
     ("no Office complete banner", L, "S.complete = S.count > 0 and S.nextIndex == nil", "S.complete = false", "the Office complete banner"),
-    ("the complete banner left scrolled away", C, "\t\t\tofficePage.CanvasPosition = Vector2.new(0, 0)\n", "",
-     "the Office complete banner shows at the top (the page scrolled back up)"),
-    ("a refusal not shown in the card", C, "\t\trungStatus(index, text, COLORS.refusal)\n", "", "the card shows the answer in red"),
-    ("no pop and no float on success", C, "\t\tcelebrate(index)\n", "", "on success the icon pops"),
     ("the bought rung folds at once (no Bought!)", L, "local mine = owned[i] == true and i ~= bought", "local mine = owned[i] == true",
-     "the card says Bought! a moment"),
-    ("the free Desk says Buy $0", L, '"Get it free", "buy", "buy"', '"Buy $0", "buy", "buy"', "the free Desk says Get it free"),
+     "ladder: the upgrade just bought stays the hero a moment"),
+    ("the free Desk says Buy $0", L, '"Get it free", "buy", "buy"', '"Buy $0", "buy", "buy"', "ladder: 0 owned, $0, $0/s: the hero's button"),
     ("Buy offered while the request runs", L, "\t\telseif busy then\n", "\t\telseif false then\n", "while the request runs the hero says ..."),
-    ("no busy state: a second tap sends again", C, ("\tif officeBusy then return end\n", "ShopConfig.formatCash, bought, officeBusy)"),
-     ("", "ShopConfig.formatCash, bought, false)"), "a second tap while the request runs sends nothing"),
-    ("an Office buy asks for a second tap (a confirmation)", C, "\t\tbuyOffice(office.actionRemote, i)\n", '\t\trungStatus(i, "Tap again to buy", COLORS.gold)\n',
-     "an Office upgrade never asks for a confirmation"),
-    ("the bar's fill never set", C, "parts.fill.Size = UDim2.fromScale(hero.fill, 1)", "parts.fill.Size = UDim2.fromScale(0, 1)", "the bar's fill is the ladder's"),
-    ("no shake on Need more", C, "\t\tshakeBar(office.rungs[i])\n", "", "the bar shakes and the card says"),
-    ("the hint without the time", L, 'H.hint = H.time and (H.time .. " at your Income") or', 'H.hint = H.time and "Not enough Cash" or',
-     "the card says about 5 s at your Income"),
-    ("a pulse on Need more", C, '\tif hero and hero.action == "buy" then\n', "\tif hero then\n", "none on Need more"),
-    ("the pulse every second", C, "if pulseTicks % 4 ~= 0 or", "if pulseTicks % 1 ~= 0 or", "a soft pulse every 4 s"),
+    ("no busy state: a second tap sends again", C, "\tif office.busy or not office.actionRemote then return end", "\tif not office.actionRemote then return end",
+     "a second tap while the request runs sends nothing"),
     ("narrow rows too short for two lines", L, "ShopLayout.ROW_NARROW = 72", "ShopLayout.ROW_NARROW = 56", "office rows and the hero: every piece inside"),
     ("the reveal scrolls past the hero's top", L, "local want = math.min(math.max(0, y + h - view), y)", "local want = math.max(0, y + h - view)",
      "revealScroll: never past the hero's top"),
@@ -3151,21 +2864,6 @@ MUTANTS = [
      "no HUD button that may draw above the shop (DisplayOrder at or above ShopGui's) covers a tab"),
     ("ShopGui under the other windows' layer (3)", C, "\tDisplayOrder = 5,\n", "\tDisplayOrder = 3,\n",
      "layers: the shop window is on the windows' layer, with the Poach, IPO and Daily windows"),
-    ("the hero revealed on every placing again (a message line moves the page)", C, "table.insert(layoutHooks, refreshOffice)",
-     "table.insert(layoutHooks, function()\n\trefreshOffice()\n\trevealHero()\nend)", "a message line appearing never moves the Office page"),
-    ("a tab tap reveals the hero again", C, "\t\ttabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab\n\tend\n",
-     "\t\ttabButtons[tabName].BackgroundColor3 = tabName == name and COLORS.buy or COLORS.tab\n\tend\n\tif name == \"Office\" then\n\t\trevealHero()\n\tend\n",
-     "a tab tap never moves the Office page"),
-    ("opening the shop reveals the hero again", C, "\t\trefreshAll()\n\tend\nend\n\nplayerGui:GetAttributeChangedSignal(\"OpenPanel\")",
-     "\t\trefreshAll()\n\t\trevealHero()\n\tend\nend\n\nplayerGui:GetAttributeChangedSignal(\"OpenPanel\")",
-     "closing and opening the shop, and the refresh every second, never move it"),
-    ("a new screen size never clamps the scroll", C, "\telseif officePage.CanvasPosition.Y > math.max(0, total - pagesHeight) then\n",
-     "\telseif false then\n", "a new screen size keeps the player's place, clamped to the new canvas"),
-    ("a buy does not show the card whole", C, "\t\toffice.reveal = true -- the card says Bought! whole\n", "",
-     "after the buy the card says Bought! whole"),
-    ("the rung folds while its buy request runs (the server's attribute came first)", C,
-     "\tif bought == nil and officeBusy and office.buying and owned[office.buying] then\n", "\tif false then\n",
-     "while the request runs the rung stays the hero"),
     ("closing the shop drops a message still in its line", C, "\tif wasOpen and not open then\n\t\tstatusToToast()\n\tend\n", "",
      "closing the shop moves a message still in its line to the toast"),
     ("another window opening drops the shop's message", C, "\t\twindow.Visible = false\n\t\tstatusToToast()\n", "\t\twindow.Visible = false\n",
@@ -3183,14 +2881,8 @@ MUTANTS = [
      "opening the shop shows the whole message in the window's line"),
     ("the toast not cut again on a new width", C, "\tif toast.Visible then\n\t\ttoast.Text = toastFace() -- cut again for the new width\n\tend\n", "",
      "a new screen size cuts the toast again for its new width"),
-    ("the hero's info always the long form (it wraps onto the bar at 568x320)", C,
-     "\t\tparts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort\n", "\t\tparts.info.Text = hero.info\n",
-     "every line of the hero card fits its box on one line at 16 px"),
-    ("the hero's info always the short form", C,
-     "\t\tparts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort\n", "\t\tparts.info.Text = hero.infoShort\n",
-     "what it earns is +$X every second where that fits"),
     ("the short form as long as the long one", L, 'infoShort = earns .. "/s" }', 'infoShort = earns .. " every second" }',
-     "every line of the hero card fits its box on one line at 16 px"),
+     "ladder: 0 owned, $0, $0/s: and has the short form"),
     ("the portrait tabs ignore their labels (Passes in 51 px)", L, "local labelW = math.max(0, finite(tabLabelW and tabLabelW[i], 0))", "local labelW = 0",
      "every tab's label fits its tab on one line at 16 px"),
     ("a portrait row too long for the bar squeezed to even tabs", L, "local tabW = allFit and even or need[i] + extra", "local tabW = even",
@@ -3213,8 +2905,16 @@ MUTANTS = [
      "a sentence as long as stripMaxChars fits the strip"),
     ("a long TutorialBanner never flagged", C, "\tif count > ShopLayout.STRIP_TEXT_LIMIT then\n", "\tif false then\n",
      "a banner one character over the limit is flagged"),
-    ("a hero change does not reveal the new hero", C, "\t\toffice.reveal = heroIndex ~= nil\n", "\t\toffice.reveal = false\n",
-     "after the Retry the hero shows whole"),
+    # overhaul 2: the Office catalog by stage and its Hire chip
+    ("a locked item offers its price", C, '\t\telseif stageNow() < item.stage then\n\t\t\tsetButton(button, "Locked", COLORS.disabled, false)',
+     '\t\telseif false then\n\t\t\tsetButton(button, "Locked", COLORS.disabled, false)', "Series A's items are shown, Locked"),
+    ("the shop opens on the Garage, not the stage reached", C, "\toffice.shown = stageNow()\n\ttask.spawn(fetchOfficeState)", "\toffice.shown = 1\n\ttask.spawn(fetchOfficeState)",
+     "the shop opens on the stage reached"),
+    ("a locked item's button still sends", C, "\t\tif ownsItem(i) or stageNow() < item.stage then return end", "\t\tif ownsItem(i) then return end",
+     "a locked item's button sends nothing"),
+    ("the building's Buy sends a number", C, '\t\tofficeRequest("BuyBuilding")', '\t\tofficeRequest("BuyBuilding", 2)', "the building's Buy sends BuyBuilding only"),
+    ("the hires without the egg comparison", C, 'offer.rarity, OfficeConfig.money(offer.eggAverage))', 'offer.rarity, "")',
+     "every direct hire shows its price and what an egg pays on average"),
 ]
 
 
@@ -3240,8 +2940,6 @@ HARNESS_SELF_TESTS = [
     ("a wrong next index that also crashes (no guard in the ladder)", L,
      ("\t\t\tS.nextIndex = i\n", "\tif S.nextIndex and not upgrades[S.nextIndex] then\n\t\tS.nextIndex = nil -- never a hero without its upgrade\n\tend\n"),
      ("\t\t\tS.nextIndex = i + 1\n", ""), "the next rung is the first not owned"),
-    ("a locked rung's button placed with no rectangle (crashes)", C, "\tif button.Visible and R.button then\n", "\tif true then\n",
-     "locked rungs are shown, a padlock, Unlocks after <the one before>, no button"),
 ]
 
 

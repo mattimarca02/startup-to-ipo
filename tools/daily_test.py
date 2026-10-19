@@ -823,6 +823,7 @@ local CompanyServer = { serialize = function(data)
 	if FAIL == "pokedex" then error("pokedex exploded") end
 	return POKEDEX
 end }
+local function officeToSave(data) return data.office and { v = 1, desks = data.office.desks } or nil end -- overhaul 2 (TycoonCore, outside the markers)
 __BUILDSAVE__
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -1802,15 +1803,17 @@ check("max-level clamp: perkValue past the max = the max, below 0 = 0", IpoConfi
 local passEffect
 for _, pass in ipairs(MODULES.ShopConfig.Passes) do if pass.key == "Shareholder" then passEffect = pass.effect end end
 check("the Shareholder pass is still 2x Shares", passEffect and passEffect.sharesMultiplier == 2)
-check("Shares formula numbers: 10, growth 0.8, exponent 0.5, cap 2", IpoConfig.SharesPerIpo == 10 and IpoConfig.SharesGrowthPerIpo == 0.8
+-- Overhaul 2 (2026-10-19, the owner's written OK on economy numbers): a run is about 20 hours, so an IPO pays more Shares
+check("Shares formula numbers: 40, growth 0.5, exponent 0.5, cap 2 (overhaul 2)", IpoConfig.SharesPerIpo == 40 and IpoConfig.SharesGrowthPerIpo == 0.5
 	and IpoConfig.SharesExponent == 0.5 and IpoConfig.SharesRatioCap == 2)
-check("IPO 1 gives 10 Shares, 20 with the pass", IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 1) == 10 and IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 2) == 20)
-check("IPO 2 gives 18, IPO 3 gives 26, IPO 4 with the pass gives 68", IpoConfig.sharesFor(IpoConfig.ipoValuation(1), 1, 1) == 18
-	and IpoConfig.sharesFor(IpoConfig.ipoValuation(2), 2, 1) == 26 and IpoConfig.sharesFor(IpoConfig.ipoValuation(3), 3, 2) == 68)
+check("IPO 1 gives 40 Shares, 80 with the pass", IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 1) == 40 and IpoConfig.sharesFor(IpoConfig.ipoValuation(0), 0, 2) == 80)
+check("IPO 2 gives 60, IPO 3 gives 80, IPO 4 with the pass gives 200", IpoConfig.sharesFor(IpoConfig.ipoValuation(1), 1, 1) == 60
+	and IpoConfig.sharesFor(IpoConfig.ipoValuation(2), 2, 1) == 80 and IpoConfig.sharesFor(IpoConfig.ipoValuation(3), 3, 2) == 200)
 check("waiting past 2x IPO-ready gives no more Shares (cap 2)", IpoConfig.sharesFor(10 * IpoConfig.ipoValuation(0), 0, 1) == IpoConfig.sharesFor(2 * IpoConfig.ipoValuation(0), 0, 1)
-	and IpoConfig.sharesFor(2 * IpoConfig.ipoValuation(0), 0, 1) == 14)
-check("stages 0 / 1800 / 6300 / 23400 / 81000, growth x2.5 per IPO", IpoConfig.stageValuation(2, 0) == 1800 and IpoConfig.stageValuation(3, 0) == 6300
-	and IpoConfig.stageValuation(4, 0) == 23400 and IpoConfig.ipoValuation(0) == 81000 and IpoConfig.StageGrowthPerIpo == 2.5 and IpoConfig.ipoValuation(1) == 202500)
+	and IpoConfig.sharesFor(2 * IpoConfig.ipoValuation(0), 0, 1) == 56)
+check("stages 0 / 30K / 10M / 100M / 300M / 1B (overhaul 2, Series C added), growth x1.1 per IPO", #IpoConfig.Stages == 6 and IpoConfig.stageValuation(2, 0) == 30000
+	and IpoConfig.stageValuation(3, 0) == 10000000 and IpoConfig.stageValuation(4, 0) == 100000000 and IpoConfig.stageValuation(5, 0) == 300000000
+	and IpoConfig.ipoValuation(0) == 1000000000 and IpoConfig.StageGrowthPerIpo == 1.1 and IpoConfig.stageValuation(2, 1) == 33000)
 check("multiplier and cooldown unchanged", IpoConfig.BonusPerIpo == 0.5 and IpoConfig.BonusExponent == 0.75 and IpoConfig.CooldownSeconds == 60)
 
 -- IPO_PERK_COSTS in tools/economy_sim.py (the sim's copy, read by the Python side) must equal the real costs
@@ -2078,7 +2081,7 @@ local allMapped = true
 for i, stage in ipairs(IC.Stages) do
 	if C.rungForStage(stage.key) ~= i - 1 then allMapped = false end
 end
-check("every funding stage maps to its rung (Garage 0, Seed 1, Series A 2, Series B 3, IPO-ready 4)", allMapped and #IC.Stages == 5)
+check("every funding stage maps to its rung (Garage 0, Seed 1, Series A 2, Series B 3, Series C 4, IPO-ready 5)", allMapped and #IC.Stages == 6)
 local bad
 for key, text in pairs(TEXTS) do
 	for _, word in ipairs({ "odds", "chance", "luck", "random", "probab", "%%" }) do
@@ -3424,7 +3427,7 @@ do
 	local r, rd = newPlayer(nil)
 	check("Debug Set rung: 3", string.find(DEBUG.TaskSetRung(r, rd, "3"), "Rung set to 3", 1, true) ~= nil and stats(r).rung == 3)
 	check("Debug Set rung: auto goes back to the funding stage", string.find(DEBUG.TaskSetRung(r, rd, "auto"), "Garage", 1, true) ~= nil and stats(r).rung == 0)
-	for _, bad in ipairs({ "5", "-1", "1.5", "abc", "", "nan" }) do
+	for _, bad in ipairs({ "6", "-1", "1.5", "abc", "", "nan" }) do
 		check("Debug Set rung '" .. bad .. "' is refused", DEBUG.TaskSetRung(r, rd, bad) == "Bad rung" and stats(r).rung == 0)
 	end
 	local summary = DEBUG.TaskStats(r, rd)
@@ -3453,14 +3456,14 @@ do
 	MODULES.ShopConfig.DebugInStudio = true
 
 	-- stage to rung
-	local expectedRungs = { { 0, 0 }, { 1799, 0 }, { 1800, 1 }, { 6300, 2 }, { 23400, 3 }, { 81000, 4 }, { 1e9, 4 } }
+	local expectedRungs = { { 0, 0 }, { 29999, 0 }, { 30000, 1 }, { 1e7, 2 }, { 1e8, 3 }, { 3e8, 4 }, { 1e9, 5 }, { 1e12, 5 } }
 	local allRungs = true
 	for _, pair in ipairs(expectedRungs) do
 		local sp = newPlayer(nil, { valuation = pair[1] })
 		if stats(sp).rung ~= pair[2] then allRungs = false; print_real("   valuation " .. pair[1] .. " gave rung " .. stats(sp).rung) end
 	end
-	check("stage to rung: Garage 0, Seed 1, Series A 2, Series B 3, IPO-ready 4", allRungs)
-	check("after an IPO the stages grow, so the same valuation is a lower rung", stats((newPlayer(nil, { valuation = 1800, ipos = 1 }))).rung == 0)
+	check("stage to rung: Garage 0, Seed 1, Series A 2, Series B 3, Series C 4, IPO-ready 5", allRungs)
+	check("after an IPO the stages grow, so the same valuation is a lower rung", stats((newPlayer(nil, { valuation = 30000, ipos = 1 }))).rung == 0)
 end
 
 -- 20. Save round trip ---------------------------------------------------------------------------------------------------------------
@@ -4330,6 +4333,7 @@ local STORY = {
 		decor = { "ShelfBack", "ShelfBoard3", "Trophy1", "Trophy5", "RugBase", "LoungeTable", "ArmchairA", "ArmchairB", "FounderTop", "DeskPhone", "GapPlantLPot", "FloorLampShadeA" },
 		desk = { "DeskTop", "DeskLegL", "MonitorFrame", "MonitorScreen", "Keyboard" }, wallPart = "BackLower", wall = { 246, 247, 248 }, lights = 3 },
 }
+STORY[6] = STORY[5] -- overhaul 2: the IPO-ready room (the HQ Tower's) keeps the HQ layout; Series C (5) is its copy in walnut
 local function has(list, name) for _, s in ipairs(list) do if s.name == name then return s end end return nil end
 local function countPrefix(list, prefix) local n = 0 for _, s in ipairs(list) do if string.find(s.name, prefix, 1, true) == 1 then n += 1 end end return n end
 for i = 2, #PlotArt.Stages do
@@ -4467,7 +4471,8 @@ do
 	end
 	if PlotArt.Stages[5] then
 		local r = room(5)
-		check("stage 5: a polished light floor (SmoothPlastic, bright)", PlotArt.Stages[5].floor.material == "SmoothPlastic" and PlotArt.Stages[5].floor.color[1] >= 200)
+		check("stage 5 (Series C, overhaul 2): a walnut plank floor", PlotArt.Stages[5].floor.material == "WoodPlanks" and PlotArt.Stages[5].floor.color[1] < 160)
+		check("stage 6 (IPO-ready): a polished light floor (SmoothPlastic, bright)", PlotArt.Stages[6].floor.material == "SmoothPlastic" and PlotArt.Stages[6].floor.color[1] >= 200)
 		check("stage 5: big windows: four glass panes at least 7 studs tall on the back wall", count(r, "Window", "Glass") == 4 and find(r, "WindowA").Size.Y >= 7)
 		check("stage 5: a simple block skyline: 9 towers behind the back wall, none over 30 studs", count(r, "Skyline") == 9)
 		check("stage 5: the skyline is inside the plot's width (it never reaches a neighbour)", (function()
@@ -4894,7 +4899,20 @@ local function check(name, cond, extra)
 end
 local CLOCK = 100
 local os = { clock = function() return CLOCK end }
-local UPGRADES = __UPGRADES__
+local OfficeConfig = (function()
+__OFFICECONFIG__
+end)()
+local IpoConfig = (function()
+__IPOCONFIG__
+end)()
+local UPGRADES = {} -- overhaul 2: the office catalog, as TycoonCore builds it from OfficeConfig
+for _, item in ipairs(OfficeConfig.Items) do
+	table.insert(UPGRADES, { name = item.key, cost = item.price, income = item.income, stage = item.stage })
+end
+local function indexOf(key) for i, upg in ipairs(UPGRADES) do if upg.name == key then return i end end end
+local COFFEE, LAPTOP, RACK, LOGO = indexOf("Coffee Machine"), indexOf("Laptop"), indexOf("Server Rack"), indexOf("Neon Logo")
+local FIRST_SEED = nil
+for i, upg in ipairs(UPGRADES) do if upg.stage == 2 and not FIRST_SEED then FIRST_SEED = i end end
 local playerData = {}
 local CALLS = {}
 local function updateIncome(player) table.insert(CALLS, "income") end
@@ -4909,9 +4927,9 @@ end
 local core = { buyUpgrade = buyUpgrade, upgradeList = upgradeList }
 __SHOPACTION__
 
-local function newPlayer(cash, ready)
+local function newPlayer(cash, ready, valuation)
 	local player = {}
-	playerData[player] = { ready = ready ~= false, owned = {}, cash = { Value = cash } }
+	playerData[player] = { ready = ready ~= false, owned = {}, cash = { Value = cash }, ipo = { valuation = valuation or 0, count = 0 } }
 	return player, playerData[player]
 end
 local function buy(player, id)
@@ -4920,46 +4938,46 @@ local function buy(player, id)
 	return handleShopAction(player, "BuyUpgrade", id)
 end
 
--- 1. The purchase, in the same order and with the same rules as the old pad -------------------------
+-- 1. The purchase: the Desk first, then any item of the stages reached (overhaul 2's catalog) -------------------
 do
-	local p, d = newPlayer(1000)
+	local p, d = newPlayer(1000000)
 	local ok, msg = buy(p, 1)
-	check("Desk (free): bought, no Cash taken", ok == true and d.owned.Desk == true and d.cash.Value == 1000, msg)
+	check("Desk (free): bought, no Cash taken", ok == true and d.owned.Desk == true and d.cash.Value == 1000000, msg)
 	check("a purchase pops its prop in, updates the income and the sign",
 		table.concat(CALLS, ",") == "income,spawn:1:Desk:true,sign", table.concat(CALLS, ","))
-	ok, msg = buy(p, 2)
-	check("Coffee Machine ($25): bought, exactly its price taken", ok == true and d.owned["Coffee Machine"] == true and d.cash.Value == 975, d.cash.Value)
-	ok, msg = buy(p, 3)
-	check("Laptop ($100)", ok == true and d.cash.Value == 875)
-	ok = buy(p, 4); check("Server Rack ($400)", ok == true and d.cash.Value == 475)
-	ok = buy(p, 5); check("Whiteboard ($1500): not enough Cash, refused", ok == false and d.owned.Whiteboard == nil and d.cash.Value == 475)
-	d.cash.Value = 1500
-	ok = buy(p, 5); check("Whiteboard with exactly $1500: bought, Cash is 0 (never negative)", ok == true and d.cash.Value == 0)
-	d.cash.Value = 5000
-	ok = buy(p, 6); check("Neon Logo ($5000): the last one", ok == true and d.cash.Value == 0)
-	local all = true
-	for _, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then all = false end end
-	check("all six owned after buying in order", all)
-	ok, msg = buy(p, 6)
-	check("everything bought: another request is refused", ok == false)
+	ok, msg = buy(p, COFFEE)
+	check("Coffee Machine: bought, exactly its price taken", ok == true and d.owned["Coffee Machine"] == true and d.cash.Value == 1000000 - UPGRADES[COFFEE].cost, d.cash.Value)
+	local before = d.cash.Value
+	ok = buy(p, LOGO)
+	check("any order inside the stage: the Neon Logo before the Laptop", ok == true and d.owned["Neon Logo"] == true and d.cash.Value == before - UPGRADES[LOGO].cost)
+	ok, msg = buy(p, FIRST_SEED)
+	check("a Seed item at the Garage is refused (Unlocks at Seed), nothing taken", ok == false and d.owned[UPGRADES[FIRST_SEED].name] == nil
+		and string.find(msg, "Unlocks at Seed", 1, true) ~= nil, msg)
+	d.ipo.valuation = 30000
+	before = d.cash.Value
+	ok = buy(p, FIRST_SEED)
+	check("the same Seed item once Seed is reached: bought at its price", ok == true and d.cash.Value == before - UPGRADES[FIRST_SEED].cost)
+	d.cash.Value = UPGRADES[LAPTOP].cost
+	ok = buy(p, LAPTOP)
+	check("exactly the price: bought, Cash is 0 (never negative)", ok == true and d.cash.Value == 0)
+	ok = buy(p, LAPTOP)
+	check("an owned item: another request is refused", ok == false)
 end
 
 -- 2. Refusals change nothing ----------------------------------------------------------------------
 do
-	local p, d = newPlayer(24)
+	local p, d = newPlayer(UPGRADES[COFFEE].cost - 1)
 	buy(p, 1)
-	local ok, msg = buy(p, 2)
-	check("insufficient Cash ($24 for $25): refused with the price", ok == false and d.cash.Value == 24 and d.owned["Coffee Machine"] == nil
-		and string.find(msg, "$25", 1, true) ~= nil, msg)
+	local ok, msg = buy(p, COFFEE)
+	check("insufficient Cash (one short): refused with the price", ok == false and d.cash.Value == UPGRADES[COFFEE].cost - 1 and d.owned["Coffee Machine"] == nil
+		and string.find(msg, OfficeConfig.money(UPGRADES[COFFEE].cost), 1, true) ~= nil, msg)
 	check("insufficient Cash: no prop, no income change, no sign refresh", #CALLS == 0, table.concat(CALLS, ","))
 	ok, msg = buy(p, 1)
-	check("already owned: refused, nothing taken", ok == false and d.cash.Value == 24 and string.find(msg, "already", 1, true) ~= nil, msg)
-	d.cash.Value = 100000
-	ok, msg = buy(p, 4)
-	check("wrong order (Server Rack before Coffee Machine): refused, says what to buy first", ok == false and d.owned["Server Rack"] == nil
-		and d.cash.Value == 100000 and string.find(msg, "Coffee Machine first", 1, true) ~= nil, msg)
-	ok = buy(p, 6)
-	check("wrong order (Neon Logo with the Desk only): refused", ok == false and d.owned["Neon Logo"] == nil)
+	check("already owned: refused, nothing taken", ok == false and string.find(msg, "already", 1, true) ~= nil, msg)
+	local q, e = newPlayer(100000)
+	ok, msg = buy(q, RACK)
+	check("before the Desk: refused, says to buy the Desk first", ok == false and e.owned["Server Rack"] == nil
+		and e.cash.Value == 100000 and string.find(msg, "Desk first", 1, true) ~= nil, msg)
 	check("a refused request never spawns a prop", #CALLS == 0)
 end
 
@@ -4968,12 +4986,12 @@ do
 	local p, d = newPlayer(100000)
 	CLOCK += 10
 	local first = handleShopAction(p, "BuyUpgrade", 1)
-	local second, msg = handleShopAction(p, "BuyUpgrade", 2) -- the same instant
+	local second, msg = handleShopAction(p, "BuyUpgrade", COFFEE) -- the same instant
 	check("spam: the second request in the same instant is refused", first == true and second == false and msg == "Too fast" and d.owned["Coffee Machine"] == nil, msg)
 	CLOCK += BUY_MIN_INTERVAL - 0.01
-	check("spam: still refused just under the interval", handleShopAction(p, "BuyUpgrade", 2) == false)
+	check("spam: still refused just under the interval", handleShopAction(p, "BuyUpgrade", COFFEE) == false)
 	CLOCK += 0.02
-	check("spam: allowed again once the interval has passed", handleShopAction(p, "BuyUpgrade", 2) == true and d.owned["Coffee Machine"] == true)
+	check("spam: allowed again once the interval has passed", handleShopAction(p, "BuyUpgrade", COFFEE) == true and d.owned["Coffee Machine"] == true)
 	-- A refused request leaves the stamp (and so the next allowed time) exactly where the last looked-at request put it
 	CLOCK += 1
 	local stampedAt = CLOCK
@@ -4987,7 +5005,7 @@ do
 	check("a refused spam request does not push the next allowed time forward (the stamp stays exactly the same)", stampOk and d.lastBuyAt == stampedAt, d.lastBuyAt)
 	CLOCK = stampedAt + BUY_MIN_INTERVAL + 0.05 -- 0.45 s after the last purchase, 0.2 s after the last refused request
 	check("spam: allowed once the interval from the last purchase has passed, even right after refused requests",
-		handleShopAction(p, "BuyUpgrade", 4) == true and d.owned["Server Rack"] == true and d.lastBuyAt == CLOCK, d.lastBuyAt)
+		handleShopAction(p, "BuyUpgrade", 4) == true and d.owned[UPGRADES[4].name] == true and d.lastBuyAt == CLOCK, d.lastBuyAt)
 end
 
 -- 3b. 100 spammed requests on a moving clock: the exact purchases and the exact Cash --------------------------
@@ -4995,7 +5013,7 @@ do
 	local p, d = newPlayer(100000)
 	d.owned.Desk = true -- the free one: every purchase below costs Cash
 	CLOCK += 10
-	local function nextId() -- what a spammed Buy button sends: the next upgrade's number
+	local function nextId() -- what a spammed Buy button sends: the next item's number
 		for i, upg in ipairs(UPGRADES) do if not d.owned[upg.name] then return i end end
 		return 1
 	end
@@ -5013,16 +5031,17 @@ do
 			table.insert(at, request)
 		end
 	end
+	local spent = UPGRADES[2].cost + UPGRADES[3].cost + UPGRADES[4].cost
 	check("spam: 100 requests on a moving clock buy exactly 3 times (requests 1, 42 and 100)", bought == 3 and table.concat(at, ",") == "1,42,100", table.concat(at, ","))
-	check("spam: 100 requests spend exactly $525 (Coffee Machine + Laptop + Server Rack)", d.cash.Value == 100000 - 525, 100000 - d.cash.Value)
-	check("spam: after 100 requests the next is the Whiteboard (nothing skipped, nothing doubled)",
-		d.owned["Server Rack"] == true and d.owned.Whiteboard == nil)
+	check("spam: 100 requests spend exactly the price of items 2, 3 and 4", d.cash.Value == 100000 - spent, 100000 - d.cash.Value)
+	check("spam: after 100 requests the next is item 5 (nothing skipped, nothing doubled)",
+		d.owned[UPGRADES[4].name] == true and d.owned[UPGRADES[5].name] == nil)
 end
 
 -- 4. Bad numbers and bad states --------------------------------------------------------------------------
 do
 	local p, d = newPlayer(100000)
-	for _, bad in ipairs({ "1", "2", true, {}, 0, -1, 7, 1.5, 2.0000001, 0 / 0, math.huge, -math.huge, 1e300 }) do
+	for _, bad in ipairs({ "1", "2", true, {}, 0, -1, #UPGRADES + 1, 1.5, 2.0000001, 0 / 0, math.huge, -math.huge, 1e300 }) do
 		local ran, ok, msg = pcall(buy, p, bad)
 		check("bad id " .. tostring(bad) .. " (" .. type(bad) .. "): refused cleanly (no error), nothing changed", ran and ok == false and next(d.owned) == nil and d.cash.Value == 100000, msg)
 	end
@@ -5038,21 +5057,22 @@ do
 	check("a bad id never moves the rate limit stamp", d.lastBuyAt == nil, d.lastBuyAt)
 end
 
--- 5. The client chooses the upgrade, never the price ---------------------------------------------------------
+-- 5. The client chooses the item, never the price ---------------------------------------------------------
 do
-	local p, d = newPlayer(25)
+	local p, d = newPlayer(UPGRADES[COFFEE].cost)
 	buy(p, 1)
 	CALLS = {}
 	CLOCK += 1
-	local ok = handleShopAction(p, "BuyUpgrade", 2, 0, 1, "cost", { cost = 0 }) -- a client sending a price of 0 and more
-	check("a price sent by the client is ignored: the real $25 is taken", ok == true and d.cash.Value == 0, d.cash.Value)
+	local ok = handleShopAction(p, "BuyUpgrade", COFFEE, 0, 1, "cost", { cost = 0 }) -- a client sending a price of 0 and more
+	check("a price sent by the client is ignored: the real price is taken", ok == true and d.cash.Value == 0, d.cash.Value)
 	local seen
 	core.buyUpgrade = function(...) seen = { ... } return false, "x" end
 	handleShopAction(p, "BuyUpgrade", 3, 0, 99)
 	check("ShopServer passes only (player, id) on: nothing else the client sent reaches the buy", seen ~= nil and #seen == 2 and seen[1] == p and seen[2] == 3, seen and #seen)
 	core.buyUpgrade = buyUpgrade
 	local ok2, list = handleShopAction(p, "Upgrades", 5, 6)
-	check("Upgrades: the six, in order, with name, price and income", ok2 == true and #list == #UPGRADES and list[1].name == "Desk" and list[2].cost == 25 and list[6].income == 120)
+	check("Upgrades: the whole catalog, in order, with name, price and income", ok2 == true and #list == #UPGRADES and list[1].name == "Desk"
+		and list[COFFEE].cost == UPGRADES[COFFEE].cost and list[LOGO].income == UPGRADES[LOGO].income)
 end
 
 -- 6. HR Department purchase (PoachServer's HRBUY) ------------------------------------------------------------------
@@ -5224,6 +5244,9 @@ __IPOCONFIG__
 end)()
 MODULES.CompanyConfig = (function()
 __COMPANYCONFIG__
+end)()
+MODULES.OfficeConfig = (function() -- overhaul 2: CompanyServer reads the buildings from it
+__OFFICECONFIG__
 end)()
 local PlotVisuals = (function()
 __PLOTVISUALS__
@@ -5948,7 +5971,7 @@ local function refusedFor(name, reason, e, id, x, z, r)
 end
 local SPOT_BAD, TURN_BAD, NO_SIZE, NO_ZONES = "That spot isn't valid", "That turn isn't valid", "Your office isn't ready for that yet", "The office layout isn't available right now"
 check("the anchor: the plot's Floor is 60 deep and the plot center is 30 behind its front", CC.FloorDepth == PlotArt.Layout.floorSize[3] and CC.Buildings.Sizes[1].w == PlotArt.Layout.floorSize[1] and CC.Buildings.Sizes[1].d == PlotArt.Layout.floorSize[3])
-check("five nested buildings, each at least as big as the one before", #CC.Buildings.Sizes == 5 and (function()
+check("six nested buildings (overhaul 2: the HQ Tower), each at least as big as the one before", #CC.Buildings.Sizes == 6 and (function()
 	for i = 2, 5 do
 		if CC.Buildings.Sizes[i].w < CC.Buildings.Sizes[i - 1].w or CC.Buildings.Sizes[i].d < CC.Buildings.Sizes[i - 1].d then return false end
 	end
@@ -6031,7 +6054,7 @@ check("placement: turned 90 degrees, the sides swap", placed(e, "Coffee Machine"
 check("placement: turned 45 degrees takes more room (the corners)", placed(e, "Coffee Machine", -28.5, -6, 1) == false)
 local big = env(function(x) x.building = 5 end)
 check("placement: building 5 (78 x 82) is bigger: x -36.5 fits there and not in building 1", placed(big, "Coffee Machine", -36.5, -6, 0) == true and placed(e, "Coffee Machine", -36.5, -6, 0) == false)
-refusedFor("placement: building 6 has no size: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = 6 end), "Desk", -23, -40, 0)
+refusedFor("placement: building 7 has no size: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = 7 end), "Desk", -23, -40, 0)
 refusedFor("placement: building 0 has no size: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = 0 end), "Desk", -23, -40, 0)
 refusedFor("placement: no building at all: refused (the office isn't ready)", NO_SIZE, env(function(x) x.building = nil end), "Desk", -23, -40, 0)
 -- zones
@@ -6224,15 +6247,16 @@ def company_source(mutation=None):
 
 
 def upgrades_lua_names():
-    """The six UPGRADES names from TycoonCore.lua, as a Luau list."""
+    """The six upgrades with a station (the old garage upgrades: TycoonCore's OLD_STATIONS, in slot order), as a Luau list."""
     import re
     with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
         text = f.read()
-    block = text[text.index("local UPGRADES = {"):]
+    block = text[text.index("local OLD_STATIONS = {"):]
     block = block[:block.index("\n}")]
-    names = re.findall(r'name = "([^"]+)"', block)
+    rows = re.findall(r'(?:\["([^"]+)"\]|(\w+)) =\s+\{ slot = (\d)', block)
+    names = [n for _, n in sorted((int(slot), a or b) for a, b, slot in rows)]
     if len(names) != 6:
-        raise SystemExit("TycoonCore UPGRADES changed: update the Pokedex placement tests (expected 6 upgrades, found %d)" % len(names))
+        raise SystemExit("TycoonCore OLD_STATIONS changed: update the Pokedex placement tests (expected 6 stations, found %d)" % len(names))
     return "{ " + ", ".join('"%s"' % n for n in names) + " }"
 
 
@@ -6339,7 +6363,7 @@ COMPANY_MUTATIONS = [
     ("the ownership check (furniture)", ("elseif not (env.decor and (env.decor[key] or 0) >= copy) then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building", "elseif false then\n\t\treturn false, \"You don't own \" .. id\n\tend\n\tlocal building"),
      "furniture: Chair#1 and Chair#2 are yours, Chair#3 is not"),
     ("the building check (a size that doesn't exist)", ("if not building then\n\t\treturn false, \"Your office isn't ready for that yet\"", "if false then\n\t\treturn false, \"Your office isn't ready for that yet\""),
-     "placement: building 6 has no size: refused (the office isn't ready)"),
+     "placement: building 7 has no size: refused (the office isn't ready)"),
     ("the zones check (missing zones accepted)", ("if typeof(env.zones) ~= \"table\" then", "if false then"),
      "placement: without the plot's zones the server refuses (it can't know what is reserved)"),
     ("the inside-the-building check (the back wall)", ("or corner[2] < -building.d - EPSILON or corner[2] > EPSILON then", "or corner[2] > EPSILON then"),
@@ -6528,6 +6552,9 @@ __IPOCONFIG__
 end)()
 MODULES.CompanyConfig = (function()
 __COMPANYCONFIG__
+end)()
+MODULES.OfficeConfig = (function() -- overhaul 2: CompanyServer reads the buildings from it
+__OFFICECONFIG__
 end)()
 local PlotVisuals = (function()
 __PLOTVISUALS__
@@ -6891,6 +6918,10 @@ do
 	local expected = deepCopy(FAT)
 	expected.run = FAT.run + 1
 	expected.studio = true -- a Studio server marks every save
+	if type(expected.active) == "table" then
+		expected.active.building = 1 -- overhaul 2: an IPO starts the next run in the Garage
+		expected.active.o2 = 1 -- overhaul 2: the one-time building move ran at the join (its mark)
+	end
 	local fatPayload = { pokedex = CompanyServer.serialize(fatData) }
 	CompanyServer.writeIpoRun(fatData, fatPayload, FAT.run + 1)
 	check("an IPO by this version, a section with unknown fields: the saved payload carries run = the new count", fatPayload.pokedex.run == FAT.run + 1, fatPayload.pokedex.run)
@@ -6981,15 +7012,15 @@ SERVER_MUTATIONS = [
      "an IPO by this version: the saved payload carries run = the new count"),
     ("the run in the IPO's save (written into the section in memory too early)", ("\tpayload.pokedex.run = count\n", "\tpayload.pokedex.run = count\n\tstate.section.run = count\n"),
      "an IPO by this version: the section in memory is not changed by the payload step (only after the save worked)"),
-    ("the run in memory after an IPO (never set)", ("\tstate.section.run = count\nend\n\n-- True while", "\tstate.section.run = state.section.run\nend\n\n-- True while"),
+    ("the run in memory after an IPO (never set)", ("\tstate.section.run = count\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1", "\tstate.section.run = state.section.run\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1"),
      "an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)"),
-    ("the run in memory after an IPO (the wrong value)", ("\tstate.section.run = count\nend\n\n-- True while", "\tstate.section.run = count - 1\nend\n\n-- True while"),
+    ("the run in memory after an IPO (the wrong value)", ("\tstate.section.run = count\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1", "\tstate.section.run = count - 1\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1"),
      "an IPO by this version: after the save worked, the section in memory follows (an autosave keeps run)"),
     ("the lock guard of the IPO's run", ("if state == nil or state.locked or typeof(payload) ~= \"table\"", "if state == nil or typeof(payload) ~= \"table\""),
      "a locked section: writeIpoRun and onIpo change nothing"),
     ("the run in the IPO's save (skipped when the section has an unknown top-level field)", ("\tpayload.pokedex.run = count\n", "\tfor key in pairs(payload.pokedex) do\n\t\tif key ~= \"v\" and key ~= \"run\" and key ~= \"active\" and key ~= \"sectors\" and key ~= \"kept\" and key ~= \"hall\" and key ~= \"dust\" and key ~= \"studio\" then return end\n\tend\n\tpayload.pokedex.run = count\n"),
      "an IPO by this version, a section with unknown fields: the saved payload carries run = the new count"),
-    ("the run in memory after an IPO (skipped when the section has an unknown top-level field)", ("\tstate.section.run = count\nend\n\n-- True while", "\tfor key in pairs(state.section) do\n\t\tif key ~= \"v\" and key ~= \"run\" and key ~= \"active\" and key ~= \"sectors\" and key ~= \"kept\" and key ~= \"hall\" and key ~= \"dust\" and key ~= \"studio\" then return end\n\tend\n\tstate.section.run = count\nend\n\n-- True while"),
+    ("the run in memory after an IPO (skipped when the section has an unknown top-level field)", ("\tstate.section.run = count\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1", "\tfor key in pairs(state.section) do\n\t\tif key ~= \"v\" and key ~= \"run\" and key ~= \"active\" and key ~= \"sectors\" and key ~= \"kept\" and key ~= \"hall\" and key ~= \"dust\" and key ~= \"studio\" then return end\n\tend\n\tstate.section.run = count\n\tif typeof(state.section.active) == \"table\" then\n\t\tstate.section.active.building = 1"),
      "an IPO by this version, a section with unknown fields: the section in memory follows (run = the new count)"),
 ]
 
@@ -7079,6 +7110,9 @@ end)()
 MODULES.CompanyConfig = (function()
 __COMPANYCONFIG__
 end)()
+MODULES.OfficeConfig = (function() -- overhaul 2: CompanyServer reads the buildings from it
+__OFFICECONFIG__
+end)()
 local function buildCompanyServer()
 __COMPANYSERVER__
 end
@@ -7137,6 +7171,7 @@ end }
 local function getStore() return fakeStore end
 local function updateIncome() COUNT.income += 1 end
 local function refreshSign() COUNT.sign += 1 end
+local function officeToSave(data) return data.office and { v = 1, desks = data.office.desks } or nil end -- overhaul 2 (TycoonCore, outside the markers)
 __BUILDSAVE__
 __SAVENOTE__
 __SAVEFN__
@@ -7149,7 +7184,7 @@ local function newPlayer(savedPokedex, count)
 		owned = { Desk = true, Laptop = true }, cash = { Value = 250 },
 		items = { Desk = { Destroy = function() COUNT.destroyed += 1 end }, Laptop = { Destroy = function() COUNT.destroyed += 1 end } },
 		unknownSections = { future = { x = 1 } },
-		shop = {}, onboarding = {}, daily = {}, tasks = {}, poachLevel = 2, poach = {},
+		shop = {}, onboarding = {}, daily = {}, tasks = {}, poachLevel = 2, poach = {}, office = { v = 1, desks = 0 },
 		team = { employees = {}, incubators = { { egg = "Garage" }, false, false } },
 		ipo = { count = count or 1, shares = 5, valuation = 900, lifetime = 900, best = 900 },
 	}
@@ -7254,6 +7289,10 @@ do
 	local expected = deepCopy(FAT)
 	expected.run = FAT.run + 1
 	expected.studio = true -- a Studio server marks every save
+	if type(expected.active) == "table" then
+		expected.active.building = 1 -- overhaul 2: an IPO starts the next run in the Garage
+		expected.active.o2 = 1 -- overhaul 2: the one-time building move ran at the join (its mark)
+	end
 	local result = commitIpo(player, ipoAfter(data))
 	check("an IPO with unknown fields in the pokedex: the call returns true and saves once", result == true and STORE.calls == 1, result)
 	local payload = STORE.last or { pokedex = {} }
@@ -7322,7 +7361,7 @@ COMMITIPO_MUTATIONS = [
      "an IPO while the pokedex is locked: the call returns false"),
     ("the lock guard of commitIpo falls through", ("TycoonCore.lua", "unreadable)\")\n\t\treturn false\n", "unreadable)\")\n"),
      "an IPO while the pokedex is locked: the call returns false"),
-    ("the lock guard of commitIpo is off", ("TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n", "\tif false then\n"),
+    ("the lock guard of commitIpo is off", ("TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n\t\t-- The Pokedex is from a newer version", "\tif false then\n\t\t-- The Pokedex is from a newer version"),
      "an IPO while the pokedex is locked: the call returns false"),
     ("the refusal of a locked IPO is not logged", ("TycoonCore.lua", "\t\t" + _GUARD_WARN, ""),
      "an IPO while the pokedex is locked: the refusal is logged with the player and the reason"),
@@ -7350,17 +7389,25 @@ def code_only(text):
     return "\n".join(lines)
 
 
-def upgrades_lua():
-    """UPGRADES from TycoonCore.lua as a Luau table (name, cost, income: the real prices)."""
+def read_text(name):
+    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
+        return f.read()
+
+
+def office_items():
+    """OfficeConfig.Items as (key, stage, price, income) rows (overhaul 2: the office catalog TycoonCore's UPGRADES is built from)."""
     import re
-    with open(os.path.join(ROOT, "TycoonCore.lua"), encoding="utf-8") as f:
-        text = f.read()
-    block = text[text.index("local UPGRADES = {"):]
-    block = block[:block.index("\n}")]
-    rows = re.findall(r'name = "([^"]+)",\s*cost = (\d+),\s*income = (\d+)', block)
-    if len(rows) != 6:
-        raise SystemExit("UPGRADES in TycoonCore.lua no longer has 6 rows with name, cost and income")
-    return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s }' % row for row in rows) + " }"
+    text = read_text("OfficeConfig.lua")
+    block = text[text.index("--ITEMS-START"):text.index("--ITEMS-END")]
+    rows = re.findall(r'key = "([^"]+)", icon = "[^"]*", stage = (\d), price = (\d+), income = (\d+)', block)
+    if len(rows) < 60:
+        raise SystemExit("OfficeConfig.Items has %d rows with key, stage, price and income (60 or more expected)" % len(rows))
+    return rows
+
+
+def upgrades_lua():
+    """UPGRADES as TycoonCore builds it from OfficeConfig, as a Luau table (name, cost, income, stage: the real prices)."""
+    return "{ " + ", ".join('{ name = "%s", cost = %s, income = %s, stage = %s }' % (k, p, i, st) for k, st, p, i in office_items()) + " }"
 
 
 def hr_levels_lua():
@@ -7391,6 +7438,7 @@ def buy_source(mutation=None):
     first region that has `old` (TycoonCore, ShopServer, PoachServer's HRBUY region, buyHr, onAction)."""
     parts = {
         "__BUYUPGRADE__": marked_source("BUYUPGRADE"),
+        "__OFFICECONFIG__": read_text("OfficeConfig.lua"),
         "__SHOPACTION__": marked_source("SHOPACTION", "ShopServer.lua"),
         "__HRBUY__": marked_source("HRBUY", "PoachServer.lua"),
         "__BUYHR__": function_source("local function buyHr(player)", "PoachServer.lua"),
@@ -7404,7 +7452,7 @@ def buy_source(mutation=None):
                 break
         else:
             raise SystemExit("mutation target not found: " + old)
-    source = BUY_TESTS.replace("__UPGRADES__", upgrades_lua()).replace("__HRLEVELS__", hr_levels_lua())
+    source = BUY_TESTS.replace("__IPOCONFIG__", read_text("IpoConfig.lua")).replace("__HRLEVELS__", hr_levels_lua())
     for key, region in parts.items():
         source = source.replace(key, region)
     return source
@@ -7413,9 +7461,12 @@ def buy_source(mutation=None):
 # Each of these breaks one rule of the purchase; the tests must notice (a test that can't fail proves nothing).
 # A third element names a test that must be among the failures (proof that this test is the one that can fail).
 BUY_MUTATIONS = [
-    ("the Cash check", ("if cash < upg.cost then", "if false then")),
-    ("the already-owned check", ("if data.owned[upg.name] then", "if false then")),
-    ("the order check", ("if i ~= id then", "if false then")),
+    ("the Cash check", ("if cash < item.price then", "if false then")),
+    ("the already-owned check", ("if owned[item.key] then\n\t\treturn nil, item.key .. \" is already yours\"", "if false then\n\t\treturn nil, item.key .. \" is already yours\"")),
+    ("the Desk-first check", ("if item.key ~= OfficeConfig.FirstItem and not owned[OfficeConfig.FirstItem] then", "if false then"),
+     "before the Desk: refused, says to buy the Desk first"),
+    ("the stage lock (overhaul 2)", ("\tif stage < item.stage then\n\t\treturn nil, OfficeConfig.unlockText(item.stage)", "\tif false then\n\t\treturn nil, OfficeConfig.unlockText(item.stage)"),
+     "a Seed item at the Garage is refused"),
     ("the rate limit", ("if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then", "if false then"),
      "spam: 100 requests on a moving clock buy exactly 3 times"),
     ("the rate limit (a refused request also stamps the time)",
@@ -7487,8 +7538,8 @@ def pads_gone_checks():
     check("TycoonCore: a join and an IPO reset refresh the sign and the Office state", code.count("refreshSign(player)") >= 3)
     check("TycoonCore: spawning on a plot buys nothing (the character only lands and faces the sign)", "auto-buy" not in core and "Touched" not in core)
     sections = re.search(r"local KNOWN_SECTIONS = \{([^}]*)\}", core).group(1)
-    check("TycoonCore: no new save section (the Office tab saves nothing: owned already is)",
-          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks pokedex".split()), sections)
+    check("TycoonCore: the known sections are the old ones plus overhaul 2's office (the catalog itself saves in owned)",
+          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks pokedex office".split()), sections)
     check("TycoonCore: nothing new is written to the save for the Office (no lastBuyAt or Upgrade attribute in the payload)",
           "lastBuyAt" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
 
@@ -7502,12 +7553,12 @@ def pads_gone_checks():
 
     client = code_only(read("ShopClient.lua"))
     invokes = re.findall(r"actionRemote:InvokeServer\(([^)]*)\)", client)
-    check("ShopClient: the Office tab asks only for the list and sends the upgrade number (no price)",
-          sorted(invokes) == ['"BuyUpgrade", index', '"Upgrades"'], invokes)
+    check("ShopClient: the Office tab asks for \"Office\" and sends an action alone or an action and a number (no price; overhaul 2)",
+          sorted(invokes) == ['"Office"', 'action', 'action, index'], invokes)
     check("ShopClient: an Office tab, first and the one shown when the shop opens",
           'local tabNames = { "Office",' in client and 'showTab("Office")' in client)
-    check("ShopClient: Buy is only offered for the next upgrade when the Cash is there (the server decides anyway)",
-          'button.Visible = row.state ~= "locked"' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
+    check("ShopClient: a locked item says Locked and an owned one Owned (the server decides anyway; overhaul 2)",
+          'setButton(button, "Locked", COLORS.disabled, false)' in client and 'setButton(button, "Owned", COLORS.owned, false)' in client)
 
     poach = code_only(read("PoachClient.lua"))
     check("PoachClient: Buy HR sends only the action", 'request("BuyHr")' in poach and 'request("BuyHr",' not in poach)
@@ -7604,7 +7655,10 @@ def task_wiring_checks(files=None, failures=None):
 
     # Calls start with the Desk (owner decision): the Call row names the first upgrade, TaskServer only reads it from the
     # data it already has, and the client shows nothing about calls until the server says they are on.
-    first_upgrade = re.search(r'local UPGRADES = \{\s*\{ name = "([^"]+)",\s+cost = (\d+)', core)
+    # overhaul 2: TycoonCore's UPGRADES is OfficeConfig's catalog (built in order), so its first row is the Desk
+    first_upgrade = re.search(r'--ITEMS-START\n(?:\t--[^\n]*\n)*\t\{ key = "([^"]+)", icon = "[^"]*", stage = \d, price = (\d+)', read("OfficeConfig.lua"))
+    if "for _, item in ipairs(OfficeConfig.Items) do" not in core:
+        first_upgrade = None
     check("desk wiring: TycoonCore's first upgrade is a Desk that costs 0 (the row's `owns` must name it)", first_upgrade is not None and first_upgrade.group(1) == "Desk" and first_upgrade.group(2) == "0", first_upgrade and first_upgrade.groups())
     check("desk wiring: the Call row's `owns` is the name of TycoonCore's first upgrade",
           first_upgrade is not None and re.search(r'unlock = \{ rung = 0, owns = "%s" \}' % re.escape(first_upgrade.group(1)), config) is not None)
@@ -7751,8 +7805,8 @@ TASK_MUTANTS = [
     ("the client ignores the server's flag", "TaskClient.lua",
      "callsOn = state.on == true", "callsOn = true",
      "wiring", "desk wiring: TaskClient starts with calls off"),
-    ("the first upgrade is renamed in TycoonCore (the row's name drifts)", "TycoonCore.lua",
-     '{ name = "Desk",           cost = 0,', '{ name = "Writing Desk",    cost = 0,',
+    ("the first upgrade is renamed in OfficeConfig (the row's name drifts)", "OfficeConfig.lua",
+     '\t{ key = "Desk", icon', '\t{ key = "Writing Desk", icon',
      "wiring", "desk wiring: TycoonCore's first upgrade is a Desk"),
     ("TaskServer writes the player's Desk", "TaskServer.lua",
      "local function callsOn(data)\n", "local function callsOn(data)\n\tdata.owned.Desk = true\n",
@@ -7811,9 +7865,7 @@ def visuals_expected_lua():
         return [(num(x), num(z)) for x, z in re.findall(r"Vector3\.new\((-?[\d.]+), 0, (-?[\d.]+)\)", block)]
 
     core = read("TycoonCore.lua")
-    upgrades_block = core[core.index("local UPGRADES = {"):]
-    upgrades_block = upgrades_block[:upgrades_block.index("\n}")]
-    upgrades = re.findall(r'name = "([^"]+)"', upgrades_block)
+    upgrades = re.findall(r'"([^"]+)"', upgrades_lua_names())  # overhaul 2: the six upgrades with a station prop
     item = re.search(r"local function itemOffset\(i\)\s*local col = \(i - 1\) // 3\s*local row = \(i - 1\) % 3\s*return Vector3\.new\((-?[\d.]+) \+ col \* (-?[\d.]+), 0, (-?[\d.]+) \+ row \* (-?[\d.]+)\)", core)
     if not item:
         raise SystemExit("itemOffset changed in TycoonCore.lua: update visuals_expected_lua and PlotArt.Layout")
@@ -8038,6 +8090,9 @@ end)()
 MODULES.CompanyConfig = (function()
 __COMPANYCONFIG__
 end)()
+MODULES.OfficeConfig = (function() -- overhaul 2: CompanyServer reads the buildings from it
+__OFFICECONFIG__
+end)()
 local CompanyConfig = MODULES.CompanyConfig
 
 -- The real TycoonCore code, with the garages turned by TURNS (its own GARAGE_TURNS line is read separately below)
@@ -8051,7 +8106,9 @@ __UPGRADES__
 __CORE_FUNCTIONS__
 	local plotZones = __PLOTZONES__
 	return { plotFrame = plotFrame, plotCenter = plotCenter, makePart = makePart, itemOffset = itemOffset, spawnItem = spawnItem,
-		refreshSign = refreshSign, teleportToPlot = teleportToPlot, plotZones = plotZones, playerData = playerData, UPGRADES = UPGRADES,
+		refreshSign = refreshSign, teleportToPlot = teleportToPlot, plotZones = plotZones, playerData = playerData,
+		-- overhaul 2: the six upgrades with a station (the old garage upgrades), in station order: the frame tests place their props
+		UPGRADES = (function() local t = {} for _, u in ipairs(UPGRADES) do if u.slot then t[u.slot] = u end end return t end)(),
 		MAX_PLOTS = MAX_PLOTS, SIGN_OFFSET = SIGN_OFFSET }
 end
 local REAL_TURNS = (function()
@@ -8505,6 +8562,16 @@ FRAME_CORE_FUNCTIONS = ("local function makePart(", "local function addLabel(", 
                         "local function publishUpgrades(", "local function refreshSign(", "local function teleportToPlot(")
 
 
+def frame_upgrades(core, texts):
+    """TycoonCore's UPGRADES as it builds them (overhaul 2): OfficeConfig, the six stations and the loop over the catalog."""
+    start = core.find("local OLD_STATIONS = {")
+    end = core.find("\nlocal PLOT_SPACING", start)
+    if start < 0 or end < 0:
+        return 'error("TycoonCore: OLD_STATIONS and the UPGRADES loop not found")'
+    office = texts.get("OfficeConfig.lua") or read_text("OfficeConfig.lua")
+    return "local OfficeConfig = (function()\n" + office + "\nend)()\n" + core[start:end]
+
+
 def frame_source(texts):
     """The frame test program, with the (possibly mutated) scripts in texts."""
     core, ipo, employee = texts["TycoonCore.lua"], texts["IpoServer.lua"], texts["EmployeeServer.lua"]
@@ -8523,7 +8590,7 @@ def frame_source(texts):
     text = (FRAME_TESTS.replace("__PLOTART__", texts["PlotArt.lua"]).replace("__PLOTVISUALS__", texts["PlotVisuals.lua"])
             .replace("__SECTORCONFIG__", texts["SectorConfig.lua"]).replace("__IPOCONFIG__", texts["IpoConfig.lua"])
             .replace("__COMPANYCONFIG__", texts["CompanyConfig.lua"])
-            .replace("__CORE_CONSTANTS__", constants).replace("__UPGRADES__", frame_block(core, "local UPGRADES = {"))
+            .replace("__CORE_CONSTANTS__", constants).replace("__UPGRADES__", frame_upgrades(core, texts))
             .replace("__CORE_FUNCTIONS__", functions).replace("__PLOTZONES__", plot_zones)
             .replace("__TURNS_LINE__", frame_line(core, "local GARAGE_TURNS = ") or "local GARAGE_TURNS = {}")
             .replace("__IPO_CONSTANTS__", ipo_constants).replace("__BUILDSIGN__", frame_extract_function(ipo, "local function buildSign("))
@@ -8932,9 +8999,9 @@ WIRING_MUTATIONS = [
     ("CompanyServer names a sector", "CompanyServer.lua", "return CompanyServer\n", "local k = \"Gaming\"\nreturn CompanyServer\n"),
     ("a D9 word in CompanyServer", "CompanyServer.lua", "\"Too fast\"", "\"Good luck\""),
     ("a DataStore in CompanyConfig", "CompanyConfig.lua", "return CompanyConfig\n", "local s = game:GetService(\"DataStoreService\"):GetDataStore(\"Other\")\nreturn CompanyConfig\n"),
-    ("an IPO allowed while the pokedex is locked", "TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n", "\tif false then\n"),
-    ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex) then", "data.tasks) then"),
-    ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true }", "tasks = true }"),
+    ("an IPO allowed while the pokedex is locked", "TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n\t\t-- The Pokedex is from a newer version", "\tif false then\n\t\t-- The Pokedex is from a newer version"),
+    ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex and data.office) then", "data.tasks and data.office) then"),
+    ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true, office = true }", "tasks = true, office = true }"),
     ("the payload without the pokedex", "TycoonCore.lua", "pokedex = CompanyServer.serialize(data),", "pokedex = nil,"),
     ("commitIpo no longer writes the pokedex's run in the IPO's save", "TycoonCore.lua", "\t\tCompanyServer.writeIpoRun(data, payload, newIpo.count) -- the pokedex's run follows the new count in this very save\n", ""),
     ("commitIpo writes the wrong run in the IPO's save", "TycoonCore.lua", "CompanyServer.writeIpoRun(data, payload, newIpo.count)", "CompanyServer.writeIpoRun(data, payload, newIpo.count - 1)"),
@@ -9040,7 +9107,7 @@ def sim_perk_costs_lua():
 
 
 def run_luau(luau, source):
-    source = source.replace("__STORABLE__", STORABLE_LUA)
+    source = source.replace("__STORABLE__", STORABLE_LUA).replace("__OFFICECONFIG__", read_text("OfficeConfig.lua"))
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
         path = f.name

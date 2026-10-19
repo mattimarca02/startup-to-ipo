@@ -54,6 +54,7 @@ CompanyConfig.Buildings = {
 		{ w = 68, d = 70 },
 		{ w = 72, d = 76 },
 		{ w = 78, d = 82 },
+		{ w = 82, d = 86 }, -- overhaul 2: the HQ Tower (IPO-ready)
 	},
 }
 CompanyConfig.FloorDepth = 60 -- TycoonCore's Floor Part is 60 deep: the plot center is 30 studs behind the anchor

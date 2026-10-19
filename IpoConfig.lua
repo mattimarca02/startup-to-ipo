@@ -1,7 +1,7 @@
 -- IpoConfig: the IPO rebirth rules in one place (milestone 4).
 -- Put this ModuleScript in ReplicatedStorage (the server and the IPO screen both read it).
 --
--- Valuation = all the Cash your startup earned (income, offline earnings and Cash packs).
+-- Valuation = the Cash your startup earned (income, calls and activities; offline earnings and Cash packs count 10%: OfficeConfig.GiftValuationShare).
 -- It climbs through funding stages; at the last one you can go public ("IPO").
 -- Going public resets your Cash, garage upgrades and eggs in incubators (see Resets below),
 -- and in return gives a permanent income multiplier and Shares to spend on permanent perks.
@@ -14,17 +14,21 @@ local IpoConfig = {}
 
 -- Funding stages, from start to IPO. valuation = what you need to reach that stage on your
 -- current run (since your last IPO). The last stage is the one that lets you go public.
+-- Overhaul 2 (2026-10-19, the owner's numbers): Seed $30K, Series A $10M, Series B $100M, Series C $300M (new), IPO $1B.
+-- Each stage unlocks its building and its part of the office catalog in SHOP > Office (OfficeConfig); the building is
+-- bought, never given. Never change a stage key: TaskConfig, the goal chain and the pokedex refer to them.
 IpoConfig.Stages = {
 	{ key = "Garage", name = "Garage", icon = "🏚️", valuation = 0 },
-	{ key = "Seed", name = "Seed", icon = "🌱", valuation = 1800 },
-	{ key = "SeriesA", name = "Series A", icon = "💼", valuation = 6300 },
-	{ key = "SeriesB", name = "Series B", icon = "🚀", valuation = 23400 },
-	{ key = "IpoReady", name = "IPO-ready", icon = "🔔", valuation = 81000 },
+	{ key = "Seed", name = "Seed", icon = "🌱", valuation = 30000 },
+	{ key = "SeriesA", name = "Series A", icon = "💼", valuation = 10000000 },
+	{ key = "SeriesB", name = "Series B", icon = "🚀", valuation = 100000000 },
+	{ key = "SeriesC", name = "Series C", icon = "🏙️", valuation = 300000000 },
+	{ key = "IpoReady", name = "IPO-ready", icon = "🔔", valuation = 1000000000 },
 }
--- Every IPO you've done makes the stages of the next run this many times bigger (1 = never grows)
--- Retuned via tools/economy_sim.py (see docs/ECONOMY.md section 3): first IPO ~10-15 min active play,
--- IPO 5 in a few hours, IPO 10 after 2+ days, a 2h single-session binge caps around IPO 5.
-IpoConfig.StageGrowthPerIpo = 2.5
+-- Every IPO you've done makes the stages of the next run this many times bigger (1 = never grows).
+-- Overhaul 2: small, so later runs are faster through the IPO multiplier and what is kept (employees, desks, perks).
+-- tools/economy_sim.py --o2 (docs/ECONOMY.md section 10): first IPO about 20 h of active play, the next ones faster.
+IpoConfig.StageGrowthPerIpo = 1.1
 
 -- Permanent income multiplier: 1 + BonusPerIpo * IPOs ^ BonusExponent.
 -- An exponent below 1 makes each IPO add a bit less than the one before (x1.5, x1.84, x2.14...).
@@ -33,11 +37,11 @@ IpoConfig.BonusPerIpo = 0.5
 IpoConfig.BonusExponent = 0.75
 
 -- Shares from an IPO: SharesPerIpo * (1 + SharesGrowthPerIpo * IPOs) * (valuation / IPO-ready valuation) ^ SharesExponent.
--- IPOs = how many you have already done, so the 1st IPO gives SharesPerIpo (10), the 2nd 18, the 11th 90.
+-- IPOs = how many you have already done, so the 1st IPO gives SharesPerIpo (40), the 2nd 60, the 11th 240.
 -- Going public exactly at IPO-ready gives that base; waiting until 2x (the cap) gives 1.41x as many.
 -- The Shareholder pass multiplies this (see ShopConfig).
-IpoConfig.SharesPerIpo = 10
-IpoConfig.SharesGrowthPerIpo = 0.8
+IpoConfig.SharesPerIpo = 40 -- overhaul 2: a run is about 20 hours now (was 12 minutes), so an IPO pays more
+IpoConfig.SharesGrowthPerIpo = 0.5
 IpoConfig.SharesExponent = 0.5
 IpoConfig.SharesRatioCap = 2 -- waiting longer than 2x IPO-ready (e.g. offline Cash) gives no more Shares: ratio 2 = x1.41
 

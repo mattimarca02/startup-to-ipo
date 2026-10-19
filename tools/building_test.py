@@ -528,16 +528,16 @@ do
 	check("fallback: every piece is built and fills its kit size (bottom-center, front +Z), with its own roles", bad == nil, bad)
 end
 
--- 3. The five layouts ------------------------------------------------------------------------------------------------
+-- 3. The six layouts (overhaul 2: Series C added, the HQ Tower is the sixth building) ---------------------------------------------------------------------------------------------
 local LAYOUTS = {}
-for s = 1, 5 do LAYOUTS[s] = PB.layout(s) end
-check("layout: five stages, one per funding stage, with PlotArt's keys in order", #PB.Stages == 5 and (function()
-	for s = 1, 5 do if LAYOUTS[s].key ~= PlotArt.Stages[s].key then return false end end return true end)())
+for s = 1, 6 do LAYOUTS[s] = PB.layout(s) end
+check("layout: six stages, one per funding stage, with PlotArt's keys in order", #PB.Stages == 6 and #PlotArt.Stages == 6 and (function()
+	for s = 1, 6 do if LAYOUTS[s].key ~= PlotArt.Stages[s].key then return false end end return true end)())
 check("layout: a stage past the last shows the last, below 1 or not a number shows the first",
-	PB.layout(9).stage == 5 and PB.layout(0).stage == 1 and PB.layout(0 / 0).stage == 1 and PB.layout(nil).stage == 1)
+	PB.layout(9).stage == 6 and PB.layout(0).stage == 1 and PB.layout(0 / 0).stage == 1 and PB.layout(nil).stage == 1)
 check("frame: PlotBuilding.FLOOR_TOP is PlotArt.Layout.floorTop", PB.FLOOR_TOP == PlotArt.Layout.floorTop)
 
-for s = 1, 5 do
+for s = 1, 6 do
 	local L = LAYOUTS[s]
 	local fp, lot, min = L.footprint, PB.Lot, PB.MinShell
 	check("footprint: stage " .. s .. " is at least building-pass's shell (62 x 62) and inside the lot (82.6 x 86.6)",
@@ -562,7 +562,7 @@ for s = 1, 5 do
 	check("kit: every key stage " .. s .. " uses is in the KitManifest (or is a Block)", unknown == nil, unknown)
 	-- the facade's depth (overhaul phase 5): the named Blocks each stage adds outside its front wall (and the tower's band)
 	local FACADE = { {}, { "Canopy", "CanopyFascia", "SillL", "SillR" }, { "Canopy", "Course", "Sill2", "PilasterL1", "PilasterR2" },
-		{ "FinL1", "FinR2", "Line1", "Line3", "PlinthL", "PlinthR" }, { "PodiumGold", "TowerLine" } }
+		{ "FinL1", "FinR2", "Line1", "Line3", "PlinthL", "PlinthR" }, { "PodiumGold", "TowerLine" }, { "PodiumGold", "TowerLine" } }
 	local missing = nil
 	for _, want in ipairs(FACADE[s]) do
 		local found = false
@@ -749,20 +749,22 @@ do
 	check("look: Big Office: two stories, WallWindow and WallGlass, RoofEdge", stories(3) == 2 and has(3, "WallWindow") and has(3, "WallGlass") and has(3, "WallDoor"))
 	check("look: Small Corporate: four stories, WallGlass, an open entrance between two pillars (no RevolvingDoor: players walked through its post)",
 		stories(4) == 4 and has(4, "WallGlass") and has(4, "Corner") and not has(4, "RevolvingDoor"))
-	check("look: Big Corporate: the tallest (six stories), Columns, a RoofCrown", stories(5) == 6 and has(5, "Column") and has(5, "RoofCrown")
+	check("look: Big Corporate: six stories, Columns, a RoofCrown", stories(5) == 6 and has(5, "Column") and has(5, "RoofCrown")
 		and stories(5) > stories(4))
+	check("look: HQ Tower (overhaul 2): the tallest (seven stories), Columns, a RoofCrown", stories(6) == 7 and has(6, "Column") and has(6, "RoofCrown")
+		and stories(6) > stories(5))
 	local mats = {}
 	for s = 1, 5 do mats[s] = PB.styleOf(s, "Wall", "main").material end
 	check("look: Brick for the garage, SmoothPlastic for the office, Glass for the tower, Marble for the headquarters",
 		mats[1] == "Brick" and mats[2] == "SmoothPlastic" and mats[4] == "Glass" and mats[5] == "Marble" and PB.styleOf(5, "Column", "accent").color[1] == 255)
-	local want = { "WallGarage", "WallDoor", "WallDoor", "none", "none" }
+	local want = { "WallGarage", "WallDoor", "WallDoor", "none", "none", "none" }
 	local wrong = nil
-	for s = 1, 5 do
+	for s = 1, 6 do
 		for _, p in ipairs(LAYOUTS[s].pieces) do
 			if p.lane and p.key ~= want[s] then wrong = wrong or (s .. " " .. p.name) end
 		end
 	end
-	check("lane: only the door piece may stand in the lane (stage 1 the WallGarage, 2 and 3 the WallDoor, none at 4 and 5), never solid", wrong == nil, wrong)
+	check("lane: only the door piece may stand in the lane (stage 1 the WallGarage, 2 and 3 the WallDoor, none at 4 to 6), never solid", wrong == nil, wrong)
 end
 """
 
@@ -777,7 +779,7 @@ local postBox = { PB.ClaimPost.x0, PB.ClaimPost.x1, PB.GROUND, PB.ClaimPost.top,
 local landBox = { PB.Landing.x - PB.Landing.half, PB.Landing.x + PB.Landing.half, 0, PB.Landing.top, PB.Landing.z - PB.Landing.half, PB.Landing.z + PB.Landing.half }
 local apronBox = { -PB.Lane.half, PB.Lane.half, PB.GROUND, PB.Lane.top, PB.FRONT_OUT, PB.FRONT_OUT + PB.APRON }
 local results = {}
-for s = 1, 5 do
+for s = 1, 6 do
 	local L = PB.layout(s)
 	local laneOk = {}
 	for _, p in ipairs(L.pieces) do if p.lane then laneOk[p.name] = true end end
@@ -1085,7 +1087,7 @@ do
 	for _, c in ipairs(garage:GetChildren()) do if c.Name == "PlotBuilding" then count += 1 end end
 	check("sync: a new stage replaces the building (one Model, the old one destroyed)", c3 and m3 ~= m1 and count == 1 and rawget(m1, "destroyed") == true)
 	local m4 = PBV.sync(garage, frame, PB, 12, nil)
-	check("sync: a stage past the last shows the last", m4:GetAttribute("Stage") == 5)
+	check("sync: a stage past the last shows the last", m4:GetAttribute("Stage") == 6)
 check("streaming: every building Model is Persistent (its shell never streams out across the plaza)", m4.ModelStreamingMode == Enum.ModelStreamingMode.Persistent)
 	-- a visitor stands in Big Corporate's band; an IPO brings back the Garage, whose wall stands there
 	local origin = PBV.originOf(frame, PB)
@@ -1108,21 +1110,21 @@ check("streaming: every building Model is Persistent (its shell never streams ou
 		m6 ~= m7 and movedJump == 0 and near((jumper.Position - (origin * Vector3.new(5, 10.6, -5))).Magnitude, 0), movedJump)
 end
 
--- 7. Six garages at the biggest stage, and the plaza: under 3,000 parts -------------------------------------------------
+-- 7. Six garages at the biggest stage, and the plaza: under 3,200 parts (overhaul 2: 3,000 -> 3,200 for the HQ Tower) -----------------------------------------------
 do
 	local room = 0
-	local r = PlotVisuals.buildRoom(nil, frameAt(0), PlotArt, 5)
+	local r = PlotVisuals.buildRoom(nil, frameAt(0), PlotArt, 6)
 	for _, slot in ipairs(PlotArt.Layout.itemSlots) do PlotVisuals.buildProp(r:FindFirstChild("UpgradeProps"), frameAt(0), PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z)) end
 	for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") then room += 1 end end
 	local biggest = 0
-	for s = 1, 5 do
+	for s = 1, 6 do
 		local m = PBV.build(nil, frameAt(0), PB, s, makeKit(0))
 		local n = 0
 		for _, d in ipairs(m:GetDescendants()) do if d:IsA("BasePart") then n += 1 end end
 		biggest = math.max(biggest, n)
 	end
 	local total = 6 * (room + biggest + 2) + PLAZA_BUDGET -- + the Floor and the garage sign
-	check("budget: six garages at their biggest stage (room " .. room .. " + building " .. biggest .. ") plus the plaza (" .. PLAZA_BUDGET .. ") is under 3,000: " .. total, total < 3000, total)
+	check("budget: six garages at their biggest stage (room " .. room .. " + building " .. biggest .. ") plus the plaza (" .. PLAZA_BUDGET .. ") is under 3,200: " .. total, total < 3200, total)
 end
 """
 
@@ -1389,7 +1391,7 @@ end
 do
 	-- standing at the claim post with the camera behind: the shell is solid at every stage and turn
 	local faded = nil
-	for s = 1, 5 do
+	for s = 1, 6 do
 		for _, turn in ipairs({ 0, 90, 180, 270 }) do
 			fresh()
 			local fr = frameAt(turn, -135, 150)
@@ -1752,7 +1754,7 @@ def core_snippets(core):
         consts.append(m.group(0))
     helpers = between(core, "local function makePart(", "local function plotCenter(", False)
     frame = between(core, "local function plotCenter(", "-- Where each upgrade's prop stands", False)
-    looks = between(core, "local function looks(", "-- The funding stage decides", False)
+    looks = between(core, "local function looks(", "-- The funding stage the valuation reached", False)
     garages = between(core, "local garages = {} -- slot", "\nbuildGarages()\n")
     leave = between(core, "Players.PlayerRemoving:Connect(function(player)\n", "\nend)\n")
     if None in (helpers, frame, looks, garages, leave):
@@ -1870,8 +1872,8 @@ def static_checks(sources):
     add("core: nothing of the building is called inside the CLAIMLOAD block (building-pass's third edit is dropped)",
         block != "" and "syncBuilding" not in block and "PlotBuilding" not in block)
     sync = between(code_only(core), "local function syncRoom(data)", "\nend\n") or ""
-    add("core: syncRoom (every second) syncs the building with the stage (or the Studio Debug button's, in memory only)",
-        "local stage = data.debugStage or stageOf(data)" in sync and "syncBuilding(data.slot, stage)" in sync)
+    add("core: syncRoom (every second) syncs the building with the building bought (overhaul 2; or the Studio Debug button's, in memory only)",
+        "local stage = data.debugStage or buildingOf(data)" in sync and "syncBuilding(data.slot, stage)" in sync)
     leave = between(core, "Players.PlayerRemoving:Connect(function(player)\n", "\nend)\n") or ""
     add("core: the leave handler resets the garage after the leave save and the folder",
         leave.find("saveOnLeave(player)") >= 0 and leave.find("saveOnLeave(player)") < leave.find("data.folder:Destroy()") < leave.find("resetGarage(data.slot)") < leave.find("plotOwners[data.slot] = nil"))
@@ -1894,8 +1896,8 @@ MUTANTS = [
      "\t\t\tlookFlags(part)\n\t\t\tpart.CanCollide = true\n\t\t\tpaint(part, building, stage, piece, role)\n\t\t\ttag(part, piece, role)\n\t\t\tpart.Parent = parent\n\t\t\ttable.insert(made, part)", "solid:", ("build",)),
     ("the client remembers only opaque parts (glass never fades)", CLIENT, "\tif item:IsA(\"BasePart\") then\n\t\tstate.parts[item] = { base = item.Transparency, fade = 0 }",
      "\tif item:IsA(\"BasePart\") and item.Transparency == 0 then\n\t\tstate.parts[item] = { base = item.Transparency, fade = 0 }", "client: glass in the way", ("client",)),
-    ("a stage over the budget (Big Corporate gets 12 more columns)", PB, '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n',
-     '\t\t\t{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },\n' + "".join('\t\t\t{ key = "Column", x = %d, y = -1, z = -50, turn = 0 },\n' % x for x in range(-33, 39, 6)), "budget:", ("data",)),
+    ("a stage over the budget (Big Corporate gets 12 more columns)", PB, '\t\t\t{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 40.7, z = 14.4 },\n',
+     '\t\t\t{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 40.7, z = 14.4 },\n' + "".join('\t\t\t{ key = "Column", x = %d, y = -1, z = -50, turn = 0 },\n' % x for x in range(-33, 39, 6)), "budget:", ("data",)),
     ("the front moves at stage 4 (z 33.2 instead of 32.2)", PB, "masses = { { half = 40, back = -40, front = 32.2,", "masses = { { half = 40, back = -40, front = 33.2,", "front:", ("data",)),
     ("furniture inside the room (the band measured from the room's edge inward)", PB, "p.x, p.z, p.turn = -inner + depth / 2, f.along, 90", "p.x, p.z, p.turn = -30 + depth / 2, f.along, 90", "furniture:", ("data",)),
     ("the fallback missing a wall (Wall has no Parts version)", PB, '\tWall = { box("main", 16, 13, 2, 0, 6.5, 0), box("trim", 16, 1, 2, 0, 13.5, 0) },', '\tWall = {},', "fallback:", ("data", "build")),

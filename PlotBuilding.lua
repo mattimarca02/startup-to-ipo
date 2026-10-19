@@ -3,7 +3,8 @@
 -- PlotBuildingVisuals (which builds it) and PlotArt (the room inside, unchanged).
 --
 -- Stages[i] is the building of IpoConfig.Stages[i]: 1 Garage, 2 Small Office (Seed), 3 Big Office (Series A),
--- 4 Small Corporate (Series B), 5 Big Corporate (IPO-ready). A stage past the last shows the last one.
+-- 4 Small Corporate (Series B), 5 Big Corporate (Series C), 6 HQ Tower (IPO-ready; overhaul 2). A stage past the last shows
+-- the last one. Overhaul 2: the building shown is the one BOUGHT (TycoonCore buildingOf), never the valuation by itself.
 -- Looks only, like PlotArt: nothing here is saved, sent through a remote or read back. Nothing random, no odds text.
 --
 -- Data and pure layout code (no services, no Instances), so tools/building_test.py runs it outside Studio:
@@ -47,7 +48,7 @@ PlotBuilding.ClaimPost = { x0 = 6, x1 = 10, z0 = 34.2, z1 = 36.2, top = 9 } -- P
 PlotBuilding.Landing = { x = 0, z = 12, half = 2.5, top = 8 } -- where TycoonCore's teleportToPlot lands a player
 PlotBuilding.CLEAR_ABOVE = 12.5 -- a solid part over the 60 x 60 floor stays this high or higher (a jump reaches about 12.3)
 PlotBuilding.ROOF = 0.5 -- the roof's solid box: this thick, under the top of the outer mass (12.5 to 13 on one story)
-PlotBuilding.Budget = { parts = 160, lights = 1 } -- per building: kit MeshParts (or fallback Parts) plus the solid boxes; one light (the ceiling's)
+PlotBuilding.Budget = { parts = 180, lights = 1 } -- per building: kit MeshParts (or fallback Parts) plus the solid boxes; one light (the ceiling's). Overhaul 2: 160 -> 180 for the HQ Tower (the sixth building)
 PlotBuilding.Inside = { floorBelow = 3, margin = 1 } -- the ground floor's inside box (PlotBuildingVisuals.isInside; the server's unstick and the tests)
 -- The occlusion fade (BuildingClient, overhaul phase 2): a shell part between the camera and the player goes to `occluded`
 -- (from its own transparency) in `seconds`, and comes back 1.5 times slower
@@ -265,6 +266,17 @@ PlotBuilding.Styles = {
 		furniture = "SmoothPlastic",
 		light = { color = rgb(255, 236, 200), brightness = 1, range = 54 }, -- gold-white, the marble lobby
 	},
+	{ -- 6 HQ Tower (overhaul 2): white marble, silver-blue glass, gold; the tower is light glass
+		roles = {
+			main = S(rgb(240, 238, 232), "Marble"), trim = S(rgb(196, 200, 210), "Metal"), accent = S(rgb(255, 200, 70), "Metal"),
+			glass = S(rgb(150, 190, 225), "Glass", GLASS), dark = S(rgb(46, 52, 64), "Metal"),
+		},
+		keys = { RoofCrown = { main = S(rgb(255, 200, 70), "Metal") } },
+		looks = { tower = { main = S(rgb(120, 168, 214), "Glass"), trim = S(rgb(230, 232, 236), "Metal") }, roof = { main = S(rgb(70, 74, 84), "Concrete") },
+			floor = { main = S(rgb(236, 234, 228), "Marble") } },
+		furniture = "SmoothPlastic",
+		light = { color = rgb(255, 244, 226), brightness = 1, range = 56 }, -- bright white, the HQ lobby
+	},
 }
 
 local function hexColor(hex)
@@ -303,7 +315,7 @@ function PlotBuilding.styleOf(stage, key, role, look)
 	return { color = hexColor(hex), material = style.furniture, transparency = role == "glass" and GLASS or 0 }
 end
 
--- The five buildings ------------------------------------------------------------------------------------------------
+-- The six buildings -------------------------------------------------------------------------------------------------
 -- A building is one or more masses (a box of stories: half-width, back face, front face, first and last story, corner
 -- posts or not), the sequence of pieces along each wall of each story, the door, the pieces outside, and the furniture.
 -- A mass may have a pitched roof (pitch = { slope, overhang }: two sheets from the side eaves to a ridge along Z, brick
@@ -446,11 +458,49 @@ PlotBuilding.Stages = {
 		},
 	},
 	{ -- 5 Big Corporate: a marble podium on the whole lot, a five-story dark glass tower, columns, a crown, gold
-		key = "IpoReady", bandFloor = true, name = "Big Corporate",
+		key = "SeriesC", bandFloor = true, name = "Big Corporate",
 		masses = {
 			{ half = 41.2, back = -42.2, front = 32.2, from = 1, to = 1, roofEdge = true,
 				doorWall = { F, K("WallGlass"), gap(18), K("WallGlass"), F }, sideWall = { F }, backWall = { F } },
 			{ half = 26, back = -18, front = 14, from = 2, to = 6, roofEdge = true, crown = true, look = "tower",
+				frontWall = { K("WallGlass"), K("WallGlass"), K("WallGlass") }, sideWall = { F }, backWall = { F } },
+		},
+		-- an open entrance 12 wide under a RoofEdge lintel, between two columns standing in the wall's gap (x 6 to 9 each side)
+		door = { half = 6, top = 10, lintel = true },
+		sign = { y = 13.2, w = 16, h = 2.6 }, -- on the podium's roof edge (13 to 16), above the columns (14 high from the ground)
+		extras = {
+			{ key = "Column", x = -7.5, y = -1, z = 31.7, turn = 0 },
+			{ key = "Column", x = 7.5, y = -1, z = 31.7, turn = 0 },
+			-- the facade's depth (overhaul phase 5), within the budget (this stage is the biggest): a gold line along the podium's
+			-- front under its roof edge, and a gold floor line across the tower's front on its middle story line (41).
+			-- (No facade Block is named "...Band...": that name means the band's floor, the Static group, PlotBuilding.layout.)
+			{ block = { 82.4, 0.6, 0.6 }, role = "accent", name = "PodiumGold", x = 0, y = 11.6, z = 32.4 },
+			{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 46.7, z = 14.4 },
+		},
+		backBand = 8, -- P2: the BoardTable, the Rug and the Bell are 6 to 8 deep
+		furniture = {
+			{ key = "ReceptionDesk", side = "left", along = 16 },
+			{ key = "Plant", side = "left", along = 26.5 },
+			{ key = "Sofa", side = "right", along = 16 },
+			{ key = "CoffeeMachine", side = "right", along = 26 },
+			{ key = "Whiteboard", side = "back", along = -33 },
+			{ key = "Shelf", side = "back", along = 26 },
+			{ key = "Armchair", side = "right", along = 6 },
+			{ key = "Armchair", side = "right", along = 0 },
+			{ key = "LobbyTree", side = "left", along = 4 },
+			{ key = "LobbyTree", side = "left", along = -8 },
+			{ key = "ServerRack", side = "back", along = 18 },
+			{ key = "Rug", side = "back", along = -22 },
+			{ key = "BoardTable", side = "back", along = -4 },
+			{ key = "Bell", side = "back", along = 11 },
+		},
+	},
+	{ -- 6 HQ Tower (overhaul 2, IPO-ready): a white marble podium on the whole lot and a six-story silver glass tower (the tallest) with a crown
+		key = "IpoReady", bandFloor = true, name = "HQ Tower",
+		masses = {
+			{ half = 41.2, back = -42.2, front = 32.2, from = 1, to = 1, roofEdge = true,
+				doorWall = { F, K("WallGlass"), gap(18), K("WallGlass"), F }, sideWall = { F }, backWall = { F } },
+			{ half = 26, back = -18, front = 14, from = 2, to = 7, roofEdge = true, crown = true, look = "tower",
 				frontWall = { K("WallGlass"), K("WallGlass"), K("WallGlass") }, sideWall = { F }, backWall = { F } },
 		},
 		-- an open entrance 12 wide under a RoofEdge lintel, between two columns standing in the wall's gap (x 6 to 9 each side)

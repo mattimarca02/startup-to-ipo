@@ -29,6 +29,7 @@ fraction of Income while the player is ONLINE and present. Offline pay and idle 
 
 import argparse
 import math
+import os
 import random
 import statistics
 import zlib
@@ -3743,6 +3744,237 @@ def report_pk(picked, n):
         globals()[fn](n)
 
 
+# =============================================================================
+# Section 10: OVERHAUL 2 (docs/OVERHAUL2_PLAN.md). Reads the real numbers from OfficeConfig.lua, CreatureConfig.lua
+# and IpoConfig.lua through Luau (LUAU=/path/to/luau, or luau on the PATH), so nothing here is a hand copy.
+# One first run (and the runs after an IPO) of an active, perfect player: every second it earns Income x (1 + the
+# founder activities), buys the best payback it can afford (catalog items, the next building, desks, eggs), hatches
+# eggs the moment they are ready and keeps the best employees. The founder activities are modeled as seconds of
+# Income per online second (O2_ACTIVITY below, the plan's section 2), unlocked as in the game.
+# =============================================================================
+
+O2_ACTIVITY = {"calls": 0.25, "sprint": 0.15, "brainstorm": 0.07, "bug": 0.08}  # PROPOSAL rates (seconds of Income per second)
+O2_ATTENTION = 0.85        # share of the activities an active player really does
+O2_FREE_EGG_AT = 80        # the onboarding's free Garage Egg hatches at about 1:20
+O2_TARGETS = {"Seed": (60, 75), "SeriesA": (150, 210), "SeriesB": (360, 480), "SeriesC": (660, 780), "IpoReady": (1080, 1320)}
+
+_O2_LUAU_PRELUDE = r"""
+Color3 = { fromRGB = function(r, g, b) return { r, g, b } end, new = function(r, g, b) return { r, g, b } end }
+Vector3 = { new = function(x, y, z) return { x, y, z } end }
+warn = warn or function(...) io.stderr:write(table.concat({...}, " ") .. "\n") end
+local function enc(v)
+    local t = type(v)
+    if t == "table" then
+        if #v > 0 or next(v) == nil then
+            local out = {}
+            for _, x in ipairs(v) do table.insert(out, enc(x)) end
+            return "[" .. table.concat(out, ",") .. "]"
+        end
+        local out = {}
+        for k, x in pairs(v) do
+            if type(k) == "string" and type(x) ~= "function" then table.insert(out, string.format("%q", k) .. ":" .. enc(x)) end
+        end
+        return "{" .. table.concat(out, ",") .. "}"
+    elseif t == "string" then return string.format("%q", v)
+    elseif t == "number" then return (v == math.floor(v) and math.abs(v) < 2^53) and string.format("%d", v) or string.format("%.17g", v)
+    elseif t == "boolean" then return tostring(v) end
+    return "null"
+end
+"""
+
+
+def o2_load():
+    """OfficeConfig, CreatureConfig and IpoConfig as Python dicts (read with Luau)."""
+    import json, shutil, subprocess, tempfile
+    luau = os.environ.get("LUAU") or shutil.which("luau")
+    if not luau:
+        raise SystemExit("Luau not found: set LUAU=/path/to/luau (section 10 reads the real .lua files)")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    parts = [_O2_LUAU_PRELUDE]
+    for name in ("OfficeConfig", "CreatureConfig", "IpoConfig"):
+        with open(os.path.join(root, name + ".lua"), encoding="utf-8") as f:
+            parts.append("local %s = (function()\n%s\nend)()" % (name, f.read()))
+    parts.append('print(enc({ office = OfficeConfig, creatures = CreatureConfig, ipo = IpoConfig, hires = OfficeConfig.hireList(CreatureConfig) }))')
+    with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
+        f.write("\n".join(parts))
+        path = f.name
+    try:
+        out = subprocess.run([luau, path], capture_output=True, text=True)
+    finally:
+        os.unlink(path)
+    if out.returncode != 0:
+        raise SystemExit("Luau failed reading the configs:\n" + out.stderr)
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horizon=48 * 3600):
+    """One run. kept = (team incomes, desks bought) from the run before (employees and desks survive an IPO)."""
+    rng = random.Random(seed)
+    office, cre, ipo = cfg["office"], cfg["creatures"], cfg["ipo"]
+    items, blds, bought_desks = office["Items"], office["Buildings"], office["Bought"]
+    eggs = {e["key"]: e for e in cre["Eggs"]}
+    by_rarity = {}
+    for c in cre["Creatures"]:
+        by_rarity.setdefault(c["rarity"], []).append(c["income"])
+    thresholds = [math.floor(st["valuation"] * ipo["StageGrowthPerIpo"] ** ipo_count) for st in ipo["Stages"]]
+    stage_keys = [st["key"] for st in ipo["Stages"]]
+    mult = cash_mult * ((1 + ipo["BonusPerIpo"] * ipo_count ** ipo["BonusExponent"]) if ipo_count > 0 else 1)
+
+    def egg_ev(key):
+        odds = eggs[key]["odds"]; tot = sum(odds.values())
+        return sum(w / tot * sum(by_rarity[r]) / len(by_rarity[r]) for r, w in odds.items())
+
+    def roll(key):
+        odds = eggs[key]["odds"]; x = rng.random() * sum(odds.values())
+        for r, w in odds.items():
+            x -= w
+            if x <= 0:
+                break
+        return rng.choice(by_rarity[r])
+
+    team, desks = (list(kept[0]), kept[1]) if kept else ([], 0)
+    owned, b, cash, val, t = set(), 0, 0.0, 0.0, 0
+    item_income, effects = 0, {}
+    incub, reached, log = [], {0: 0}, []
+    free_egg = None if (kept or ipo_count) else O2_FREE_EGG_AT
+    last_event, longest_wait = 0, 0
+    capacity = lambda: office["FreeDesks"] + desks
+
+    def income(bb=None):
+        bb = b if bb is None else bb
+        return (item_income * blds[bb]["office"] + sum(team) * blds[bb]["team"]) * mult
+
+    def unlocked(a):
+        if a in ("calls", "sprint"):
+            return "Desk" in owned
+        if a == "brainstorm":
+            return len(team) > 0
+        return effects.get("unlock:bug", 0) > 0
+
+    def activity():
+        return O2_ATTENTION * sum(v * (1 + effects.get(a, 0)) for a, v in O2_ACTIVITY.items() if unlocked(a))
+
+    while t < horizon:
+        t += 1
+        g = income() * (1 + activity())
+        cash += g; val += g
+        stage = max(reached)
+        for s in range(stage + 1, len(thresholds)):
+            if val >= thresholds[s]:
+                reached[s] = t
+        stage = max(reached)
+        if stop_stage in reached:
+            break
+        if free_egg and t >= free_egg:
+            team.append(roll("Garage")); free_egg = None
+        for e in list(incub):
+            if t >= e[1]:
+                incub.remove(e); k = roll(e[0])
+                if len(team) < capacity():
+                    team.append(k)
+                else:
+                    team.sort()
+                    if team[0] < k:
+                        team[0] = k
+                if t < 3600:
+                    longest_wait = max(longest_wait, t - last_event); last_event = t
+        if t % 2:
+            continue  # look at the shop every 2 s (a real player is slower still)
+        opts = []
+        inc_now = income()
+        for i, it in enumerate(items):
+            if it["key"] in owned or it["stage"] - 1 > stage or (i and "Desk" not in owned):
+                continue
+            gain = it["income"] * blds[b]["office"] * mult
+            for a, v in (it.get("effect") or {}).items():
+                if a == "unlock":
+                    gain += inc_now * O2_ACTIVITY["bug"] * O2_ATTENTION
+                else:
+                    gain += inc_now * O2_ACTIVITY.get(a, 0.02) * v * O2_ATTENTION
+            opts.append(("item", it["price"], max(gain, 1e-6), i))
+        if b + 1 < len(blds) and stage >= b + 1:
+            opts.append(("building", blds[b + 1]["price"], (income(b + 1) - inc_now) * 2 + 1, b + 1))
+        if desks < len(bought_desks) and stage + 1 >= bought_desks[desks]["stage"]:
+            opts.append(("desk", bought_desks[desks]["price"], egg_ev("Garage") * blds[b]["team"] * mult * 0.7, None))
+        if len(incub) < cre["Incubators"]:
+            for key in ("Garage", "Startup", "Unicorn"):
+                if len(team) + len(incub) < capacity():
+                    gain = egg_ev(key)
+                elif team:
+                    gain = max(0, egg_ev(key) - min(team)) * 0.5
+                else:
+                    gain = 0
+                if gain > 0:
+                    opts.append(("egg", eggs[key]["price"], gain * blds[b]["team"] * mult, key))
+        if not opts:
+            continue
+        best = min(opts, key=lambda o: o[1] / max(o[2], 1e-9))
+        if best[1] <= cash:
+            cash -= best[1]
+            kind = best[0]
+            if kind == "item":
+                it = items[best[3]]; owned.add(it["key"]); item_income += it["income"]
+                for a, v in (it.get("effect") or {}).items():
+                    key = "unlock:" + v if a == "unlock" else a
+                    effects[key] = effects.get(key, 0) + (1 if a == "unlock" else v)
+                log.append((t, it["key"], best[1]))
+            elif kind == "building":
+                b = best[3]; log.append((t, blds[b]["name"], best[1]))
+            elif kind == "desk":
+                desks += 1; log.append((t, "Desk %d" % capacity(), best[1]))
+            else:
+                incub.append((best[3], t + eggs[best[3]]["hatchSeconds"]))
+            if t < 3600:
+                longest_wait = max(longest_wait, t - last_event); last_event = t
+    times = {stage_keys[s]: reached[s] for s in reached}
+    return {"times": times, "log": log, "wait": longest_wait, "income": income(), "items": len(owned),
+            "building": blds[b]["name"], "team": (team, desks)}
+
+
+def report_o2(n):
+    cfg = o2_load()
+    keys = [st["key"] for st in cfg["ipo"]["Stages"]][1:]
+    names = {st["key"]: st["name"] for st in cfg["ipo"]["Stages"]}
+    runs = max(3, min(n, 12))
+    print("\n## 10. Overhaul 2: the first run, minutes of active play (median of %d runs; perfect player)\n" % runs)
+    first = [o2_run(cfg, seed) for seed in range(1, runs + 1)]
+    print("| Stage | Valuation | Reached at (median) | Range | Target |")
+    print("|---|---|---|---|---|")
+    for k in keys:
+        ts = sorted(r["times"].get(k, 1e9) / 60 for r in first)
+        st = next(s for s in cfg["ipo"]["Stages"] if s["key"] == k)
+        lo, hi = O2_TARGETS[k]
+        print("| %s | %s | %s | %s to %s | %s to %s |" % (names[k], fmt_cash(st["valuation"]), fmt_time(statistics.median(ts) * 60),
+              fmt_time(ts[0] * 60), fmt_time(ts[-1] * 60), fmt_time(lo * 60), fmt_time(hi * 60)))
+    print("\nLongest wait between two purchases or hatches in the first hour (the activities fill it): median %s" %
+          fmt_time(statistics.median(r["wait"] for r in first)))
+    print("Items bought by the IPO bell: median %d of %d; Income at the bell: %s/s" % (
+        statistics.median(r["items"] for r in first), len(cfg["office"]["Items"]), fmt_cash(statistics.median(r["income"] for r in first))))
+    ex = first[0]
+    print("\nOne run's purchases (seed 1): " + ", ".join("%s %s" % (fmt_time(t), name) for t, name, _ in ex["log"][:40]) + " ...")
+    print("\n### Later runs (employees and desks kept, IPO multiplier, thresholds x%.2f per IPO)\n" % cfg["ipo"]["StageGrowthPerIpo"])
+    print("| Run | Reaches IPO-ready at |")
+    print("|---|---|")
+    for count in range(0, 4):
+        res = []
+        for seed in range(1, max(3, runs // 2) + 1):
+            kept = None
+            for c in range(count):
+                kept = o2_run(cfg, seed + 100 * c, ipo_count=c, kept=kept)["team"]
+            res.append(o2_run(cfg, seed, ipo_count=count, kept=kept)["times"].get("IpoReady", 1e9))
+        print("| %d | %s |" % (count + 1, fmt_time(statistics.median(res))))
+    print("\n### With the 2x Cash pass (first run)\n")
+    res = [o2_run(cfg, seed, cash_mult=2.0) for seed in range(1, max(3, runs // 2) + 1)]
+    print("| " + " | ".join(names[k] for k in keys) + " |")
+    print("|" + "---|" * len(keys))
+    print("| " + " | ".join(fmt_time(statistics.median(r["times"].get(k, 1e9) for r in res)) for k in keys) + " |")
+    print("\n### Direct hires (OfficeConfig.hireList)\n")
+    print("| Creature | Rarity | Price | An egg pays on average |")
+    print("|---|---|---|---|")
+    for h in cfg["hires"]:
+        print("| %s | %s | %s | %s (%s Egg) |" % (h["creature"], h["rarity"], fmt_cash(h["price"]), fmt_cash(h["eggAverage"]), h["egg"]))
+
+
 def main():
     global SIM_DAYS_IPO
     ap = argparse.ArgumentParser()
@@ -3760,6 +3992,7 @@ def main():
     ap.add_argument("--gaming", action="store_true", help="sims S3, S9 and S10 (docs/SECTORS_PROPOSAL.md 4; default OFF)")
     ap.add_argument("--robust", action="store_true", help="the review of tip e08fd72, item 7: which results survive a change of assumption (default OFF)")
     ap.add_argument("--combined", action="store_true", help="the review of tip e08fd72, item 8: every proposed fix applied at once (default OFF)")
+    ap.add_argument("--o2", action="store_true", help="only section 10: OVERHAUL 2, read from OfficeConfig/CreatureConfig/IpoConfig with Luau")
     ap.add_argument("--pk-check", action="store_true", help="only check that the S1-S10 engine equals long_run when every hook is off")
     args = ap.parse_args()
     n = args.runs
@@ -3772,6 +4005,9 @@ def main():
           "to be roughly 15-25% faster per IPO cycle than these numbers show.")
     print(f"Daily login calendar (DailyConfig.lua, M6) IS modeled: claimed at the first login of every day, Cash as a gift "
           f"(not valuation). In sections 1-6: {'ON' if DAILY_IN_ALL_TABLES else 'OFF'} (DAILY_IN_ALL_TABLES); section 7 compares calendars.")
+    if args.o2:
+        report_o2(n)
+        return
     if args.long:
         report_long(n)
         return

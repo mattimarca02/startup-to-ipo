@@ -80,9 +80,9 @@ TaskConfig.Difficulty = { gapPerLevel = 0.02, gapMax = 1.4, limitPerLevel = 0.03
 -- Rungs: the ladder position the tasks care about. The game has 5 funding stages until PR 2 adds
 -- SeriesCD and PreIpo, so IPO-ready counts as rung 4 (the Series C+D budget and difficulty).
 -- Keys are IpoConfig.Stages keys. PR 2 swaps in the 7-stage mapping.
-TaskConfig.RungNames = { "Garage", "Seed", "Series A", "Series B", "Series C+D", "Pre-IPO" } -- rung 0 first
-TaskConfig.StageToRung = { Garage = 0, Seed = 1, SeriesA = 2, SeriesB = 3, IpoReady = 4 }
-TaskConfig.MaxRung = 4 -- the highest rung PR 1's stages reach (Debug "Set rung" stops here)
+TaskConfig.RungNames = { "Garage", "Seed", "Series A", "Series B", "Series C", "IPO-ready" } -- rung 0 first
+TaskConfig.StageToRung = { Garage = 0, Seed = 1, SeriesA = 2, SeriesB = 3, SeriesC = 4, IpoReady = 5 } -- overhaul 2: six stages
+TaskConfig.MaxRung = 5 -- the highest rung the stages reach (Debug "Set rung" stops here)
 
 -- Reward budget (the autoclicker wall): per online second the player is paid at most Budget[rung]
 -- seconds of Income at full value. Unused budget banks up to BudgetBank seconds; beyond it a reward

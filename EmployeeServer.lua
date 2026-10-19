@@ -8,6 +8,9 @@
 -- IPO perks (IpoServer) add incubators and desks, speed up eggs and improve luck; an IPO empties
 -- the incubators (clearIncubators) and buying a perk calls refreshCapacity.
 -- OnboardingServer gives a brand-new player one free egg with grantEgg (server only, no remote).
+-- Overhaul 2: the team's size is the number of workstations (OfficeConfig: the free desk, the desks bought, the Extra
+-- Desk perk and the Extra Employee Slots pass), and the shop's Hire tab buys a fixed creature for Cash (hireDirect: no
+-- roll, so the restricted players' rule is untouched).
 -- Players for whom paid random items are restricted (ShopServer.isRandomRestricted, Roblox policy,
 -- FR-13 / D9 option B) get no random roll: every hatch takes the next hire of the egg's fixed order
 -- (CreatureConfig.fixedHire), counted per egg in its own save section, fixedHires.
@@ -19,6 +22,7 @@ local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
+local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- workstations and direct hires (overhaul 2)
 local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
@@ -45,7 +49,7 @@ local WHITE = Color3.new(1, 1, 1)
 
 local EmployeeServer = {}
 
-local core -- { getData, save, updateIncome, plotFrame, onTeamChanged }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotFrame, onTeamChanged, desksBought, hatchBonus }, given by TycoonCore
 local remotes = {}
 local rng = Random.new()
 
@@ -56,9 +60,13 @@ local function getTeam(player)
 	return data and data.team, data
 end
 
+-- Workstations (overhaul 2): the free desk plus the desks bought (core.desksBought, the `office` save section; the old
+-- 5 base slots until it is read), the Extra Desk IPO perk, then the Extra Employee Slots pass on top: at most 11 (the
+-- hire spots). The pass is always +3 free workstations, as it was +3 slots.
 local function maxEmployees(player)
 	local data = core.getData(player)
-	return ShopServer.getMaxEmployees(player, CreatureConfig.BaseEmployeeSlots + IpoServer.perk(data, "ExtraSlot"))
+	local base = core.desksBought and OfficeConfig.FreeDesks + core.desksBought(data) or CreatureConfig.BaseEmployeeSlots
+	return math.min(OfficeConfig.MaxWorkstations, ShopServer.getMaxEmployees(player, base + IpoServer.perk(data, "ExtraSlot")))
 end
 
 -- How many eggs can incubate at once (base + Extra Incubator IPO perk)
@@ -347,7 +355,9 @@ end
 -- Starts an egg's timer in an empty incubator (buying it and the free onboarding egg both use this)
 local function startEgg(player, team, data, egg, index)
 	local now = os.time()
-	local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - IpoServer.perk(data, "FasterEggs")))
+	-- Faster Recruiting (IPO perk) and the office items with a hatch effect (overhaul 2) each take their share off
+	local items = core.hatchBonus and math.clamp(core.hatchBonus(data), 0, 0.5) or 0
+	local seconds = math.ceil(egg.hatchSeconds * math.max(0, 1 - IpoServer.perk(data, "FasterEggs")) * (1 - items))
 	team.incubators[index] = { egg = egg.key, startedAt = now, hatchAt = now + seconds }
 	refreshIncubator(data, index, now)
 	push(player)
@@ -434,6 +444,47 @@ end
 function EmployeeServer.hasFreeSlot(player)
 	local team = getTeam(player)
 	return team ~= nil and #team.employees < maxEmployees(player)
+end
+
+-- Workstations now (the office shows a desk at each of them)
+function EmployeeServer.capacity(player)
+	return maxEmployees(player)
+end
+
+-- Direct hires (overhaul 2, the shop's Hire tab): index = the number in OfficeConfig.hireList. A fixed creature for a
+-- fixed price, so no roll and nothing random (FR-13 untouched). The server checks everything: ready, the number, a
+-- free workstation, no hire waiting, Cash. No yield between the checks and the hire.
+local hireListCache
+function EmployeeServer.hireList()
+	hireListCache = hireListCache or OfficeConfig.hireList(CreatureConfig)
+	return hireListCache
+end
+
+function EmployeeServer.hireDirect(player, index)
+	local team, data = getTeam(player)
+	if not team or not data.ready then
+		return false, "Still loading, try again in a moment"
+	end
+	local list = EmployeeServer.hireList()
+	if typeof(index) ~= "number" or index ~= index or index % 1 ~= 0 or index < 1 or index > #list then
+		return false, "Unknown hire"
+	end
+	local offer = list[index]
+	local creature = CreatureConfig.getCreature(offer.creature)
+	if not creature then return false, "Unknown hire" end
+	if team.pending then return false, "First decide about your waiting new hire (Team tab)" end
+	if #team.employees >= maxEmployees(player) then
+		return false, "Every desk is taken: buy a desk first (SHOP > Hire)"
+	end
+	if data.cash.Value < offer.price then
+		return false, "You need " .. OfficeConfig.money(offer.price) .. " for " .. creature.name
+	end
+	data.cash.Value -= offer.price
+	table.insert(team.employees, newEmployee(creature.key))
+	placeEmployees(data)
+	core.updateIncome(player)
+	push(player)
+	return true, creature.name .. " joins your team"
 end
 
 -- Takes an employee off the team and returns it (nil if it isn't there).
