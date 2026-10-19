@@ -15,7 +15,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
-| EmployeeClient | StarterPlayerScripts | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
+| EmployeeClient | StarterPlayerScripts | free | | |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
@@ -60,7 +60,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-hatch-pause, then ux-tap-targets (stacked on it) | 2026-10-19 |
+| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -102,5 +102,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
-| tools/hatch_reveal_test.luau | (repo only) | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
+| tools/hatch_reveal_test.luau | (repo only) | free | | |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
