@@ -1,8 +1,8 @@
 World pass integration (branch world-icons-pass): NOT APPLIED. It needs the owner's approval.
 
-Made for: TycoonCore.lua sha256 fa78a9d9d00b231b670a8531a8eb622a407c3a2a2d655c83773142ff45f129e4, 69526 bytes (main at overhaul2-phase2).
-Result:   TycoonCore.lua sha256 5541c0942d5636f09db07f49469a706a3067a8dd6203d59f03995ae833e42f50, 70704 bytes.
-Both hashes, the line numbers below and the hunk headers are valid for that TycoonCore.lua only (main at overhaul2-phase2).
+Made for: TycoonCore.lua sha256 2a8b3c3057fd3ab259fee890f6217742ca6f34811eca559a568eec2b2df8d691, 73997 bytes (main at overhaul2-phase3).
+Result:   TycoonCore.lua sha256 514e77f1698ebeb17de98716903582207725b38928da3ad190203bc42a9b14fc, 75175 bytes.
+Both hashes, the line numbers below and the hunk headers are valid for that TycoonCore.lua only (main at overhaul2-phase3).
 On any other TycoonCore.lua (main moved on), regenerate them at merge time, in the repo folder, on the branch that
 claims TycoonCore:
   python3 tools/world_test.py --regen-patch
@@ -16,12 +16,12 @@ those ever change. Both modules are required inside pcall with a 5 second wait, 
 PlotArt: if either is missing or broken there is one warning and the game runs exactly as today. No save, no
 remote, no player data, no touch handler, nothing runs per player.
 
-The two edits, in TycoonCore.lua at main overhaul2-phase2 (TycoonCore is the only file this changes):
-  E1  after line 65 (the end of the "Plot visuals are off" block, lines 60-65): 10 lines that require
+The two edits, in TycoonCore.lua at main overhaul2-phase3 (TycoonCore is the only file this changes):
+  E1  after line 66 (the end of the "Plot visuals are off" block, lines 61-66): 10 lines that require
       WorldVisuals and WorldArt inside pcall and warn if they are missing.
-  E2  between line 1514 (the end of onPlayerAdded) and line 1515 (Players.PlayerAdded:Connect(onPlayerAdded)):
-      12 lines that build the world once inside pcall, from PLOT_SPACING (line 88), MAX_PLOTS (line 90) and
-      plotCenter (lines 153-160).
+  E2  between line 1602 (the end of onPlayerAdded) and line 1603 (Players.PlayerAdded:Connect(onPlayerAdded)):
+      12 lines that build the world once inside pcall, from PLOT_SPACING (line 89), MAX_PLOTS (line 91) and
+      plotCenter (lines 154-161).
 
 Studio steps by hand, in this order (nothing syncs by itself):
   1. ServerScriptService: create a ModuleScript named exactly WorldArt and paste WorldArt.lua into it.
@@ -38,7 +38,7 @@ passes tools/daily_test.py and tools/world_test.py, and the two inserted blocks 
 
 --- a/TycoonCore.lua
 +++ b/TycoonCore.lua
-@@ -64,6 +64,16 @@ if not (visualsOk and artOk) then
+@@ -65,6 +65,16 @@ if not (visualsOk and artOk) then
  	PlotVisuals, PlotArt = nil, nil
  end
  
@@ -55,7 +55,7 @@ passes tools/daily_test.py and tools/world_test.py, and the two inserted blocks 
  -- The office catalog (overhaul 2): OfficeConfig.Items, bought in the shop's Office tab (ShopClient), any order inside
  -- the funding stages reached (the Desk first). name = the key saved in `owned`, cost = Cash, income = Cash per second
  -- before the building's office multiplier, stage = the funding stage that unlocks it. Only the six old garage upgrades
-@@ -1512,6 +1522,18 @@ local function onPlayerAdded(player)
+@@ -1600,6 +1610,18 @@ local function onPlayerAdded(player)
  		autoClaim(player)
  	end
  end

@@ -235,8 +235,10 @@ do
 	IS_STUDIO = false
 end
 
--- 3. Chain on, live server (calls don't run) -------------------------------------------------
+-- 3. Chain on, live server with calls switched to the Studio-only test mode (TaskConfig.StudioOnly = true): calls
+-- don't run, so the call goals are skipped and never block (overhaul 2 phase 3 ships StudioOnly = false: section 3b)
 Config.ChainEnabled = true
+MODULES.TaskConfig.StudioOnly = true
 do
 	IS_STUDIO = false
 	local p = fresh("Live")
@@ -288,6 +290,31 @@ do
 	check("live: every reachable goal done hides the tracker (call goals skipped, not blocking)", p:GetAttribute("OnboardingTracker") == false)
 	check("live: the save lists every finished key, sorted", savedKeys(p) == "BigCorporate,BigOffice,FirstIpo,Hire3,Hire5,IpoReady,Own3,Seed,SeriesA,SeriesB,SeriesC,ServerRack,SmallCorporate,SmallOffice", savedKeys(p))
 end
+MODULES.TaskConfig.StudioOnly = false
+
+-- 3b. The shipped config (overhaul 2 phase 3): calls run on live servers, so the call goals come first there too, and the
+-- blackboard (OnboardingServer.boardLines) writes the next unfinished goals with their progress
+do
+	check("shipped: TaskConfig runs calls on live servers (StudioOnly = false)", MODULES.TaskConfig.StudioOnly == false)
+	IS_STUDIO = false
+	local p = fresh("LiveCalls")
+	hire(p, 1); tick()
+	check("live calls: Calls3 comes first on a live server", shownKeys(p) == "Calls3,Own3", shownKeys(p))
+	p.data.tasks.done = 1
+	local lines = Server.boardLines(p.data, 3)
+	check("board: the first three unfinished goals, in chain order, with their progress", #lines == 3 and lines[1] == "Answer 3 calls (1/3)"
+		and lines[2] == "Own 3 office items (0/3)" and lines[3] == "Hire 3 employees (1/3)", table.concat(lines, " | "))
+	p.data.tasks.done = 3; tick()
+	lines = Server.boardLines(p.data, 2)
+	check("board: a finished goal leaves the board; count limits the lines", #lines == 2 and lines[1] == "Own 3 office items (0/3)", table.concat(lines, " | "))
+	p.data.ipo.valuation = 0
+	local stageLine = false
+	for _, line in ipairs(Server.boardLines(p.data, 20)) do
+		if line == "Reach Seed stage" then stageLine = true end
+	end
+	check("board: a stage goal has no count (just its text)", stageLine)
+	check("board: no data, no lines (never an error)", #Server.boardLines(nil, 3) == 0 and #Server.boardLines({}, 3) == 0)
+end
 
 -- 4. Chain on, calls running (Studio) ------------------------------------------------------
 do
@@ -317,7 +344,7 @@ do
 	local p = fresh("Old", { seenIntro = true, legacy = false, arrowDone = true, dismissed = false, goals = { "Hire3", "Seed", "FromTheFuture" }, extra = 7 })
 	hire(p, 3); tick()
 	check("save: Hire3 and Seed finished before stay finished", p.data.onboarding.goals.Hire3 and p.data.onboarding.goals.Seed)
-	check("save: a player who finished today's goals meets the chain", p:GetAttribute("OnboardingTracker") == true and shownKeys(p) == "Own3,ServerRack", shownKeys(p))
+	check("save: a player who finished today's goals meets the chain", p:GetAttribute("OnboardingTracker") == true and shownKeys(p) == "Calls3,Own3", shownKeys(p)) -- calls run live (overhaul 2 phase 3)
 	local s = Server.serialize(p.data)
 	check("save: an unknown goal key is kept", string.find(table.concat(s.goals, ","), "FromTheFuture") ~= nil)
 	check("save: an unknown field is kept", s.extra == 7)
@@ -392,7 +419,7 @@ do
 	Config.ShowAtOnce = 1
 	local p = fresh("One")
 	hire(p, 1); tick()
-	check("one: a single goal shown", shownKeys(p) == "Own3", shownKeys(p))
+	check("one: a single goal shown", shownKeys(p) == "Calls3", shownKeys(p))
 	Config.ShowAtOnce = 2
 end
 

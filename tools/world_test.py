@@ -939,12 +939,11 @@ def real_numbers():
     buy = one(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", core, "TycoonCore SIGN_OFFSET")
     ipo_sign = one(r"local SIGN_OFFSET = Vector3\.new\((-?[\d.]+), 0\.5, (-?[\d.]+)\)", ipo, "IpoServer SIGN_OFFSET")
     # Both signs stand at `pos`, their spot in the garage's frame (lobby PR L1): post and board are placed from it with CFrame.new
-    post = one(r'"BuySign", Vector3\.new\(0\.4, ([\d.]+), 0\.4\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', core, "the sign's post")
-    board = one(r'"Board", Vector3\.new\(([\d.]+), ([\d.]+), ([\d.]+)\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', core, "the sign's board")
-    ipo_post = one(r'"IpoSign", Vector3\.new\(0\.4, ([\d.]+), 0\.4\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', ipo, "the IPO sign's post")
-    ipo_board = one(r'"Board", Vector3\.new\(([\d.]+), ([\d.]+), ([\d.]+)\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', ipo, "the IPO sign's board")
-    if post.groups() != ipo_post.groups() or board.groups() != ipo_board.groups():
-        raise SystemExit("world_test: the two garage signs no longer have the same post and board: WorldArt.Site.signBoard must be split")
+    # Overhaul 2 phase 3: the next-upgrade sign became the blackboard (TycoonCore writeBoard, inside the garage at
+    # SIGN_OFFSET, under 11 studs high); the IPO sign keeps the post and board both signs had, and the world keeps out of both
+    post = one(r'"IpoSign", Vector3\.new\(0\.4, ([\d.]+), 0\.4\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', ipo, "the IPO sign's post")
+    board = one(r'"Board", Vector3\.new\(([\d.]+), ([\d.]+), ([\d.]+)\), pos \* CFrame\.new\(0, ([\d.]+), 0\)', ipo, "the IPO sign's board")
+    one(r'local origin = plotFrame\(data\.slot\) \* CFrame\.new\(SIGN_OFFSET\)', core, "the blackboard at SIGN_OFFSET")
     landing = one(r"local spawnPos = plotFrame\(slot\) \* Vector3\.new\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)", core, "the landing spot")
     look = one(r"local signPos = plotFrame\(slot\) \* Vector3\.new\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)", core, "the landing look")
     lc = one(r"local LOUNGE_CENTER = Vector3\.new\((-?[\d.]+), (-?[\d.]+), (-?[\d.]+)\)", shop, "LOUNGE_CENTER")

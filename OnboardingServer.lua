@@ -338,6 +338,31 @@ function OnboardingServer.setupPlayer(player, data, savedOnboarding, loadOk)
 	end
 end
 
+-- The blackboard's lines (overhaul 2 phase 3, the owner's point 10): the first `count` goals of the chain this player has
+-- not finished, as "text (current/target)", in the chain's order. Every player sees them (legacy saves too): the board is
+-- the office's to-do list, not the tutorial. Read only: it marks nothing finished (updateGoals does that every second).
+function OnboardingServer.boardLines(data, count)
+	local lines = {}
+	local onboarding = data and data.onboarding
+	if not onboarding or not data.team or not data.ipo then
+		return lines
+	end
+	for _, goal in ipairs(OnboardingConfig.activeGoals()) do
+		if #lines >= count then
+			break
+		end
+		local current, target = goalProgress(data, goal)
+		if current and not onboarding.goals[goal.key] and current < target then
+			local progress = ""
+			if goal.kind ~= "stage" and target > 1 then
+				progress = string.format(" (%d/%d)", math.floor(current), target)
+			end
+			table.insert(lines, goal.text .. progress)
+		end
+	end
+	return lines
+end
+
 -- The part of the save file that belongs to onboarding
 function OnboardingServer.serialize(data)
 	local onboarding = data.onboarding

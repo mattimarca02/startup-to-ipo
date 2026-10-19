@@ -236,7 +236,7 @@ local function newWorld(opts)
 	module(W.ReplicatedStorage, "OfficeConfig", (OFFICECONFIG_SOURCE)()) -- overhaul 2: the office catalog (real)
 	module(W.ReplicatedStorage, "LobbyConfig", lobby)
 	local sections = { ShopServer = "shop", EmployeeServer = "team", PoachServer = "poach", IpoServer = "ipo", OnboardingServer = "onboarding",
-		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex" }
+		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex", FounderServer = "founder" }
 	if opts.realShop then
 		sections.ShopServer = nil
 		W.ShopConfig = (SHOPCONFIG_SOURCE)()
@@ -272,6 +272,7 @@ local function newWorld(opts)
 		W.mods.ShopServer.getCashMultiplier = function() return 1 end
 	end
 	W.mods.IpoServer.getMultiplier = function() return 1 end
+	W.mods.FounderServer.incomeBoost = function() return 1 end -- overhaul 2 phase 3: no brainstorm boost
 	W.mods.IpoServer.perk = function() return 0 end
 	W.mods.EmployeeServer.getIncome = function() return 0 end
 	W.mods.EmployeeServer.countEggs = function() return 0 end
