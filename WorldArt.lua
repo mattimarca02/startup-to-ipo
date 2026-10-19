@@ -21,7 +21,7 @@
 --   color    a Palette key
 --   material SmoothPlastic, Plastic, Concrete, Cobblestone, Brick, Wood, WoodPlanks, Metal, Fabric, Grass, or Neon
 --            (lights only: the name must say Lamp, Light, Glow or Bulb)
---   extra    rot = { x, y, z } degrees, quarter turns only; text = { value or slot = true, font, color, faces, glow }
+--   extra    rot = { x, y, z } degrees, quarter turns only (except an ArchVoussoir..., any angle about Z); text = { value or slot = true, font, color, faces, glow }
 --            (faces "Front" = -Z, "Back" = +Z; slot = true shows the plot's number)
 -- Everything is decor: anchored, no collision, no touch, no queries. Lights are added by the layout (WorldArt.LampLight).
 -- A piece's `solid` list (overhaul phase 1, the owner's point 2) names the invisible boxes a player bumps into:
@@ -226,7 +226,9 @@ WorldArt.Pieces = {
 		solid = { solid(0.6, 6.4, 0.6) }, -- the post
 	},
 	-- The welcome gate (overhaul 2 phase 5, the owner's point 1): a Roman triumphal arch in white marble at human scale,
-	-- about 42 wide and 34 high: a central archway 12 wide and 20 high (its curve in steps: quarter turns only), two side
+	-- about 42 wide and 34 high: a central archway 12 wide and 20 high (a smooth half circle of radius 6 from 14 up: eight
+	-- voussoirs turned 10 to 170 degrees about Z, the one exception to quarter turns, and the keystone at its top; their
+	-- depths alternate 3.9 / 3.7 / 3.8 so no two touching faces share a plane, all inside the piers and the lintel), two side
 	-- passages 5 wide and 10 high, four piers on plinths, eight engaged columns (base, shaft, capital) on its two faces,
 	-- the entablature (architrave, frieze, cornice) and the attic with BUILD YOUR STARTUP carved in a serif on both faces.
 	-- Solid: the four piers only (every passage stays open).
@@ -266,15 +268,15 @@ WorldArt.Pieces = {
 		upright("ArchBackOutRightShaft", 20.6, 1.4, 17.5, 2, 2.3, "MarbleShade", "Marble"),
 		P("ArchBackOutRightCapital", "Block", { 2.2, 1, 2.2 }, { 17.5, 23.1, 2.3 }, "MarbleShade", "Marble"),
 		P("ArchLintel", "Block", { 12, 4, 4 }, { 0, 22, 0 }, "Marble", "Marble"),
-		P("ArchCurve2Left", "Block", { 0.28, 1.2, 4 }, { -5.86, 15.8, 0 }, "Marble", "Marble"),
-		P("ArchCurve2Right", "Block", { 0.28, 1.2, 4 }, { 5.86, 15.8, 0 }, "Marble", "Marble"),
-		P("ArchCurve3Left", "Block", { 0.8, 1.2, 4 }, { -5.6, 17, 0 }, "Marble", "Marble"),
-		P("ArchCurve3Right", "Block", { 0.8, 1.2, 4 }, { 5.6, 17, 0 }, "Marble", "Marble"),
-		P("ArchCurve4Left", "Block", { 1.72, 1.2, 4 }, { -5.14, 18.2, 0 }, "Marble", "Marble"),
-		P("ArchCurve4Right", "Block", { 1.72, 1.2, 4 }, { 5.14, 18.2, 0 }, "Marble", "Marble"),
-		P("ArchCurve5Left", "Block", { 3.38, 1.2, 4 }, { -4.31, 19.4, 0 }, "Marble", "Marble"),
-		P("ArchCurve5Right", "Block", { 3.38, 1.2, 4 }, { 4.31, 19.4, 0 }, "Marble", "Marble"),
-		P("ArchKeystone", "Block", { 1.4, 2.2, 4.4 }, { 0, 19.9, 0 }, "MarbleShade", "Marble"),
+		P("ArchVoussoir1", "Block", { 3, 3, 3.9 }, { 7.386, 15.302, 0 }, "Marble", "Marble", { rot = { 0, 0, 10 } }),
+		P("ArchVoussoir2", "Block", { 3, 3, 3.7 }, { 6.495, 17.75, 0 }, "Marble", "Marble", { rot = { 0, 0, 30 } }),
+		P("ArchVoussoir3", "Block", { 3, 3, 3.9 }, { 4.821, 19.745, 0 }, "Marble", "Marble", { rot = { 0, 0, 50 } }),
+		P("ArchVoussoir4", "Block", { 3, 3, 3.8 }, { 2.565, 21.048, 0 }, "Marble", "Marble", { rot = { 0, 0, 70 } }),
+		P("ArchKeystone", "Block", { 2.2, 2.6, 4.4 }, { 0, 21.2, 0 }, "MarbleShade", "Marble"),
+		P("ArchVoussoir6", "Block", { 3, 3, 3.8 }, { -2.565, 21.048, 0 }, "Marble", "Marble", { rot = { 0, 0, 110 } }),
+		P("ArchVoussoir7", "Block", { 3, 3, 3.9 }, { -4.821, 19.745, 0 }, "Marble", "Marble", { rot = { 0, 0, 130 } }),
+		P("ArchVoussoir8", "Block", { 3, 3, 3.7 }, { -6.495, 17.75, 0 }, "Marble", "Marble", { rot = { 0, 0, 150 } }),
+		P("ArchVoussoir9", "Block", { 3, 3, 3.9 }, { -7.386, 15.302, 0 }, "Marble", "Marble", { rot = { 0, 0, 170 } }),
 		P("ArchArchitrave", "Block", { 41, 1.2, 4.8 }, { 0, 24.6, 0 }, "MarbleShade", "Marble"),
 		P("ArchFrieze", "Block", { 40.4, 1.4, 4.4 }, { 0, 25.9, 0 }, "Marble", "Marble"),
 		P("ArchCornice", "Block", { 42.4, 0.8, 5.4 }, { 0, 27, 0 }, "MarbleShade", "Marble"),

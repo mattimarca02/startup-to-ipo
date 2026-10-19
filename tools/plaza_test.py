@@ -12,6 +12,7 @@ Run:   LUAU=/path/to/luau python3 tools/plaza_test.py
 Broken versions (mutants) must be caught. tools/world_test.py checks the world rules for the arch and the fountain.
 """
 
+import math
 import os
 import re
 import shutil
@@ -134,6 +135,15 @@ def pins(files=None):
     add("arch: about 42 wide and 34 high (a human-scale gate)", tops and 33 <= max(tops) <= 35 and widths and 40 <= 2 * max(widths) <= 44)
     add("arch: the central archway is 12 wide and 20 high (the inner piers at 6, the curve's top at 20)",
         'P("ArchPierInLeft", "Block", { 4, 23, 4 }, { -8,' in arch and 'P("ArchLintel", "Block", { 12, 4, 4 }, { 0, 22, 0 }' in arch)
+    # The smooth curve (after overhaul 2): voussoirs turned about Z round a half circle of radius 6 from the spring line at
+    # 14, no gaps between them (each spans 28 degrees at the curve, they stand 20 apart), and no step left
+    vs = [(float(m.group(1)), float(m.group(2)), float(m.group(3)))
+          for m in re.finditer(r'P\("ArchVoussoir\d", "Block", \{ 3, 3, [\d.]+ \}, \{ ([-\d.]+), ([\d.]+), 0 \}, "Marble", "Marble", \{ rot = \{ 0, 0, (\d+) \} \}\)', arch)]
+    angles = sorted(a for _, _, a in vs)
+    add("arch: the curve is smooth: 8 white marble voussoirs turned about Z round a half circle of radius 6 (inner face), no steps",
+        "ArchCurve" not in arch and len(vs) == 8 and angles == [10, 30, 50, 70, 110, 130, 150, 170]
+        and all(abs(x - 7.5 * math.cos(math.radians(a))) < 0.01 and abs(y - 14 - 7.5 * math.sin(math.radians(a))) < 0.01 for x, y, a in vs)
+        and 'P("ArchKeystone", "Block", { 2.2, 2.6, 4.4 }, { 0, 21.2, 0 }' in arch)
     add("arch: solid on the four piers only", re.search(r"solid = \{ solid\(4, 24, 4, -8, 0\), solid\(4, 24, 4, 8, 0\), solid\(5, 24, 4, -17\.5, 0\), solid\(5, 24, 4, 17\.5, 0\) \}", arch) is not None)
     add("lounge: its inside is built in a pcall (a failure never stops the shop) and the showcase refreshes on a loop",
         "pcall(furnishVipLounge)" in shop and "pcall(refreshShowcase)" in shop)
@@ -156,6 +166,8 @@ MUTANTS = [
      'if true then\n\t\tplayerGui:SetAttribute("OpenPanel", PANEL_NAME)', "intro: it holds OpenPanel"),
     ("the marker drawn on top again", "LobbyClient.lua", "\tAlwaysOnTop = false,", "\tAlwaysOnTop = true,", "free sign: never AlwaysOnTop"),
     ("a solid box on the arch's beam", "WorldArt.lua", "solid(5, 24, 4, 17.5, 0) },", "solid(5, 24, 4, 17.5, 0), solid(12, 4, 4, 0, 0) },", "arch: solid on the four piers only"),
+    ("a voussoir back to a quarter turn (a step in the curve)", "WorldArt.lua", '"Marble", "Marble", { rot = { 0, 0, 30 } }),', '"Marble", "Marble"),', "arch: the curve is smooth"),
+    ("a voussoir off the circle", "WorldArt.lua", "{ 4.821, 19.745, 0 }", "{ 4.821, 20.745, 0 }", "arch: the curve is smooth"),
     ("the lounge's inside not in a pcall", "ShopServer.lua", "local furnished, why = pcall(furnishVipLounge)", "local furnished, why = true, furnishVipLounge()", "lounge: its inside is built in a pcall"),
 ]
 

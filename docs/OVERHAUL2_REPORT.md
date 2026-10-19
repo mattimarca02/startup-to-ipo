@@ -44,7 +44,7 @@ Also done (the owner's requests during the work):
 - **Looks checked by eye.** The MCP's screen captures are unreliable. Every look was checked from data (sizes, positions, part counts, the room and world checks), not with eyes: the arch, the fountain, the reveal, the blackboard and the cinematic.
 - **A real click on the desk board's Answer.** The MCP cannot press a BillboardGui button. The code path was read and the board's state was checked.
 - **"No dead time over 2 minutes in the first hour"** is now measured with the sim (`tools/economy_sim.py --o2`, `o2_dead_time`, after the PRs were opened). The worst of 12 runs is 40 s, which is the slowest gap between two calls. **But between two purchases or hatches there is still a 14-minute stretch** (about minutes 10 to 24, from the Server Rack to the Neon Logo). Calls, sprints, the brainstorm and bugs fill it. If the owner wants a purchase in there too, the cheap fix is a cheaper Neon Logo or Router.
-- **The arch's curve is stepped.** World parts may only turn in quarter turns, so the curve is made of steps.
+- **The arch's curve was stepped.** Fixed after the overhaul: its voussoirs turn freely about Z (the one exception to quarter turns), so the curve is a smooth half circle, with the same 9 parts.
 - **The fountain's sound** is the built-in `impact_water.mp3`, looped slowly. There is no other built-in water sound.
 - **The plan put the blackboard on the back wall.** Every room's back wall has its door, windows or decor, so it hangs where the old sign stood: the one spot that is free in all six rooms.
 - **Gate G1** (task engine PR 1) was not measured. The owner's brief asked to turn calls on, and the stats line stays, so f can still be read live.
