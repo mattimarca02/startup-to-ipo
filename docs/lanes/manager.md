@@ -103,3 +103,9 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-19 00:41 gameplay not started: PR #61 open (head 36c310a), no verdict yet; goes to quality.
 2026-10-19 00:41 ux started: PR #53 merged, no open PR, continue with the backlog (22:35 start was denied once).
 2026-10-19 00:41 quality started: review PR #61 (gameplay, head 36c310a), no verdict for its head.
+2026-10-19 03:44 building started: started by the manager at 22:35 (over 3 h), no PR, no new branch, lane file still idle; "previous run stopped" restart (cloud only, no Mac approval).
+2026-10-19 03:44 world start FAILED (permission denied by the run classifier): started at 22:35 (over 3 h), no PR, lane file still idle; needed the "previous run stopped" restart.
+2026-10-19 03:44 gameplay not started: PR #61 MERGE at its head 36c310a, mergeable clean; sent to the owner.
+2026-10-19 03:44 ux not started: PR #63 open (head 97d015c), no verdict yet; goes to quality.
+2026-10-19 03:44 quality started: review PR #63 (ux, head 97d015c), no verdict for its head.
+2026-10-19 03:45 notified owner: #61 and #62 ready to merge (clean); world start denied, he can start it himself.
