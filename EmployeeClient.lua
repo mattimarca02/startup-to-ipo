@@ -863,12 +863,37 @@ local revealQueue = {}
 local revealing = false
 local closeReveal -- set while a reveal card is showing
 
+-- While a reveal plays it counts as a window (request U2, A15): it holds the PlayerGui attribute "OpenPanel" as
+-- "Hatch", so TaskClient asks the server to freeze waiting calls (none rings or runs out behind the reveal) and
+-- the Daily window and the building's look wait. It takes "OpenPanel" only when no window has it (an open Eggs
+-- window stays open), takes it again if that window closes during the reveal, and gives it back at the end only
+-- if it still says "Hatch" (a window opened since keeps it). tools/hatch_reveal_test.luau runs this block.
+-- HATCHPANEL-START
+local REVEAL_PANEL = "Hatch"
+local revealShowing = false
+local function holdRevealPanel()
+	if revealShowing and playerGui:GetAttribute("OpenPanel") == nil then
+		playerGui:SetAttribute("OpenPanel", REVEAL_PANEL)
+	end
+end
+local function setRevealShowing(showing)
+	revealShowing = showing
+	if showing then
+		holdRevealPanel()
+	elseif playerGui:GetAttribute("OpenPanel") == REVEAL_PANEL then
+		playerGui:SetAttribute("OpenPanel", nil)
+	end
+end
+playerGui:GetAttributeChangedSignal("OpenPanel"):Connect(holdRevealPanel)
+-- HATCHPANEL-END
+
 local function playReveal(info)
 	local creature = CreatureConfig.getCreature(info.creature)
 	local egg = CreatureConfig.getEgg(info.egg)
 	if not creature then return end
 	local color = rarityColor(creature.rarity)
 
+	setRevealShowing(true)
 	revealGui.Enabled = true
 	GuiService.TouchControlsEnabled = false
 	revealCard.Visible = false
@@ -933,6 +958,7 @@ local function playReveal(info)
 	closeReveal = nil
 	spin:Disconnect()
 	revealGui.Enabled = false
+	setRevealShowing(false)
 	GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
 	if not info.hired then
 		setOpen(true, "Team")
@@ -952,7 +978,14 @@ eggHatched.OnClientEvent:Connect(function(info)
 	if revealing then return end
 	revealing = true
 	while #revealQueue > 0 do
-		playReveal(table.remove(revealQueue, 1))
+		local ok, err = pcall(playReveal, table.remove(revealQueue, 1))
+		if not ok then -- a reveal that breaks never keeps the screen covered or the calls frozen
+			warn("EmployeeClient: hatch reveal failed: " .. tostring(err))
+			closeReveal = nil
+			revealGui.Enabled = false
+			setRevealShowing(false)
+			GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
+		end
 	end
 	revealing = false
 end)
