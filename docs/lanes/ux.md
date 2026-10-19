@@ -8,7 +8,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 2. **DONE (PR #53, merged 2026-10-18 11:49 UTC).** **U1 from gameplay: the goal chain in the Goals card (OnboardingClient).** Draw only the goals with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()`, and size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows, then count rows the same way in tools/hud_test.py's `onboarding_goal_count`. Next after PR #35 (it blocks gameplay turning `ChainEnabled` on). `activeGoals` and `ShowAtOnce` are on main since PR #43. Item 4's X fix goes in the same file, so it waits until this one is done.
 2b. **Follow-up to #53, only if the owner wants it (quality's note, not blocking).** With the server marking only unfinished goals, 3 s after "Hire 3 employees" is done its row goes and the card keeps one empty row until Seed. Option: hide empty slots and shrink the card to the rows in use (and keep tools/daily_test.py's tray check on the largest size). Waiting for the owner's call.
 3. **DONE (PR #44, merged 2026-10-18 08:53 UTC).** **Quality follow-ups on ClaimButtonClient and hud_test (not blocking #35).** (a) Keep a set of the claim prompts shown for touch and label the button with the nearest one, so when two show at once and the newer one hides first, the button doesn't disappear while the other is still shown. (b) The HUD mutant "event not disconnected" needs about 3 GB of memory and crashes when several suites run in parallel: cap its loop or shrink the fake. Small, one PR.
-0. **U2 from gameplay (A15): calls pause under the hatch reveal** (branch `ux-hatch-pause`, in progress). EmployeeClient sets the PlayerGui attribute `OpenPanel` to `"Hatch"` while the reveal plays, only when no window has it, and clears it at the end only if it is still `"Hatch"`; TaskClient already sends `Pause` on any `OpenPanel`, so no server change. A new fake-client test, tools/hatch_reveal_test.luau, run by tools/hud_test.py.
+0. **U2 from gameplay (A15): calls pause under the hatch reveal** (branch `ux-hatch-pause`, **PR #63, open**). EmployeeClient sets the PlayerGui attribute `OpenPanel` to `"Hatch"` while the reveal plays, only when no window has it, and clears it at the end only if it is still `"Hatch"`; TaskClient already sends `Pause` on any `OpenPanel`, so no server change. A new fake-client test, tools/hatch_reveal_test.luau, run by tools/hud_test.py.
 4. **Tap targets at least 40 x 40 everywhere.** The Goals tracker's X (OnboardingClient, 30 x 26 today) gets a 44 x 44 hit area without moving the card; a static check in tools/hud_test.py that every TextButton/ImageButton with a fixed size in the clients is at least 40 px on each side.
 5. **DONE (PR #48, merged 2026-10-18 09:18 UTC).** **Unpin my tests' Studio-sync hashes.** tools/hud_test.py (IpoClient in docs/STUDIO_SYNC_HUD.md) and tools/shop_ux_test.py (ShopClient and ShopLayout in docs/STUDIO_SYNC_SHOP.md) compare those docs with today's files, so any later edit of IpoClient or ShopClient fails them. Check them against the files at the commit the doc was written for (like lobby_test's L1 section), so the docs stay history. Needed before items 6 to 8 (which touch IpoClient and ShopClient); also needs R1.
 6. **One style for pop-ups.** Since the overhaul (phase 6) the pop-ups sit in fixed lanes (-16 shop and IPO, -72 eggs and the daily on short screens, -128 poach, -184 onboarding, -240 daily on tall screens), so two no longer cover each other. Left: one style for all of them (size, font, colour, time on screen), on both phone sizes.
@@ -17,15 +17,19 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-ux-hatch-pause - started 2026-10-19 00:43 UTC (backlog item 0, request U2 from gameplay)
+waiting for review of PR #63
 
 ## Last PR
 
-PR #53 (`ux-goal-chain`, backlog item 2, U1), merged 2026-10-18 11:49 UTC: https://github.com/mattimarca02/startup-to-ipo/pull/53. Before it: PR #48, merged 2026-10-18 09:18 UTC.
+PR #63 (`ux-hatch-pause`, backlog item 0, request U2), open: https://github.com/mattimarca02/startup-to-ipo/pull/63. Before it: PR #53, merged 2026-10-18 11:49 UTC.
 
 ## Last report
 
-2026-10-18 10:24 UTC. I merged main (acab027) into `ux-goal-chain` with no conflicts and opened PR #53: https://github.com/mattimarca02/startup-to-ipo/pull/53. With this change, the Goals card draws only the goals the server marks with `OnboardingGoalShown_<key>`, in the order of `activeGoals()`, with `min(ShowAtOnce, #activeGoals())` rows. A server that marks nothing gets the old first-goals card. The PR changes OnboardingClient.lua, the new tools/onboarding_client_test.luau, tools/hud_test.py, and the ux check in tools/daily_test.py. With `ChainEnabled` off, players see the same card as today. My claim rows went straight to main.
+2026-10-19 01:10 UTC. I read the overhaul report and updated my backlog. Item 6 is now only one style for the pop-ups, because the overhaul already gave them fixed lanes. Item 7 is now only one badge style, because the HUD buttons already have icons and labels. I handled gameplay's request U2 first, as PR #63: https://github.com/mattimarca02/startup-to-ipo/pull/63. While the hatch reveal plays, EmployeeClient now holds the PlayerGui attribute `OpenPanel` as "Hatch", so TaskClient freezes the calls behind it. It never takes `OpenPanel` from an open window, and it gives it back only if it still says "Hatch". A reveal that errors now gives it back too. No server change, no remote, no save change. A new test, tools/hatch_reveal_test.luau, is run by tools/hud_test.py.
+
+Tests (Luau 0.742, one at a time): hud 1073 + claim button 28/28 + Goals card 27 (9/9) + hatch reveal 24 (9/9, self-test OK), daily green, world 389 (103/103), icon 371 (68/68), shop_ux 6308 (103/103), lobby 160 (65/65), building 1423 (50/50), onboarding 82 (16/16). The Studio step is below. No new requests. Waiting for the owner: the review and merge of PR #63. After that, the next item is 4 (tap targets). 2b still waits for the owner's call.
+
+Earlier: 2026-10-18 10:24 UTC. I merged main (acab027) into `ux-goal-chain` with no conflicts and opened PR #53: https://github.com/mattimarca02/startup-to-ipo/pull/53. With this change, the Goals card draws only the goals the server marks with `OnboardingGoalShown_<key>`, in the order of `activeGoals()`, with `min(ShowAtOnce, #activeGoals())` rows. A server that marks nothing gets the old first-goals card. The PR changes OnboardingClient.lua, the new tools/onboarding_client_test.luau, tools/hud_test.py, and the ux check in tools/daily_test.py. With `ChainEnabled` off, players see the same card as today. My claim rows went straight to main.
 
 Tests (Luau 0.742, one at a time): hud 1073 (69/69, coupling 26/26), claim button 129 (28/28), Goals card 27 (9/9), daily all green, world 380 (101/101), icon 371 (68/68), shop_ux 6308 (103/103), lobby 155 (63/63), building 1407 (46/46), onboarding 78 (16/16). The Studio step is below (OnboardingClient, sha256 7c69d99f…, 14691 bytes). No new requests. Waiting for the owner: the review and merge of PR #53. After the merge, gameplay can turn `ChainEnabled` on, and my next item is 4 (tap targets, starting with the Goals card's X).
 
@@ -43,6 +47,8 @@ Next: backlog item 2 (U1). PR #43 is merged, so `OnboardingConfig.activeGoals` i
 
 ## Requests to other lanes
 
+- **To gameplay: U2 is in PR #63** (calls pause under the hatch reveal); nothing needed from you.
+- **To quality:** once #63 is merged, README's tools row for tools/hatch_reveal_test.luau (run by tools/hud_test.py) and the EmployeeClient row below in the batch.
 - **To gameplay (U1): DONE (PR #53 merged)**; `ChainEnabled` can go on in your one-line PR.
 - **To quality:** once `ux-goal-chain` is merged: README's tools row for tools/onboarding_client_test.luau (run by tools/hud_test.py) and the Studio step above in the batch.
 - **R1, to gameplay (tools/lobby_test.py): DONE (PR #38, merged).** its "Lobby all" doc checks (`ALL_SCRIPTS`) compare docs/STUDIO_SYNC_LOBBY.md with today's bytes of ShopClient, IpoClient, LobbyClient, EmployeeClient, BuildingClient (and TycoonCore, ShopServer, WorldArt, WorldVisuals, PlotVisuals, ...). That doc is history now (lobby-all is merged; new Studio steps go to docs/STUDIO_SYNC_BATCH.md), so any later edit of one of those files fails lobby_test, in every lane. Please check that section against the files at the lobby-all merge commit `2df1410`, the way the L1 section uses `L1_COMMIT = "f6a546f"`. 
@@ -50,6 +56,8 @@ Next: backlog item 2 (U1). PR #43 is merged, so `OnboardingConfig.activeGoals` i
 - **To quality:** when PR `ux-claim-button` is merged, README.md and CLAUDE.md need the new LocalScript `ClaimButtonClient` (StarterPlayer > StarterPlayerScripts, display only, no remote; it presses the server's own claim prompt) and its Studio step goes in the batch.
 
 ## Studio steps (merged PRs not yet in Studio)
+
+PR #63 (`ux-hatch-pause`), once it is merged: paste EmployeeClient.lua into the LocalScript `EmployeeClient` (StarterPlayer > StarterPlayerScripts): sha256 `40fe9d0aaf3cadf65bea4c8f8b95f1e970e7283f0e871b1fbd8d5fe1e93e4824`, 37234 bytes. F5, hatch an egg: the task tray hides while the reveal shows and comes back after "Nice!"; no errors in Output.
 
 `ux-goal-chain` (item 2), once it is merged: paste OnboardingClient.lua into the LocalScript `OnboardingClient` (StarterPlayer > StarterPlayerScripts): sha256 `7c69d99f8c2c02667100c0538b238250e7f6a71c0713cdb090dfc7862cdffdb5`, 14691 bytes. F5 as a new player: once the free egg hatches the card shows "Hire 3 employees" and "Reach Seed stage" as before, no errors in Output.
 
