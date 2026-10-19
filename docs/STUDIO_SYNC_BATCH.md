@@ -537,6 +537,20 @@ Playtest (owner session, 1 player, the owner's HQ Tower): the building has 173 p
 
 Run on: 2026-10-19 by the owner session 2 (MCP), the 2 hashes checked.
 
+## Batch 14 (the founder activities' window on phones; branch `overhaul2-phone`, on top of main after PR #72)
+
+Opened 2026-10-19 by the owner session 2. Pushed through the Studio MCP from commit `78c9075` (`HttpEnabled` back to false); the hash read back from Studio matches.
+
+**What changes for players:** the window of the coding sprint, the bug, the brainstorm, the pitch and the dinner was a fixed 320 high, taller than a phone held sideways under Roblox's top bar (667x375 with a 58 px bar leaves 317). It now fits every phone size (never taller than the screen minus 16), its four rows turn into a 2 x 2 grid on a short screen, and every button stays at least 44 x 44. **Save change: none.**
+
+| Script | Studio | State | sha256 (`overhaul2-phone`) | bytes |
+|---|---|---|---|---|
+| `FounderClient` | LocalScript, StarterPlayerScripts | changed | `39018e375a0d941bc02ea3c35965f20eb02a9953096ec656375eb2928a38ec00` | 24699 |
+
+Playtest (owner session, 1 player, on the owner's save, Studio window 1193x434): a coding sprint opens a 360 x 320 window with four rows of 46 and closes with no cooldown. No error from our scripts. **Not run:** Test > Device (the sizes are checked by `tools/plaza_test.py` on nine phone sizes with top bars of 0, 36 and 58 px).
+
+Run on: 2026-10-19 by the owner session 2 (MCP), the hash checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

@@ -3,6 +3,7 @@
 
 Run:   LUAU=/path/to/luau python3 tools/plaza_test.py
 
+  - the founder activities' window on every phone size (FounderClient's WINDOWLAYOUT block): it fits, 44 px touch targets
   - the join cinematic (IntroClient's INTROPLAN block, run in Luau): about 7 s, from the arch over the fountain and the ring
     to the character; the client code skips on a tap, holds OpenPanel only when free and always gives the camera back
   - the FREE sign (the owner's point 4): a board with a SurfaceGui on both faces, never a BillboardGui or AlwaysOnTop
@@ -35,6 +36,7 @@ def between(text, a, b):
 
 INTRO_TESTS = r"""
 __PLAN__
+__WINDOW__
 local passed, failed = 0, 0
 local function check(name, ok, extra)
 	if ok then passed += 1 else failed += 1; print("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
@@ -49,6 +51,35 @@ for _, shot in ipairs(SHOTS) do
 end
 check("intro: it flies over the fountain and high over the ring of garages", fountain and high)
 check("intro: it lands above and behind the character", LAND_BEHIND[2] > 0 and LAND_BEHIND[3] > 0 and LAND_SECONDS > 0)
+-- The activity window (FounderClient's WINDOWLAYOUT block) on every phone size and top bar the call tray is tested with
+local screens = { { 320, 568 }, { 360, 640 }, { 375, 667 }, { 390, 844 }, { 667, 375 }, { 568, 320 }, { 640, 360 }, { 812, 375 }, { 844, 390 } }
+local cases = { { 4, false, "sprint" }, { 4, true, "bug" }, { 3, false, "pitch, brainstorm" }, { 2, false, "dinner" } }
+local fits, touch, inside, apart, why = true, true, true, true, nil
+for _, sc in ipairs(screens) do
+	for _, bar in ipairs({ 0, 36, 58 }) do
+		local W, H = sc[1], sc[2] - bar
+		for _, c in ipairs(cases) do
+			local L = windowLayout(W, H, c[1], c[2])
+			local where = string.format("%dx%d bar %d, %s", sc[1], sc[2], bar, c[3])
+			if L.w > W - 8 or L.h > H - 8 then fits, why = false, why or where end
+			for i, b in ipairs(L.buttons) do
+				if b.h < 44 or b.w < 44 then touch, why = false, why or (where .. ": button " .. i .. " " .. b.w .. "x" .. b.h) end
+				if b.x < 0 or b.x + b.w > L.w - 10 or b.y < L.trackY + 6 or b.y + b.h > L.h - 6 then inside, why = false, why or (where .. ": button " .. i) end
+				for j = i + 1, #L.buttons do
+					local o = L.buttons[j]
+					if b.x < o.x + o.w and o.x < b.x + b.w and b.y < o.y + o.h and o.y < b.y + b.h then apart, why = false, why or where end
+				end
+			end
+			if #L.buttons ~= c[1] then inside = false end
+		end
+	end
+end
+check("window: fits every phone screen with a top bar of 0, 36 or 58 px", fits, why)
+check("window: every button is at least 44 x 44 (a touch target) on every screen", touch, why)
+check("window: every button is inside the window, under the timer bar", inside, why)
+check("window: no two buttons overlap", apart, why)
+local big = windowLayout(1280, 720, 4, false)
+check("window: on a big screen it stays 360 x 320 with four rows of 46", big.w == 360 and big.h == 320 and big.buttons[4].h == 46 and big.buttons[1].w == 332)
 print(string.format("%d passed, %d failed", passed, failed))
 print("DONE")
 """
@@ -56,8 +87,9 @@ print("DONE")
 
 def run_intro(luau, files=None):
     plan = between(read("IntroClient.lua", files), "-- INTROPLAN-START", "-- INTROPLAN-END") or 'error("INTROPLAN markers not found")'
+    window = between(read("FounderClient.lua", files), "-- WINDOWLAYOUT-START", "-- WINDOWLAYOUT-END") or 'error("WINDOWLAYOUT markers not found")'
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
-        f.write(INTRO_TESTS.replace("__PLAN__", plan))
+        f.write(INTRO_TESTS.replace("__PLAN__", plan).replace("__WINDOW__", window))
         path = f.name
     try:
         r = subprocess.run([luau, path], capture_output=True, text=True, timeout=60)
@@ -114,6 +146,10 @@ def pins(files=None):
 
 
 MUTANTS = [
+    ("the window as tall as before (320) on every screen", "FounderClient.lua", "local h = math.min(320, screenH - 16)", "local h = 320",
+     "window: fits every phone screen"),
+    ("four rows never become a grid on a short screen", "FounderClient.lua", "if not grid and listRow < TOUCH and count == 4 then", "if false then",
+     "window: every button is at least 44"),
     ("the intro twice as long", "IntroClient.lua", "{ 0, 95, 10, 0, 0, 30, 1.8 },", "{ 0, 95, 10, 0, 0, 30, 8 },", "intro: about 7 s"),
     ("no skip", "IntroClient.lua", "\t\t\tskipped = true\n", "\n", "intro: a tap"),
     ("the intro steals an open window's OpenPanel", "IntroClient.lua", 'if playerGui:GetAttribute("OpenPanel") == nil then\n\t\tplayerGui:SetAttribute("OpenPanel", PANEL_NAME)',
