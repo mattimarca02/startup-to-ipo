@@ -461,6 +461,27 @@ Playtests (owner session, 1 player, F5, on the owner's save): the claim works; t
 
 Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (38 scripts).
 
+## Batch 10 (overhaul 2 phase 3: calls live, the founder's activities, calls at the desk, the blackboard; branch `overhaul2-phase3`, on top of Batch 9)
+
+Opened 2026-10-19 by the owner session 2 (docs/OVERHAUL2_PLAN.md phase 3). Pushed through the Studio MCP from commits `2baef89` and `5f3d527` on GitHub (`HttpEnabled` back to false) and hash-checked: **all 41 scripts in Studio match the repo** (three are new: `FounderConfig`, `FounderServer`, `FounderClient`).
+
+**What the owner sees after this batch:** customer calls ring on live servers too (they were Studio-only); while a call waits, a board over the founder desk says "Incoming call" with Answer and Decline: Answer walks the founder to the desk, sits them for a 3-second answer and shows the result (the phone tray still answers from anywhere); prompts in the office: **Coding sprint** and **Investor pitch** at the founder desk, **Fix the bug** at the Server Rack while its red alarm blinks, **Brainstorm** at the new chalk **blackboard** that hangs over the entrance lane where the green "Next: ..." sign was (it lists the next goals and the cheapest item). The Debug tab has three founder buttons (bug now, ready, pitch again). **Save change: a new top-level section `founder`** (rule A10): a publish with it needs **Shut down all servers** (docs/PUBLISH_RULES.md).
+
+| Script | Studio | State | sha256 (`overhaul2-phase3`) | bytes |
+|---|---|---|---|---|
+| `TaskConfig` | ModuleScript, ReplicatedStorage | changed | `99c7e969559f94650ca71c6452d37d85b0b5da0d4ebe566c16474187ce0404be` | 15663 |
+| `FounderConfig` | ModuleScript, ReplicatedStorage | **new** | `b2d9905b2da349f7526868baef965f29dbd21d99484eb77a337cd9bef1594d90` | 8400 |
+| `TaskServer` | ModuleScript, ServerScriptService | changed | `d8b2f10cd72ecba2ca67d38f36cb6c104d364360acf07522a6e1837d79bdbf9a` | 39539 |
+| `FounderServer` | ModuleScript, ServerScriptService | **new** | `0dd1f5eaeeae8c19c9a22373e129e313cd4557ed8adb079ca527d56f961f197f` | 30084 |
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `59b9cc5c24302f98fc4ce9b69bd1a122e904e3fd020f62b7d6099907e4e6eec9` | 19875 |
+| `TycoonCore` | Script, ServerScriptService | changed | `2a8b3c3057fd3ab259fee890f6217742ca6f34811eca559a568eec2b2df8d691` | 73997 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `df41a8e79ffee8b874ac3eb02355c6e6a6fc710da0eb70738c82f9b57651c0de` | 55828 |
+| `FounderClient` | LocalScript, StarterPlayerScripts | **new** | `1c978d60ad56feaed0df3f26aede9e68f9d7e853b18b41c5dceffc86e25f0831` | 22072 |
+
+Playtests (owner session, 1 player, F5, on the owner's save, garage 1 of the ring): the claim works; the blackboard hangs at the front (slate center 9.4 high in the world) with "Next steps: Answer 3 calls (0/3), Answer 10 calls in a row, Buy the Server Rack, Shop: Router $700"; no BuySign; the station attributes are set; a coding sprint at the desk (the founder sits, the window opens, 4/5 right, paid, the founder stands up after); a brainstorm at the blackboard (Premium plan: Income 6,053 to 6,961); a spawned call shows the desk's call board; the Server Rack bought ($2,000, through ShopAction), the Debug alarm rings (the sound plays), the 4 fixes in order pay $174,600 and the alarm stops; the IPO-ready pitch at the desk (3/3, +$838,080). With the Daily window open the sprint is cancelled at once (one window at a time). No error from our scripts in the Output. **These tests changed the owner's save**: the Server Rack bought, the IPO-ready pitch marked done (Debug > "Founder: pitch again" offers it again), some Cash from the activities. **Not run:** tapping the desk board's Answer with a real click (the MCP can't press a BillboardGui button; the code path was read and the board's state checked), 2 players, Test > Device (phone).
+
+Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (41 scripts).
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.
