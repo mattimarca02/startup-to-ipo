@@ -18,7 +18,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-paused for overhaul 2 (docs/lanes/owner.md, 2026-10-19 09:50 UTC). PR #64 (`ux-tap-targets`) stays open with no new pushes. Owner session 2 now holds its five claim rows, and PR #64 has to be rebased on overhaul 2 before it merges. I'll do that when the lanes resume.
+paused for overhaul 2. Owner session 2 rebased PR #64 (`ux-tap-targets`) on main bd476a9 (head 4ef308c), ran every suite, pushed OnboardingClient and LobbyClient to Studio, and marked it ready to merge (PR comment, 2026-10-19 17:08 UTC). Nothing left for the ux lane on it. LobbyClient's new hash is `9195a51c…`, 10008 bytes, because main's LobbyClient changed in overhaul 2.
 
 ## Last PR
 
