@@ -34,6 +34,8 @@ And it runs the REAL hatch reveal block of EmployeeClient.lua (HATCHPANEL, tools
 reveal plays it holds the PlayerGui attribute "OpenPanel" as "Hatch" (so the calls freeze), never takes it from an open
 window and gives it back only if it still says "Hatch"; then its own mutation runs.
 
+And it checks every TextButton and ImageButton the clients make with a fixed size in pixels: 40 or more on each side.
+
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
 
@@ -2169,6 +2171,10 @@ GOALS_MUTANTS = [
      "\t\t\tallDone = allDone and current >= target\n\t\tend\n",
      "\t\t\tallDone = allDone and current >= target\n\t\telse\n\t\t\tallDone = false\n\t\tend\n", "all done: a goal the server can't check"),
     ("the tick is never drawn", "(done and \"✅\" or goal.icon)", "(goal.icon)", "chain: a shown goal just finished keeps its row"),
+    ("the X you see moves with the bigger tap area", "\tPosition = UDim2.fromOffset(7, 4 + GAP),", "\tPosition = UDim2.fromOffset(0, 0),",
+     "close: the X you see is still 30 x 26"),
+    ("the tap area reaches onto the valuation bar", "\tPosition = UDim2.new(1, 3, 0, -GAP),", "\tPosition = UDim2.new(1, 3, 0, -GAP - 8),",
+     "close: the tap area stays below the valuation bar"),
 ]
 # Must be reported as NOT caught: the client errors on every refresh, so the row checks fail too, but an error is
 # never a catch (its "ran without an error" check fails).
@@ -2350,6 +2356,88 @@ def hatch_main(luau, mutations=True):
         code = 1
     return code
 
+
+# Tap targets (ux backlog item 4): every TextButton and ImageButton a client makes with a fixed size in pixels is 40 or
+# more on each side (a phone finger). Sizes in scale (a share of the screen or window) and sizes from ShopLayout are
+# checked by their own suites (tools/shop_ux_test.py, tools/daily_test.py's tray); this check reads the literal ones:
+# UDim2.fromOffset(w, h), and the height of UDim2.new(sx, ox, 0, h) (and its width when its X scale is 0).
+TAP_MIN = 40
+TAP_FILES = ("ClaimButtonClient.lua", "DailyClient.lua", "EmployeeClient.lua", "IpoClient.lua", "LobbyClient.lua",
+             "OnboardingClient.lua", "PoachClient.lua", "ShopClient.lua", "TaskClient.lua", "ChatTags.lua")
+NUM = r"(-?\d+(?:\.\d+)?)"
+
+
+def tap_target_sizes(text):
+    """[(line, (w or None, h or None))] for each make("TextButton" / "ImageButton", {...}) with a literal size."""
+    out = []
+    for m in re.finditer(r'make\("(?:TextButton|ImageButton)", \{', text):
+        i, depth = m.end(), 1
+        while depth and i < len(text):
+            depth += (text[i] == "{") - (text[i] == "}")
+            i += 1
+        body = code_only(text[m.end():i])
+        line = text[:m.start()].count("\n") + 1
+        s = re.search(r"\n\s*Size = UDim2\.fromOffset\(\s*" + NUM + r"\s*,\s*" + NUM + r"\s*\)", body)
+        if s:
+            out.append((line, (float(s.group(1)), float(s.group(2)))))
+            continue
+        s = re.search(r"\n\s*Size = UDim2\.new\(\s*" + NUM + r"\s*,\s*" + NUM + r"\s*,\s*0\s*,\s*" + NUM + r"\s*\)", body)
+        if s:
+            out.append((line, (float(s.group(2)) if float(s.group(1)) == 0 else None, float(s.group(3)))))
+    return out
+
+
+def tap_target_checks(texts=None):
+    results = []
+    total = 0
+    for name in TAP_FILES:
+        text = texts[name] if texts is not None and name in texts else (read(name) if os.path.exists(os.path.join(ROOT, name)) else "")
+        for line, (w, h) in tap_target_sizes(text):
+            total += 1
+            small = [v for v in (w, h) if v is not None and v < TAP_MIN]
+            results.append(("tap targets: %s:%d is %s x %s, 40 or more on each side" % (name, line, w if w is not None else "scale", h),
+                            not small, None))
+    results.append(("tap targets: the check found the fixed-size buttons (10 or more; it reads them, it must not go blind)",
+                    total >= 10, total))
+    return results
+
+
+TAP_MUTANTS = [
+    ("the Goals card's X back to 30 x 26", "OnboardingClient.lua", "\tSize = UDim2.fromOffset(44, 40),\n\tBackgroundTransparency = 1,\n",
+     "\tSize = UDim2.fromOffset(30, 26),\n\tBackgroundTransparency = 1,\n"),
+    ("the welcome card's Got it back to 30 high", "LobbyClient.lua", "Size = UDim2.fromOffset(110, 40),", "Size = UDim2.fromOffset(110, 30),"),
+    ("a window's close button at 44 x 30", "IpoClient.lua", "Size = UDim2.fromOffset(44, 40),", "Size = UDim2.fromOffset(44, 30),"),
+    ("the Daily window's Claim button at 36 high", "DailyClient.lua", "Size = UDim2.new(1, 0, 0, 56),", "Size = UDim2.new(1, 0, 0, 36),"),
+]
+
+
+def tap_main(mutations=True):
+    code = 0
+    results = tap_target_checks()
+    bad = [(n, e) for n, ok, e in results if not ok]
+    for n, e in bad:
+        print("FAIL: " + n + (" -- " + str(e) if e is not None else ""))
+    print("Tap targets (fixed-size buttons in the clients): %d passed, %d failed" % (len(results) - len(bad), len(bad)))
+    if bad:
+        code = 1
+    if not mutations:
+        return code
+    caught = 0
+    for label, name, old, new in TAP_MUTANTS:
+        text = read(name)
+        if text.count(old) != 1:
+            print("NOT CAUGHT: %s -- not applied (%d matches)" % (label, text.count(old)))
+            continue
+        failed = [n for n, ok, _ in tap_target_checks({name: text.replace(old, new)}) if not ok]
+        if any(n.startswith("tap targets: " + name) for n in failed):
+            caught += 1
+        else:
+            print("NOT CAUGHT: %s" % label)
+    print("Tap target mutations: %d of %d caught, each by its named check" % (caught, len(TAP_MUTANTS)))
+    if caught != len(TAP_MUTANTS):
+        code = 1
+    return code
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -2406,6 +2494,8 @@ def main():
     if goals_card_main(luau, "--no-mutations" not in sys.argv):
         code = 1
     if hatch_main(luau, "--no-mutations" not in sys.argv):
+        code = 1
+    if tap_main("--no-mutations" not in sys.argv):
         code = 1
     return code
 

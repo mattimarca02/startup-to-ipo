@@ -85,7 +85,7 @@ make("UITextSizeConstraint", { MaxTextSize = 20, MinTextSize = 10, Parent = welc
 local welcomeBody = make("TextLabel", {
 	Name = "Body",
 	Position = UDim2.fromOffset(12, 36),
-	Size = UDim2.new(1, -24, 0, 70),
+	Size = UDim2.new(1, -24, 0, 64), -- ends at y 100: the Got it button (40 high, ux item 4) starts at 102
 	BackgroundTransparency = 1,
 	Font = Enum.Font.Gotham,
 	TextScaled = true,
@@ -100,8 +100,8 @@ make("UITextSizeConstraint", { MaxTextSize = 15, MinTextSize = 9, Parent = welco
 local welcomeButton = make("TextButton", {
 	Name = "GotIt",
 	AnchorPoint = Vector2.new(1, 1),
-	Position = UDim2.new(1, -12, 1, -10),
-	Size = UDim2.fromOffset(110, 30),
+	Position = UDim2.new(1, -12, 1, -8),
+	Size = UDim2.fromOffset(110, 40), -- a tap target is 40 or more on each side (tools/hud_test.py)
 	BackgroundColor3 = Color3.fromRGB(0, 200, 90),
 	Font = Enum.Font.GothamBold,
 	TextScaled = true,
@@ -132,7 +132,14 @@ local function placeBanner()
 	local x, y = banner.Position.X.Offset, banner.Position.Y.Offset + 34 + 8
 	local width = math.max(160, math.min(WELCOME_WIDTH, banner.Size.X.Offset))
 	welcome.Position = UDim2.fromOffset(x, y)
-	welcome.Size = UDim2.fromOffset(width, math.min(WELCOME_HEIGHT, math.max(100, size.Y - y - 180)))
+	local height = math.min(WELCOME_HEIGHT, math.max(100, size.Y - y - 180))
+	welcome.Size = UDim2.fromOffset(width, height)
+	-- The story above the Got it button on the full card; on a shorter one (landscape phones) beside it, never under it
+	if height < WELCOME_HEIGHT then
+		welcomeBody.Size = UDim2.new(1, -24 - 110 - 8, 0, height - 36 - 8)
+	else
+		welcomeBody.Size = UDim2.new(1, -24, 0, 64)
+	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner)
 placeBanner()
