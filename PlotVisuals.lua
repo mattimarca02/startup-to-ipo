@@ -55,7 +55,7 @@ local FACES = { Top = true, Bottom = true, Left = true, Right = true, Front = tr
 PlotVisuals.LIGHT_WORDS = { "Bulb", "Lamp", "Light", "Screen", "LED", "Sign", "Logo", "Neon", "Glow", "Flash" }
 PlotVisuals.TINY = 2 -- a part whose longest side is shorter than this casts no shadow
 PlotVisuals.FLAT = 0.2 -- a part at most this tall lying on the floor or the ground is a floor mark (rug, stain, line)
-PlotVisuals.MAX_PARTS = 260 -- per stage room, upgrade props included
+PlotVisuals.MAX_PARTS = 420 -- per stage room: upgrade props, catalog items and solid boxes included (overhaul 2: was 260)
 PlotVisuals.MAX_LIGHTS = 3 -- PointLights per plot
 PlotVisuals.SIDE_WALL_MAX = 6 -- the sides and the front, where the camera looks in
 PlotVisuals.BACK_WALL_MAX = 12 -- behind the incubators (z <= BACK_BAND)
@@ -64,6 +64,13 @@ PlotVisuals.BACKDROP_Z = -43 -- the skyline ("Skyline" parts) stands behind this
 PlotVisuals.BACKDROP_MAX = 30
 PlotVisuals.TURNS = { [0] = true, [90] = true, [180] = true, [270] = true } -- a kit piece turns by quarter turns only
 PlotVisuals.KIT_FIT = 0.02 -- a fallback box may stick out of its kit size by this much (float noise), never more
+-- Solid boxes (overhaul 2, the owner's point 5): one invisible anchored box per furniture piece, the only room parts a
+-- player bumps into besides the floors. Each stands on the floor inside its piece's footprint (inset a little), at most
+-- SOLID_MAX tall; a piece lower than SOLID_MIN (cans, pizza boxes, weeds) stays something to walk over.
+PlotVisuals.SOLID_MAX = 8
+PlotVisuals.SOLID_MIN = 1.2
+PlotVisuals.SOLID_INSET = 0.1
+PlotVisuals.SOLIDS = "Solids" -- the room's Model of the decor's boxes (a desk's, a prop's, an item's box is in its own Model)
 
 local TOUCH = 0.06 -- parts closer than this touch (floating check)
 local OVERLAP = 0.01 -- parts must go this far into a zone to count as inside it
@@ -398,6 +405,141 @@ function PlotVisuals.buildGroup(parent, name, base, specs, art, kit)
 	return model
 end
 
+-- The box around some parts in the garage's frame (origin): { minX, maxX, minY, maxY, minZ, maxZ }, or nil
+local function boxAround(parts, origin)
+	local b
+	for _, part in ipairs(parts) do
+		local p = boxOf(origin:ToObjectSpace(part.CFrame), part.Size)
+		if b then
+			b = { math.min(b[1], p[1]), math.max(b[2], p[2]), math.min(b[3], p[3]), math.max(b[4], p[4]), math.min(b[5], p[5]), math.max(b[6], p[6]) }
+		else
+			b = p
+		end
+	end
+	return b
+end
+
+local function isSolid(part)
+	return part:GetAttribute("Solid") == true
+end
+PlotVisuals.isSolid = isSolid
+
+-- One solid box over b (a box in the garage's frame) from the floor up: invisible, anchored, collides, never touched, no
+-- shadow (CanQuery stays on, like the plaza's Solid group: a colliding part is always queryable). nil when too low or thin.
+local function makeSolid(parent, name, origin, b)
+	local r = {}
+	for k = 1, 6 do
+		r[k] = math.floor(b[k] * 1000 + 0.500001) / 1000 -- the same box at every turn of the garage (float noise, exact halves up)
+	end
+	b = r
+	local inset = PlotVisuals.SOLID_INSET
+	local w, d = b[2] - b[1] - 2 * inset, b[6] - b[5] - 2 * inset
+	local h = math.min(b[4], PlotVisuals.SOLID_MAX)
+	if w < 0.2 or d < 0.2 or h < PlotVisuals.SOLID_MIN then
+		return nil
+	end
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Size = Vector3.new(w, h, d)
+	part.CFrame = origin * CFrame.new((b[1] + b[2]) / 2, h / 2, (b[5] + b[6]) / 2)
+	part.Transparency = 1
+	part.Anchored = true
+	part.CanCollide = true
+	part.CanTouch = false
+	part.CanQuery = true
+	part.CastShadow = false
+	part.Material = Enum.Material.SmoothPlastic
+	part:SetAttribute("Solid", true)
+	part.Parent = parent
+	return part
+end
+
+-- A furniture piece's solid box (a hire desk with its chair, an upgrade prop, a catalog item): over all its parts, inside it
+function PlotVisuals.addSolid(model, origin)
+	local parts = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and not isSolid(d) then
+			table.insert(parts, d)
+		end
+	end
+	local b = boxAround(parts, origin)
+	return b and makeSolid(model, model.Name .. "Solid", origin, b)
+end
+
+-- The decor's solid boxes: its parts that stand low inside the floor (not floor marks, not see-through, not the hire
+-- desks: those have their own) are grouped by touching, and each group that stands on the floor and is at least
+-- SOLID_MIN tall gets one box. Built once per room, in the room's Solids model.
+function PlotVisuals.decorSolids(room, origin, art)
+	local decor = room:FindFirstChild("Decor")
+	if not decor then
+		return 0
+	end
+	local half = art.Layout.floorSize[1] / 2
+	local items = {}
+	for _, d in ipairs(decor:GetDescendants()) do
+		if d:IsA("BasePart") and not isSolid(d) and d.Transparency < 0.9 then
+			local node, inDesk = d.Parent, false
+			while node and node ~= decor do
+				if string.find(node.Name, "HireDesk", 1, true) == 1 then
+					inDesk = true
+				end
+				node = node.Parent
+			end
+			local b = boxOf(origin:ToObjectSpace(d.CFrame), d.Size)
+			for k = 1, 6 do
+				b[k] = math.floor(b[k] * 1000 + 0.500001) / 1000 -- the same groups at every turn of the garage (no float noise at TOUCH)
+			end
+			if not inDesk and b[4] - b[3] > PlotVisuals.FLAT and b[3] < 4 and b[3] > -TOUCH
+				and b[1] > -half and b[2] < half and b[5] > -half and b[6] < half then
+				table.insert(items, b)
+			end
+		end
+	end
+	local group = {}
+	local function find(i)
+		while group[i] ~= i do
+			group[i] = group[group[i]]
+			i = group[i]
+		end
+		return i
+	end
+	for i = 1, #items do
+		group[i] = i
+	end
+	for i = 1, #items do
+		local a = items[i]
+		for j = i + 1, #items do
+			local b = items[j]
+			if a[1] <= b[2] + TOUCH and b[1] <= a[2] + TOUCH and a[3] <= b[4] + TOUCH and b[3] <= a[4] + TOUCH
+				and a[5] <= b[6] + TOUCH and b[5] <= a[6] + TOUCH then
+				group[find(i)] = find(j)
+			end
+		end
+	end
+	local boxes, onFloor = {}, {}
+	for i, b in ipairs(items) do
+		local g = find(i)
+		local u = boxes[g]
+		boxes[g] = u and { math.min(u[1], b[1]), math.max(u[2], b[2]), math.min(u[3], b[3]), math.max(u[4], b[4]), math.min(u[5], b[5]), math.max(u[6], b[6]) } or b
+		onFloor[g] = onFloor[g] or b[3] <= TOUCH
+	end
+	local model = Instance.new("Model")
+	model.Name = PlotVisuals.SOLIDS
+	local keys = {}
+	for g in pairs(boxes) do
+		table.insert(keys, g)
+	end
+	table.sort(keys)
+	local count = 0
+	for _, g in ipairs(keys) do
+		if onFloor[g] and makeSolid(model, "DecorSolid" .. (count + 1), origin, boxes[g]) then
+			count += 1
+		end
+	end
+	model.Parent = room
+	return count
+end
+
 local function floorOrigin(center, art)
 	if typeof(center) == "CFrame" then
 		return center * CFrame.new(0, art.Layout.floorTop, 0) -- a turned garage
@@ -421,7 +563,9 @@ function PlotVisuals.buildDesks(decor, origin, art, stage, kit, desks)
 		local base = origin * CFrame.new(spot[1] + desk[1], 0, spot[2] + desk[2]) * CFrame.Angles(0, math.rad(desk[3]), 0)
 		local model = PlotVisuals.buildGroup(decor, "HireDesk" .. i, base, look.desk, art, kit)
 		model.WorldPivot = base -- the pop-in grows it from the floor
-		if i > count then -- the next hire's spot: the same desk, see-through
+		if i <= count then
+			PlotVisuals.addSolid(model, origin) -- the desk and its chair: one box (overhaul 2)
+		else -- the next hire's spot: the same desk, see-through, walk-through
 			model:SetAttribute("Ghost", true)
 			for _, d in ipairs(model:GetDescendants()) do
 				if d:IsA("BasePart") then
@@ -449,6 +593,7 @@ function PlotVisuals.buildRoom(parent, center, art, stage, kit, desks)
 	PlotVisuals.buildGroup(room, "Shell", origin, look.shell, art, kit)
 	local decor = PlotVisuals.buildGroup(room, "Decor", origin, look.decor, art, kit)
 	PlotVisuals.buildDesks(decor, origin, art, stage, kit, desks)
+	PlotVisuals.decorSolids(room, origin, art)
 	local props = Instance.new("Model")
 	props.Name = "UpgradeProps"
 	props.Parent = room
@@ -466,6 +611,43 @@ function PlotVisuals.buildProp(parent, center, art, upgrade, slot)
 	local base = floorOrigin(center, art) * CFrame.new(slot.X, 0, slot.Z)
 	local model = PlotVisuals.buildGroup(nil, upgrade, base, look)
 	model:SetAttribute("Upgrade", upgrade)
+	PlotVisuals.addSolid(model, floorOrigin(center, art))
+	model.WorldPivot = base -- the pop-in grows it from the floor
+	model.Parent = parent
+	return model
+end
+
+-- A catalog item's spot in its room (overhaul 2, PlotArt.Items): its zone in the garage's frame { x0, x1, y0, y1, z0, z1 }
+function PlotVisuals.itemBox(look)
+	local s = look.spot
+	local quarter = (s.turn or 0) % 180 == 90
+	local hw, hd = (quarter and s.d or s.w) / 2, (quarter and s.w or s.d) / 2
+	return { s.x - hw, s.x + hw, s.y0 or 0, s.h, s.z - hd, s.z + hd }
+end
+
+-- The catalog items that have a spot in the room of `stage` (their own stage's room), sorted by name
+function PlotVisuals.itemsOf(art, stage)
+	local out = {}
+	for key, look in pairs(art.Items or {}) do
+		if look.stage == stage then
+			table.insert(out, key)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+-- One catalog item, standing on its spot (its front, +Z in the art, turned by spot.turn), with its solid box
+function PlotVisuals.buildItem(parent, center, art, key)
+	local look = art.Items and art.Items[key]
+	if not look then
+		return nil
+	end
+	local origin = floorOrigin(center, art)
+	local base = origin * CFrame.new(look.spot.x, 0, look.spot.z) * CFrame.Angles(0, math.rad(look.spot.turn or 0), 0)
+	local model = PlotVisuals.buildGroup(nil, key, base, look.parts)
+	model:SetAttribute("Item", key)
+	PlotVisuals.addSolid(model, origin)
 	model.WorldPivot = base -- the pop-in grows it from the floor
 	model.Parent = parent
 	return model
@@ -532,7 +714,9 @@ function PlotVisuals.setStage(plot, stage, flash)
 	local oldProps = old and old:FindFirstChild("UpgradeProps")
 	if oldProps then
 		for _, prop in ipairs(oldProps:GetChildren()) do
-			prop.Parent = props
+			if prop:GetAttribute("Item") == nil then -- a station prop moves along; the catalog items are the new room's
+				prop.Parent = props
+			end
 		end
 	end
 	if plot.floor then
@@ -543,6 +727,7 @@ function PlotVisuals.setStage(plot, stage, flash)
 	if old then
 		old:Destroy()
 	end
+	PlotVisuals.setItems(plot, nil)
 	if flash then
 		task.spawn(PlotVisuals.flash, plot)
 	end
@@ -559,6 +744,32 @@ function PlotVisuals.addProp(plot, upgrade, slot, popIn)
 		task.spawn(PlotVisuals.popIn, model)
 	end
 	return model
+end
+
+-- The catalog items on show (overhaul 2): the room shows the items of its own stage that `owned` has (TycoonCore's
+-- data.owned, kept for the next room; nil = the last one given). A new one pops in when it is popKey (a purchase); one
+-- that is no longer owned (an IPO) goes. Cheap enough to run every second.
+function PlotVisuals.setItems(plot, owned, popKey)
+	if owned ~= nil then
+		plot.owned = owned
+	end
+	local props = plot.room and plot.room:FindFirstChild("UpgradeProps")
+	if not props then
+		return
+	end
+	local stage = plot.room:GetAttribute("Stage")
+	for key, look in pairs(plot.art.Items or {}) do
+		local model = props:FindFirstChild(key)
+		local want = look.stage == stage and plot.owned ~= nil and plot.owned[key] == true
+		if want and not model then
+			model = PlotVisuals.buildItem(props, plot.frame, plot.art, key)
+			if model and popKey == key then
+				task.spawn(PlotVisuals.popIn, model)
+			end
+		elseif model and not want and model:GetAttribute("Item") ~= nil then
+			model:Destroy()
+		end
+	end
 end
 
 -- Effects (they wait: run them with task.spawn) ----------------------------------
@@ -849,6 +1060,21 @@ function PlotVisuals.validate(art)
 			list("Prop " .. tostring(upgrade), specs)
 		end
 	end
+	if art.Items ~= nil then
+		for key, look in pairs(art.Items) do
+			local where = "Item " .. tostring(key)
+			local s = type(look) == "table" and look.spot
+			if type(look) ~= "table" or type(look.stage) ~= "number" or look.stage % 1 ~= 0 or look.stage < 1 or look.stage > #art.Stages then
+				problem(where .. ": needs the stage of its room (1 to " .. #art.Stages .. ")")
+			elseif type(s) ~= "table" or not (finite(s.x) and finite(s.z) and finite(s.w) and finite(s.d) and finite(s.h) and s.w > 0 and s.d > 0 and s.h > 0)
+				or (s.turn ~= nil and not PlotVisuals.TURNS[s.turn]) or (s.y0 ~= nil and not (finite(s.y0) and s.y0 >= 0 and s.y0 < s.h)) then
+				problem(where .. ": spot needs x, z, w, d, h (above 0), a quarter turn and y0 under h")
+			end
+			if type(look) == "table" then
+				list(where, look.parts)
+			end
+		end
+	end
 	if type(art.Flash) ~= "table" or type(art.Flash.part) ~= "table" then
 		problem("Flash: missing")
 	else
@@ -887,7 +1113,7 @@ end
 -- The reserved gameplay zones from the layout map: boxes no room part may enter (the garage signs,
 -- the spawn and the walking lane down the middle, incubators and the space in front of them, where each
 -- hire stands and its desk, the aisles) and the upgrade slots (only that upgrade's prop goes in its slot).
-function PlotVisuals.zones(layout)
+function PlotVisuals.zones(layout, art, stage)
 	local r = layout.reserve
 	local zones = {}
 	local function add(kind, name, x0, x1, z0, z1, top, owner)
@@ -905,7 +1131,7 @@ function PlotVisuals.zones(layout)
 			spot[2] - r.incubatorHalf, spot[2] + r.incubatorFront, r.height)
 	end
 	for i, spot in ipairs(layout.employeeSpots) do
-		add("hire", "Hire" .. i, spot[1] - r.hireHalf, spot[1] + r.hireHalf, spot[2] - r.hireHalf, spot[2] + r.hireHalf, r.hireHeight)
+		add("hire", "Hire" .. i, spot[1] - r.hireHalf, spot[1] + r.hireHalf, spot[2] - r.hireHalf, spot[2] + r.hireHalf, r.hireHeight, "HireDesk" .. i)
 		add("desk", "HireDesk" .. i, spot[1] - r.deskHalfX, spot[1] + r.deskHalfX, spot[2] + r.deskFrom, spot[2] + r.deskTo, r.deskHeight)
 	end
 	for _, slot in ipairs(layout.itemSlots) do
@@ -913,6 +1139,12 @@ function PlotVisuals.zones(layout)
 	end
 	for i, a in ipairs(aisles) do
 		add("aisle", i == 1 and "DoorAisle" or ("RowAisle" .. (i - 1)), a[1], a[2], a[3], a[4], r.height)
+	end
+	-- The catalog items' spots in this stage's room (overhaul 2): only that item goes in its spot
+	if art and stage then
+		for _, key in ipairs(PlotVisuals.itemsOf(art, stage)) do
+			table.insert(zones, { kind = "item", name = key, owner = key, box = PlotVisuals.itemBox(art.Items[key]) })
+		end
 	end
 	return zones
 end
@@ -936,16 +1168,17 @@ function PlotVisuals.check(room, center, art)
 			lights += 1
 		elseif d:IsA("BasePart") then
 			local b = boxOf(origin:ToObjectSpace(d.CFrame), d.Size) -- in the garage's frame
-			local upgrade, deskName, node = nil, nil, d.Parent
+			local upgrade, item, deskName, node = nil, nil, nil, d.Parent
 			while node and node ~= room do
 				upgrade = upgrade or node:GetAttribute("Upgrade")
+				item = item or node:GetAttribute("Item")
 				if not deskName and string.find(node.Name, "HireDesk", 1, true) == 1 then
 					deskName = node.Name
 				end
 				node = node.Parent
 			end
 			local flat = b[4] - b[3] <= PlotVisuals.FLAT and (math.abs(b[3]) <= TOUCH or math.abs(b[3] - ground) <= TOUCH)
-			table.insert(parts, { part = d, name = d:GetFullName(), box = b, upgrade = upgrade, desk = deskName, flat = flat })
+			table.insert(parts, { part = d, name = d:GetFullName(), box = b, upgrade = upgrade, item = item, desk = deskName, flat = flat, solid = isSolid(d) })
 		end
 	end
 	if #parts > PlotVisuals.MAX_PARTS then
@@ -955,13 +1188,18 @@ function PlotVisuals.check(room, center, art)
 		problem(string.format("%d lights (budget %d)", lights, PlotVisuals.MAX_LIGHTS))
 	end
 
-	local zones = PlotVisuals.zones(layout)
-	local slotOf, deskOf = {}, {}
+	local zones = PlotVisuals.zones(layout, art, room:GetAttribute("Stage"))
+	local slotOf, deskOf, itemOf = {}, {}, {}
 	for _, zone in ipairs(zones) do
 		if zone.kind == "slot" then
 			slotOf[zone.owner] = zone
+		elseif zone.kind == "item" then
+			itemOf[zone.owner] = zone.box
 		elseif zone.kind == "desk" then
-			deskOf[zone.name] = zone.box
+			-- a workstation: the desk zone and, behind it, the hire's spot where its chair stands (overhaul 2)
+			local spot = layout.employeeSpots[tonumber(string.sub(zone.name, 9))]
+			local r = layout.reserve
+			deskOf[zone.name] = { zone.box[1], zone.box[2], 0, r.hireHeight, spot[2] - r.hireHalf, zone.box[6] }
 		end
 	end
 	for _, p in ipairs(parts) do
@@ -973,7 +1211,14 @@ function PlotVisuals.check(room, center, art)
 		if part.CanTouch then
 			problem(p.name .. ": CanTouch is on")
 		end
-		if part.CanCollide then
+		if p.solid then
+			if not (part.CanCollide and part.CanQuery and part.Transparency == 1 and not part.CastShadow) then
+				problem(p.name .. ": a solid box is CanCollide on, CanQuery on, Transparency 1, no shadow")
+			end
+			if b[3] > TOUCH or b[3] < -TOUCH or b[4] > PlotVisuals.SOLID_MAX + OVERLAP then
+				problem(p.name .. ": a solid box stands on the floor, at most " .. PlotVisuals.SOLID_MAX .. " tall")
+			end
+		elseif part.CanCollide then
 			if not (string.find(part.Name, "Floor", 1, true) or string.find(part.Name, "LowWall", 1, true)) then
 				problem(p.name .. ": only floors and low walls may collide")
 			end
@@ -991,7 +1236,8 @@ function PlotVisuals.check(room, center, art)
 		-- Reserved zones
 		for _, zone in ipairs(zones) do
 			if (not p.flat or zone.kind == "sign") and overlaps(b, zone.box, OVERLAP)
-				and not (zone.kind == "slot" and p.upgrade == zone.owner) and not (zone.kind == "desk" and p.desk == zone.name) then
+				and not (zone.kind == "slot" and p.upgrade == zone.owner) and not (zone.kind == "desk" and p.desk == zone.name)
+				and not (zone.kind == "hire" and p.desk == zone.owner) and not (zone.kind == "item" and p.item == zone.owner) then
 				problem(p.name .. " is inside " .. zone.kind .. " zone " .. zone.name)
 			end
 		end
@@ -1002,11 +1248,22 @@ function PlotVisuals.check(room, center, art)
 				problem(p.name .. ": a prop must stay inside its own slot")
 			end
 		end
+		if p.item then
+			local z = itemOf[p.item]
+			if not z or b[1] < z[1] - OVERLAP or b[2] > z[2] + OVERLAP or b[5] < z[5] - OVERLAP or b[6] > z[6] + OVERLAP or b[4] > z[4] + OVERLAP
+				or (b[3] < z[3] - OVERLAP and not p.solid) then
+				problem(p.name .. ": a catalog item must stay inside its own spot")
+			end
+		end
 		if p.desk then
 			local z = deskOf[p.desk]
 			if not z or b[1] < z[1] - OVERLAP or b[2] > z[2] + OVERLAP or b[5] < z[5] - OVERLAP or b[6] > z[6] + OVERLAP or b[4] > z[4] + OVERLAP then
 				problem(p.name .. ": a hire desk must stay inside its own desk zone")
 			end
+		end
+		-- A solid box never sticks out of its piece (inside its desk, slot or spot by the checks above)
+		if p.solid and not (p.desk or p.upgrade or p.item) and not (part.Parent and part.Parent.Name == PlotVisuals.SOLIDS) then
+			problem(p.name .. ": a solid box of no furniture piece")
 		end
 		-- Walls where the camera looks in
 		if string.find(part.Name, "Skyline", 1, true) == 1 then
@@ -1019,6 +1276,19 @@ function PlotVisuals.check(room, center, art)
 			end
 		elseif (b[1] <= -half + 1 or b[2] >= half - 1 or b[6] >= half - 1) and b[4] > PlotVisuals.SIDE_WALL_MAX + OVERLAP then
 			problem(p.name .. ": taller than " .. PlotVisuals.SIDE_WALL_MAX .. " on a side the camera looks in over")
+		end
+	end
+
+	-- Every furniture piece has its solid box: a real hire desk, an upgrade prop, a catalog item
+	for _, d in ipairs(room:GetDescendants()) do
+		if d:IsA("Model") and ((string.find(d.Name, "HireDesk", 1, true) == 1 and not d:GetAttribute("Ghost")) or d:GetAttribute("Upgrade") or d:GetAttribute("Item")) then
+			local has = false
+			for _, c in ipairs(d:GetChildren()) do
+				has = has or (c:IsA("BasePart") and isSolid(c))
+			end
+			if not has then
+				problem(d:GetFullName() .. ": a furniture piece without its solid box")
+			end
 		end
 	end
 

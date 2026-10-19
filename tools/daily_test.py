@@ -4067,16 +4067,23 @@ for i = 1, #PlotArt.Stages do
 		if d:IsA("BasePart") then
 			parts += 1
 			local floorish = string.find(d.Name, "Floor", 1, true) ~= nil
-			if not d.Anchored or d.CanTouch or (d.CanCollide and not floorish) or d.CanQuery ~= d.CanCollide then badFlags = badFlags or d:GetFullName() end
+			if not d.Anchored or d.CanTouch or (d.CanCollide and not floorish and not d:GetAttribute("Solid")) or d.CanQuery ~= d.CanCollide then badFlags = badFlags or d:GetFullName() end
 			if not ALLOWED[d.Material.Name] then badMaterial = badMaterial or d:GetFullName() end
 			if math.max(d.Size.X, d.Size.Y, d.Size.Z) < 2 and d.CastShadow then tinyShadow = tinyShadow or d:GetFullName() end
 		elseif d:IsA("PointLight") then
 			lights += 1
 		end
 	end
-	check("room " .. i .. ": at most 260 parts with all 6 props (" .. parts .. ")", parts <= 260 and parts > 0, parts)
+	local withItems = fullRoom(PlotArt, i)
+	for _, key in ipairs(PlotVisuals.itemsOf(PlotArt, i)) do PlotVisuals.buildItem(withItems:FindFirstChild("UpgradeProps"), center, PlotArt, key) end
+	local itemParts = 0
+	for _, d in ipairs(withItems:GetDescendants()) do if d:IsA("BasePart") then itemParts += 1 end end
+	check("room " .. i .. ": at most 420 parts with all 6 props and every catalog item of its stage (" .. itemParts .. ")", itemParts <= 420 and parts > 0, itemParts)
+	local itemProbs = PlotVisuals.check(withItems, center, PlotArt)
+	check("room " .. i .. ": with every catalog item of its stage, PlotVisuals.check finds nothing (each item on its spot, none in an aisle, the lane, a desk or a station)",
+		#itemProbs == 0, #itemProbs .. " problem(s), first: " .. tostring(itemProbs[1]))
 	check("room " .. i .. ": at most 3 PointLights (" .. lights .. ")", lights <= 3, lights)
-	check("room " .. i .. ": decor anchored, no touch, no query, only floors collide", badFlags == nil, badFlags)
+	check("room " .. i .. ": decor anchored, no touch, no query, only floors and the invisible solid boxes collide", badFlags == nil, badFlags)
 	check("room " .. i .. ": allowed materials only", badMaterial == nil, badMaterial)
 	check("room " .. i .. ": tiny parts cast no shadow", tinyShadow == nil, tinyShadow)
 	check("room " .. i .. ": grouped in Shell, Decor and UpgradeProps", room:FindFirstChild("Shell") and room:FindFirstChild("Decor")
@@ -4141,17 +4148,21 @@ do
 	local room = PlotVisuals.buildRoom(nil, center, PlotArt, 1)
 	local neon, texts, techWords = {}, {}, nil
 	for _, d in ipairs(room:GetDescendants()) do
-		if d:IsA("BasePart") and d.Material.Name == "Neon" then table.insert(neon, d.Name) end
+		local atDesk = string.find(d:GetFullName(), "HireDesk", 1, true) ~= nil -- a hire's workstation: its old laptop (overhaul 2)
+		if d:IsA("BasePart") and d.Material.Name == "Neon" and not atDesk then table.insert(neon, d.Name) end
 		if d.ClassName == "TextLabel" then texts[d.Text] = true end
-		if d:IsA("BasePart") then
+		if d:IsA("BasePart") and not atDesk then
 			for _, word in ipairs({ "Monitor", "Laptop", "Server", "Screen" }) do
 				if string.find(d.Name, word, 1, true) and d.Name ~= "ComputerScreen" then techWords = d.Name end
 			end
 		end
 	end
 	table.sort(neon)
-	check("garage: the only lights are the bare bulb (the kit's BareBulb, its glass) and the old PC's screen", #neon == 2 and neon[1] == "Bulb_glass" and neon[2] == "ComputerScreen", table.concat(neon, ","))
-	check("garage: no monitor, laptop or server in the room (they are upgrades)", techWords == nil, techWords)
+	check("garage: outside the workstations, the only lights are the bare bulb (the kit's BareBulb, its glass) and the old PC's screen", #neon == 2 and neon[1] == "Bulb_glass" and neon[2] == "ComputerScreen", table.concat(neon, ","))
+	check("garage: no monitor, laptop or server in the room outside the workstations (they are upgrades)", techWords == nil, techWords)
+	local station = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
+	check("garage: every workstation is a desk, a chair and a computer (overhaul 2: a crate, an upturned bucket, an old laptop)",
+		station ~= nil and station:FindFirstChild("Crate_main") ~= nil and station:FindFirstChild("BucketStool") ~= nil and station:FindFirstChild("LaptopScreen") ~= nil)
 	check("garage: the cardboard OFFICE sign", texts["OFFICE"] == true)
 	check("garage: the 'WIFI: ask mom' sticky note", texts["WIFI:\nask mom"] == true)
 	check("garage: the old PC and the phone are there", room:FindFirstChild("Decor"):FindFirstChild("ComputerCRT") ~= nil
@@ -4261,7 +4272,8 @@ end
 -- 7. Stages 2 to 5 (visuals-garage): same builder, same rules, new shells and decor --------------------
 -- The fingerprints below were taken from the commit before stages 2-5 (cb326d8). If one fails, stage 1, the
 -- six props or the layout changed: that is only allowed on purpose, by hand. Stage 1's was taken again on purpose by
--- interiors PR 1 (the Garage's furniture from the kit: crates, workbench, old desk and chair, bare bulb); the props' and
+-- interiors PR 1 (the Garage's furniture from the kit: crates, workbench, old desk and chair, bare bulb) and again by overhaul 2
+-- phase 2 (each workstation: the crate, an upturned bucket, an old laptop); the props' and
 -- the layout's are still cb326d8's.
 local function num(n) return string.format("%.4f", n) end
 local function triple(t) if not t then return "-" end return num(t[1]) .. "," .. num(t[2]) .. "," .. num(t[3]) end
@@ -4290,8 +4302,8 @@ end
 do
 	local g = PlotArt.Stages[1]
 	check("stage 1 is unchanged (fingerprint of its shell, decor, desks, floor and key)",
-		hash(listString(g.shell) .. "#" .. listString(g.decor) .. "#" .. listString(g.desk) .. g.floor.material .. triple(g.floor.color) .. g.key) == 995603267
-		and #g.shell == 35 and #g.decor == 72 and #g.desk == 1)
+		hash(listString(g.shell) .. "#" .. listString(g.decor) .. "#" .. listString(g.desk) .. g.floor.material .. triple(g.floor.color) .. g.key) == 3458492636
+		and #g.shell == 35 and #g.decor == 72 and #g.desk == 5)
 	local names = {}
 	for n in pairs(PlotArt.Props) do table.insert(names, n) end
 	table.sort(names)
@@ -4366,19 +4378,22 @@ for i = 2, #PlotArt.Stages do
 	for _, d in ipairs(room:GetDescendants()) do
 		if d:IsA("BasePart") then
 			parts += 1
-			if d.CanCollide then solid += 1 end
+			if d.CanCollide and not d:GetAttribute("Solid") then solid += 1 end
 			local oy, hy = d.CFrame.y - center.Y - 0.5, d.Size.Y / 2
 			local lowest = oy - hy
 			if d.Size.X > 20 and d.Size.Z > 20 and lowest > 5 and string.find(d.Name, "Skyline", 1, true) ~= 1 then roof = roof or d:GetFullName() end
 			if d.Size.X > 30 and d.CFrame.z - center.Z > 20 and string.find(d.Name, "Floor", 1, true) == nil and d.Size.Y > 0.3 then front = front or d:GetFullName() end
 		end
 	end
-	check("stage " .. i .. ": nothing collides (walls and floors are looks; the real Floor is the only solid)", solid == 0, solid)
+	check("stage " .. i .. ": nothing collides but the furniture's invisible solid boxes (walls and floors are looks; the real Floor is the only floor)", solid == 0, solid)
 	check("stage " .. i .. ": no roof", roof == nil, roof)
 	check("stage " .. i .. ": the front is open (no long wall or facade along the front)", front == nil, front)
 	local desks = room:FindFirstChild("Decor"):FindFirstChild("HireDesk1")
 	check("stage " .. i .. ": hire desks are not the garage crate", desks ~= nil and desks:FindFirstChild("Crate") == nil and #desks:GetChildren() >= 3)
-	check("stage " .. i .. ": shell, decor and 11 desks use at most 142 parts so the six props (118) always fit (" .. (parts - 118) .. ")", parts - 118 <= 142, parts)
+	local itemsCount = 0
+	for _, key in ipairs(PlotVisuals.itemsOf(PlotArt, i)) do itemsCount += #PlotArt.Items[key].parts + 1 end -- its parts and its solid box
+	check("stage " .. i .. ": shell, decor, 11 workstations and the six props leave room for every catalog item of the stage (" .. parts .. " + " .. itemsCount .. " <= 420)",
+		parts + itemsCount <= PlotVisuals.MAX_PARTS and PlotVisuals.MAX_PARTS == 420, parts + itemsCount)
 	-- The six props are the same in every room
 	local propsOf = function(r)
 		local out = {}
@@ -4431,7 +4446,7 @@ do
 		check("stage 2: a new door of four panels with a smoked glass band", count(r, "DoorPanel") == 4 and find(r, "DoorGlassBand").Material.Name == "Glass")
 		check("stage 2: fresh paint is smooth (SmoothPlastic), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "SmoothPlastic" and count(r, "SideWall", "CorrodedMetal") == 0)
 		check("stage 2: a rug of two layers and a sofa of five parts", count(r, "Rug") == 2 and count(r, "Sofa") == 5)
-		check("stage 2: every hire desk has an oak top, two legs and a monitor (5 parts)", #PlotArt.Stages[2].desk == 5)
+		check("stage 2: every workstation has an oak top, two legs, a monitor and a chair (8 parts)", #PlotArt.Stages[2].desk == 8)
 	end
 	if PlotArt.Stages[3] then
 		local r = room(3)
@@ -4532,10 +4547,10 @@ for i = 2, #PlotArt.Stages do
 	check("mutation (stage " .. i .. "): a tall wall on the side is caught", anyMatch(extra({ name = "TestWall", shape = "Block", size = { 0.6, 9, 6 }, offset = { -29.7, 4.5, 24 }, color = { 1, 2, 3 }, material = "Wood" }), "taller than 6"))
 	check("mutation (stage " .. i .. "): too many parts is caught", (function()
 		local art = deepCopy(PlotArt)
-		for k = 1, 60 do
+		for k = 1, 130 do
 			table.insert(art.Stages[i].decor, at(-8 + (k % 10) * 0.5, 0.2 + math.floor(k / 10) * 0.1, 27, { name = "Extra" .. k, size = { 0.4, 0.2, 0.4 } }))
 		end
-		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "parts (budget 260)")
+		return anyMatch(PlotVisuals.check(fullRoom(art, i), center, art), "parts (budget 420)")
 	end)())
 end
 
@@ -4724,7 +4739,7 @@ do
 	local g = PlotArt.Stages[1]
 	local function spec(list, name) for _, x in ipairs(list) do if x.name == name then return x end end end
 	local desk, chair, bench, bulb = spec(g.decor, "OldDesk"), spec(g.decor, "OldChair"), spec(g.decor, "Workbench"), spec(g.decor, "Bulb")
-	check("garage: the hire desk is the kit's Crate and nothing else", #g.desk == 1 and g.desk[1].kit == "Crate")
+	check("garage: the hire desk is the kit's Crate, with a bucket to sit on and an old laptop (overhaul 2: 5 pieces)", #g.desk == 5 and g.desk[1].kit == "Crate")
 	check("garage: an old desk (the kit's Desk) and a chair (the kit's Chair) facing it, a workbench (Workbench), the bare bulb (BareBulb) and a pile of crates",
 		desk and desk.kit == "Desk" and chair and chair.kit == "Chair" and chair.turn == 180 and bench and bench.kit == "Workbench" and bulb and bulb.kit == "BareBulb"
 		and spec(g.decor, "JunkCrateLow") and spec(g.decor, "JunkCrateHigh") and true or false)
@@ -8133,7 +8148,7 @@ __EMPLOYEE_CONSTANTS__
 	local function hatch() end
 	local function refreshIncubator() end
 __EMPLOYEE_FUNCTIONS__
-	return placeEmployees, buildIncubator, EMPLOYEE_SPOTS, INCUBATOR_SPOTS, FEET
+	return placeEmployees, buildIncubator, EMPLOYEE_SPOTS, INCUBATOR_SPOTS, FEET, SEAT
 end
 
 local EPS = 1e-6
@@ -8387,26 +8402,30 @@ do
 		folder.Parent = ROOT
 		local data = { slot = slot, folder = folder, team = { employees = {}, models = {}, incubatorParts = {} } }
 		for i = 1, HIRES do table.insert(data.team.employees, { id = "e" .. i, creature = "CodingCat" }) end
-		local place, incubator, spots, incubatorSpots, feet = employeeAt({ plotFrame = core.plotFrame })
+		local place, incubator, spots, incubatorSpots, feet, seat = employeeAt({ plotFrame = core.plotFrame })
 		place(data)
 		for i = 1, 5 do incubator(newPlayer(), data, i) end
 		local models = {}
 		for i = 1, HIRES do models[i] = data.team.models["e" .. i] end
-		return data, models, spots, incubatorSpots, feet
+		return data, models, spots, incubatorSpots, feet, seat
 	end
 	local homesExact, faceExact = true, true
 	for slot = 1, 6 do
-		local _, models, spots, _, feet = team(core0, slot)
+		local _, models, spots, _, feet, seat = team(core0, slot)
 		for i, model in ipairs(models) do
 			local lap = (i - 1) // #spots
 			local want = rowCenter(slot) + (spots[(i - 1) % #spots + 1] + Vector3.new(lap * 2, 0, lap * 2)) + feet
 			local home = model:GetAttribute("Home")
 			if not (home and home.X == want.X and home.Y == want.Y and home.Z == want.Z) then homesExact = false end
-			if not exactCF(model.pivot, CFrame.new(want) * CFrame.Angles(0, math.pi, 0)) or model:GetAttribute("Facing") ~= math.pi then faceExact = false end
+			-- overhaul 2: the first 11 sit at their workstation (want + SEAT), the others stand at their spot
+			local at = i <= #spots and want + seat or want
+			local sat = model:GetAttribute("Seat")
+			if (i <= #spots) ~= (sat ~= nil) or (sat and not sameVec(sat, at, 0)) then homesExact = false end
+			if not exactCF(model.pivot, CFrame.new(at) * CFrame.Angles(0, math.pi, 0)) or model:GetAttribute("Facing") ~= math.pi then faceExact = false end
 		end
 	end
-	check("hire spots at 0 degrees: every employee's Home is main's (center + spot + feet, second lap included), exactly", homesExact)
-	check("employee facing at 0 degrees: every employee is pivoted as on main (math.pi) and Facing is exactly math.pi", faceExact)
+	check("hire spots at 0 degrees: every employee's Home is main's (center + spot + feet, second lap included) and the first 11 have their Seat, exactly", homesExact)
+	check("employee facing at 0 degrees: every employee is pivoted at its seat (or spot) facing math.pi, and Facing is exactly math.pi", faceExact)
 	local incubatorsExact = true
 	for slot = 1, 6 do
 		local data, _, _, incubatorSpots = team(core0, slot)
@@ -8583,9 +8602,10 @@ def frame_source(texts):
     plot_zones = core[zones_at + len("\tplotZones = "):zones_end + len("\n\tend")] if zones_at >= 0 and zones_end >= 0 else "nil"
     ipo_constants = "\n".join(frame_line(ipo, "local %s = " % name) for name in ("SIGN_OFFSET", "SIGN_COLOR", "WHITE"))
     employee_constants = "\n".join((frame_block(employee, "local EMPLOYEE_SPOTS = {"), frame_block(employee, "local INCUBATOR_SPOTS = {"),
-                                    frame_line(employee, "local FEET = "), frame_line(employee, "local WHITE = ")))
+                                    frame_line(employee, "local FEET = "), frame_line(employee, "local WHITE = "))
+                                   + tuple(frame_line(employee, "local %s = " % name) for name in ("SEAT", "DOOR", "FRONT_BAND", "FRONT_AISLE", "INCUBATOR_LINE", "WALK_SPEED")))
     employee_functions = "\n".join(frame_extract_function(employee, header) for header in (
-        "local function makePart(", "local function spotFor(", "local function placeEmployees(", "local function buildIncubator("))
+        "local function makePart(", "local function spotFor(", "local function pathTo(", "local function placeEmployees(", "local function buildIncubator("))
     visuals_fake = VISUALS_TESTS[:VISUALS_TESTS.index("local PlotArt = (function()")]
     text = (FRAME_TESTS.replace("__PLOTART__", texts["PlotArt.lua"]).replace("__PLOTVISUALS__", texts["PlotVisuals.lua"])
             .replace("__SECTORCONFIG__", texts["SectorConfig.lua"]).replace("__IPOCONFIG__", texts["IpoConfig.lua"])
@@ -8621,10 +8641,11 @@ FRAME_SITES = {
 }
 # WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
 FRAME_UNWIRED = ("WorldArt.lua", "WorldVisuals.lua")
-WANDER_LINES = (
-    "\t\t\t\tw.target = math.random() < 0.3 and w.offset or Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)\n",
-    "\t\t\t\tw.yaw = math.atan2(-delta.X, -delta.Z) -- models face -Z\n",
-    "\t\t\tmodel:PivotTo(CFrame.new(home + w.offset + Vector3.new(0, bob, 0)) * CFrame.Angles(0, w.yaw, 0))\n",
+WANDER_LINES = (  # overhaul 2: no wander; the walk in, the seat and the spot are world positions from the server
+    "\t\t\t\tlocal yaw = step.Magnitude > 0.01 and math.atan2(-step.X, -step.Z) or facing -- models face -Z\n",
+    "\t\t\t\tmodel:PivotTo(CFrame.new(at + Vector3.new(0, math.abs(math.sin(w.phase)) * 0.35, 0)) * CFrame.Angles(0, yaw, 0))\n",
+    "\t\t\t\tmodel:PivotTo(CFrame.new(seat + Vector3.new(0, bob, 0)) * CFrame.Angles(0, facing, 0) * CFrame.Angles(-lean, 0, 0))\n",
+    "\t\t\t\tmodel:PivotTo(CFrame.new(home + Vector3.new(0, math.sin(w.phase) * 0.06, 0)) * CFrame.Angles(0, facing, 0))\n",
 )
 
 
@@ -8673,12 +8694,13 @@ def frame_static_checks(texts=None):
     client = texts.get("EmployeeClient.lua", "")
     beat_at = client.find("RunService.Heartbeat:Connect(function(dt)")
     beat = client[beat_at:client.find("\nend)\n", beat_at)] if beat_at >= 0 else ""
-    add("EmployeeClient: the wander, the walking yaw and the pivot are in world axes (pinned: main's three lines, nothing turned in the Heartbeat)",
+    add("EmployeeClient: the wander, the walking yaw and the pivot are in world axes (pinned: the walk, the seat and the spot lines, nothing turned in the Heartbeat)",
         all(client.count(line) == 1 and line in beat for line in WANDER_LINES)
-        and not re.search(r"Facing|plotFrame|ToObjectSpace|VectorToWorldSpace|\bturn\b", code_only(beat)))
+        and not re.search(r"plotFrame|ToObjectSpace|VectorToWorldSpace|\bturn\b", code_only(beat))
+        and code_only(beat).count("Facing") == 1)
     add("EmployeeClient: a walker starts at the server's Facing (math.pi when it is missing)",
-        client.count("\t\tlocal facing = model:GetAttribute(\"Facing\")\n") == 1
-        and client.count("yaw = type(facing) == \"number\" and facing or math.pi,") == 1)
+        client.count("\t\t\tlocal facing = model:GetAttribute(\"Facing\")\n") == 1
+        and client.count("facing = type(facing) == \"number\" and facing or math.pi") == 1)
     employee = texts.get("EmployeeServer.lua", "")
     place = frame_extract_function(employee, "local function placeEmployees(")
     facing_at, parent_at = place.find("model:SetAttribute(\"Facing\", facing)"), place.find("model.Parent = data.folder")
@@ -8707,7 +8729,7 @@ FRAME_MUTATIONS = [
                                              "local pos = CFrame.new(plotFrame(data.slot).Position + itemOffset(i)")], "blocks at 90 degrees"),
     ("the landing not turned", [("TycoonCore.lua", "local spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)",
                                  "local spawnPos = plotFrame(slot).Position + Vector3.new(0, 4, 12)")], "landing at 90 degrees"),
-    ("the hire spots not turned", [("EmployeeServer.lua", "local home = frame * (spotFor(i) + FEET)", "local home = frame.Position + spotFor(i) + FEET")],
+    ("the hire spots not turned", [("EmployeeServer.lua", "local home = frame * (spot + FEET)", "local home = frame.Position + spot + FEET")],
      "hire spots at 90 degrees"),
     ("the incubators not turned", [("EmployeeServer.lua", "local spot = core.plotFrame(data.slot) * (INCUBATOR_SPOTS[i]",
                                     "local spot = core.plotFrame(data.slot).Position + (INCUBATOR_SPOTS[i]")], "incubators at 90 degrees"),
@@ -8719,8 +8741,8 @@ FRAME_MUTATIONS = [
     ("every garage takes the first garage's turn", [("TycoonCore.lua", "local c, s = QUARTER_TURNS[GARAGE_TURNS[slot]][1], QUARTER_TURNS[GARAGE_TURNS[slot]][2]",
                                                      "local c, s = QUARTER_TURNS[GARAGE_TURNS[1]][1], QUARTER_TURNS[GARAGE_TURNS[1]][2]")],
      "turn math: at 180 degrees"),
-    ("an employee re-pivoted without the turn", [("EmployeeServer.lua", "\t\t\tmodel:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0)) -- face",
-                                                 "\t\t\tmodel:PivotTo(CFrame.new(home) * CFrame.Angles(0, math.pi, 0)) -- face")],
+    ("an employee re-pivoted without the turn", [("EmployeeServer.lua", "\t\t\tmodel:PivotTo(CFrame.new(seat or home) * CFrame.Angles(0, facing, 0)) -- at its desk",
+                                                 "\t\t\tmodel:PivotTo(CFrame.new(seat or home) * CFrame.Angles(0, math.pi, 0)) -- at its desk")],
      "employee facing at 90 degrees"),
     # L1 changes no behavior
     ("a garage turned in L1", [("TycoonCore.lua", "local GARAGE_TURNS = { 0, 0, 0, 0, 0, 0 }", "local GARAGE_TURNS = { 0, 0, 0, 90, 0, 0 }")],
@@ -8751,13 +8773,13 @@ FRAME_MUTATIONS = [
     ("EmployeeServer back on core.plotCenter", [("EmployeeServer.lua", "local frame = core.plotFrame(data.slot)\n",
                                                  "local frame = CFrame.new(core.plotCenter(data.slot))\n")],
      "center plus offset: no module computes from core.plotCenter"),
-    ("EmployeeClient's walking yaw turned by Facing", [("EmployeeClient.lua", "w.yaw = math.atan2(-delta.X, -delta.Z) -- models face -Z",
-                                                        "w.yaw = math.atan2(-delta.X, -delta.Z) + (model:GetAttribute(\"Facing\") or math.pi) - math.pi -- models face -Z")],
+    ("EmployeeClient's walking yaw turned by Facing", [("EmployeeClient.lua", "math.atan2(-step.X, -step.Z) or facing -- models face -Z",
+                                                        "math.atan2(-step.X, -step.Z) + facing - math.pi or facing -- models face -Z")],
      "EmployeeClient: the wander, the walking yaw and the pivot are in world axes"),
-    ("EmployeeClient's wander turned into the garage's frame", [("EmployeeClient.lua", "Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)",
-                                                                 "CFrame.Angles(0, w.turn or 0, 0) * Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)")],
+    ("EmployeeClient's seat turned into the garage's frame", [("EmployeeClient.lua", "model:PivotTo(CFrame.new(seat + Vector3.new(0, bob, 0))",
+                                                               "model:PivotTo(CFrame.new(CFrame.Angles(0, w.turn or 0, 0) * seat + Vector3.new(0, bob, 0))")],
      "EmployeeClient: the wander, the walking yaw and the pivot are in world axes"),
-    ("EmployeeClient ignores Facing", [("EmployeeClient.lua", "yaw = type(facing) == \"number\" and facing or math.pi,", "yaw = math.pi,")],
+    ("EmployeeClient ignores Facing", [("EmployeeClient.lua", "facing = type(facing) == \"number\" and facing or math.pi", "facing = math.pi")],
      "EmployeeClient: a walker starts at the server's Facing"),
     ("Facing set after the model is parented", [("EmployeeServer.lua", "\t\t\tmodel:SetAttribute(\"Facing\", facing) -- EmployeeClient starts them facing it\n", ""),
                                                 ("EmployeeServer.lua", "\t\tmodel:SetAttribute(\"Home\", home)\n",

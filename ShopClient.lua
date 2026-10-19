@@ -1199,6 +1199,29 @@ if debugRemote then
 	end
 
 	local order = 1
+	-- Reset my save (overhaul 2, the owner's request): Studio play writes the real save, so this makes it a new player's
+	-- again. Two taps (Reset, then "Yes, erase it" within 15 s), and the server asks for both steps too.
+	local resetDesc, resetButton = makeCard(page, order, "🧨", "Reset my save")
+	order += 1
+	resetDesc.Text = "Erases YOUR real save (the same one live servers use): Cash, team, eggs, IPOs, office, daily streak, everything. You come back as a brand-new player. Studio only."
+	local resetArmedUntil = 0
+	local function showReset()
+		local armed = os.clock() < resetArmedUntil
+		setButton(resetButton, armed and "Yes, erase it" or "Reset", armed and COLORS.close or COLORS.debug, true)
+	end
+	showReset()
+	resetButton.Activated:Connect(function()
+		if os.clock() < resetArmedUntil then
+			resetArmedUntil = 0
+			showReset()
+			runDebug("ResetSaveConfirm")
+		else
+			resetArmedUntil = os.clock() + 15
+			showReset()
+			runDebug("ResetSaveArm")
+			task.delay(15.1, showReset)
+		end
+	end)
 	local ignoreDesc, ignoreButton = makeCard(page, order, "🙈", "Ignore passes I really own")
 	order += 1
 	ignoreDesc.Text = "As the creator you own every pass. Turn this on to test like a normal player."

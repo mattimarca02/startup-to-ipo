@@ -1368,10 +1368,92 @@ end
 )
 
 
+# Overhaul 2 phase 2's edits outside the CLAIMLOAD markers (docs/OVERHAUL2_PLAN.md: the catalog items stand in the room of
+# their stage, the room's items follow `owned`, the Studio-only "Reset my save" Debug button), applied after O1_EDITS.
+O2_EDITS = (
+    ('''-- An upgrade shows its prop from PlotArt in its station (popIn on a purchase); without one, the plain block. Overhaul 2:
+-- only the six old upgrades have a station (upg.slot); the other catalog items are placed by phase 2's office layout.
+local function spawnItem(data, i, upg, popIn)
+	if not upg.slot then return end
+''',
+     '''-- An upgrade shows its prop from PlotArt in its station (popIn on a purchase); without one, the plain block. Overhaul 2:
+-- only the six old upgrades have a station (upg.slot); every other catalog item stands on its spot in the room of its own
+-- stage (PlotArt.Items through PlotVisuals.setItems: looks only, nothing saved).
+local function spawnItem(data, i, upg, popIn)
+	if not upg.slot then
+		if data.looks then
+			looks("item " .. upg.name, PlotVisuals.setItems, data.looks, data.owned, popIn and upg.name or nil)
+		end
+		return
+	end
+'''),
+    ('''	if data.looks and data.looks.stage ~= stage then
+		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+	end
+	syncBuilding(data.slot, stage)
+''',
+     '''	if data.looks and data.looks.stage ~= stage then
+		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
+	end
+	if data.looks then
+		looks("items", PlotVisuals.setItems, data.looks, data.owned) -- the catalog items on show follow `owned` (an IPO clears them)
+	end
+	syncBuilding(data.slot, stage)
+'''),
+    ('''		return "Showing stage " .. data.debugStage .. " (" .. IpoConfig.Stages[data.debugStage].name .. "): Studio only, not saved"
+	end)
+end
+''',
+     '''		return "Showing stage " .. data.debugStage .. " (" .. IpoConfig.Stages[data.debugStage].name .. "): Studio only, not saved"
+	end)
+
+	-- "Reset my save" (the owner's request, 2026-10-19: Studio tests write the real save). Two steps: ResetSaveArm, then
+	-- ResetSaveConfirm within RESET_SECONDS. data.loaded goes off first, so nothing saves this session any more (the
+	-- autosave, the leave save, BindToClose and purchases all check it); a save already running is waited for; then the
+	-- key is removed (the DataStore keeps its older versions for 30 days) and the player is kicked, to come back as new.
+	local RESET_SECONDS = 15
+	ShopServer.addDebugAction("ResetSaveArm", function(_, data)
+		data.debugResetArmed = os.clock()
+		return "Sure? Tap \\"Yes, erase it\\" within " .. RESET_SECONDS .. " s: your whole save becomes a new player's"
+	end)
+	ShopServer.addDebugAction("ResetSaveConfirm", function(player, data)
+		local armed = data.debugResetArmed
+		data.debugResetArmed = nil
+		if not armed or os.clock() - armed > RESET_SECONDS then
+			return "Tap Reset first: the second tap must come within " .. RESET_SECONDS .. " s"
+		end
+		data.loaded = false -- from here on nothing saves this session
+		local waited = 0
+		while data.saving and waited < 10 do
+			waited += task.wait(0.1)
+		end
+		local currentStore = getStore()
+		local ok, err = false, "no DataStore (Game Settings > Security > Enable Studio Access to API Services)"
+		if currentStore then
+			ok, err = pcall(function()
+				currentStore:RemoveAsync("player_" .. player.UserId)
+			end)
+		end
+		if not ok then
+			data.loaded = true
+			return "Reset failed, your save is unchanged: " .. tostring(err)
+		end
+		task.delay(2, function()
+			if player.Parent then
+				player:Kick("Your save was reset to a new player's. Press Stop, then Play again.")
+			end
+		end)
+		return "Done: your save is erased. Press Stop, then Play to start as a new player."
+	end)
+end
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS and O1_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS, O1_EDITS and O2_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)

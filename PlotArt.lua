@@ -868,6 +868,27 @@ local function copyRoom(room)
 	end
 	return out
 end
+-- Every workstation (overhaul 2, the owner's point 9): a desk, a chair and a computer. The chair stands where the hire
+-- sits (its spot, 3.3 behind the desk: EmployeeServer's SEAT puts the hire on the seat, 1.2 up), inside the hire's own
+-- zone, which belongs to its desk. The garage's hire sits on an upturned bucket at a crate with an old laptop.
+local function chairFor(seat, frame)
+	return {
+		upright("ChairPost", 0.95, 0.3, 0, 0, -3, frame, "Metal"),
+		B("ChairSeat", 0, 1.075, -3, 1.7, 0.25, 1.5, seat, "Fabric"),
+		B("ChairBack", 0, 2, -3.85, 1.7, 1.6, 0.2, seat, "Fabric"),
+	}
+end
+garage.desk = join(garage.desk, {
+	upright("BucketStool", 1.2, 1.3, 0, 0, -3, C.paintBlue, "Plastic"),
+	B("LaptopBase", 0, 2.25, -0.1, 1.4, 0.1, 0.9, C.silver, "Metal"),
+	B("LaptopLid", 0, 2.77, 0.33, 1.4, 0.95, 0.08, C.charcoal, "Metal"),
+	B("LaptopScreen", 0, 2.77, 0.28, 1.25, 0.8, 0.03, C.crtGreen, "Neon"),
+})
+seed.desk = join(seed.desk, chairFor(C.coral, C.mintDark))
+seriesA.desk = join(seriesA.desk, chairFor(C.sofaBlue, C.steelBlack))
+seriesB.desk = join(seriesB.desk, chairFor(C.cobalt, C.navy))
+ipoReady.desk = join(ipoReady.desk, chairFor(C.graphite, C.graphite))
+
 local seriesC = copyRoom(ipoReady)
 seriesC.key = "SeriesC"
 seriesC.floor = { color = { 122, 86, 58 }, material = "WoodPlanks" }
@@ -1032,6 +1053,592 @@ PlotArt.Props = {
 	["Server Rack"] = scaled(rack, 1.3),
 	["Whiteboard"] = scaled(whiteboard, 1.3),
 	["Neon Logo"] = scaled(logo, 1.2),
+}
+
+-- Catalog items (overhaul 2, the owner's point 16) -------------------------------------------
+-- Every item of OfficeConfig.Items that is not one of the six old stations above stands somewhere in the room of its
+-- own stage once it is bought: Items[name] = { stage, spot, parts }. spot = { x, z, w, d, h [, turn] [, y0] }: where it
+-- stands (its center on the floor, in the garage's frame) and the box it may fill (w wide and d deep in its own frame,
+-- h tall), never an aisle, the lane, a hire's desk or a station (PlotVisuals.check proves it per room). parts = parts
+-- from the spot's center on the floor, its front +Z (toward the room's open front). Each gets one solid box.
+-- The room of a stage shows that stage's items: bought before moving in, an item shows once its building is bought; in a
+-- later building the new room's own furniture stands in for the older items (they keep paying: only the looks move on).
+-- The spots shared by most rooms (the side gaps between the stations, the two back corners, the gaps between the outer
+-- incubators, the front band, the row-3 corner where no twelfth hire stands):
+local SPOT = {
+	cornerL = { x = -23, z = -16.25, w = 10, d = 3.2, h = 7 },
+	cornerR = { x = 23, z = -16.25, w = 10, d = 3.2, h = 7 },
+	sideL1 = { x = -23, z = -4.5, w = 10, d = 3.6, h = 6 },
+	sideL2 = { x = -23, z = 7.5, w = 10, d = 3.6, h = 6 },
+	sideR1 = { x = 23, z = -4.5, w = 10, d = 3.6, h = 6 },
+	sideR2 = { x = 23, z = 7.5, w = 10, d = 3.6, h = 6 },
+	backL = { x = -18, z = -23.6, w = 4.4, d = 10.2, h = 9.5 },
+	backR = { x = 18, z = -23.6, w = 4.4, d = 10.2, h = 9.5 },
+	frontR = { x = 22, z = 20.3, w = 10, d = 3.6, h = 6 },
+	row3 = { x = 13.5, z = 15.3, w = 3.6, d = 5.4, h = 8 },
+}
+local function at(base, x, z, w, d, h)
+	local s = {}
+	for k, v in pairs(base or {}) do
+		s[k] = v
+	end
+	s.x, s.z, s.w, s.d, s.h = x or s.x, z or s.z, w or s.w, d or s.d, h or s.h
+	return s
+end
+local function ITEM(stage, spot, parts)
+	return { stage = stage, spot = spot, parts = parts }
+end
+-- A bench of seats in a row (a block to sit on and its back), for the training room, the auditorium, the hall
+local function seatRow(tag, z, w, seat, back)
+	return {
+		B(tag .. "Seat", 0, 0.55, z, w, 1.1, 1, seat, "Fabric"),
+		B(tag .. "Back", 0, 1.6, z + 0.6, w, 1.6, 0.25, back, "SmoothPlastic"),
+	}
+end
+-- A lounge chair: its base and its back (at -Z), facing +Z
+local function lounger(tag, x, z, w, body, cushion)
+	return {
+		B(tag .. "Base", x, 0.55, z, w, 1.1, 2, cushion, "Fabric"),
+		B(tag .. "Back", x, 1.7, z - 0.8, w, 1.4, 0.45, body, "SmoothPlastic"),
+	}
+end
+local function frame(tag, x, y, z, w, h, edge, glow)
+	return {
+		B(tag .. "Frame", x, y, z, w, h, 0.14, edge, "SmoothPlastic"),
+		B(tag .. "Screen", x, y, z + 0.09, w - 0.3, h - 0.3, 0.04, glow, "Neon"),
+	}
+end
+C.copper = { 196, 120, 72 }
+C.velvet = { 132, 40, 56 }
+C.greenScreen = { 70, 180, 90 }
+C.lawRed = { 120, 40, 40 }
+C.cork = { 186, 148, 104 }
+C.leafDark = { 58, 128, 64 }
+
+PlotArt.Items = {
+	-- Garage (stage 1): the founder's corner grows (the old desk is at x -22, z 22; the six stations have their own spots)
+	["Second Monitor"] = ITEM(1, { x = -16.8, z = 22.3, w = 2.6, d = 2.2, h = 4.2 }, {
+		B("MonitorCrate", 0, 1.1, 0, 2.4, 2.2, 2, C.crate, "WoodPlanks"),
+		B("MonitorStand", 0, 2.4, -0.3, 0.3, 0.4, 0.3, C.charcoal, "Metal"),
+		B("MonitorBack", 0, 3.3, -0.3, 2.2, 1.4, 0.12, C.black, "SmoothPlastic"),
+		B("MonitorScreen", 0, 3.3, -0.22, 2, 1.2, 0.04, C.screenBlue, "Neon"),
+	}),
+	["Router"] = ITEM(1, { x = -14, z = 22.3, w = 2, d = 2, h = 2.6 }, {
+		B("RouterBox", 0, 0.6, 0, 1.6, 1.2, 1.6, C.cardboard, "SmoothPlastic"),
+		B("RouterBody", 0, 1.35, 0, 1.2, 0.3, 0.8, C.black, "SmoothPlastic"),
+		B("AntennaL", -0.45, 1.95, -0.25, 0.1, 0.9, 0.1, C.black, "SmoothPlastic"),
+		B("AntennaR", 0.45, 1.95, -0.25, 0.1, 0.9, 0.1, C.black, "SmoothPlastic"),
+		B("RouterLED", 0, 1.35, 0.41, 0.8, 0.1, 0.03, C.ledGreen, "Neon"),
+	}),
+	["Better Chair"] = ITEM(1, { x = -16.8, z = 25.4, w = 2.4, d = 2.4, h = 4.2 }, {
+		upright("ChairFoot", 0.2, 1.8, 0, 0, 0, C.black, "Metal"),
+		upright("ChairPost", 1.05, 0.3, 0, 0.2, 0, C.steel, "Metal"),
+		B("ChairSeat", 0, 1.4, 0, 1.9, 0.3, 1.9, C.charcoal, "Fabric"),
+		B("ChairBack", 0, 2.65, 0.85, 1.9, 2.2, 0.3, C.charcoal, "Fabric"),
+		B("ChairHeadrest", 0, 3.9, 0.85, 1.2, 0.3, 0.3, C.coral, "Fabric"),
+	}),
+	["Mini Fridge"] = ITEM(1, { x = -25.5, z = 7.5, w = 2.8, d = 2.6, h = 4 }, {
+		B("FridgeBody", 0, 1.7, 0, 2.4, 3.4, 2.2, C.white, "SmoothPlastic"),
+		B("FridgeSeam", 0, 2.4, 1.115, 2.2, 0.06, 0.03, C.grayLight, "SmoothPlastic"),
+		B("FridgeHandle", 0.9, 1.6, 1.15, 0.12, 1, 0.1, C.silver, "Metal"),
+		B("FridgeSticker", -0.4, 1.2, 1.115, 0.6, 0.6, 0.03, C.sticky, "SmoothPlastic"),
+		upright("FridgeCan", 0.55, 0.4, 0.5, 3.4, 0, C.canRed, "SmoothPlastic"),
+	}),
+	["Bookshelf"] = ITEM(1, { x = -25, z = -4.5, w = 4.4, d = 1.6, h = 5.6 }, {
+		B("ShelfBack", 0, 2.7, -0.65, 4.2, 5.4, 0.2, C.woodDark, "Wood"),
+		B("ShelfBase", 0, 0.15, 0.05, 4.2, 0.3, 1.3, C.woodDark, "Wood"),
+		B("ShelfMid", 0, 1.95, 0.05, 4.2, 0.2, 1.3, C.woodDark, "Wood"),
+		B("ShelfHigh", 0, 3.65, 0.05, 4.2, 0.2, 1.3, C.woodDark, "Wood"),
+		B("ShelfTop", 0, 5.3, 0.05, 4.2, 0.2, 1.3, C.woodDark, "Wood"),
+		B("BooksLow", -0.2, 0.95, 0, 3.6, 1.3, 1, C.paintRed, "SmoothPlastic"),
+		B("BooksMid", 0.3, 2.6, 0, 3.2, 1.1, 1, C.paintBlue, "SmoothPlastic"),
+		B("BooksHigh", -0.5, 4.25, 0, 2.8, 1, 1, C.canGreen, "SmoothPlastic"),
+	}),
+
+	-- Seed (stage 2)
+	["Standing Desks"] = ITEM(2, at(SPOT.frontR), {
+		B("StandTopL", -2.4, 3.3, 0, 4.2, 0.2, 2.2, C.oak, "Wood"),
+		B("StandTopR", 2.4, 3.3, 0, 4.2, 0.2, 2.2, C.oak, "Wood"),
+		B("StandLegL", -2.4, 1.6, -0.5, 0.6, 3.2, 0.6, C.mintDark, "Metal"),
+		B("StandLegR", 2.4, 1.6, -0.5, 0.6, 3.2, 0.6, C.mintDark, "Metal"),
+		B("StandMonitorL", -2.4, 4.1, -0.6, 1.8, 1.2, 0.1, C.black, "SmoothPlastic"),
+		B("StandScreenL", -2.4, 4.1, -0.53, 1.6, 1, 0.04, C.screenBlue, "Neon"),
+		B("StandMonitorR", 2.4, 4.1, -0.6, 1.8, 1.2, 0.1, C.black, "SmoothPlastic"),
+		B("StandScreenR", 2.4, 4.1, -0.53, 1.6, 1, 0.04, C.screenBlue, "Neon"),
+	}),
+	["Team Table"] = ITEM(2, at(SPOT.backR), {
+		B("TableTop", 0, 2, -0.5, 2.4, 0.2, 7, C.oak, "Wood"),
+		B("TableLegBack", 0, 0.95, -3.6, 2, 1.9, 0.3, C.oakDark, "Wood"),
+		B("TableLegFront", 0, 0.95, 2.6, 2, 1.9, 0.3, C.oakDark, "Wood"),
+		B("BenchL", -1.75, 0.5, -0.5, 0.8, 1, 6.6, C.oakDark, "Wood"),
+		B("BenchR", 1.75, 0.5, -0.5, 0.8, 1, 6.6, C.oakDark, "Wood"),
+		P("FruitBowl", "Ball", { 0.9, 0.9, 0.9 }, { 0, 2.5, 0 }, C.coral, "SmoothPlastic"),
+	}),
+	["Phone Booth"] = ITEM(2, at(SPOT.backL), {
+		B("BoothBase", 0, 0.15, -2, 3.8, 0.3, 3.8, C.mintDark, "Metal"),
+		B("BoothBack", 0, 3.8, -3.8, 3.8, 7, 0.2, C.mintDark, "SmoothPlastic"),
+		B("BoothSideL", -1.8, 3.8, -2, 0.2, 7, 3.6, C.mint, "Fabric"),
+		B("BoothSideR", 1.8, 3.8, -2, 0.2, 7, 3.6, C.mint, "Fabric"),
+		B("BoothRoof", 0, 7.45, -2, 3.8, 0.3, 3.8, C.mintDark, "Metal"),
+		B("BoothDoor", 0, 3.8, -0.15, 3.4, 6.8, 0.1, C.glassTint, "Glass", { transparency = 0.45, shadow = false }),
+		B("BoothLamp", 0, 7.22, -2, 1.4, 0.15, 1.4, C.bulb, "Neon"),
+		upright("BoothStool", 1.4, 1, 0, 0.3, -2.4, C.coral, "SmoothPlastic"),
+	}),
+	["Meeting Corner"] = ITEM(2, at(SPOT.cornerL), {
+		B("SofaBase", -2, 0.45, 0, 5.2, 0.9, 2.4, C.coral, "SmoothPlastic"),
+		B("SofaSeat", -2, 1.15, 0.2, 4.8, 0.5, 1.8, C.coralLight, "Fabric"),
+		B("SofaBack", -2, 1.9, -0.9, 5.2, 2, 0.6, C.coral, "SmoothPlastic"),
+		upright("SideTable", 1.2, 1.1, 1.3, 0, 0.2, C.oak, "Wood"),
+		P("TableLamp", "Ball", { 0.6, 0.6, 0.6 }, { 1.3, 1.5, 0.2 }, C.bulb, "Neon"),
+		B("ArmchairBase", 3.3, 0.45, 0, 2.4, 0.9, 2.4, C.mintDark, "SmoothPlastic"),
+		B("ArmchairBack", 3.3, 1.9, -0.9, 2.4, 2, 0.6, C.mintDark, "SmoothPlastic"),
+	}),
+	["Plant Wall"] = ITEM(2, { x = -11, z = 25, w = 9, d = 7, h = 6 }, {
+		B("Planter", 0, 0.7, 0, 8, 1.4, 1.4, C.oak, "WoodPlanks"),
+		B("GreenPanel", 0, 2.95, -0.2, 7.6, 3.1, 0.5, C.leaf, "Fabric"),
+		B("PanelCap", 0, 4.6, -0.2, 8, 0.2, 0.7, C.oakDark, "Wood"),
+		P("LeavesA", "Ball", { 1.8, 1.8, 1.8 }, { -2.6, 1.9, 0.4 }, C.leafDark, "Fabric"),
+		P("LeavesB", "Ball", { 1.8, 1.8, 1.8 }, { 0.4, 2, 0.5 }, C.leaf, "Fabric"),
+		P("LeavesC", "Ball", { 1.6, 1.6, 1.6 }, { 2.8, 1.8, 0.4 }, C.leafDark, "Fabric"),
+	}),
+	["Espresso Bar"] = ITEM(2, at(SPOT.cornerR), {
+		B("BarCounter", 0, 1.4, -0.3, 8, 2.8, 2.2, C.oak, "WoodPlanks"),
+		B("BarTop", 0, 2.9, -0.3, 8.4, 0.2, 2.5, C.charcoal, "Metal"),
+		B("EspressoMachine", -2, 3.75, -0.7, 2, 1.5, 1.2, C.silver, "Metal"),
+		B("MachineLED", -2, 3.9, -0.08, 1.2, 0.15, 0.04, C.ledGreen, "Neon"),
+		upright("BarCup", 0.4, 0.4, -0.4, 3, 0.3, C.white, "SmoothPlastic"),
+		upright("StoolA", 1.9, 0.9, 1.2, 0, 1.15, C.mintDark, "Metal"),
+		upright("StoolB", 1.9, 0.9, 3, 0, 1.15, C.mintDark, "Metal"),
+		B("MenuSign", 2.3, 4.2, -1.3, 2.6, 1.2, 0.12, C.charcoal, "SmoothPlastic",
+			{ text = { value = "ESPRESSO", font = "FredokaOne", color = C.cream } }),
+	}),
+	["Pitch Screen"] = ITEM(2, at(SPOT.row3), {
+		B("ScreenFeet", 0, 0.1, 0, 3, 0.2, 1.6, C.charcoal, "Metal"),
+		B("ScreenPost", 0, 2.25, -0.2, 0.3, 4.1, 0.3, C.charcoal, "Metal"),
+		B("PitchBack", 0, 4.2, 0, 3.4, 2, 0.15, C.black, "SmoothPlastic"),
+		B("PitchScreen", 0, 4.2, 0.09, 3.1, 1.7, 0.04, C.screenBlue, "Neon",
+			{ text = { value = "PITCH DECK", font = "FredokaOne", color = C.white, area = { 0.1, 0.3, 0.8, 0.4 } } }),
+	}),
+	["Printer Station"] = ITEM(2, at(SPOT.sideL1), {
+		B("PrinterCabinet", 0, 1.3, 0, 4.4, 2.6, 2.2, C.offwhite, "SmoothPlastic"),
+		B("Printer", -0.8, 3.05, -0.1, 2.4, 0.9, 1.8, C.grayLight, "SmoothPlastic"),
+		B("PaperTray", -0.8, 2.75, 1, 1.8, 0.1, 0.6, C.white, "SmoothPlastic"),
+		B("PaperStack", 1.3, 2.9, 0, 1.2, 0.6, 0.9, C.white, "SmoothPlastic"),
+		B("PrinterLED", 0.2, 3.2, 0.81, 0.3, 0.1, 0.04, C.ledGreen, "Neon"),
+		B("FlyerBox", 3.3, 0.6, 0.3, 1.4, 1.2, 1.4, C.cardboard, "SmoothPlastic"),
+	}),
+	["Wi-Fi Mesh"] = ITEM(2, at(SPOT.sideL2), {
+		B("MeshCabinet", 0, 0.9, 0, 5, 1.8, 1.8, C.mintDark, "SmoothPlastic"),
+		upright("MeshPodA", 1.2, 0.9, -1.6, 1.8, 0, C.white, "SmoothPlastic"),
+		upright("MeshPodB", 1.2, 0.9, 0, 1.8, 0, C.white, "SmoothPlastic"),
+		upright("MeshPodC", 1.2, 0.9, 1.6, 1.8, 0, C.white, "SmoothPlastic"),
+		B("MeshLED", 0, 1.3, 0.91, 4.6, 0.12, 0.04, C.ledCyan, "Neon"),
+	}),
+	["Dev Kit Shelf"] = ITEM(2, at(SPOT.sideR1), {
+		B("KitBack", 0, 2.6, -1.4, 6, 5.2, 0.2, C.steelDark, "Metal"),
+		B("KitShelfLow", 0, 0.2, -0.2, 6, 0.2, 2.6, C.steelDark, "Metal"),
+		B("KitShelfMid", 0, 1.9, -0.2, 6, 0.2, 2.6, C.steelDark, "Metal"),
+		B("KitShelfHigh", 0, 3.6, -0.2, 6, 0.2, 2.6, C.steelDark, "Metal"),
+		B("KitBoxes", -1.5, 0.9, -0.2, 2.4, 1.2, 1.8, C.cardboard, "SmoothPlastic"),
+		B("DevBoards", 1.2, 2.3, 0, 2.6, 0.6, 1.6, C.mintDark, "SmoothPlastic"),
+		B("KitLED", 0, 3.75, 1.05, 5, 0.1, 0.05, C.ledGreen, "Neon"),
+		B("RobotHead", -1.8, 4.2, -0.2, 1, 1, 1, C.silver, "Metal"),
+	}),
+	["Brand Mural"] = ITEM(2, at(SPOT.sideR2), {
+		B("MuralPanel", 0, 3, -0.8, 9, 5, 0.4, C.cream, "SmoothPlastic",
+			{ text = { value = "OUR STORY", font = "FredokaOne", color = C.mintDark, area = { 0.05, 0.05, 0.5, 0.25 } } }),
+		B("MuralCoral", -2.5, 2.2, -0.57, 2.6, 2.6, 0.06, C.coral, "SmoothPlastic"),
+		B("MuralMint", 0.3, 3.2, -0.57, 2.6, 2.6, 0.06, C.mint, "SmoothPlastic"),
+		B("MuralAmber", 2.9, 2.1, -0.57, 2.2, 2.2, 0.06, C.amber, "SmoothPlastic"),
+		B("MuralFootL", -4, 0.25, -0.8, 0.8, 0.5, 1.6, C.charcoal, "Metal"),
+		B("MuralFootR", 4, 0.25, -0.8, 0.8, 0.5, 1.6, C.charcoal, "Metal"),
+	}),
+
+	-- Series A (stage 3): the partitions stand at x -18 and 18, so the back gaps stay free; two spots in the front-left
+	["Meeting Room"] = ITEM(3, { x = -10.5, z = 26.5, w = 9, d = 5, h = 6 }, {
+		B("GlassWall", 0, 2.7, -2.3, 8.6, 5.4, 0.12, C.glassTint, "Glass", { transparency = 0.5, shadow = false }),
+		B("MeetScreen", 0, 3.6, -2.2, 3, 1.6, 0.06, C.screenBlue, "Neon"),
+		B("MeetTable", 0, 2, 0, 5.6, 0.2, 2.4, C.birch, "Wood"),
+		B("MeetBase", 0, 0.95, 0, 3, 1.9, 0.6, C.steelBlack, "Metal"),
+		B("ChairA", -1.6, 1, -1.7, 1.3, 2, 0.9, C.sofaBlue, "Fabric"),
+		B("ChairB", 1.6, 1, -1.7, 1.3, 2, 0.9, C.sofaBlue, "Fabric"),
+		B("ChairC", -1.6, 1, 1.7, 1.3, 2, 0.9, C.sofaBlue, "Fabric"),
+		B("ChairD", 1.6, 1, 1.7, 1.3, 2, 0.9, C.sofaBlue, "Fabric"),
+	}),
+	["QA Lab"] = ITEM(3, at(SPOT.sideL1), {
+		B("LabTop", 0, 1.6, 0, 6, 0.2, 2.4, C.white, "SmoothPlastic"),
+		B("LabLegL", -2.8, 0.75, 0, 0.3, 1.5, 2.2, C.steelBlack, "Metal"),
+		B("LabLegR", 2.8, 0.75, 0, 0.3, 1.5, 2.2, C.steelBlack, "Metal"),
+		B("TestPhones", -1.2, 1.85, 0.3, 2, 0.3, 0.6, C.black, "SmoothPlastic"),
+		B("TestBack", 1.3, 2.4, -0.6, 2, 1.4, 0.1, C.black, "SmoothPlastic"),
+		B("TestScreen", 1.3, 2.4, -0.53, 1.8, 1.2, 0.04, C.ledGreen, "Neon"),
+		B("BeaconPost", 2.6, 2.3, -0.8, 0.15, 1.2, 0.15, C.steelBlack, "Metal"),
+		P("StatusLight", "Ball", { 0.6, 0.6, 0.6 }, { 2.6, 3.2, -0.8 }, C.ledGreen, "Neon"),
+	}),
+	["Design Studio"] = ITEM(3, at(SPOT.sideL2), {
+		B("DraftFoot", 0, 0.1, 0, 2.4, 0.2, 1.6, C.steelBlack, "Metal"),
+		B("DraftPost", 0, 1.3, 0, 0.4, 2.4, 0.4, C.steelBlack, "Metal"),
+		B("DraftTop", 0, 2.6, 0, 3.6, 0.15, 2.4, C.white, "SmoothPlastic", { rot = { 20, 0, 0 } }),
+		upright("DesignStool", 1.8, 1.1, 2.6, 0, 0.6, C.amber, "SmoothPlastic"),
+		B("LampArm", -1.4, 3.1, -0.8, 0.12, 1.2, 0.12, C.steelBlack, "Metal"),
+		B("LampHead", -1.4, 3.85, -0.8, 0.6, 0.4, 0.6, C.bulb, "Neon"),
+		B("PinBoard", -3.6, 2.6, -1.1, 2.4, 3, 0.15, C.cork, "Wood"),
+		B("PinNoteA", -4.1, 3.2, -1.0, 0.7, 0.7, 0.04, C.stickyPink, "SmoothPlastic"),
+		B("PinNoteB", -3.1, 2.4, -1.0, 0.7, 0.7, 0.04, C.sticky, "SmoothPlastic"),
+	}),
+	["Server Row"] = ITEM(3, at(SPOT.cornerL), {
+		B("RowPlinth", 0, 0.1, -0.2, 9.4, 0.2, 2.6, C.charcoal, "Metal"),
+		B("RackA", -3, 3.1, -0.2, 2.6, 5.8, 2.4, C.rack, "Metal"),
+		B("RackB", 0, 3.1, -0.2, 2.6, 5.8, 2.4, C.rack, "Metal"),
+		B("RackC", 3, 3.1, -0.2, 2.6, 5.8, 2.4, C.rack, "Metal"),
+		B("RackLEDA", -2.2, 3.1, 1.02, 0.15, 4.6, 0.04, C.ledGreen, "Neon"),
+		B("RackLEDB", 0.8, 3.1, 1.02, 0.15, 4.6, 0.04, C.ledCyan, "Neon"),
+		B("RackLEDC", 3.8, 3.1, 1.02, 0.15, 4.6, 0.04, C.ledGreen, "Neon"),
+	}),
+	["Snack Bar"] = ITEM(3, at(SPOT.cornerR), {
+		B("SnackCounter", 0, 1.4, -0.4, 7, 2.8, 1.8, C.birch, "Wood"),
+		B("SnackTop", 0, 2.9, -0.4, 7.4, 0.2, 2.2, C.steelBlack, "Metal"),
+		upright("JarA", 1.2, 0.9, -2.4, 3, -0.6, C.glassTint, "Glass"),
+		upright("JarB", 1.2, 0.9, -1.2, 3, -0.6, C.glassTint, "Glass"),
+		P("FruitBall", "Ball", { 1, 1, 1 }, { 0.4, 3.5, -0.4 }, C.amber, "SmoothPlastic"),
+		B("SnackSign", 2.2, 4.4, -1.2, 3, 1, 0.12, C.amber, "SmoothPlastic",
+			{ text = { value = "SNACKS", font = "LuckiestGuy", color = C.steelBlack } }),
+		B("SignPost", 2.2, 3.45, -1.2, 0.15, 0.9, 0.15, C.steelBlack, "Metal"),
+	}),
+	["Podcast Booth"] = ITEM(3, at(SPOT.row3), {
+		upright("PodTablePost", 2.1, 0.3, 0, 0, 0.3, C.steelBlack, "Metal"),
+		P("PodTable", "Cylinder", { 0.15, 2.2, 2.2 }, { 0, 2.17, 0.3 }, C.birch, "Wood", { rot = { 0, 0, 90 } }),
+		B("MicA", -0.6, 2.6, 0.3, 0.25, 0.7, 0.25, C.black, "SmoothPlastic"),
+		B("MicB", 0.6, 2.6, 0.3, 0.25, 0.7, 0.25, C.black, "SmoothPlastic"),
+		B("FoamPanel", 0, 2.5, -2.3, 3.4, 5, 0.3, C.charcoal, "Fabric"),
+		B("OnAirSign", 0, 4.4, -2.1, 1.8, 0.6, 0.1, C.paintRed, "Neon",
+			{ text = { value = "ON AIR", font = "GothamBold", color = C.white } }),
+	}),
+	["Whiteboard Wall"] = ITEM(3, at(SPOT.frontR), {
+		B("BoardL", -2.4, 3.4, 0, 4.4, 3, 0.15, C.white, "SmoothPlastic",
+			{ text = { value = "Q3 PLAN", font = "PermanentMarker", color = C.inkBlue, area = { 0.05, 0.05, 0.6, 0.3 } } }),
+		B("BoardR", 2.4, 3.4, 0, 4.4, 3, 0.15, C.white, "SmoothPlastic"),
+		B("BoardPostL", -2.4, 0.95, 0, 0.25, 1.9, 0.25, C.steelBlack, "Metal"),
+		B("BoardPostR", 2.4, 0.95, 0, 0.25, 1.9, 0.25, C.steelBlack, "Metal"),
+		B("BoardFootL", -2.4, 0.1, 0, 3.6, 0.2, 1.2, C.steelBlack, "Metal"),
+		B("BoardFootR", 2.4, 0.1, 0, 3.6, 0.2, 1.2, C.steelBlack, "Metal"),
+		B("BoardNoteA", 1.6, 3.8, 0.1, 0.8, 0.8, 0.04, C.sticky, "SmoothPlastic"),
+		B("BoardNoteB", 3.2, 3.1, 0.1, 0.8, 0.8, 0.04, C.stickyGreen, "SmoothPlastic"),
+	}),
+	["Game Corner"] = ITEM(3, { x = -10.5, z = 20.8, w = 9, d = 3.6, h = 6 }, {
+		B("PingTop", -1.2, 2.4, 0, 5.2, 0.15, 2.8, C.cobalt, "Wood"),
+		B("PingNet", -1.2, 2.65, 0, 0.06, 0.35, 2.8, C.white, "Fabric"),
+		B("PingLegL", -3.2, 1.16, 0, 0.3, 2.33, 2.4, C.steelBlack, "Metal"),
+		B("PingLegR", 0.8, 1.16, 0, 0.3, 2.33, 2.4, C.steelBlack, "Metal"),
+		B("ArcadeBody", 3.3, 2.6, -0.4, 1.8, 5.2, 1.6, C.paintRed, "SmoothPlastic"),
+		B("ArcadeScreen", 3.3, 3.6, 0.42, 1.4, 1.1, 0.04, C.neonBlue, "Neon"),
+	}),
+	["Analytics Screens"] = ITEM(3, at(SPOT.sideR1), {
+		B("ScreensPostL", -3.6, 2.5, -0.9, 0.3, 5, 0.3, C.steelBlack, "Metal"),
+		B("ScreensPostR", 3.6, 2.5, -0.9, 0.3, 5, 0.3, C.steelBlack, "Metal"),
+		B("ScreensFootL", -3.6, 0.1, -0.9, 0.6, 0.2, 1.6, C.steelBlack, "Metal"),
+		B("ScreensFootR", 3.6, 0.1, -0.9, 0.6, 0.2, 1.6, C.steelBlack, "Metal"),
+		B("ScreensBack", 0, 3.6, -0.8, 7.6, 2.2, 0.15, C.black, "SmoothPlastic"),
+		B("ChartScreen1", -2.5, 3.6, -0.7, 2.3, 1.8, 0.04, C.barBlue, "Neon"),
+		B("ChartScreen2", 0, 3.6, -0.7, 2.3, 1.8, 0.04, C.barGreen, "Neon"),
+		B("ChartScreen3", 2.5, 3.6, -0.7, 2.3, 1.8, 0.04, C.barOrange, "Neon"),
+	}),
+	["Nap Pod"] = ITEM(3, at(SPOT.sideR2), {
+		B("PodBase", 0, 0.2, 0, 4.4, 0.4, 2.2, C.steelBlack, "Metal"),
+		P("PodBody", "Cylinder", { 5, 2.8, 2.8 }, { 0, 1.8, 0 }, C.white, "SmoothPlastic"),
+		P("PodEndL", "Ball", { 2.8, 2.8, 2.8 }, { -2.5, 1.8, 0 }, C.white, "SmoothPlastic"),
+		P("PodEndR", "Ball", { 2.8, 2.8, 2.8 }, { 2.5, 1.8, 0 }, C.white, "SmoothPlastic"),
+		B("PodLight", 0, 1.8, 1.41, 3.6, 0.12, 0.04, C.ledCyan, "Neon"),
+		B("PodWindow", 0, 2.3, 1.2, 2.4, 0.8, 0.1, C.glassTint, "Glass", { transparency = 0.3 }),
+	}),
+	["Rooftop Sign"] = ITEM(3, { x = 27.4, z = 26.5, w = 3.4, d = 5, h = 6 }, {
+		B("PylonBase", 0, 0.3, 0, 2.4, 0.6, 2.4, C.steelBlack, "Metal"),
+		B("PylonPost", 0, 2.3, -0.5, 0.4, 3.4, 0.4, C.steelBlack, "Metal"),
+		B("PylonGlow", 0, 4.6, -0.6, 3.4, 1.8, 0.06, C.neonOrange, "Neon"),
+		B("PylonSign", 0, 4.6, -0.4, 3.2, 1.6, 0.3, C.navyDark, "SmoothPlastic",
+			{ text = { value = "STARTUP", font = "LuckiestGuy", color = C.neonOrange, glow = true } }),
+	}),
+
+	-- Series B (stage 4): the meeting room fills the front-left, so a narrow spot by the next-upgrade sign
+	["Data Center Room"] = ITEM(4, at(SPOT.backL), {
+		B("DataFloor", 0, 0.1, -1, 4.2, 0.2, 8, C.grayLight, "DiamondPlate"),
+		B("DataRackBack", 0, 3.7, -3, 3.6, 7, 2.4, C.rack, "Metal"),
+		B("DataRackFront", 0, 3.7, 0.2, 3.6, 7, 2.4, C.rack, "Metal"),
+		B("RackLEDBack", 0, 4.5, -1.78, 3, 0.15, 0.04, C.ledCyan, "Neon"),
+		B("RackLEDFront", 0, 4.5, 1.42, 3, 0.15, 0.04, C.ledCyan, "Neon"),
+		B("ColdLight", 0, 7.27, -1.4, 3.6, 0.15, 5.6, C.ledCyan, "Neon"),
+		B("DataGlass", 0, 3.7, 2.8, 4.2, 7.2, 0.1, C.officeGlass, "Glass", { transparency = 0.5, shadow = false }),
+	}),
+	["Marketing Floor"] = ITEM(4, at(SPOT.cornerL), {
+		B("CampaignBoard", 0, 3.6, -1.3, 8, 3.2, 0.2, C.white, "SmoothPlastic",
+			{ text = { value = "LAUNCH WEEK", font = "LuckiestGuy", color = C.cobalt, area = { 0.05, 0.05, 0.6, 0.3 } } }),
+		B("PosterA", 1.8, 3.4, -1.17, 2, 2.2, 0.06, C.cobalt, "SmoothPlastic"),
+		B("PosterB", 3.2, 3.6, -1.17, 1, 1.6, 0.06, C.amber, "SmoothPlastic"),
+		B("BoardPostL", -3.9, 1, -1.3, 0.2, 2, 0.2, C.navy, "Metal"),
+		B("BoardPostR", 3.9, 1, -1.3, 0.2, 2, 0.2, C.navy, "Metal"),
+		B("DeskTopL", -2.2, 1.9, 0.5, 3.6, 0.16, 1.6, C.officeWhite, "SmoothPlastic"),
+		B("DeskTopR", 2.2, 1.9, 0.5, 3.6, 0.16, 1.6, C.officeWhite, "SmoothPlastic"),
+		B("DeskBaseL", -2.2, 0.91, 0.5, 3.2, 1.82, 0.3, C.navy, "Metal"),
+		B("DeskBaseR", 2.2, 0.91, 0.5, 3.2, 1.82, 0.3, C.navy, "Metal"),
+	}),
+	["Recruiting Office"] = ITEM(4, at(SPOT.sideL1), {
+		B("HireDeskTop", 0, 1.9, 0, 4.4, 0.2, 2, C.navy, "Wood"),
+		B("HirePedestal", 1.6, 0.9, 0, 1, 1.8, 1.8, C.navy, "Wood"),
+		B("HireDeskLeg", -2, 0.9, 0, 0.2, 1.8, 1.8, C.navy, "Metal"),
+		B("CandidateChair", -0.8, 0.8, 1.35, 1.3, 1.6, 0.8, C.cobalt, "Fabric"),
+		B("HireLaptop", -0.6, 2.05, -0.2, 1.2, 0.1, 0.8, C.silver, "Metal"),
+		B("HiringSign", 3.8, 2.6, 0, 1.6, 2.2, 0.12, C.cobalt, "SmoothPlastic",
+			{ text = { value = "WE'RE HIRING", font = "GothamBold", color = C.white } }),
+		B("HiringSignPost", 3.8, 0.75, 0, 0.15, 1.5, 0.15, C.navy, "Metal"),
+	}),
+	["Lounge Sofas"] = ITEM(4, at(SPOT.cornerR), join(
+		lounger("SofaL", -2.9, 0, 3.6, C.navy, C.cobalt),
+		lounger("SofaR", 2.9, 0, 3.6, C.navy, C.cobalt),
+		{
+			B("LoungeTable", 0, 0.45, 0.4, 1.6, 0.9, 1.6, C.officeWhite, "SmoothPlastic"),
+			B("CushionL", -2.9, 1.35, 0.1, 1.2, 0.5, 0.4, C.amber, "Fabric"),
+			B("CushionR", 2.9, 1.35, 0.1, 1.2, 0.5, 0.4, C.amber, "Fabric"),
+		}
+	)),
+	["Training Room"] = ITEM(4, at(SPOT.frontR), join(
+		seatRow("RowA", -0.2, 8, C.navy, C.officeWhite),
+		seatRow("RowB", 1.0, 8, C.navy, C.officeWhite),
+		{
+			B("TrainingPost", 0, 1.35, -1.6, 0.3, 2.7, 0.3, C.navy, "Metal"),
+			B("TrainingBack", 0, 3.9, -1.6, 4.3, 2.5, 0.12, C.black, "SmoothPlastic"),
+			B("TrainingScreen", 0, 3.9, -1.51, 4, 2.2, 0.06, C.cobalt, "Neon"),
+		}
+	)),
+	["Customer Success Desk"] = ITEM(4, at(SPOT.sideL2), {
+		B("CsDeskMid", 0, 1.9, 0, 3.2, 0.2, 1.8, C.officeWhite, "SmoothPlastic"),
+		B("CsDeskWingL", -2.6, 1.9, 0.4, 2.4, 0.2, 1.8, C.officeWhite, "SmoothPlastic", { rot = { 0, -25, 0 } }),
+		B("CsDeskWingR", 2.6, 1.9, 0.4, 2.4, 0.2, 1.8, C.officeWhite, "SmoothPlastic", { rot = { 0, 25, 0 } }),
+		B("CsDeskBase", 0, 0.9, 0, 6, 1.8, 0.4, C.navy, "Metal"),
+		B("CsBack", 0, 2.6, -0.5, 1.8, 1.2, 0.1, C.black, "SmoothPlastic"),
+		B("CsScreen", 0, 2.6, -0.43, 1.6, 1, 0.04, C.cobalt, "Neon"),
+		B("Headset", 1.4, 2.15, 0, 0.6, 0.3, 0.3, C.charcoal, "SmoothPlastic"),
+	}),
+	["Security Desk"] = ITEM(4, { x = -6.5, z = 26, w = 3.4, d = 6, h = 4.4 }, {
+		B("Podium", 0, 1.6, -1.6, 3, 3.2, 1.4, C.navy, "SmoothPlastic"),
+		B("PodiumTop", 0, 3.3, -1.6, 3.2, 0.2, 1.6, C.officeWhite, "SmoothPlastic"),
+		B("BadgeScreen", 0.6, 3.7, -1.9, 1, 0.6, 0.05, C.cobalt, "Neon"),
+		B("GatePostL", -1.3, 1.6, 1.6, 0.4, 3.2, 0.4, C.silver, "Metal"),
+		B("GatePostR", 1.3, 1.6, 1.6, 0.4, 3.2, 0.4, C.silver, "Metal"),
+		B("GateLight", 0, 2.4, 1.6, 2.2, 0.15, 0.1, C.ledGreen, "Neon"),
+	}),
+	["Mail Room"] = ITEM(4, at(SPOT.sideR1), {
+		B("CubbyShelf", 0, 2.4, -1.1, 6, 4.8, 1.2, C.officeWhite, "SmoothPlastic"),
+		B("CubbyGrid", 0, 2.4, -0.48, 5.6, 4.4, 0.04, C.carpetLine, "SmoothPlastic"),
+		B("ParcelA", -2, 0.6, 0.6, 1.6, 1.2, 1.4, C.cardboard, "SmoothPlastic"),
+		B("ParcelB", -0.3, 0.45, 0.8, 1.2, 0.9, 1, C.cardboardDark, "SmoothPlastic"),
+		B("ParcelC", -2, 1.6, 0.6, 1, 0.8, 1, C.cardboard, "SmoothPlastic"),
+		B("CartTop", 2.4, 0.8, 0.6, 2, 0.15, 1.4, C.silver, "Metal"),
+		B("CartHandle", 3.35, 0.75, 0.6, 0.15, 1.5, 1.2, C.silver, "Metal"),
+	}),
+	["Library"] = ITEM(4, at(SPOT.sideR2), {
+		B("ShelfA", -3, 2.5, -1.2, 3, 5, 0.9, C.walnut, "Wood"),
+		B("BooksA1", -3, 1.5, -0.72, 2.6, 1.2, 0.1, C.paintRed, "SmoothPlastic"),
+		B("BooksA2", -3, 3.4, -0.72, 2.6, 1.2, 0.1, C.barBlue, "SmoothPlastic"),
+		B("ShelfB", 0, 2.5, -1.2, 3, 5, 0.9, C.walnut, "Wood"),
+		B("BooksB1", 0, 1.5, -0.72, 2.6, 1.2, 0.1, C.barGreen, "SmoothPlastic"),
+		B("BooksB2", 0, 3.4, -0.72, 2.6, 1.2, 0.1, C.amber, "SmoothPlastic"),
+		B("ReadingChairBase", 3.2, 0.5, 0.3, 2.2, 1, 2, C.coral, "Fabric"),
+		B("ReadingChairBack", 3.2, 1.6, -0.6, 2.2, 1.6, 0.4, C.coral, "Fabric"),
+	}),
+	["Video Studio"] = ITEM(4, at(SPOT.backR), {
+		B("GreenBackdrop", 0, 3.8, -4.4, 4.2, 7.6, 0.2, C.greenScreen, "Fabric"),
+		B("GreenSweep", 0, 0.1, -3.3, 4.2, 0.2, 2, C.greenScreen, "Fabric"),
+		B("TripodFoot", 0, 0.1, 1.5, 1.4, 0.2, 1.4, C.black, "Metal"),
+		B("TripodPost", 0, 1.25, 1.5, 0.2, 2.1, 0.2, C.black, "Metal"),
+		B("CameraBody", 0, 2.65, 1.5, 0.9, 0.7, 1.4, C.black, "SmoothPlastic"),
+		B("RecLight", 0.3, 3.08, 1.2, 0.15, 0.15, 0.15, C.paintRed, "Neon"),
+		B("SoftboxStand", 1.4, 1.75, -1, 0.15, 3.5, 0.15, C.black, "Metal"),
+		B("SoftboxLight", 1.4, 4.2, -1, 1.4, 1.4, 0.3, C.bulb, "Neon"),
+	}),
+	["Coffee Roastery"] = ITEM(4, at(SPOT.row3), {
+		B("RoasterBody", 0, 1, -0.8, 2.4, 2, 1.8, C.steelBlack, "Metal"),
+		P("RoasterDrum", "Cylinder", { 2.4, 1.8, 1.8 }, { 0, 2.9, -0.8 }, C.copper, "Metal"),
+		B("RoasterHopper", 0.4, 4.2, -0.8, 0.8, 0.8, 0.8, C.brass, "Metal"),
+		upright("CoolingTray", 1.2, 2, 0, 0, 1.4, C.copper, "Metal"),
+		B("BeanSack", -1.1, 0.6, 1.8, 1.2, 1.2, 0.9, C.coffeeBag, "Fabric"),
+	}),
+
+	-- Series C (stage 5)
+	["Cafeteria"] = ITEM(5, { x = -12, z = 23.5, w = 9, d = 6, h = 5 }, {
+		B("FoodCounter", 0, 1.4, -2.4, 8, 2.8, 1, C.hqWhite, "SmoothPlastic"),
+		B("FoodBins", 0, 2.9, -2.4, 6, 0.2, 0.8, C.amber, "SmoothPlastic"),
+		B("SneezeGlass", 0, 3.5, -2.4, 7.6, 1, 0.1, C.officeGlass, "Glass", { transparency = 0.5, shadow = false }),
+		upright("TablePostA", 2, 0.3, -2.2, 0, 1, C.graphite, "Metal"),
+		P("TableTopA", "Cylinder", { 0.15, 2.2, 2.2 }, { -2.2, 2.07, 1 }, C.walnut, "Wood", { rot = { 0, 0, 90 } }),
+		upright("TablePostB", 2, 0.3, 2.2, 0, 1, C.graphite, "Metal"),
+		P("TableTopB", "Cylinder", { 0.15, 2.2, 2.2 }, { 2.2, 2.07, 1 }, C.walnut, "Wood", { rot = { 0, 0, 90 } }),
+		upright("StoolA", 1.3, 0.9, -2.2, 0, 2.4, C.coral, "SmoothPlastic"),
+		upright("StoolB", 1.3, 0.9, 2.2, 0, 2.4, C.coral, "SmoothPlastic"),
+	}),
+	["Gym"] = ITEM(5, at(SPOT.cornerL), {
+		B("TreadBelt", -2.5, 0.4, 0, 4, 0.8, 1.8, C.graphite, "SmoothPlastic"),
+		B("TreadPost", -4.3, 1.8, 0, 0.3, 2.8, 1.6, C.graphite, "Metal"),
+		B("TreadScreen", -4.1, 3, 0, 0.1, 0.6, 1, C.ledCyan, "Neon"),
+		B("BenchPad", 1.5, 0.95, 0, 3, 0.3, 1.2, C.black, "Fabric"),
+		B("BenchLeg", 1.5, 0.4, 0, 0.6, 0.8, 0.8, C.graphite, "Metal"),
+		B("WeightRack", 4, 1.4, -0.8, 1.6, 2.8, 1.2, C.graphite, "Metal"),
+		B("Dumbbells", 4, 1, -0.05, 1.4, 0.4, 0.3, C.silver, "Metal"),
+	}),
+	["Rooftop Terrace"] = ITEM(5, at(SPOT.cornerR), {
+		B("TerraceDeck", 0, 0.1, 0, 9.6, 0.2, 3, C.walnut, "WoodPlanks"),
+		B("ParasolPole", -2, 2.6, 0, 0.2, 4.8, 0.2, C.graphite, "Metal"),
+		P("ParasolTop", "Cylinder", { 0.3, 3, 3 }, { -2, 5.15, 0 }, C.coral, "Fabric", { rot = { 0, 0, 90 } }),
+		B("LoungerA", 1.4, 0.5, 0, 1.4, 0.6, 2.8, C.hqWhite, "Fabric"),
+		B("LoungerB", 3.4, 0.5, 0, 1.4, 0.6, 2.8, C.hqWhite, "Fabric"),
+		upright("TerracePot", 1.2, 1.2, -4.1, 0.2, 0, C.graphite, "SmoothPlastic"),
+		P("TerraceLeaves", "Ball", { 1.6, 1.6, 1.6 }, { -4.1, 2.1, 0 }, C.leaf, "Fabric"),
+	}),
+	["Legal Office"] = ITEM(5, at(SPOT.sideL1), {
+		B("LegalDesk", 0, 1.9, 0.3, 4.4, 0.2, 2, C.walnut, "Wood"),
+		B("LegalPedestal", -1.5, 0.9, 0.3, 1.2, 1.8, 1.8, C.walnutDark, "Wood"),
+		B("LegalLeg", 2, 0.9, 0.3, 0.2, 1.8, 1.8, C.walnutDark, "Wood"),
+		B("ScalesPost", 1.2, 2.6, 0.3, 0.12, 1.2, 0.12, C.gold, "Metal"),
+		B("ScalesBeam", 1.2, 3.2, 0.3, 1.4, 0.08, 0.08, C.gold, "Metal"),
+		B("LawShelf", 3.6, 2.4, -1.2, 2.4, 4.8, 1, C.walnutDark, "Wood"),
+		B("LawBooks", 3.6, 2.4, -0.68, 2, 4, 0.06, C.lawRed, "SmoothPlastic"),
+	}),
+	["Demo Stage"] = ITEM(5, at(SPOT.frontR), {
+		B("StagePlatform", 0, 0.4, 0, 9, 0.8, 3.4, C.graphite, "SmoothPlastic"),
+		B("DemoPodium", -2.5, 1.8, 0.4, 1.2, 2, 1, C.hqWhite, "SmoothPlastic"),
+		B("DemoSupport", 1.5, 1.5, -1.45, 0.3, 1.4, 0.2, C.graphite, "Metal"),
+		B("DemoBack", 1.5, 3.6, -1.45, 5, 2.8, 0.12, C.black, "SmoothPlastic"),
+		B("DemoScreen", 1.5, 3.6, -1.37, 4.6, 2.4, 0.04, C.screenBlue, "Neon",
+			{ text = { value = "LAUNCH", font = "LuckiestGuy", color = C.white, area = { 0.2, 0.3, 0.6, 0.4 } } }),
+	}),
+	["Innovation Lab"] = ITEM(5, at(SPOT.sideL2), {
+		B("InnoBench", 0, 1.5, 0, 6, 0.2, 2.4, C.hqWhite, "SmoothPlastic"),
+		B("InnoBase", 0, 0.7, 0, 5.4, 1.4, 2, C.graphite, "SmoothPlastic"),
+		upright("ArmBase", 0.4, 1, -1.5, 1.6, 0, C.graphite, "Metal"),
+		B("ArmLower", -1.5, 2.8, 0, 0.3, 1.6, 0.3, C.cobalt, "Metal"),
+		B("ArmUpper", -0.9, 3.6, 0, 1.4, 0.25, 0.25, C.cobalt, "Metal"),
+		P("CoreGlow", "Ball", { 1, 1, 1 }, { 1.6, 2.1, 0 }, C.ledCyan, "Neon"),
+	}),
+	["Wellness Room"] = ITEM(5, at(SPOT.sideR1), {
+		B("YogaMatA", -3, 0.05, 0, 1.6, 0.1, 3, C.mint, "Fabric"),
+		B("YogaMatB", -1, 0.05, 0, 1.6, 0.1, 3, C.coral, "Fabric"),
+		upright("FountainBowl", 0.8, 2.2, 2.4, 0, 0, C.graphite, "SmoothPlastic"),
+		P("FountainWater", "Cylinder", { 0.1, 2, 2 }, { 2.4, 0.85, 0 }, C.skyGlass, "Glass", { rot = { 0, 0, 90 }, transparency = 0.2 }),
+		upright("WellnessPot", 1.4, 1.2, 4, 0, -0.8, C.graphite, "SmoothPlastic"),
+		P("WellnessLeaves", "Ball", { 1.8, 1.8, 1.8 }, { 4, 2.2, -0.8 }, C.leaf, "Fabric"),
+	}),
+	["Investor Lounge"] = ITEM(5, at(SPOT.backL), join(
+		lounger("VelvetA", 0, -2.6, 2.4, C.velvet, C.velvet),
+		lounger("VelvetB", 0, 1.6, 2.4, C.velvet, C.velvet),
+		{
+			upright("LoungeSideTable", 1.3, 1, 0, 0, -0.5, C.gold, "Metal"),
+			B("LoungeLampPole", 1.5, 2.2, -4.2, 0.15, 4.4, 0.15, C.gold, "Metal"),
+			B("LoungeLampShade", 1.5, 4.7, -4.2, 1, 0.8, 1, C.bulb, "Neon"),
+		}
+	)),
+	["Auditorium"] = ITEM(5, at(SPOT.backR), {
+		B("TierFront", 0, 0.5, 2.5, 4.2, 1, 2.4, C.graphite, "SmoothPlastic"),
+		B("TierMid", 0, 1, 0, 4.2, 2, 2.4, C.graphite, "SmoothPlastic"),
+		B("TierBack", 0, 1.5, -2.5, 4.2, 3, 2.4, C.graphite, "SmoothPlastic"),
+		B("SeatsFront", 0, 1.2, 2.8, 4, 0.4, 1, C.coral, "Fabric"),
+		B("SeatsMid", 0, 2.2, 0.3, 4, 0.4, 1, C.coral, "Fabric"),
+		B("SeatsBack", 0, 3.2, -2.2, 4, 0.4, 1, C.coral, "Fabric"),
+	}),
+	["Green Roof"] = ITEM(5, at(SPOT.row3), {
+		B("BigPlanter", 0, 0.8, 0, 3.2, 1.6, 4.6, C.walnut, "WoodPlanks"),
+		upright("TreeTrunk", 2.8, 0.5, 0, 1.6, 0, C.walnutDark, "Wood"),
+		P("TreeCrown", "Ball", { 3.2, 3.2, 3.2 }, { 0, 5.4, 0 }, C.leaf, "Fabric"),
+		P("TreeCrownTop", "Ball", { 2, 2, 2 }, { 0.5, 6.6, 0.4 }, C.leafDark, "Fabric"),
+	}),
+	["Art Gallery"] = ITEM(5, at(SPOT.sideR2), {
+		B("ArtFrameA", -2.5, 3.2, -0.8, 3.2, 2.4, 0.2, C.gold, "Metal"),
+		B("CanvasA", -2.5, 3.2, -0.68, 2.8, 2, 0.04, C.cobalt, "SmoothPlastic"),
+		B("ArtStandA", -2.5, 1, -0.8, 0.3, 2, 0.6, C.graphite, "Metal"),
+		B("ArtFrameB", 2.5, 3.2, -0.8, 3.2, 2.4, 0.2, C.gold, "Metal"),
+		B("CanvasB", 2.5, 3.2, -0.68, 2.8, 2, 0.04, C.coral, "SmoothPlastic"),
+		B("ArtStandB", 2.5, 1, -0.8, 0.3, 2, 0.6, C.graphite, "Metal"),
+		B("GalleryBench", 0, 0.45, 1, 3.6, 0.9, 1, C.graphite, "SmoothPlastic"),
+	}),
+
+	-- IPO-ready (stage 6)
+	["Boardroom"] = ITEM(6, at(SPOT.cornerL), {
+		B("BoardTable", 0, 1.9, 0.2, 7.4, 0.2, 2, C.walnut, "Wood"),
+		B("BoardTableBase", 0, 0.9, 0.2, 5, 1.8, 0.6, C.graphite, "Metal"),
+		B("BoardChairA", -2.6, 1.4, -1.2, 1.2, 2.8, 0.7, C.black, "Fabric"),
+		B("BoardChairB", 0, 1.4, -1.2, 1.2, 2.8, 0.7, C.black, "Fabric"),
+		B("BoardChairC", 2.6, 1.4, -1.2, 1.2, 2.8, 0.7, C.black, "Fabric"),
+		B("BoardChairEndL", -4.35, 1.4, 0.2, 0.7, 2.8, 1.2, C.black, "Fabric"),
+		B("BoardChairEndR", 4.35, 1.4, 0.2, 0.7, 2.8, 1.2, C.black, "Fabric"),
+	}),
+	["Trading Screens"] = ITEM(6, at(SPOT.frontR), {
+		B("TradeDesk", 0, 1.9, 0.6, 8, 0.2, 2, C.graphite, "SmoothPlastic"),
+		B("TradeDeskBase", 0, 0.9, 0.6, 7, 1.8, 0.4, C.graphite, "Metal"),
+		B("TradeSupportL", -4, 1.05, -1.2, 0.3, 2.1, 0.3, C.graphite, "Metal"),
+		B("TradeSupportR", 4, 1.05, -1.2, 0.3, 2.1, 0.3, C.graphite, "Metal"),
+		B("TradeFrame", 0, 3.6, -1.2, 8.4, 3, 0.2, C.black, "SmoothPlastic"),
+		B("TickerScreen1", -2.75, 3.6, -1.08, 2.6, 2.6, 0.04, C.barGreen, "Neon"),
+		B("TickerScreen2", 0, 3.6, -1.08, 2.6, 2.6, 0.04, C.paintRed, "Neon"),
+		B("TickerScreen3", 2.75, 3.6, -1.08, 2.6, 2.6, 0.04, C.barGreen, "Neon"),
+		B("TickerLED", 0, 5.3, -1.2, 8.4, 0.4, 0.1, C.amber, "Neon"),
+	}),
+	["Press Room"] = ITEM(6, at(SPOT.sideL1), {
+		B("PressBackdrop", 0, 2.9, -1.5, 8, 5.4, 0.2, C.navyDark, "SmoothPlastic",
+			{ text = { value = "PRESS", font = "GothamBold", color = C.gold, area = { 0.25, 0.1, 0.5, 0.25 } } }),
+		B("PressPodium", 0, 1.5, 0.4, 1.6, 3, 1.2, C.hqWhite, "SmoothPlastic"),
+		B("PressMic", 0, 3.4, 0.6, 0.1, 0.8, 0.1, C.black, "SmoothPlastic"),
+		B("FlagPoleL", -3.4, 2.5, -1, 0.1, 5, 0.1, C.gold, "Metal"),
+		B("FlagL", -3, 4.4, -1, 0.7, 1.2, 0.05, C.cobalt, "Fabric"),
+		B("FlagPoleR", 3.4, 2.5, -1, 0.1, 5, 0.1, C.gold, "Metal"),
+		B("FlagR", 3, 4.4, -1, 0.7, 1.2, 0.05, C.cobalt, "Fabric"),
+	}),
+	["Executive Floor"] = ITEM(6, at(SPOT.backL), {
+		B("ExecDesk", 0, 2, 0.4, 4, 0.25, 2.2, C.walnut, "Wood"),
+		B("ExecDeskFront", 0, 0.95, 1.35, 4, 1.9, 0.3, C.walnutDark, "Wood"),
+		B("ExecDeskSide", -1.85, 0.95, 0.4, 0.3, 1.9, 1.8, C.walnutDark, "Wood"),
+		B("ExecChairBase", 0, 0.6, -1.6, 1.8, 1.2, 1.6, C.black, "Fabric"),
+		B("ExecChairBack", 0, 2.2, -2.4, 1.8, 2.4, 0.4, C.black, "Fabric"),
+		B("ExecShelf", 0, 3.5, -4.5, 4.2, 7, 0.8, C.walnutDark, "Wood"),
+		B("ExecBooks", 0, 3.5, -4.05, 3.8, 6.2, 0.1, C.brass, "SmoothPlastic"),
+		B("ExecLamp", 1.4, 2.4, 0.4, 0.5, 0.55, 0.5, C.bulb, "Neon"),
+	}),
+	["Trophy Wall"] = ITEM(6, at(SPOT.backR), {
+		B("TrophyCabinet", 0, 4, -4.4, 4.2, 8, 1, C.graphite, "SmoothPlastic"),
+		B("TrophyGlass", 0, 4, -3.87, 3.8, 7.4, 0.06, C.officeGlass, "Glass", { transparency = 0.5, shadow = false }),
+		B("TrophyShelfLow", 0, 2.6, -4.4, 3.8, 0.12, 0.9, C.silver, "Metal"),
+		B("TrophyShelfHigh", 0, 5.2, -4.4, 3.8, 0.12, 0.9, C.silver, "Metal"),
+		upright("TrophyCupA", 1.2, 0.6, -1, 2.66, -4.4, C.gold, "Metal"),
+		upright("TrophyCupB", 1.6, 0.8, 0.8, 2.66, -4.4, C.gold, "Metal"),
+		upright("TrophyCupC", 1, 0.6, 0, 5.26, -4.4, C.silver, "Metal"),
+		B("CabinetLight", 0, 7.9, -4.4, 3.6, 0.1, 0.8, C.bulb, "Neon"),
+	}),
+	["Helipad"] = ITEM(6, at(SPOT.cornerR), {
+		B("HeliPlinth", 0, 0.6, 0, 4, 1.2, 3, C.graphite, "SmoothPlastic"),
+		P("HeliPad", "Cylinder", { 0.1, 2.8, 2.8 }, { 0, 1.25, 0 }, C.grayLight, "SmoothPlastic",
+			{ rot = { 0, 0, 90 }, text = { value = "H", font = "GothamBold", color = C.white, face = "Right" } }),
+		P("HeliBody", "Ball", { 1, 1, 1 }, { 0, 1.8, 0 }, C.cobalt, "SmoothPlastic"),
+		B("HeliTail", 0.9, 1.9, 0, 1.2, 0.15, 0.15, C.cobalt, "SmoothPlastic"),
+		B("HeliMast", 0, 2.4, 0, 0.1, 0.2, 0.1, C.graphite, "Metal"),
+		B("HeliRotor", 0, 2.52, 0, 2.6, 0.05, 0.2, C.graphite, "Metal"),
+		B("HeliPlaque", 3.5, 1, 0, 2, 2, 0.15, C.gold, "Metal",
+			{ text = { value = "HELIPAD", font = "GothamBold", color = C.graphite } }),
+	}),
+	["Shareholder Hall"] = ITEM(6, at(SPOT.sideL2), join(
+		seatRow("HallA", -0.2, 7, C.navy, C.hqWhite),
+		seatRow("HallB", 1, 7, C.navy, C.hqWhite),
+		{
+			B("HallBannerPostL", -3.6, 2.5, -1.4, 0.2, 5, 0.2, C.gold, "Metal"),
+			B("HallBannerPostR", 3.6, 2.5, -1.4, 0.2, 5, 0.2, C.gold, "Metal"),
+			B("HallBanner", 0, 4, -1.4, 7, 1.8, 0.1, C.gold, "Fabric",
+				{ text = { value = "SHAREHOLDERS", font = "GothamBold", color = C.graphite } }),
+		}
+	)),
+	["Golden Bell"] = ITEM(6, at(SPOT.row3), {
+		B("BellBase", 0, 0.15, 0, 3.4, 0.3, 1.6, C.graphite, "SmoothPlastic"),
+		B("BellPostL", -1.4, 2.6, 0, 0.3, 4.9, 0.3, C.walnut, "Wood"),
+		B("BellPostR", 1.4, 2.6, 0, 0.3, 4.9, 0.3, C.walnut, "Wood"),
+		B("BellBeam", 0, 5.2, 0, 3.4, 0.3, 0.4, C.walnut, "Wood"),
+		upright("Bell", 1.4, 1.6, 0, 3.65, 0, C.gold, "Metal"),
+		upright("BellRim", 0.2, 1.9, 0, 3.5, 0, C.gold, "Metal"),
+	}),
 }
 
 -- The stage-change flash -----------------------------------------------------------

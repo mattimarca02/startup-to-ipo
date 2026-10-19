@@ -14,6 +14,15 @@ Roblox, and TycoonCore's own setupOffice / officeToSave cut out of the real file
   - the save: the `office` section (a legacy save gets the old 5 slots, a new player none, bad values warned about,
     unknown fields written back at the same level) and the one-time building move in CompanyServer (a save keeps the
     building its old stage showed, never twice, an IPO starts the Garage again, a locked pokedex is never changed).
+  - the room (phase 2): every catalog item that is not an old station has its spot in the room of its stage, inside
+    the floor and clear of every reserved zone and of the other items; every stage room with all its items passes
+    PlotVisuals.check; every furniture piece (a workstation, a station, an item) has one invisible solid box and the
+    see-through next desk none; the decor's boxes; setItems / setStage show the room's own items only; the hires' walk in
+    (EmployeeServer's pathTo between the PATH markers) never crosses a desk, a station or an item, and EmployeeClient's
+    alongPath (WALK markers) follows it;
+  - the Studio-only "Reset my save" Debug button (TycoonCore's two debug actions, cut out of the real file): two steps
+    within 15 s, nothing saves once it starts (data.loaded off), a running save is waited for, the key is removed in a
+    pcall, a failure leaves the save as it was, and the player is kicked to start as new; registered only in Studio.
 Then it breaks the code on purpose (mutants): each must be caught by a named check, never by a crash.
 It changes nothing in the game or in Studio.
 """
@@ -269,6 +278,319 @@ MUTANTS = [
 ]
 
 
+def room_program(sources):
+    """The room tests: the real PlotArt, PlotVisuals and OfficeConfig with daily_test.py's fake Roblox (3D math, Instances)."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("daily_test_fake", os.path.join(ROOT, "tools", "daily_test.py"))
+    dt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dt)
+    fake = dt.VISUALS_TESTS[:dt.VISUALS_TESTS.index("local PlotArt = (function()")]
+    path = between(sources["EmployeeServer.lua"], "-- PATH-START", "-- PATH-END") or 'error("PATH markers not found")'
+    walk = between(sources["EmployeeClient.lua"], "-- WALK-START", "-- WALK-END") or 'error("WALK markers not found")'
+    constants = []
+    for name in ("FRONT_BAND", "FRONT_AISLE", "INCUBATOR_LINE", "DOOR"):
+        m = re.search(r"^local %s = .*$" % name, sources["EmployeeServer.lua"], re.M)
+        constants.append(m.group(0) if m else 'error("%s not found")' % name)
+    spots = between(sources["EmployeeServer.lua"], "local EMPLOYEE_SPOTS = {", "\n}\n")
+    incubators = between(sources["EmployeeServer.lua"], "local INCUBATOR_SPOTS = {", "\n}\n")
+    return "\n".join([
+        fake,
+        "local PlotArt = (function()\n" + sources["PlotArt.lua"] + "\nend)()",
+        "local PlotVisuals = (function()\n" + sources["PlotVisuals.lua"] + "\nend)()",
+        "local OfficeConfig = (function()\n" + sources["OfficeConfig.lua"].replace(
+            'local RunService = game:GetService("RunService")', "local RunService = { IsStudio = function() return false end }") + "\nend)()",
+        "\n".join(constants),
+        (spots or 'error("EMPLOYEE_SPOTS")') + "\n}",
+        (incubators or 'error("INCUBATOR_SPOTS")') + "\n}",
+        path, walk, ROOM_TESTS,
+    ])
+
+
+ROOM_TESTS = r"""
+local PASS, FAIL = 0, 0
+local function check(name, ok, extra)
+	if ok then PASS += 1 else FAIL += 1 print_real("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+-- The fake's Vector3 has no Magnitude: the walk needs it
+V.__index = function(t, k)
+	if k == "Magnitude" then return math.sqrt(t.X * t.X + t.Y * t.Y + t.Z * t.Z) end
+	return rawget(V, k)
+end
+local L = PlotArt.Layout
+local center = Vector3.new(-135, 0.5, 150)
+local function inside(b, x, z) return x > b[1] + 0.01 and x < b[2] - 0.01 and z > b[5] + 0.01 and z < b[6] - 0.01 end
+local function overlap(a, b) return a[1] < b[2] - 0.01 and b[1] < a[2] - 0.01 and a[5] < b[6] - 0.01 and b[5] < a[6] - 0.01 end
+
+-- 1. Every catalog item that is not an old station has its spot, in the room of its own stage
+do
+	local missing, wrong, extra, count = nil, nil, nil, 0
+	for _, item in ipairs(OfficeConfig.Items) do
+		local look = PlotArt.Items[item.key]
+		if PlotArt.Props[item.key] then
+			if look then extra = item.key end
+		elseif not look then
+			missing = missing or item.key
+		else
+			count += 1
+			if look.stage ~= item.stage then wrong = wrong or item.key end
+		end
+	end
+	for key in pairs(PlotArt.Items) do
+		if not OfficeConfig.getItem(key) then extra = extra or key end
+	end
+	check("items: every catalog item that is not one of the six stations has its look and spot in PlotArt.Items", missing == nil and count >= 54, missing or count)
+	check("items: each stands in the room of its own stage", wrong == nil, wrong)
+	check("items: no look for an unknown key or a station (the stations keep their props)", extra == nil, extra)
+	check("items: PlotVisuals.validate finds nothing in the art", #PlotVisuals.validate(PlotArt) == 0, PlotVisuals.validate(PlotArt)[1])
+end
+
+-- 2. Every spot: inside the floor, clear of the reserved zones and of the other items of its room
+do
+	local bad, why = nil, nil
+	for stage = 1, #PlotArt.Stages do
+		local keys = PlotVisuals.itemsOf(PlotArt, stage)
+		local zones = PlotVisuals.zones(L)
+		for i, key in ipairs(keys) do
+			local b = PlotVisuals.itemBox(PlotArt.Items[key])
+			if b[1] < -30 or b[2] > 30 or b[5] < -30 or b[6] > 30 then bad, why = bad or key, why or "outside the floor" end
+			for _, z in ipairs(zones) do
+				if overlap(b, z.box) then bad, why = bad or key, why or ("in " .. z.kind .. " zone " .. z.name) end
+			end
+			for j = i + 1, #keys do
+				if overlap(b, PlotVisuals.itemBox(PlotArt.Items[keys[j]])) then bad, why = bad or key, why or ("on " .. keys[j]) end
+			end
+		end
+	end
+	check("items: every spot is inside the floor, clear of the aisles, the lane, the spawn, the signs, the incubators, the workstations, the stations and the other items",
+		bad == nil, tostring(bad) .. ": " .. tostring(why))
+end
+
+-- 3. Every stage room with all its items: the room checks, one solid box per furniture piece
+local function fullRoom(stage, desks)
+	local room = PlotVisuals.buildRoom(nil, center, PlotArt, stage, nil, desks)
+	for _, slot in ipairs(L.itemSlots) do
+		PlotVisuals.buildProp(room:FindFirstChild("UpgradeProps"), center, PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z))
+	end
+	for _, key in ipairs(PlotVisuals.itemsOf(PlotArt, stage)) do
+		PlotVisuals.buildItem(room:FindFirstChild("UpgradeProps"), center, PlotArt, key)
+	end
+	return room
+end
+do
+	local clean, cleanWhy, pieces, piecesWhy, ghostOk, decorOk, flagsOk, walkOk, walkWhy = true, nil, true, nil, true, true, true, true, nil
+	for stage = 1, #PlotArt.Stages do
+		local room = fullRoom(stage, 6) -- six workstations and the see-through seventh
+		local probs = PlotVisuals.check(room, center, PlotArt)
+		if #probs > 0 then clean, cleanWhy = false, cleanWhy or ("room " .. stage .. ": " .. probs[1]) end
+		for _, d in ipairs(room:GetDescendants()) do
+			if d:IsA("Model") and (string.find(d.Name, "HireDesk", 1, true) == 1 or d:GetAttribute("Upgrade") or d:GetAttribute("Item")) then
+				local n = 0
+				for _, c in ipairs(d:GetChildren()) do if c:IsA("BasePart") and c:GetAttribute("Solid") then n += 1 end end
+				if d:GetAttribute("Ghost") then
+					if n ~= 0 then ghostOk = false end
+				elseif n ~= 1 then
+					pieces, piecesWhy = false, piecesWhy or (d.Name .. " has " .. n)
+				end
+			end
+			if d:IsA("BasePart") and d:GetAttribute("Solid") then
+				if not (d.CanCollide and not d.CanTouch and d.Transparency == 1 and not d.CastShadow and d.Anchored) then flagsOk = false end
+			end
+		end
+		local solids = room:FindFirstChild(PlotVisuals.SOLIDS)
+		if not solids or #solids:GetChildren() < 3 then decorOk = false end
+		-- nothing solid where a player walks: the lane, the spawn, the aisles, in front of the incubators
+		for _, d in ipairs(room:GetDescendants()) do
+			if d:IsA("BasePart") and d:GetAttribute("Solid") then
+				local p = d.CFrame.Position - center
+				local b = { p.X - d.Size.X / 2, p.X + d.Size.X / 2, 0, 1, p.Z - d.Size.Z / 2, p.Z + d.Size.Z / 2 }
+				for _, z in ipairs(PlotVisuals.zones(L)) do
+					if (z.kind == "lane" or z.kind == "spawn" or z.kind == "aisle" or z.kind == "sign") and overlap(b, z.box) then
+						walkOk, walkWhy = false, walkWhy or (d:GetFullName() .. " in " .. z.name)
+					end
+				end
+			end
+		end
+	end
+	check("room: every stage room with all its items, six workstations and the stations passes PlotVisuals.check", clean, cleanWhy)
+	check("solids: every furniture piece (a workstation, a station, an item) has exactly one solid box", pieces, piecesWhy)
+	check("solids: the see-through next desk has none (walk through it)", ghostOk)
+	check("solids: every box collides, is never touched, is invisible, casts no shadow, is anchored", flagsOk)
+	check("solids: the decor's furniture has its boxes too (the Solids model, at least 3 per room)", decorOk)
+	check("solids: nothing solid in the lane, the spawn, the aisles or on the signs", walkOk, walkWhy)
+end
+
+-- 4. setItems and setStage: the room shows its own stage's items, the stations move along
+do
+	ROOT = newInstance("Folder")
+	local folder = newInstance("Folder")
+	folder.Parent = ROOT
+	SPAWNED = {}
+	local plot = PlotVisuals.newPlot(folder, center, PlotArt, nil, 2)
+	local owned = { ["Team Table"] = true, ["Gym"] = true, ["Desk"] = true }
+	local desk = PlotVisuals.addProp(plot, "Desk", Vector3.new(-23, 0, -10), false)
+	PlotVisuals.setItems(plot, owned, "Team Table")
+	local props = plot.room:FindFirstChild("UpgradeProps")
+	check("setItems: the room shows the owned items of its own stage only", props:FindFirstChild("Team Table") ~= nil and props:FindFirstChild("Gym") == nil)
+	check("setItems: a purchase pops in", #SPAWNED == 1 and SPAWNED[1] == PlotVisuals.popIn)
+	local before = props:FindFirstChild("Team Table")
+	PlotVisuals.setItems(plot, owned)
+	check("setItems: running it again changes nothing (every second)", props:FindFirstChild("Team Table") == before and #SPAWNED == 1)
+	PlotVisuals.setStage(plot, 5, false)
+	props = plot.room:FindFirstChild("UpgradeProps")
+	check("setStage: the catalog items are the new room's (the Gym in Series C, no Team Table)", props:FindFirstChild("Gym") ~= nil and props:FindFirstChild("Team Table") == nil)
+	check("setStage: the stations move along", desk.Parent == props)
+	owned["Gym"] = nil
+	PlotVisuals.setItems(plot, owned)
+	check("setItems: an item no longer owned (an IPO) goes", props:FindFirstChild("Gym") == nil and desk.Parent == props)
+end
+
+-- 5. The walk in: never across a desk, a station or an item; along the path
+do
+	local blocks = {}
+	local r = L.reserve
+	for i, spot in ipairs(L.employeeSpots) do
+		table.insert(blocks, { name = "workstation " .. i, spot = i, box = { spot[1] - r.deskHalfX, spot[1] + r.deskHalfX, 0, 1, spot[2] - r.hireHalf, spot[2] + r.deskTo } })
+	end
+	for _, z in ipairs(PlotVisuals.zones(L)) do
+		if z.kind == "slot" or z.kind == "sign" then table.insert(blocks, { name = z.kind .. " " .. z.name, box = z.box }) end
+	end
+	for key, look in pairs(PlotArt.Items) do table.insert(blocks, { name = "item " .. key, box = PlotVisuals.itemBox(look) }) end
+	local starts = {}
+	for i, s in ipairs(INCUBATOR_SPOTS) do table.insert(starts, { name = "incubator " .. i, at = s }) end
+	table.insert(starts, { name = "the door", at = DOOR })
+	for i, s in ipairs(EMPLOYEE_SPOTS) do table.insert(starts, { name = "desk " .. i, at = s, fromSpot = true, spot = i }) end
+	local ok, why, ends = true, nil, true
+	for _, start in ipairs(starts) do
+		for target, spot in ipairs(EMPLOYEE_SPOTS) do
+			local way = pathTo(start.at, spot, start.fromSpot)
+			local last = way[#way]
+			if math.abs(last.X - spot.X) > 1e-6 or math.abs(last.Z - spot.Z) > 1e-6 then ends = false end
+			for i = 2, #way do
+				local a, b = way[i - 1], way[i]
+				for k = 0, 40 do
+					local x, z = a.X + (b.X - a.X) * k / 40, a.Z + (b.Z - a.Z) * k / 40
+					for _, blk in ipairs(blocks) do
+						if blk.spot ~= target and blk.spot ~= start.spot and inside(blk.box, x, z) then
+							ok, why = false, why or (start.name .. " -> spot " .. target .. " crosses " .. blk.name .. string.format(" at %.1f, %.1f", x, z))
+						end
+					end
+				end
+			end
+		end
+	end
+	check("path: every walk ends exactly at the hire's spot", ends)
+	check("path: from every incubator, the door and every other desk to every spot, the walk crosses no workstation, station, sign or catalog item", ok, why)
+	local way = { Vector3.new(0, 0, 0), Vector3.new(0, 0, 10), Vector3.new(5, 0, 10) }
+	local p0 = alongPath(way, 0)
+	local p1, step1 = alongPath(way, 12)
+	check("alongPath: it starts at the first point and follows the segments", p0 and p0.Z == 0 and p1 and math.abs(p1.X - 2) < 1e-9 and math.abs(p1.Z - 10) < 1e-9 and step1.X > 0)
+	check("alongPath: done (nil) past the end, then the hire sits", alongPath(way, 15.5) == nil)
+end
+
+print_real(string.format("%d passed, %d failed", PASS, FAIL))
+print_real("DONE")
+"""
+
+ROOM_MUTANTS = [
+    ("an item spot in the walking lane", "PlotArt.lua", '["Router"] = ITEM(1, { x = -14, z = 22.3,', '["Router"] = ITEM(1, { x = 0, z = 16,', "items: every spot is inside the floor"),
+    ("an item built without its solid box", "PlotVisuals.lua", '\tmodel:SetAttribute("Item", key)\n\tPlotVisuals.addSolid(model, origin)\n', '\tmodel:SetAttribute("Item", key)\n', "solids: every furniture piece"),
+    ("the ghost desk solid", "PlotVisuals.lua", "\t\t\tmodel:SetAttribute(\"Ghost\", true)\n", "\t\t\tmodel:SetAttribute(\"Ghost\", true)\n\t\t\tPlotVisuals.addSolid(model, origin)\n", "solids: the see-through next desk"),
+    ("setItems ignores the room's stage", "PlotVisuals.lua", "local want = look.stage == stage and plot.owned ~= nil", "local want = plot.owned ~= nil", "setItems: the room shows the owned items of its own stage only"),
+    ("setStage forgets the new room's items", "PlotVisuals.lua", "\t\told:Destroy()\n\tend\n\tPlotVisuals.setItems(plot, nil)\n", "\t\told:Destroy()\n\tend\n", "setStage: the catalog items are the new room's"),
+    ("the walk skips the lane (straight across the rows)", "EmployeeServer.lua", "\t\tadd(0, way[#way].Z)\n\t\tadd(0, aisle)\n", "", "path: from every incubator"),
+    ("a decor box over the lane", "PlotVisuals.lua", "\t\tif onFloor[g] and makeSolid(", "\t\tif g == keys[1] then makeSolid(model, 'LaneSolid', origin, { -2, 2, 0, 3, 0, 4 }) end\n\t\tif onFloor[g] and makeSolid(", "solids: nothing solid in the lane"),
+]
+
+
+def reset_program(sources):
+    """The Reset my save actions, cut out of TycoonCore (the Studio-only block), with a fake store, clock and ShopServer."""
+    core = sources["TycoonCore.lua"]
+    block = between(core, "if RunService:IsStudio() then\n\tShopServer.addDebugAction(\"BuildingNextStage\"", "\n-- Eggs and employees (milestone 2)")
+    return RESET_PRELUDE + "\n" + (block or 'error("the Studio debug block not found")') + "\n" + RESET_TESTS
+
+
+RESET_PRELUDE = r"""
+local PASS, FAIL = 0, 0
+local function check(name, ok, extra)
+	if ok then PASS += 1 else FAIL += 1 print("FAIL: " .. name .. (extra ~= nil and (" -- " .. tostring(extra)) or "")) end
+end
+local STUDIO = true
+local RunService = { IsStudio = function() return STUDIO end }
+local ACTIONS = {}
+local ShopServer = { addDebugAction = function(name, fn) ACTIONS[name] = fn end }
+local NOW = 100
+local os = { clock = function() return NOW end, time = function() return 0 end }
+local DELAYED = {}
+local SAVING_FOR = 0
+local data
+local task = {
+	wait = function(t) NOW += t or 0; SAVING_FOR -= 1; if SAVING_FOR <= 0 and data then data.saving = false end; return t or 0 end,
+	delay = function(t, fn) table.insert(DELAYED, fn) end,
+}
+local REMOVED, STORE_FAILS, STORE_ON = {}, false, true
+local LOADED_WHEN_REMOVED, SAVING_WHEN_REMOVED
+local function getStore()
+	if not STORE_ON then return nil end
+	return { RemoveAsync = function(_, key)
+		if STORE_FAILS then error("DataStore request was throttled") end
+		LOADED_WHEN_REMOVED, SAVING_WHEN_REMOVED = data.loaded, data.saving
+		table.insert(REMOVED, key)
+	end }
+end
+local KICKED
+local player = { UserId = 7, Parent = true, Kick = function(_, msg) KICKED = msg end }
+local IpoConfig = { Stages = { { name = "Garage" } } }
+local function stageOf() return 1 end
+local function fresh() data = { loaded = true, ready = true, saving = false } ; REMOVED = {} ; DELAYED = {} ; KICKED = nil end
+"""
+
+RESET_TESTS = r"""
+check("reset: both steps are Debug actions (Studio)", ACTIONS.ResetSaveArm ~= nil and ACTIONS.ResetSaveConfirm ~= nil)
+fresh()
+local msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: Yes without Reset first does nothing", #REMOVED == 0 and data.loaded == true and string.find(msg, "Tap Reset first", 1, true) ~= nil, msg)
+fresh()
+ACTIONS.ResetSaveArm(player, data)
+NOW += 16
+msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: a second tap after 15 s does nothing", #REMOVED == 0 and data.loaded == true, msg)
+fresh()
+ACTIONS.ResetSaveArm(player, data)
+NOW += 3
+data.saving = true
+SAVING_FOR = 4
+msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: the key player_<UserId> is removed (the store's only key for this player)", #REMOVED == 1 and REMOVED[1] == "player_7", REMOVED[1])
+check("reset: nothing saves once it starts (data.loaded off before the removal, and after)", LOADED_WHEN_REMOVED == false and data.loaded == false)
+check("reset: a save already running is waited for before the removal", SAVING_WHEN_REMOVED == false)
+check("reset: the player is kicked a moment later, to come back as a new player", #DELAYED == 1 and (DELAYED[1]() or true) and KICKED ~= nil and string.find(KICKED, "Stop", 1, true) ~= nil, KICKED)
+msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: one Reset tap allows one removal only", #REMOVED == 1, #REMOVED)
+fresh()
+STORE_FAILS = true
+ACTIONS.ResetSaveArm(player, data)
+msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: a store error leaves the save as it was (saving again, nobody kicked)", data.loaded == true and #DELAYED == 0 and string.find(msg, "unchanged", 1, true) ~= nil, msg)
+STORE_FAILS = false
+fresh()
+STORE_ON = false
+ACTIONS.ResetSaveArm(player, data)
+msg = ACTIONS.ResetSaveConfirm(player, data)
+check("reset: no DataStore (Studio without API access): nothing changes", data.loaded == true and #REMOVED == 0, msg)
+print(string.format("%d passed, %d failed", PASS, FAIL))
+print("DONE")
+"""
+
+RESET_MUTANTS = [
+    ("the session keeps saving after the reset (the leave save writes the old save back)", "\t\tdata.loaded = false -- from here on nothing saves this session\n", "",
+     "reset: nothing saves once it starts"),
+    ("one tap is enough", "\t\tif not armed or os.clock() - armed > RESET_SECONDS then\n", "\t\tif false then\n", "reset: Yes without Reset first"),
+    ("a running save not waited for", "\t\twhile data.saving and waited < 10 do\n", "\t\twhile false do\n", "reset: a save already running"),
+    ("a failure leaves the session unsaved", "\t\tif not ok then\n\t\t\tdata.loaded = true\n", "\t\tif not ok then\n", "reset: a store error leaves the save"),
+]
+
+
 def run(luau, source):
     with tempfile.NamedTemporaryFile("w", suffix=".luau", delete=False, encoding="utf-8") as f:
         f.write(source)
@@ -291,7 +613,8 @@ def main():
     if not luau:
         print("Luau not found. Download it from https://github.com/luau-lang/luau/releases and set LUAU=/path/to/luau")
         return 2
-    names = ("OfficeConfig", "CreatureConfig", "IpoConfig", "SectorConfig", "CompanyConfig", "CompanyServer", "TycoonCore")
+    names = ("OfficeConfig", "CreatureConfig", "IpoConfig", "SectorConfig", "CompanyConfig", "CompanyServer", "TycoonCore",
+             "PlotArt", "PlotVisuals", "EmployeeServer", "EmployeeClient")
     sources = {n + ".lua": read(n + ".lua") for n in names}
     passed, fails, done, err = outcome(run(luau, program(sources)))
     for f in fails:
@@ -316,8 +639,70 @@ def main():
         else:
             print("NOT CAUGHT: %s -- no failing check starts with \"%s\" (failed: %s)" % (label, want, mfails[:3]))
     print("Office mutations: %d of %d caught, each by its named check" % (caught, len(MUTANTS)))
-    print("office_test.py: %d checks passed, %d of %d mutation runs caught" % (passed, caught, len(MUTANTS)))
-    return 0 if (not fails and done and caught == len(MUTANTS)) else 1
+    rpassed, rfails, rdone, rerr = outcome(run(luau, room_program(sources)))
+    for f in rfails:
+        print("FAIL: " + f)
+    if not rdone:
+        print("CRASH (room): " + rerr)
+    print("Room checks (phase 2): %d passed, %d failed" % (rpassed, len(rfails) + (0 if rdone else 1)))
+    rcaught = 0
+    for label, file, old, new, want in ROOM_MUTANTS:
+        if sources[file].count(old) != 1:
+            print("NOT CAUGHT: %s -- not applied (its anchor is missing or there twice)" % label)
+            continue
+        mutated = dict(sources)
+        mutated[file] = sources[file].replace(old, new)
+        _, mfails, mdone, merr = outcome(run(luau, room_program(mutated)))
+        hit = [f for f in mfails if f.startswith(want)]
+        if not mdone:
+            print("NOT CAUGHT: %s -- it crashed: %s" % (label, merr[:200]))
+        elif hit:
+            rcaught += 1
+            print("caught: %s -- by \"%s\"" % (label, hit[0]))
+        else:
+            print("NOT CAUGHT: %s -- no failing check starts with \"%s\" (failed: %s)" % (label, want, mfails[:3]))
+    print("Room mutations: %d of %d caught, each by its named check" % (rcaught, len(ROOM_MUTANTS)))
+    spassed, sfails, sdone, serr = outcome(run(luau, reset_program(sources)))
+    for f in sfails:
+        print("FAIL: " + f)
+    if not sdone:
+        print("CRASH (reset): " + serr)
+    core = sources["TycoonCore.lua"]
+    studio_block = between(core, "if RunService:IsStudio() then\n\tShopServer.addDebugAction(\"BuildingNextStage\"", "\n-- Eggs and employees (milestone 2)") or ""
+    pins = [
+        ("reset: registered only inside TycoonCore's `if RunService:IsStudio()` block (the Debug remote never exists live)",
+         core.count('"ResetSaveConfirm"') == 1 and '"ResetSaveConfirm"' in studio_block and core.count('"ResetSaveArm"') == 1 and '"ResetSaveArm"' in studio_block),
+        ("reset: ShopServer's Debug handler still refuses outside Studio or with DebugInStudio off",
+         "if not RunService:IsStudio() or not ShopConfig.DebugInStudio then" in read("ShopServer.lua")),
+        ("reset: the shop's Debug tab asks twice (Reset, then Yes, erase it) and sends both steps",
+         all(t in read("ShopClient.lua") for t in ('runDebug("ResetSaveArm")', 'runDebug("ResetSaveConfirm")', '"Yes, erase it"'))),
+    ]
+    for name, ok in pins:
+        if not ok:
+            print("FAIL: " + name)
+    pins_failed = sum(1 for _, ok in pins if not ok)
+    print("Reset my save checks: %d passed, %d failed" % (spassed + len(pins) - pins_failed, len(sfails) + pins_failed + (0 if sdone else 1)))
+    scaught = 0
+    for label, old, new, want in RESET_MUTANTS:
+        if core.count(old) != 1:
+            print("NOT CAUGHT: %s -- not applied (its anchor is missing or there twice)" % label)
+            continue
+        mutated = dict(sources)
+        mutated["TycoonCore.lua"] = core.replace(old, new)
+        _, mfails, mdone, merr = outcome(run(luau, reset_program(mutated)))
+        hit = [f for f in mfails if f.startswith(want)]
+        if mdone and hit:
+            scaught += 1
+            print("caught: %s -- by \"%s\"" % (label, hit[0]))
+        else:
+            print("NOT CAUGHT: %s -- %s" % (label, merr[:200] if not mdone else mfails[:3]))
+    print("Reset mutations: %d of %d caught, each by its named check" % (scaught, len(RESET_MUTANTS)))
+    passed += spassed + len(pins) - pins_failed
+    caught += scaught
+    reset_ok = not sfails and sdone and pins_failed == 0
+    total, total_caught, total_mutants = passed + rpassed, caught + rcaught, len(MUTANTS) + len(ROOM_MUTANTS) + len(RESET_MUTANTS)
+    print("office_test.py: %d checks passed, %d of %d mutation runs caught" % (total, total_caught, total_mutants))
+    return 0 if (not fails and done and not rfails and rdone and reset_ok and total_caught == total_mutants) else 1
 
 
 if __name__ == "__main__":
