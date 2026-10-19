@@ -1001,17 +1001,17 @@ eggHatched.OnClientEvent:Connect(function(info)
 	revealing = false
 end)
 
--- Employees wandering around the garage ----------------------------------
+-- Employees at work in the garage ----------------------------------------------
+-- Overhaul 2 (the owner's point 8): a hire with a workstation sits on its chair ("Seat", a world position) facing its
+-- desk (the server's "Facing", turned with the garage) and types: a small bob and lean, no wandering. A new hire first
+-- walks in along the server's path ("Way1".."WayCount", world positions, from "ArriveAt" in server time at
+-- "WalkSpeed"), then sits. A hire past the workstations stands at "Home". Only this screen moves them.
 
-local walkers = {} -- model -> { offset, target, nextMove, yaw, phase }
+local workers = {} -- model -> { phase }
 
--- They start facing the front of their garage (the server's "Facing", turned with the garage). The wander below is in
--- world axes: a stroll of up to 3 studs around "Home" (a world position) and a walking yaw from the step itself, so it
--- is right at any turn.
 local function track(model)
 	if model:IsA("Model") then
-		local facing = model:GetAttribute("Facing")
-		walkers[model] = { offset = Vector3.zero, target = Vector3.zero, nextMove = 0, yaw = type(facing) == "number" and facing or math.pi, phase = math.random() * 10 }
+		workers[model] = { phase = math.random() * 10 }
 	end
 end
 for _, model in ipairs(CollectionService:GetTagged("Employee")) do
@@ -1019,32 +1019,74 @@ for _, model in ipairs(CollectionService:GetTagged("Employee")) do
 end
 CollectionService:GetInstanceAddedSignal("Employee"):Connect(track)
 CollectionService:GetInstanceRemovedSignal("Employee"):Connect(function(model)
-	walkers[model] = nil
+	workers[model] = nil
 end)
 
--- Only this screen moves them, so it costs the server nothing
+-- WALK-START
+-- (tools/office_test.py runs the code between the WALK markers: plain math only.)
+-- Where a walker is `walked` studs along its path (a list of points), and the direction it faces there; nil once done
+local function alongPath(way, walked)
+	for i = 2, #way do
+		local step = way[i] - way[i - 1]
+		local length = step.Magnitude
+		if walked <= length and length > 0 then
+			return way[i - 1] + step * (walked / length), step
+		end
+		walked -= length
+	end
+	return nil
+end
+-- WALK-END
+
+local function pathOf(model)
+	local count = model:GetAttribute("WayCount")
+	if type(count) ~= "number" or count < 2 then
+		return nil
+	end
+	local way = {}
+	for i = 1, count do
+		local point = model:GetAttribute("Way" .. i)
+		if typeof(point) ~= "Vector3" then
+			return nil
+		end
+		way[i] = point
+	end
+	return way
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	local camera = workspace.CurrentCamera
 	if not camera then return end
 	local cameraPosition = camera.CFrame.Position
-	local now = os.clock()
-	for model, w in pairs(walkers) do
+	local serverNow = workspace:GetServerTimeNow()
+	for model, w in pairs(workers) do
 		local home = model:GetAttribute("Home")
-		if home and model.PrimaryPart and (home - cameraPosition).Magnitude < 160 then
-			if now >= w.nextMove then
-				-- Stroll to a new spot near their desk, or take a break
-				w.target = math.random() < 0.3 and w.offset or Vector3.new(math.random() * 6 - 3, 0, math.random() * 6 - 3)
-				w.nextMove = now + 2 + math.random() * 4
+		if typeof(home) == "Vector3" and model.PrimaryPart and (home - cameraPosition).Magnitude < 160 then
+			local facing = model:GetAttribute("Facing")
+			facing = type(facing) == "number" and facing or math.pi
+			local seat = model:GetAttribute("Seat")
+			local arriveAt, speed = model:GetAttribute("ArriveAt"), model:GetAttribute("WalkSpeed")
+			local at, step
+			if type(arriveAt) == "number" and type(speed) == "number" and serverNow - arriveAt < 60 then
+				local way = pathOf(model)
+				if way then
+					at, step = alongPath(way, math.max(0, serverNow - arriveAt) * speed)
+				end
 			end
-			local delta = w.target - w.offset
-			local walking = delta.Magnitude > 0.05
-			if walking then
-				w.offset += delta.Unit * math.min(delta.Magnitude, 3.5 * dt)
-				w.yaw = math.atan2(-delta.X, -delta.Z) -- models face -Z
+			if at then -- walking in
+				w.phase += dt * 12
+				local yaw = step.Magnitude > 0.01 and math.atan2(-step.X, -step.Z) or facing -- models face -Z
+				model:PivotTo(CFrame.new(at + Vector3.new(0, math.abs(math.sin(w.phase)) * 0.35, 0)) * CFrame.Angles(0, yaw, 0))
+			elseif typeof(seat) == "Vector3" then -- at work: typing, with a small lean toward the desk now and then
+				w.phase += dt * 9
+				local typing = math.sin(w.phase * 0.13) > -0.3
+				local bob = typing and math.abs(math.sin(w.phase)) * 0.05 or 0
+				local lean = typing and math.rad(6) or 0
+				model:PivotTo(CFrame.new(seat + Vector3.new(0, bob, 0)) * CFrame.Angles(0, facing, 0) * CFrame.Angles(-lean, 0, 0))
+			else -- no workstation: standing at its spot, breathing
+				w.phase += dt * 2.5
+				model:PivotTo(CFrame.new(home + Vector3.new(0, math.sin(w.phase) * 0.06, 0)) * CFrame.Angles(0, facing, 0))
 			end
-			w.phase += dt * (walking and 12 or 2.5)
-			local bob = walking and math.abs(math.sin(w.phase)) * 0.35 or math.sin(w.phase) * 0.06
-			model:PivotTo(CFrame.new(home + w.offset + Vector3.new(0, bob, 0)) * CFrame.Angles(0, w.yaw, 0))
 		end
 	end
 end)

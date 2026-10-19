@@ -442,6 +442,25 @@ Playtests (run by the owner session, 1 player, F5, on the owner's save): the cla
 
 Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (38 scripts).
 
+## Batch 9 (overhaul 2 phase 2: workstations, hires at their desks, solid boxes, the catalog items in the rooms, Reset my save; branch `overhaul2-phase2`, on top of Batch 8)
+
+Opened 2026-10-19 by the owner session 2 (docs/OVERHAUL2_PLAN.md phase 2). Pushed through the Studio MCP from commit `2ea8373` on GitHub (the same fetch as Batch 8, `HttpEnabled` back to false) and hash-checked: **all 38 scripts in Studio match the repo**.
+
+**What the owner sees after this batch:** every workstation is a desk, a chair and a computer (the Garage: a crate, an upturned bucket, an old laptop); hires sit on their chair and type, and a new hire walks in from its incubator (or the front, for a direct hire) along the aisles to its desk; desks, chairs, the six stations, the catalog items and the rooms' furniture have invisible collision boxes (aisles, the lane, the spawn and the incubators stay free); each catalog item shows in the room of its stage once bought; the Debug tab has **Reset my save** (two taps). **Save change: none** (the room is looks only).
+
+| Script | Studio | State | sha256 (`overhaul2-phase2`) | bytes |
+|---|---|---|---|---|
+| `PlotArt` | ModuleScript, ServerScriptService | changed | `e4564086c48190ccf94339aa485c0fab870f3c0e9994f1b4c721827e6202db10` | 100808 |
+| `PlotVisuals` | ModuleScript, ServerScriptService | changed | `77a90b704208516a2917ed606efb961061c2c7fbcf13fefdd95a7ca007e6bedf` | 55701 |
+| `TycoonCore` | Script, ServerScriptService | changed | `fa78a9d9d00b231b670a8531a8eb622a407c3a2a2d655c83773142ff45f129e4` | 69526 |
+| `EmployeeServer` | ModuleScript, ServerScriptService | changed | `a6cf14147f18dfe2bf028c44ba178c682dc2056391008a9c2176e90fc8eaa85e` | 38832 |
+| `EmployeeClient` | LocalScript, StarterPlayerScripts | changed | `9365e03c8e0fdf05a6126f21ec38335ef6fa5e0d66d490dafa6c8678746019cc` | 39284 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `ab0b1ef52134b1db1d816864406a60ae6f89fab256ad62a25ee901393a17921f` | 55361 |
+
+Playtests (owner session, 1 player, F5, on the owner's save): the claim works; the HQ Tower room (stage 6) with 4 employees, all seated (Seat attribute, client pivot within 0.05 of the seat); 19 solid boxes in that room before purchases; the Boardroom bought through ShopAction appears at its spot (local -23, -16.4, 8 parts with its solid, CanCollide on, Transparency 1); a direct hire walks in along 6 waypoints and sits; Reset my save: "Yes" without "Reset" is refused, and "Yes" 16 s after "Reset" is refused (**the reset itself was not run: it is the owner's to press**). No error from our scripts in the Output. Client render rate in Studio was 14.9 FPS with Studio in the background (2,064 parts in Workspace): not a phone number. **Not run:** 2 players, Test > Device (phone), FPS on a phone.
+
+Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (38 scripts).
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

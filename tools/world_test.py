@@ -147,6 +147,13 @@ CF.__eq = function(a, b)
 	return true
 end
 function CF.GetComponents(t) local r = t.r return t.x, t.y, t.z, r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9] end
+-- overhaul 2 phase 2: the rooms' solid boxes are measured in the garage's frame (PlotVisuals.addSolid / decorSolids)
+function CF.Inverse(t)
+	local r = t.r
+	local q = { r[1], r[4], r[7], r[2], r[5], r[8], r[3], r[6], r[9] }
+	return cf(-(q[1] * t.x + q[2] * t.y + q[3] * t.z), -(q[4] * t.x + q[5] * t.y + q[6] * t.z), -(q[7] * t.x + q[8] * t.y + q[9] * t.z), q)
+end
+function CF.ToObjectSpace(a, b) return a:Inverse() * b end
 local function rx(a) local c, s = math.cos(a), math.sin(a) return { 1, 0, 0, 0, c, -s, 0, s, c } end
 local function ry(a) local c, s = math.cos(a), math.sin(a) return { c, 0, s, 0, 1, 0, -s, 0, c } end
 local function rz(a) local c, s = math.cos(a), math.sin(a) return { c, -s, 0, s, c, 0, 0, 0, 1 } end

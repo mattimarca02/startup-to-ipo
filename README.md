@@ -65,7 +65,7 @@ Other files:
 
 | File | What it is |
 |---|---|
-| `tools/office_test.py` | Overhaul 2's office: the catalog, the ladder, the purchase checks, workstations and the pass, direct hires, the `office` save section and the one-time building move (real OfficeConfig, CompanyConfig, CompanyServer and TycoonCore's own functions, with mutants) |
+| `tools/office_test.py` | Overhaul 2's office: the catalog, the ladder, the purchase checks, workstations and the pass, direct hires, the `office` save section and the one-time building move, the room (catalog items on their spots, the solid boxes, the hires' walk in) and Reset my save (real OfficeConfig, CompanyConfig, CompanyServer, PlotArt, PlotVisuals and TycoonCore's own functions, with mutants) |
 | `sync_monetization.py`, `sync_monetization.bat` | Create and update the passes and products on Roblox from `ShopConfig` |
 | `icons/` | Pass icons that `sync_monetization` uploads |
 | `tools/economy_sim.py` | Economy simulator (Python): IPO timing, Shares, passes and the daily calendar (`--daily`). See `docs/ECONOMY.md` |

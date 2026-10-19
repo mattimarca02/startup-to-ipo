@@ -1110,12 +1110,18 @@ check("streaming: every building Model is Persistent (its shell never streams ou
 		m6 ~= m7 and movedJump == 0 and near((jumper.Position - (origin * Vector3.new(5, 10.6, -5))).Magnitude, 0), movedJump)
 end
 
--- 7. Six garages at the biggest stage, and the plaza: under 3,200 parts (overhaul 2: 3,000 -> 3,200 for the HQ Tower) -----------------------------------------------
+-- 7. Six garages at the biggest stage, and the plaza: under 4,000 parts (overhaul 2: 3,000 -> 3,200 for the HQ Tower; phase 2:
+-- 3,200 -> 4,000 for the catalog items in the rooms and the solid boxes, about 35 per room, which are invisible) -----------
 do
 	local room = 0
-	local r = PlotVisuals.buildRoom(nil, frameAt(0), PlotArt, 6)
-	for _, slot in ipairs(PlotArt.Layout.itemSlots) do PlotVisuals.buildProp(r:FindFirstChild("UpgradeProps"), frameAt(0), PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z)) end
-	for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") then room += 1 end end
+	for stage = 1, #PlotArt.Stages do -- the biggest room with its six props and every catalog item of its stage
+		local r = PlotVisuals.buildRoom(nil, frameAt(0), PlotArt, stage)
+		for _, slot in ipairs(PlotArt.Layout.itemSlots) do PlotVisuals.buildProp(r:FindFirstChild("UpgradeProps"), frameAt(0), PlotArt, slot.name, Vector3.new(slot.x, 0, slot.z)) end
+		for _, key in ipairs(PlotVisuals.itemsOf(PlotArt, stage)) do PlotVisuals.buildItem(r:FindFirstChild("UpgradeProps"), frameAt(0), PlotArt, key) end
+		local n = 0
+		for _, d in ipairs(r:GetDescendants()) do if d:IsA("BasePart") then n += 1 end end
+		room = math.max(room, n)
+	end
 	local biggest = 0
 	for s = 1, 6 do
 		local m = PBV.build(nil, frameAt(0), PB, s, makeKit(0))
@@ -1124,7 +1130,7 @@ do
 		biggest = math.max(biggest, n)
 	end
 	local total = 6 * (room + biggest + 2) + PLAZA_BUDGET -- + the Floor and the garage sign
-	check("budget: six garages at their biggest stage (room " .. room .. " + building " .. biggest .. ") plus the plaza (" .. PLAZA_BUDGET .. ") is under 3,200: " .. total, total < 3200, total)
+	check("budget: six garages at their biggest stage (room " .. room .. " + building " .. biggest .. ") plus the plaza (" .. PLAZA_BUDGET .. ") is under 4,000: " .. total, total < 4000, total)
 end
 """
 

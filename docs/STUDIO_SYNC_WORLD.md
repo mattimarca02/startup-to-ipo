@@ -14,7 +14,7 @@ Branch `world-icons-pass` (from `main` `e3c9e67`). Nothing here touches Roblox b
 | `WorldVisuals` | ModuleScript, ServerScriptService | new | `0d2fb53941e4eaf30db7b43e3b66d55f23e5977aad8c91f077e012b12518cd05` | 55999 |
 | `IconArt` | ModuleScript, ReplicatedStorage | new | `83a43be6471c597a15a6f2ffcf1f7712fadc3d5e348b3b8a10c067b702236915` | 30741 |
 | `IconVisuals` | ModuleScript, ReplicatedStorage | new | `f4543a25877c459389553663fc413eadb3bb14170598e3f2e1f3435ee0f491e4` | 55083 |
-| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at overhaul2-phase1) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `bc24166730783dbe74e0bb3252ac8d4d7a92fd7899c14dac3559c78fa1246f0b` | 68553 |
+| `TycoonCore` | Script, ServerScriptService | **only after approval**: `main`'s file (at overhaul2-phase2) with `docs/world_pass_integration.patch` applied; valid for that file only (`--regen-patch`) | `5541c0942d5636f09db07f49469a706a3067a8dd6203d59f03995ae833e42f50` | 70704 |
 
 The files use `\n` line endings and end with one newline. Studio may drop that last newline or add one more: the hash check (d) accepts both, and nothing else. Every other script stays exactly as on `main` (TycoonCore on `main` is `77ce9c43...61aa9`, 34330 bytes, as in docs/STUDIO_SYNC.md).
 

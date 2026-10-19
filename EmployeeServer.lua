@@ -44,6 +44,16 @@ local INCUBATOR_SPOTS = {
 	Vector3.new(-24, 0, -25), Vector3.new(24, 0, -25),
 }
 local FEET = Vector3.new(0, 1, 0) -- plot center -> a model's pivot with its feet on the floor
+-- Overhaul 2 (the owner's point 8): a hire with a workstation sits on its chair and works there, no wandering. SEAT goes
+-- from its spot to its pivot on the seat (PlotArt chairFor: the seat's top 1.2 up, the hire a little toward the desk).
+-- A new hire first walks in from where it came from (its incubator, or DOOR) along the aisles and the lane, never across
+-- a desk (pathTo); EmployeeClient walks and seats the models from these attributes, so it costs the server nothing.
+local SEAT = Vector3.new(0, 1.2, 0.4)
+local DOOR = Vector3.new(6, 0, 29) -- the garage's open front, beside the next-upgrade sign and the founder's desk
+local FRONT_BAND = 20.5 -- between the last row's desks (to 18.2) and the signs (from 22.5)
+local FRONT_AISLE = -15 -- the aisle between the incubators and the first row (PlotArt.Layout: z -18 to -11.5)
+local INCUBATOR_LINE = -18.2 -- just in front of the incubators, clear of the catalog spots on both sides
+local WALK_SPEED = 8 -- studs per second (EmployeeClient reads the path and walks it at this speed)
 local GOLD = Color3.fromRGB(255, 200, 50)
 local WHITE = Color3.new(1, 1, 1)
 
@@ -183,31 +193,92 @@ local function spotFor(index)
 	return EMPLOYEE_SPOTS[(index - 1) % #EMPLOYEE_SPOTS + 1] + Vector3.new(lap * 2, 0, lap * 2)
 end
 
--- Makes the garage match the team: builds new employees, removes fired ones, lines everyone up.
--- The client makes them wander around their "Home" spot.
-local function placeEmployees(data)
+-- PATH-START
+-- (tools/office_test.py runs the code between the PATH markers: plain math only.)
+-- The walk from `from` to the hire spot `spot` (both in the garage's frame, y 0): out of an incubator to the line in
+-- front of the incubators and along it to the front aisle, out of a desk into the aisle behind its row, or in at the
+-- front (DOOR) to the band before the signs; then the lane down the middle (x 0), the aisle behind the spot's row, and
+-- up to the spot. Each row's aisle is 4.6 behind it.
+local function pathTo(from, spot, fromSpot)
+	local aisle = spot.Z - 4.6
+	local way = { from }
+	local function add(x, z)
+		local last = way[#way]
+		if math.abs(last.X - x) > 0.05 or math.abs(last.Z - z) > 0.05 then
+			table.insert(way, Vector3.new(x, 0, z))
+		end
+	end
+	if fromSpot then -- from another desk: back into the aisle behind its row
+		add(from.X, from.Z - 4.6)
+		add(0, from.Z - 4.6)
+	elseif from.Z > FRONT_BAND then -- in at the front
+		add(from.X, FRONT_BAND)
+		add(0, FRONT_BAND)
+	elseif from.Z < INCUBATOR_LINE then -- from an incubator
+		add(from.X, INCUBATOR_LINE)
+		local x = math.clamp(from.X, -14, 14)
+		add(x, INCUBATOR_LINE)
+		add(x, FRONT_AISLE)
+		if aisle > FRONT_AISLE + 1 then
+			add(0, FRONT_AISLE)
+		end
+	end
+	if aisle > FRONT_AISLE + 1 or not (from.Z < INCUBATOR_LINE) then
+		add(0, way[#way].Z)
+		add(0, aisle)
+	end
+	add(spot.X, aisle)
+	add(spot.X, spot.Z)
+	return way
+end
+-- PATH-END
+
+-- Makes the garage match the team: builds new employees, removes fired ones, seats everyone at a workstation (a hire
+-- past the workstations stands at its spot). arrivals[id] = where a new hire walks in from (the garage's frame); a hire
+-- whose spot changed (someone left) walks from its old desk.
+local function placeEmployees(data, arrivals)
 	local team = data.team
 	local frame = core.plotFrame(data.slot)
 	local _, turn = frame:ToEulerAnglesYXZ()
-	local facing = math.pi + turn -- the front of the plot, turned with the garage (models face -Z)
+	local facing = math.pi + turn -- the front of the plot, turned with the garage (models face -Z): toward its desk
+	local desks = data.player and math.min(maxEmployees(data.player), #EMPLOYEE_SPOTS) or #EMPLOYEE_SPOTS
 	local employed = {}
 	for i, employee in ipairs(team.employees) do
 		employed[employee.id] = true
-		local home = frame * (spotFor(i) + FEET)
+		local spot = spotFor(i)
+		local home = frame * (spot + FEET)
+		local seat = i <= desks and frame * (spot + FEET + SEAT) or nil
 		local model = team.models[employee.id]
+		local from = arrivals and arrivals[employee.id]
+		local fromSpot = false
 		if not model then
 			local creature = CreatureConfig.getCreature(employee.creature)
 			model = CreatureModels.build(creature)
 			addNameTag(model, creature)
 			model:SetAttribute("EmployeeId", employee.id)
 			model:SetAttribute("Facing", facing) -- EmployeeClient starts them facing it
-			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0)) -- face the front of the plot
+			model:PivotTo(CFrame.new(seat or home) * CFrame.Angles(0, facing, 0)) -- at its desk, facing the front
 			CollectionService:AddTag(model, "Employee")
 			model.Parent = data.folder
 			team.models[employee.id] = model
 		elseif model:GetAttribute("Home") ~= home then
-			model:PivotTo(CFrame.new(home) * CFrame.Angles(0, facing, 0))
+			local old = model:GetAttribute("SpotIndex")
+			if typeof(old) == "number" and not from then
+				from, fromSpot = spotFor(old), true
+			end
+			model:PivotTo(CFrame.new(seat or home) * CFrame.Angles(0, facing, 0))
 		end
+		if from then
+			local way = pathTo(from, spot, fromSpot)
+			for w = 1, math.max(#way, model:GetAttribute("WayCount") or 0) do
+				model:SetAttribute("Way" .. w, way[w] and frame * (way[w] + FEET) or nil)
+			end
+			model:SetAttribute("WayCount", #way)
+			model:SetAttribute("ArriveAt", workspace:GetServerTimeNow())
+			model:SetAttribute("WalkSpeed", WALK_SPEED)
+		end
+		model:SetAttribute("SpotIndex", i)
+		model:SetAttribute("Seat", seat)
 		model:SetAttribute("Home", home)
 	end
 	for id, model in pairs(team.models) do
@@ -311,7 +382,7 @@ local function hatch(player, index, how)
 	local hired = #team.employees < maxEmployees(player)
 	if hired then
 		table.insert(team.employees, employee)
-		placeEmployees(data)
+		placeEmployees(data, { [employee.id] = INCUBATOR_SPOTS[index] or DOOR }) -- out of its incubator, to its desk
 		core.updateIncome(player)
 	else
 		team.pending = employee
@@ -433,7 +504,7 @@ local function resolvePending(player, choice)
 
 	team.pending = nil
 	table.insert(team.employees, pending)
-	placeEmployees(data)
+	placeEmployees(data, { [pending.id] = DOOR })
 	core.updateIncome(player)
 	push(player)
 	return true, creature.name .. " joined your team!"
@@ -480,8 +551,9 @@ function EmployeeServer.hireDirect(player, index)
 		return false, "You need " .. OfficeConfig.money(offer.price) .. " for " .. creature.name
 	end
 	data.cash.Value -= offer.price
-	table.insert(team.employees, newEmployee(creature.key))
-	placeEmployees(data)
+	local hire = newEmployee(creature.key)
+	table.insert(team.employees, hire)
+	placeEmployees(data, { [hire.id] = DOOR }) -- walks in at the front door, to its desk
 	core.updateIncome(player)
 	push(player)
 	return true, creature.name .. " joins your team"
@@ -522,7 +594,7 @@ function EmployeeServer.addEmployee(player, employee)
 	end
 	team.outgoing[employee.id] = nil -- saved once, as a team member, not also as leaving
 	table.insert(team.employees, { id = employee.id, creature = employee.creature, hiredAt = os.time() })
-	placeEmployees(data)
+	placeEmployees(data, { [employee.id] = DOOR })
 	core.updateIncome(player)
 	push(player)
 	return true
@@ -819,6 +891,7 @@ function EmployeeServer.refreshCapacity(player)
 		team.parked[i] = team.incubators[i] or nil
 		team.incubators[i] = nil
 	end
+	placeEmployees(data) -- the workstations may have changed: who sits (the `office` section read, a desk bought)
 	push(player)
 end
 
