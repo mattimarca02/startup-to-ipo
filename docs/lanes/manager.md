@@ -97,3 +97,9 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-18 22:35 ux start FAILED (permission denied by the run classifier): lanes resumed, PR #53 merged, no open PR, continue with the backlog.
 2026-10-18 22:35 quality not started: no open PRs.
 2026-10-18 22:36 notified owner: interiors and ux starts denied (start them himself); STUDIO_SYNC_BATCH.md got Batches 2 to 7 (claim on and the overhaul).
+2026-10-19 00:41 interiors not started: start denied three times in a row (last 22:35), already sent to the owner; lane file still stale ("waiting for review of PR #40", merged).
+2026-10-19 00:41 building not started: started by the manager at 22:35 (under 3 h).
+2026-10-19 00:41 world not started: started by the manager at 22:35 (under 3 h).
+2026-10-19 00:41 gameplay not started: PR #61 open (head 36c310a), no verdict yet; goes to quality.
+2026-10-19 00:41 ux started: PR #53 merged, no open PR, continue with the backlog (22:35 start was denied once).
+2026-10-19 00:41 quality started: review PR #61 (gameplay, head 36c310a), no verdict for its head.
