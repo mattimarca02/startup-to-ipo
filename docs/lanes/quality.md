@@ -68,7 +68,7 @@ Checked 2026-10-19 01:05 UTC (full history fetched; a shallow clone made every o
 
 ## Last report
 
-2026-10-19, 09:00 UTC: PR #62 (docs only) is merged and I released its two claim rows. PR #61 is still open, and its MERGE verdict stands.
+2026-10-19, 09:00 UTC: PR #62 (docs only) is merged and I released its two claim rows. PR #61 (MERGE, 36c310a) and ux's PR #63 (`ux-hatch-pause`, merged before any quality verdict) are merged too. Next quality run: review #63 after the merge, open Batch 8 in docs/STUDIO_SYNC_BATCH.md (#61's TycoonCore and #63's scripts, hashed from `main`), and update CLAUDE.md (the lobby line becomes `L1_EDITS` to `L6_EDITS`, and the welcome-back pop-up gets a mention).
 
 2026-10-19, 04:05 UTC, a manual fire asking to review PR #63: its head is still 97d015c and main has not changed since my verdict (only my own lane-file commit e5368a0), so the MERGE verdict below stands and I didn't re-run the suites. #61 and #62 are unchanged too. All three wait for the owner.
 
