@@ -10,8 +10,9 @@
 --   FounderAction("Start", which)      -> "sprint" (at the desk), "bug" (at the rack, while the alarm rings),
 --                                         "brainstorm" (at the blackboard), "pitch" (at the desk, while one is offered)
 --   FounderAction("Pick", n)           -> the button pressed in the running activity (1 to 4)
---   FounderAction("Cancel")            -> close it: a sprint or pitch ends with what it has; a bug can be started again
---                                         while its alarm rings; a brainstorm stays ready
+--   FounderAction("Cancel")            -> close it: a sprint or pitch ends with what it has (closed before the first
+--                                         answer: nothing happens, no cooldown, the pitch stays offered); a bug can be
+--                                         started again while its alarm rings; a brainstorm stays ready
 --   FounderState (server to client)    -> "state" { sprint, bug, board, boost, pitch, activity } (see snapshot)
 -- Starting at a station needs the character within FounderConfig.Reach of it (measured here from the garage's frame).
 -- Rewards: seconds of Income through TaskServer.payReward (the calls' reward bank and daily cap; the pitch is a round
@@ -472,7 +473,12 @@ local function onAction(player, action, arg)
 		ok, message, info = pick(player, data, live, arg, now)
 	elseif action == "Cancel" then
 		local activity = live.activity
-		if activity and activity.kind == "sprint" then
+		local untouched = activity and ((activity.kind == "sprint" and activity.round == 1) or (activity.kind == "pitch" and activity.q == 1))
+		if untouched then
+			live.activity = nil -- closed before the first answer: no cooldown, the pitch stays offered
+			live.changed = true
+			ok = true
+		elseif activity and activity.kind == "sprint" then
 			ok, message, info = finishSprint(player, data, live, now)
 		elseif activity and activity.kind == "pitch" then
 			ok, message, info = finishPitch(player, data, live, now)

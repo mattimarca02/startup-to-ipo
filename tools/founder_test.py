@@ -383,6 +383,24 @@ do
 	C.BudgetBank = 1e9
 end
 
+-- 7b. Closing before the first answer --------------------------------------------------------------------------------------
+do
+	local p, d = newPlayer({ stage = 2 })
+	step(p)
+	act(p, "Start", "sprint")
+	act(p, "Cancel")
+	check("cancel: a sprint closed before its first answer starts no cooldown", d.founder.live.activity == nil and act(p, "Start", "sprint") == true)
+	act(p, "Cancel")
+	act(p, "Start", "pitch")
+	act(p, "Cancel")
+	check("cancel: a pitch closed before its first answer stays offered", d.founder.pitched.Seed == nil and lastState(p).pitch == "Seed")
+	advance(5) -- the request bucket refills
+	act(p, "Start", "pitch")
+	advance(1); act(p, "Pick", 1)
+	act(p, "Cancel")
+	check("cancel: a pitch closed after an answer is done for the round", d.founder.pitched.Seed == true)
+end
+
 -- 8. Requests ------------------------------------------------------------------------------------------------------------
 do
 	local p, d = newPlayer()
@@ -502,6 +520,8 @@ MUTANTS = [
      "brainstorm: the calls idea"),
     ("the founder section forgets unknown fields", "FounderServer.lua", "\t\t\t\tfounder.extra[key] = value\n", "\n",
      "save: kept as it was"),
+    ("closing a sprint at once starts its cooldown", "FounderServer.lua", '(activity.kind == "sprint" and activity.round == 1) or ', "",
+     "cancel: a sprint closed before"),
     ("the Income boost never ends", "FounderServer.lua", "\tif boost and now >= boost.untilAt then\n\t\tlive.boost = nil",
      "\tif false then\n\t\tlive.boost = nil", "brainstorm: when it runs out"),
 ]
