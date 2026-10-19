@@ -482,6 +482,22 @@ Playtests (owner session, 1 player, F5, on the owner's save, garage 1 of the rin
 
 Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (41 scripts).
 
+## Batch 11 (overhaul 2 phase 4: the egg and the hatch reveal; branch `overhaul2-phase4`, on top of Batch 10)
+
+Opened 2026-10-19 by the owner session 2. Pushed through the Studio MCP from commit `73d378a` (`HttpEnabled` back to false); the three hashes below were read back from Studio and match.
+
+**What the owner sees after this batch:** the eggs in the incubators have a band and four spots in their own colors (Garage brown and cream, Startup blue and white, Unicorn pink and gold), on the side facing the garage's front; hatching plays a 3D egg that wobbles, then (rarer creatures) glows and cracks, then pops: a common creature in about 1.3 s with a plain flash, a Legendary in about 6 s with turning light rays, sparkles, the world shaking for a moment and the victory sound. **Save change: none.**
+
+| Script | Studio | State | sha256 (`overhaul2-phase4`) | bytes |
+|---|---|---|---|---|
+| `CreatureConfig` | ModuleScript, ReplicatedStorage | changed | `3349eab0ce5ea506e4d17dcfc03ebb2eee3e52efcbacf7b29f74d1a4f8ee0c70` | 18884 |
+| `EmployeeServer` | ModuleScript, ServerScriptService | changed | `c860eff8989421db512d6b5943257c7371d8105883232e976353a8bca6315f4f` | 40071 |
+| `EmployeeClient` | LocalScript, StarterPlayerScripts | changed | `86a5345a41f28721e9720ada9780915e287227a7fe5ec7fd07adc46cc7c24b78` | 46970 |
+
+Playtest (owner session, 1 player, on the owner's save): a Garage Egg bought ($800), Debug "Next hatch: Legendary" and "Skip egg timers": the owner's Auto-Hatch hatched it and the reveal reached the creature card 5.2 s after the hatch request, holding `OpenPanel` = "Hatch"; the empty incubators hide the egg, its band and its spots. No error from our scripts. **The test added a Legendary hire to the owner's save** (Debug-forced). **Not run:** watching the reveal by eye (the MCP screen captures are not reliable), a common hatch's timing in Studio (checked by `tools/egg_test.py`), a phone.
+
+Run on: 2026-10-19 by the owner session 2 (MCP), the three hashes checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

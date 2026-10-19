@@ -8662,7 +8662,7 @@ FRAME_SITES = {
     ("TycoonCore.lua", "buildGarages"): 3, ("TycoonCore.lua", "syncBuilding"): 2,
     # lobby L3: the claim post (buildGarages) and the Free garage's room (buildFreeRoom, from the frame's position)
     ("TycoonCore.lua", "buildFreeRoom"): 1,
-    ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 1, ("IpoServer.lua", "buildSign"): 1,
+    ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 2, ("IpoServer.lua", "buildSign"): 1,  # overhaul 2 phase 4: buildIncubator's egg spots face the garage's front
 }
 # WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
 FRAME_UNWIRED = ("WorldArt.lua", "WorldVisuals.lua")
