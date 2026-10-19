@@ -551,6 +551,21 @@ Playtest (owner session, 1 player, on the owner's save, Studio window 1193x434):
 
 Run on: 2026-10-19 by the owner session 2 (MCP), the hash checked.
 
+## Batch 16 (the smooth arch; branch `smooth-arch`, on top of main after PR #74; independent of Batch 15)
+
+Opened 2026-10-19 by the owner session 3. Pushed through the Studio MCP from commit `c7a6dff` (`HttpEnabled` back to false); both hashes read back from Studio match.
+
+**What changes for players:** the Roman arch's central archway is a smooth half circle (eight white marble voussoirs and the keystone; it was a staircase of steps). Same footprint, same four solid piers, same 50 parts: the world stays at 3,994 of 4,000. **Save change: none.**
+
+| Script | Studio | State | sha256 (`smooth-arch`) | bytes |
+|---|---|---|---|---|
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `38aa58bde30868023a73bf48c03c0954f1bfb9d638c3439d3487cf9445e44780` | 26224 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `c9c24197737b706c91c3f2b9e82c46b910b7e6615ccbafb736181fe91f80a079` | 66577 |
+
+Playtest (owner session, 1 player): `WelcomeArch` built with 50 parts; the eight voussoirs stand 7.5 from the spring line's centre (inner face 6) at 10, 30, 50, 70, 110, 130, 150 and 170 degrees, Marble, white, not colliding. No error or warning from our scripts (only the Max Players reminder). **Not checked by eye** (the MCP's captures are unreliable): look at the arch from the plaza.
+
+Run on: 2026-10-19 by the owner session 3 (MCP), the 2 hashes checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.
