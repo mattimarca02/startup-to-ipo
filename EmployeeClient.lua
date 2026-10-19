@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
+local SoundService = game:GetService("SoundService")
 
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig"))
 local CreatureModels = require(ReplicatedStorage:WaitForChild("CreatureModels"))
@@ -801,14 +802,49 @@ local overlay = make("TextButton", { -- a button, so tapping anywhere can close 
 	AutoButtonColor = false,
 	Parent = revealGui,
 })
-local eggShape = make("Frame", {
+-- Light rays behind the egg and the card (rare and up): thin bars turning around the middle (Frames, no image asset)
+local rays = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(150, 190),
+	Size = UDim2.fromOffset(10, 10),
+	BackgroundTransparency = 1,
+	Visible = false,
 	Parent = overlay,
 })
-round(eggShape)
-make("UIStroke", { Thickness = 4, Color = Color3.new(1, 1, 1), Parent = eggShape })
+local rayBars = {}
+for i = 1, 12 do
+	rayBars[i] = make("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(900, 26),
+		Rotation = (i - 1) * 15,
+		BorderSizePixel = 0,
+		BackgroundTransparency = 0.75,
+		Parent = rays,
+	})
+	make("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.2), NumberSequenceKeypoint.new(1, 1) }), Parent = rayBars[i] })
+end
+-- The egg: a real 3D egg (an oval, its band and spots in the egg's own colors) in a ViewportFrame, lit, that wobbles,
+-- glows and cracks before it pops
+local eggView = make("ViewportFrame", {
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(220, 260),
+	BackgroundTransparency = 1,
+	Ambient = Color3.fromRGB(150, 150, 160),
+	LightColor = Color3.new(1, 1, 1),
+	LightDirection = Vector3.new(-1, -1.2, -0.8),
+	Parent = overlay,
+})
+local eggCamera = make("Camera", { FieldOfView = 40, Parent = eggView })
+eggView.CurrentCamera = eggCamera
+eggCamera.CFrame = CFrame.lookAt(Vector3.new(0, 0, -9), Vector3.new(0, 0, 0))
+local sparkLayer = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = overlay })
+RunService.RenderStepped:Connect(function(dt) -- the rays turn while they show
+	if rays.Visible then
+		rays.Rotation = (rays.Rotation + dt * 25) % 360
+	end
+end)
 local flash = make("Frame", {
 	Size = UDim2.fromScale(1, 1),
 	BackgroundColor3 = Color3.new(1, 1, 1),
@@ -898,33 +934,136 @@ end
 playerGui:GetAttributeChangedSignal("OpenPanel"):Connect(holdRevealPanel)
 -- HATCHPANEL-END
 
+-- REVEALPLAN-START
+-- (tools/egg_test.py runs the code between the REVEALPLAN markers, so keep it free of Roblox calls.)
+-- How each rarity hatches (overhaul 2 phase 4, the owner's point 7). The rarity is the server's roll (or the fixed hire
+-- order for restricted players, FR-13): the show only follows it, it never says a chance. wobbles = shakes of the egg
+-- (each `wobble` seconds), build = seconds the egg glows and cracks before it pops, rays = light rays, sparks = flying
+-- sparkles, shake = seconds the world camera shakes, sound = a built-in rbxasset sound at the pop (nil: none).
+local REVEAL_PLAN = {
+	Common = { wobbles = 8, wobble = 0.12, build = 0, rays = false, sparks = 0, shake = 0, sound = nil },
+	Uncommon = { wobbles = 9, wobble = 0.12, build = 0.5, rays = false, sparks = 8, shake = 0, sound = nil },
+	Rare = { wobbles = 10, wobble = 0.12, build = 1.0, rays = true, sparks = 12, shake = 0, sound = "rbxasset://sounds/electronicpingshort.wav" },
+	Epic = { wobbles = 12, wobble = 0.13, build = 1.8, rays = true, sparks = 20, shake = 0.5, sound = "rbxasset://sounds/electronicpingshort.wav" },
+	Legendary = { wobbles = 16, wobble = 0.14, build = 3.0, rays = true, sparks = 32, shake = 1.2, sound = "rbxasset://sounds/victory.wav" },
+}
+local function revealPlan(rarity)
+	return REVEAL_PLAN[rarity] or REVEAL_PLAN.Common
+end
+-- Seconds from the start of the reveal to the card (the egg's part): the wobbles, the build-up and the pop
+local function revealSeconds(plan)
+	return plan.wobbles * plan.wobble + plan.build + 0.35
+end
+-- REVEALPLAN-END
+
+-- The 3D egg in the reveal, in the egg's colors (CreatureConfig: color, band, spots)
+local function buildRevealEgg(egg)
+	eggView:ClearAllChildren()
+	eggCamera = make("Camera", { FieldOfView = 40, Parent = eggView })
+	eggView.CurrentCamera = eggCamera
+	eggCamera.CFrame = CFrame.lookAt(Vector3.new(0, 0, -9), Vector3.new(0, 0, 0))
+	local model = make("Model", { Name = "Egg", Parent = eggView })
+	local shell = make("Part", { Name = "Shell", Size = Vector3.new(2.4, 3.2, 2.4), Color = egg and egg.color or COLORS.gold, Material = Enum.Material.SmoothPlastic, Anchored = true, Parent = model })
+	make("SpecialMesh", { MeshType = Enum.MeshType.Sphere, Parent = shell })
+	local band = make("Part", { Name = "Band", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.34, 2.46, 2.46), Color = egg and egg.band or Color3.new(1, 1, 1),
+		Material = Enum.Material.SmoothPlastic, Anchored = true, CFrame = CFrame.new(0, -0.2, 0) * CFrame.Angles(0, 0, math.pi / 2), Parent = model })
+	local spots = {}
+	for i, at in ipairs({ { -0.55, 0.75, -1.0 }, { 0.6, 0.35, -1.05 }, { 0.05, 1.25, -0.8 }, { -0.35, -0.85, -1.05 } }) do
+		spots[i] = make("Part", { Name = "Spot" .. i, Shape = Enum.PartType.Ball, Size = Vector3.new(0.45, 0.45, 0.45), Color = egg and egg.spots or Color3.new(1, 1, 1),
+			Material = Enum.Material.SmoothPlastic, Anchored = true, CFrame = CFrame.new(at[1], at[2], at[3]), Parent = model })
+	end
+	model.PrimaryPart = shell
+	return model, shell, band, spots
+end
+
+-- Sparkles flying out from the middle (frames in the rarity's color; each one goes by itself)
+local function burstSparks(count, color)
+	for i = 1, count do
+		local angle = (i / count) * math.pi * 2 + math.random() * 0.4
+		local spark = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(10, 10),
+			BackgroundColor3 = i % 3 == 0 and Color3.new(1, 1, 1) or color, BorderSizePixel = 0, Rotation = 45, Parent = sparkLayer })
+		round(spark, 3)
+		local reach = 160 + math.random() * 140
+		TweenService:Create(spark, TweenInfo.new(0.9 + math.random() * 0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = UDim2.new(0.5, math.cos(angle) * reach, 0.5, math.sin(angle) * reach), BackgroundTransparency = 1, Size = UDim2.fromOffset(4, 4),
+		}):Play()
+		task.delay(1.5, function() spark:Destroy() end)
+	end
+end
+
+local function playSound(id, volume)
+	if not id then return end
+	local sound = make("Sound", { SoundId = id, Volume = volume or 0.7, Parent = SoundService })
+	SoundService:PlayLocalSound(sound)
+	task.delay(6, function() sound:Destroy() end)
+end
+
 local function playReveal(info)
 	local creature = CreatureConfig.getCreature(info.creature)
 	local egg = CreatureConfig.getEgg(info.egg)
 	if not creature then return end
 	local color = rarityColor(creature.rarity)
+	local plan = revealPlan(creature.rarity)
 
 	setRevealShowing(true)
 	revealGui.Enabled = true
 	GuiService.TouchControlsEnabled = false
 	revealCard.Visible = false
-	eggShape.Visible = true
-	eggShape.Rotation = 0
-	eggShape.Size = UDim2.fromOffset(150, 190)
-	eggShape.BackgroundTransparency = 0
-	eggShape.BackgroundColor3 = egg and egg.color or COLORS.gold
-
-	-- The egg wobbles harder and harder, then pops in a flash
-	for i = 1, 8 do
-		local angle = (i % 2 == 0 and 1 or -1) * (4 + i * 2)
-		TweenService:Create(eggShape, TweenInfo.new(0.09), { Rotation = angle }):Play()
-		task.wait(0.1)
+	eggView.Visible = true
+	eggView.Size = UDim2.fromOffset(220, 260)
+	local eggModel, shell = buildRevealEgg(egg)
+	for _, bar in ipairs(rayBars) do
+		bar.BackgroundColor3 = color
 	end
-	TweenService:Create(eggShape, TweenInfo.new(0.2), { Size = UDim2.fromOffset(210, 260), BackgroundTransparency = 1 }):Play()
+	rays.Visible = false
+
+	-- The egg wobbles harder and harder (rarer eggs longer), then glows and cracks, then pops in a flash
+	for i = 1, plan.wobbles do
+		local angle = math.rad((i % 2 == 0 and 1 or -1) * (6 + i * 1.6))
+		eggModel:PivotTo(CFrame.Angles(0, os.clock(), angle))
+		task.wait(plan.wobble)
+	end
+	if plan.build > 0 then
+		rays.Visible = plan.rays
+		local glow = make("PointLight", { Color = color, Range = 8, Brightness = 0, Parent = shell })
+		local cracks = {}
+		local started = os.clock()
+		while os.clock() - started < plan.build do
+			local t = (os.clock() - started) / plan.build
+			glow.Brightness = t * 4
+			shell.Color = (egg and egg.color or COLORS.gold):Lerp(color, t * 0.6)
+			eggModel:PivotTo(CFrame.Angles(0, os.clock() * 2, math.sin(os.clock() * 40) * 0.08 * (1 + t)))
+			if #cracks < math.floor(t * 5) then -- a dark crack line appears on the shell
+				local n = #cracks + 1
+				cracks[n] = make("Part", { Name = "Crack" .. n, Size = Vector3.new(0.08, 0.9, 0.08), Color = Color3.fromRGB(40, 32, 26), Anchored = true,
+					CFrame = shell.CFrame * CFrame.new(-0.6 + n * 0.25, 0.4 - n * 0.15, -1.15) * CFrame.Angles(0, 0, (n % 2 == 0 and 0.5 or -0.5)), Parent = eggModel })
+			end
+			task.wait()
+		end
+	end
+	-- The pop: the flash, the sound, the sparkles, and (epic and legendary) the world shaking for a moment
+	playSound(plan.sound, creature.rarity == "Legendary" and 0.8 or 0.5)
+	flash.BackgroundColor3 = plan.rays and color:Lerp(Color3.new(1, 1, 1), 0.6) or Color3.new(1, 1, 1)
 	flash.BackgroundTransparency = 0
 	TweenService:Create(flash, TweenInfo.new(0.5), { BackgroundTransparency = 1 }):Play()
+	TweenService:Create(eggView, TweenInfo.new(0.2), { Size = UDim2.fromOffset(300, 350) }):Play()
+	if plan.shake > 0 then
+		local shakeUntil = os.clock() + plan.shake
+		RunService:BindToRenderStep("HatchShake", Enum.RenderPriority.Camera.Value + 1, function()
+			local camera = workspace.CurrentCamera
+			local left = shakeUntil - os.clock()
+			if left <= 0 or not camera then
+				RunService:UnbindFromRenderStep("HatchShake")
+				return
+			end
+			local power = 0.25 * left / plan.shake
+			camera.CFrame = camera.CFrame * CFrame.new((math.random() - 0.5) * power, (math.random() - 0.5) * power, 0)
+		end)
+	end
+	burstSparks(plan.sparks, color)
 	task.wait(0.15)
-	eggShape.Visible = false
+	eggView.Visible = false
+	eggView:ClearAllChildren()
 
 	-- The creature card, in its rarity color
 	viewport:ClearAllChildren()
@@ -954,6 +1093,7 @@ local function playReveal(info)
 	revealCard.Visible = true
 	revealCard.Size = UDim2.fromScale(0.5, 0.5)
 	TweenService:Create(revealCard, TweenInfo.new(0.25, Enum.EasingStyle.Back), { Size = UDim2.fromScale(0.9, 0.9) }):Play()
+	rays.Visible = plan.rays
 
 	local spin = RunService.RenderStepped:Connect(function()
 		model:PivotTo(CFrame.new(0, 0.5, 0) * CFrame.Angles(0, os.clock() * 1.2, 0)) -- pivot sits 0.5 above the feet
@@ -968,6 +1108,7 @@ local function playReveal(info)
 	end
 	closeReveal = nil
 	spin:Disconnect()
+	rays.Visible = false
 	revealGui.Enabled = false
 	setRevealShowing(false)
 	GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
@@ -993,6 +1134,8 @@ eggHatched.OnClientEvent:Connect(function(info)
 		if not ok then -- a reveal that breaks never keeps the screen covered or the calls frozen
 			warn("EmployeeClient: hatch reveal failed: " .. tostring(err))
 			closeReveal = nil
+			rays.Visible = false
+			pcall(function() RunService:UnbindFromRenderStep("HatchShake") end)
 			revealGui.Enabled = false
 			setRevealShowing(false)
 			GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
