@@ -248,7 +248,7 @@ Everything in this section is read by `python3 tools/economy_sim.py --o2` straig
 
 | Stage | Valuation to reach it | What it unlocks in SHOP > Office |
 |---|---|---|
-| Garage | 0 | the Garage's 11 items, desks 2 and 3 |
+| Garage | 0 | the Garage's 12 items, desks 2 and 3 |
 | Seed | $30K | the Small Office ($12K), 11 items, desk 4 |
 | Series A | $10M | the Big Office ($3M), 11 items, desk 5 |
 | Series B | $100M | the Small Corporate ($25M), 11 items |
@@ -276,7 +276,7 @@ Everything in this section is read by `python3 tools/economy_sim.py --o2` straig
 - **Direct hires (Office > Hire):** commons $4.6K, uncommons $13K: 4x what a Garage Egg pays on average for that rarity ($1.14K, $3.2K). Fixed creature, no roll (FR-13 untouched). Shown with the egg comparison.
 - **HR Department:** $5K, $150K, $3M, $40M, $200M (was 2.5K to 350K). **Poach cost** = 300 s of the employee's income x the attacker's team multiplier (at least $500).
 
-### 10.3 The office catalog (63 items)
+### 10.3 The office catalog (64 items)
 
 Income is per second before the building's office multiplier. Effects: calls / sprint / bug / brainstorm / pitch = that founder activity pays that share more (the activities come in phase 3), hatch = eggs hatch that share faster, unlock bug = production bugs start.
 
@@ -290,61 +290,62 @@ Income is per second before the building's office multiplier. Effects: calls / s
 | 6 | 💺 Better Chair | Garage | $1K | - | sprint 0.2 |
 | 7 | 🧃 Mini Fridge | Garage | $1.4K | - | brainstorm 0.3 |
 | 8 | 🗄️ Server Rack | Garage | $2K | 1 | unlock "bug" |
-| 9 | 📋 Whiteboard | Garage | $2.8K | - | brainstorm 0.5 |
-| 10 | 📚 Bookshelf | Garage | $3.8K | - | pitch 0.2 |
-| 11 | 💡 Neon Logo | Garage | $5.5K | 2 |  |
-| 12 | 🧍 Standing Desks | Seed | $15K | 23 |  |
-| 13 | 🍽️ Team Table | Seed | $30K | 32 |  |
-| 14 | 📞 Phone Booth | Seed | $50K | - | calls 0.25 |
-| 15 | 🗣️ Meeting Corner | Seed | $80K | 45 |  |
-| 16 | 🌿 Plant Wall | Seed | $120K | 59 |  |
-| 17 | ☕ Espresso Bar | Seed | $200K | 77 |  |
-| 18 | 📽️ Pitch Screen | Seed | $350K | - | pitch 0.25 |
-| 19 | 🖨️ Printer Station | Seed | $550K | 113 |  |
-| 20 | 📶 Wi-Fi Mesh | Seed | $900K | 147 |  |
-| 21 | 🧰 Dev Kit Shelf | Seed | $1.5M | - | sprint 0.3 |
-| 22 | 🎨 Brand Mural | Seed | $2.5M | 226 |  |
-| 23 | 🚪 Meeting Room | Series A | $2.5M | 46 |  |
-| 24 | 🧪 QA Lab | Series A | $3.5M | - | bug 0.5 |
-| 25 | ✏️ Design Studio | Series A | $4.5M | 64 |  |
-| 26 | 🖧 Server Row | Series A | $6M | 77 |  |
-| 27 | 🍿 Snack Bar | Series A | $7.5M | 86 |  |
-| 28 | 🎙️ Podcast Booth | Series A | $9M | - | calls 0.3 |
-| 29 | 🧠 Whiteboard Wall | Series A | $11M | - | brainstorm 0.5 |
-| 30 | 🎮 Game Corner | Series A | $14M | 118 |  |
-| 31 | 📈 Analytics Screens | Series A | $17M | 136 |  |
-| 32 | 😴 Nap Pod | Series A | $21M | - | hatch 0.15 |
-| 33 | 🪧 Rooftop Sign | Series A | $25M | 181 |  |
-| 34 | 🏭 Data Center Room | Series B | $12M | 67 |  |
-| 35 | 📣 Marketing Floor | Series B | $15M | 80 |  |
-| 36 | 🤝 Recruiting Office | Series B | $19M | - | hatch 0.2 |
-| 37 | 🛋️ Lounge Sofas | Series B | $23M | 100 |  |
-| 38 | 🎓 Training Room | Series B | $28M | 114 |  |
-| 39 | 🎧 Customer Success Desk | Series B | $33M | - | calls 0.35 |
-| 40 | 🛡️ Security Desk | Series B | $38M | 133 |  |
-| 41 | 📬 Mail Room | Series B | $44M | 147 |  |
-| 42 | 📖 Library | Series B | $50M | 160 |  |
-| 43 | 🎬 Video Studio | Series B | $55M | - | pitch 0.3 |
-| 44 | 🫘 Coffee Roastery | Series B | $60M | 187 |  |
-| 45 | 🥗 Cafeteria | Series C | $30M | 94 |  |
-| 46 | 🏋️ Gym | Series C | $40M | 113 |  |
-| 47 | 🌇 Rooftop Terrace | Series C | $50M | 132 |  |
-| 48 | ⚖️ Legal Office | Series C | $62M | - | bug 0.5 |
-| 49 | 🎤 Demo Stage | Series C | $75M | 160 |  |
-| 50 | 🔬 Innovation Lab | Series C | $90M | - | sprint 0.4 |
-| 51 | 🧘 Wellness Room | Series C | $105M | 190 |  |
-| 52 | 🥂 Investor Lounge | Series C | $120M | - | pitch 0.4 |
-| 53 | 🏟️ Auditorium | Series C | $140M | 228 |  |
-| 54 | 🌳 Green Roof | Series C | $165M | 247 |  |
-| 55 | 🖼️ Art Gallery | Series C | $190M | 275 |  |
-| 56 | 🪑 Boardroom | IPO-ready | $150M | 207 |  |
-| 57 | 💹 Trading Screens | IPO-ready | $200M | 248 |  |
-| 58 | 📰 Press Room | IPO-ready | $260M | - | pitch 0.5 |
-| 59 | 🏢 Executive Floor | IPO-ready | $330M | 310 |  |
-| 60 | 🏆 Trophy Wall | IPO-ready | $420M | 351 |  |
-| 61 | 🚁 Helipad | IPO-ready | $520M | 413 |  |
-| 62 | 🏛️ Shareholder Hall | IPO-ready | $630M | 455 |  |
-| 63 | 🔔 Golden Bell | IPO-ready | $750M | 517 |  |
+| 9 | 🎧 Headset | Garage | $2.4K | 1 | calls 0.15 |
+| 10 | 📋 Whiteboard | Garage | $2.8K | - | brainstorm 0.5 |
+| 11 | 📚 Bookshelf | Garage | $3.8K | - | pitch 0.2 |
+| 12 | 💡 Neon Logo | Garage | $4K | 1 |  |
+| 13 | 🧍 Standing Desks | Seed | $15K | 23 |  |
+| 14 | 🍽️ Team Table | Seed | $30K | 32 |  |
+| 15 | 📞 Phone Booth | Seed | $50K | - | calls 0.25 |
+| 16 | 🗣️ Meeting Corner | Seed | $80K | 45 |  |
+| 17 | 🌿 Plant Wall | Seed | $120K | 59 |  |
+| 18 | ☕ Espresso Bar | Seed | $200K | 77 |  |
+| 19 | 📽️ Pitch Screen | Seed | $350K | - | pitch 0.25 |
+| 20 | 🖨️ Printer Station | Seed | $550K | 113 |  |
+| 21 | 📶 Wi-Fi Mesh | Seed | $900K | 147 |  |
+| 22 | 🧰 Dev Kit Shelf | Seed | $1.5M | - | sprint 0.3 |
+| 23 | 🎨 Brand Mural | Seed | $2.5M | 226 |  |
+| 24 | 🚪 Meeting Room | Series A | $2.5M | 46 |  |
+| 25 | 🧪 QA Lab | Series A | $3.5M | - | bug 0.5 |
+| 26 | ✏️ Design Studio | Series A | $4.5M | 64 |  |
+| 27 | 🖧 Server Row | Series A | $6M | 77 |  |
+| 28 | 🍿 Snack Bar | Series A | $7.5M | 86 |  |
+| 29 | 🎙️ Podcast Booth | Series A | $9M | - | calls 0.3 |
+| 30 | 🧠 Whiteboard Wall | Series A | $11M | - | brainstorm 0.5 |
+| 31 | 🎮 Game Corner | Series A | $14M | 118 |  |
+| 32 | 📈 Analytics Screens | Series A | $17M | 136 |  |
+| 33 | 😴 Nap Pod | Series A | $21M | - | hatch 0.15 |
+| 34 | 🪧 Rooftop Sign | Series A | $25M | 181 |  |
+| 35 | 🏭 Data Center Room | Series B | $12M | 67 |  |
+| 36 | 📣 Marketing Floor | Series B | $15M | 80 |  |
+| 37 | 🤝 Recruiting Office | Series B | $19M | - | hatch 0.2 |
+| 38 | 🛋️ Lounge Sofas | Series B | $23M | 100 |  |
+| 39 | 🎓 Training Room | Series B | $28M | 114 |  |
+| 40 | 🎧 Customer Success Desk | Series B | $33M | - | calls 0.35 |
+| 41 | 🛡️ Security Desk | Series B | $38M | 133 |  |
+| 42 | 📬 Mail Room | Series B | $44M | 147 |  |
+| 43 | 📖 Library | Series B | $50M | 160 |  |
+| 44 | 🎬 Video Studio | Series B | $55M | - | pitch 0.3 |
+| 45 | 🫘 Coffee Roastery | Series B | $60M | 187 |  |
+| 46 | 🥗 Cafeteria | Series C | $30M | 94 |  |
+| 47 | 🏋️ Gym | Series C | $40M | 113 |  |
+| 48 | 🌇 Rooftop Terrace | Series C | $50M | 132 |  |
+| 49 | ⚖️ Legal Office | Series C | $62M | - | bug 0.5 |
+| 50 | 🎤 Demo Stage | Series C | $75M | 160 |  |
+| 51 | 🔬 Innovation Lab | Series C | $90M | - | sprint 0.4 |
+| 52 | 🧘 Wellness Room | Series C | $105M | 190 |  |
+| 53 | 🥂 Investor Lounge | Series C | $120M | - | pitch 0.4 |
+| 54 | 🏟️ Auditorium | Series C | $140M | 228 |  |
+| 55 | 🌳 Green Roof | Series C | $165M | 247 |  |
+| 56 | 🖼️ Art Gallery | Series C | $190M | 275 |  |
+| 57 | 🪑 Boardroom | IPO-ready | $150M | 207 |  |
+| 58 | 💹 Trading Screens | IPO-ready | $200M | 248 |  |
+| 59 | 📰 Press Room | IPO-ready | $260M | - | pitch 0.5 |
+| 60 | 🏢 Executive Floor | IPO-ready | $330M | 310 |  |
+| 61 | 🏆 Trophy Wall | IPO-ready | $420M | 351 |  |
+| 62 | 🚁 Helipad | IPO-ready | $520M | 413 |  |
+| 63 | 🏛️ Shareholder Hall | IPO-ready | $630M | 455 |  |
+| 64 | 🔔 Golden Bell | IPO-ready | $750M | 517 |  |
 
 ### 10.4 Paid items: what changes for players (Robux prices and product IDs never change)
 
@@ -363,37 +364,45 @@ Income is per second before the building's office multiplier. Effects: calls / s
 - Daily Cash days are minutes of income (5/10/20/30) with a $300 floor: they scale by themselves; eggs (days 3, 5, 7) are worth more now with the new egg prices; Day 7's 3 Shares stay. No number changed in `DailyConfig`.
 - The goal chain follows the ladder: Answer 3 calls, Own 3 office items, Hire 3, Calls in a row, the Server Rack, Seed, **Move into the Small Office**, Hire 5, Series A, **the Big Office**, Series B, **the Small Corporate**, **Series C**, **the Big Corporate**, IPO-ready, the first IPO.
 
-### 10.6 The sim: the first run, minutes of active play (median of 9 runs; perfect player)
+### 10.6 The sim: the first run, minutes of active play (median of 12 runs; perfect player)
 
 | Stage | Valuation | Reached at (median) | Range | Target |
 |---|---|---|---|---|
-| Seed | 30.00K | 55 min | 52 min to 59 min | 60 min to 75 min |
-| Series A | 10.00M | 3.0 h | 2.8 h to 3.1 h | 2.5 h to 3.5 h |
-| Series B | 100.00M | 6.9 h | 6.3 h to 7.2 h | 6.0 h to 8.0 h |
-| Series C | 300.00M | 11.0 h | 10.3 h to 11.6 h | 11.0 h to 13.0 h |
-| IPO-ready | 1.00B | 18.4 h | 16.5 h to 19.3 h | 18.0 h to 22.0 h |
+| Seed | 30.00K | 55 min | 51 min to 57 min | 60 min to 75 min |
+| Series A | 10.00M | 2.9 h | 2.8 h to 3.0 h | 2.5 h to 3.5 h |
+| Series B | 100.00M | 6.8 h | 6.2 h to 7.0 h | 6.0 h to 8.0 h |
+| Series C | 300.00M | 10.8 h | 9.3 h to 11.4 h | 11.0 h to 13.0 h |
+| IPO-ready | 1.00B | 17.7 h | 14.8 h to 19.0 h | 18.0 h to 22.0 h |
 
-Longest wait between two purchases or hatches in the first hour (the activities fill it): median 14 min
+Longest wait between two purchases or hatches in the first hour (the activities fill it): median 8 min
 
-Longest stretch with nothing to do in the first hour (purchases, hatches, calls, sprints, brainstorms, bugs; overhaul 2 phase 3's real clocks: a call every 20 to 40 s from the Desk, a sprint every 3.5 min, a brainstorm every 5 min from the first hire, a bug every 4 to 7 min from the Server Rack): **worst 40 s, median 40 s of 12 runs, under the brief's 2 minutes** (`o2_dead_time`, added at the end of overhaul 2).
-Items bought by the IPO bell: median 63 of 63; Income at the bell: 33.80K/s
+### The first hour's purchases (items, desks, buildings, eggs; until Seed when it comes first)
 
-One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min Server Rack, 10 min Second Monitor, 24 min Neon Logo, 25 min Router, 26 min Better Chair, 30 min Desk 2, 34 min Mini Fridge, 38 min Whiteboard, 44 min Desk 3, 53 min Bookshelf, 68 min Small Office, 73 min Standing Desks, 77 min Team Table, 83 min Meeting Corner, 88 min Plant Wall, 1.6 h Espresso Bar, 1.6 h Phone Booth, 1.8 h Printer Station, 2.0 h Wi-Fi Mesh, 2.4 h Brand Mural, 2.4 h Desk 4, 2.6 h Dev Kit Shelf, 2.6 h Pitch Screen, 3.2 h Big Office, 3.3 h Meeting Room, 3.6 h Design Studio, 3.9 h Server Row, 4.3 h Snack Bar, 4.4 h QA Lab, 4.8 h Podcast Booth, 5.4 h Game Corner, 6.1 h Analytics Screens, 7.0 h Small Corporate, 8.8 h Rooftop Sign, 8.8 h Desk 5, 9.3 h Whiteboard Wall, 9.7 h Data Center Room ...
+| Player | Seed (median) | Seed range | Longest wait between two purchases (worst run) | Median run | Mean wait |
+|---|---|---|---|---|---|
+| perfect (best payback first, waits for it) | 55 min | 51 min to 57 min | 8 min | 8 min | 3 min |
+| guided (follows the blackboard: cheapest first) | 65 min | 56 min to 68 min | 7 min | 7 min | 4 min |
+
+The guided player's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Second Monitor, 4 min Laptop, 7 min Router, 10 min Better Chair, 14 min Mini Fridge, 20 min Server Rack, 25 min Headset, 30 min Desk 2, 31 min Garage Egg, 36 min Whiteboard, 42 min Bookshelf, 48 min Neon Logo, 55 min Desk 3, 56 min Garage Egg, 57 min Garage Egg, 58 min Garage Egg
+Longest stretch with nothing to do in the first hour (purchases, hatches, calls, sprints, brainstorms, bugs; overhaul 2 phase 3's real clocks: a call every 20 to 40 s from the Desk, a sprint every 3.5 min, a brainstorm every 5 min from the first hire, a bug every 4 to 7 min from the Server Rack): worst 40s, median 40s, under the brief's 2 minutes (`o2_dead_time`).
+Items bought by the IPO bell: median 64 of 64; Income at the bell: 34.50K/s
+
+One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min Server Rack, 10 min Second Monitor, 16 min Headset, 18 min Router, 25 min Neon Logo, 27 min Better Chair, 30 min Desk 2, 32 min Garage Egg, 34 min Mini Fridge, 38 min Whiteboard, 44 min Desk 3, 45 min Garage Egg, 46 min Garage Egg, 48 min Garage Egg, 52 min Bookshelf, 67 min Small Office, 72 min Standing Desks, 76 min Team Table, 82 min Meeting Corner, 87 min Plant Wall, 1.6 h Espresso Bar, 1.6 h Phone Booth, 1.7 h Printer Station, 2.0 h Wi-Fi Mesh, 2.4 h Brand Mural, 2.4 h Startup Egg, 2.4 h Startup Egg, 2.4 h Startup Egg, 2.4 h Desk 4, 2.4 h Startup Egg, 2.4 h Startup Egg, 2.4 h Startup Egg, 2.5 h Startup Egg, 2.5 h Startup Egg, 2.5 h Startup Egg, 2.6 h Dev Kit Shelf, 2.6 h Pitch Screen ...
 
 ### Later runs (employees and desks kept, IPO multiplier, thresholds x1.10 per IPO)
 
 | Run | Reaches IPO-ready at |
 |---|---|
-| 1 | 18.5 h |
-| 2 | 10.7 h |
-| 3 | 9.2 h |
-| 4 | 8.7 h |
+| 1 | 17.9 h |
+| 2 | 10.5 h |
+| 3 | 9.1 h |
+| 4 | 8.5 h |
 
 ### With the 2x Cash pass (first run)
 
 | Seed | Series A | Series B | Series C | IPO-ready |
 |---|---|---|---|---|
-| 27 min | 90 min | 3.4 h | 5.6 h | 9.4 h |
+| 27 min | 87 min | 3.3 h | 5.5 h | 9.1 h |
 
 ### Direct hires (OfficeConfig.hireList)
 
@@ -407,8 +416,29 @@ One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min 
 | MemoMole | Uncommon | 13.00K | 3.20K (Garage Egg) |
 
 
-What this does not tell you: the sim player is perfect (it buys the best payback the moment it can and never pauses), so real players are slower (a guess: +10 to 25%, Seed at about 60 to 70 min). The founder activities are modeled at the proposal's rates (calls 0.25, coding sprint 0.15, brainstorm 0.07, production bug 0.08 seconds of Income per second, 85% attention): phase 3 built them (calls live on every server since then). The "longest wait in the first hour" is between purchases or hatches; the activities (a call every 20 to 40 s, a sprint every 3 min) fill it. Offline Cash is not modeled (active play only).
+What this does not tell you: the perfect player buys the best payback the moment it can and never pauses, so real players are slower (a guess: +10 to 25%); the guided player (cheapest first, as the blackboard suggests, and a Garage Egg whenever a workstation is free) is the closer stand-in for a new player and reaches Seed at about 65 min. The founder activities are modeled at the proposal's rates (calls 0.25, coding sprint 0.15, brainstorm 0.07, production bug 0.08 seconds of Income per second, 85% attention): phase 3 built them (calls live on every server since then). The "longest wait in the first hour" is between purchases or hatches; the activities (a call every 20 to 40 s, a sprint every 3 min) fill it. Offline Cash is not modeled (active play only).
 
 ### 10.7 Existing saves (the migration)
 
 The first load under overhaul 2 gives a save **the building its old stage showed** (old thresholds 1,800 / 6,300 / 23,400 / 81,000 x2.5 per IPO, frozen in `OfficeConfig.LegacyStages`), written to `pokedex.active.building` with the mark `active.o2 = 1`, and **4 bought desks** (its old 5 base slots) in the new `office` section. Cash, Shares, employees, perks, owned upgrades, the IPO count and the valuation are untouched. Checked on the owner's own test save in Studio: IPO count 1, valuation $1.9M (old IPO-ready) → keeps the Big Corporate; under the new ladder that valuation is Seed, so Seed's items are what unlocks next.
+
+### 10.8 First-hour pacing (2026-10-19, after overhaul 2)
+
+The report of overhaul 2 found a 14-minute stretch with no purchase in the first hour, between the Server Rack (about minute 10) and the Neon Logo (about minute 24): the perfect player saved for the Neon Logo ($5.5K, the best payback) and bought nothing else. The owner asked for a purchase about every 5 minutes, with Seed kept at about 60 to 75 minutes.
+
+| Item | Before | After |
+|---|---|---|
+| 🎧 Headset (new, Garage, between the Server Rack and the Whiteboard) | - | $2.4K, income 1, calls pay 15% more |
+| 💡 Neon Logo | $5.5K, income 2 | $4K, income 1 |
+| 📡 Router | $700, calls 0.2 | unchanged |
+
+| The sim, 12 runs each (`--o2`, the same code on `main` and here) | Before | After |
+|---|---|---|
+| Longest wait between two purchases in the first hour, perfect player (worst run) | 15 min | 8 min |
+| The same, guided player (follows the blackboard) | 12 min | 7 min |
+| mean wait (perfect / guided) | 3 / 4 min | 3 / 4 min |
+| Seed (perfect / guided, median) | 57 / 72 min | 55 / 65 min |
+| IPO-ready, first run (perfect, median) | 18.1 h | 17.7 h |
+
+Why these: the catalog's prices must grow inside a stage (`tools/office_test.py`), so the Router can only move between the Laptop ($450) and the Better Chair ($1K) and the Neon Logo, the Garage's last item, can't go under the Bookshelf ($3.8K). A search over every Router and Neon Logo price and income in those bounds (with and without one new item, both players, 9 runs each) found no change of those two alone under 8 min that kept Seed above 50 min for the perfect player; the Headset in the gap and a cheaper, smaller Neon Logo give 7 to 8 min with Seed where it was. The waits that are left (about 7 min) are the Garage's dearest buys, Desk 3 ($5K) and the Bookshelf, at the end of the hour; the activities fill them (worst stretch with nothing to do: 40 s). The whole run is about 2% faster (the Headset's calls bonus lasts all run): IPO-ready 17.7 h against 18.1 h on `main` (same 12 runs), still inside the runs' range (14.8 h to 19 h). An existing save keeps every item it owns; the Neon Logo's price only matters to someone who hasn't bought it.
+

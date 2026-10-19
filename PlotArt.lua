@@ -1137,6 +1137,13 @@ PlotArt.Items = {
 		B("ChairBack", 0, 2.65, 0.85, 1.9, 2.2, 0.3, C.charcoal, "Fabric"),
 		B("ChairHeadrest", 0, 3.9, 0.85, 1.2, 0.3, 0.3, C.coral, "Fabric"),
 	}),
+	["Headset"] = ITEM(1, { x = -14, z = 25.4, w = 2, d = 2, h = 3.4 }, {
+		B("HeadsetCrate", 0, 0.7, 0, 1.6, 1.4, 1.6, C.crate, "WoodPlanks"),
+		B("HeadsetPost", 0, 2, 0, 0.16, 1.2, 0.16, C.charcoal, "Metal"),
+		B("HeadsetBand", 0, 2.75, 0, 0.9, 0.16, 0.3, C.black, "SmoothPlastic"),
+		B("HeadsetCupL", -0.45, 2.35, 0, 0.2, 0.6, 0.5, C.coral, "Fabric"),
+		B("HeadsetCupR", 0.45, 2.35, 0, 0.2, 0.6, 0.5, C.coral, "Fabric"),
+	}),
 	["Mini Fridge"] = ITEM(1, { x = -25.5, z = 7.5, w = 2.8, d = 2.6, h = 4 }, {
 		B("FridgeBody", 0, 1.7, 0, 2.4, 3.4, 2.2, C.white, "SmoothPlastic"),
 		B("FridgeSeam", 0, 2.4, 1.115, 2.2, 0.06, 0.03, C.grayLight, "SmoothPlastic"),
