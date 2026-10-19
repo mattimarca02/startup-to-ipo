@@ -66,7 +66,7 @@ idle (PR #61 merged; the next free item needs the owner or gate G1, see the run 
   - Gate G1 (items 4 and 6).
   - The offline valuation share, 10% or 0% (item 4).
   - Written OKs for items 5 and 8.
-- **Waiting on the ux lane:** request U2 (item 3).
+- **Item 3 is done:** ux merged U2 as PR #63.
 
 ## Run (2026-10-18, manual fire: "continue with the next item of your backlog")
 
@@ -183,7 +183,7 @@ idle (PR #61 merged; the next free item needs the owner or gate G1, see the run 
 
 ## Requests to other lanes
 
-- **U2, to ux (EmployeeClient, A15, backlog item 3):** while the hatch reveal plays, set the PlayerGui attribute `OpenPanel` (for example `"Hatch"`) and clear it when the reveal ends, if no other window took it in the meantime. TaskServer already holds calls while a window is open, so a call no longer rings or runs out behind the reveal. No server change needed.
+- **U2, to ux (EmployeeClient, A15, backlog item 3): DONE (PR #63, merged 2026-10-19).** while the hatch reveal plays, set the PlayerGui attribute `OpenPanel` (for example `"Hatch"`) and clear it when the reveal ends, if no other window took it in the meantime. TaskServer already holds calls while a window is open, so a call no longer rings or runs out behind the reveal. No server change needed.
 - **U1, to ux (OnboardingClient, for the goal chain):**
   - Draw only the goals the server marks with the player attribute `OnboardingGoalShown_<key> == true`, in the order of `OnboardingConfig.activeGoals()` (use that function, not `OnboardingConfig.Goals`).
   - Size the card for `math.min(OnboardingConfig.ShowAtOnce, #activeGoals())` rows (2), so the card stays 30 + 22 x 2 + 8 high whatever the list's length. Then the tray tests can count rows that way: `onboarding_goal_count` in tools/daily_test.py and tools/hud_test.py.
