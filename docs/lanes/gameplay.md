@@ -24,7 +24,7 @@ This list follows docs/GAMEPLAY_FIRST_HOUR_PROPOSAL.md section 10, ordered by ho
 4. **Economy core: calls live, the away bank** (build item 8, LONG_GAME PR 2). **Needs the owner:** it changes saved data (the away bank and the 3 h engaged cap) and the economy numbers players have. I'll write the plan here before building anything.
 5. **D1 prices, Desk 3, E1 levels I and II, the Garage re-fit** (build item 9). **Needs the owner:** these are economy numbers players already have, and they depend on item 4. The new upgrade names also need the interiors lane (the six-station prop list).
 6. **D2 milestones and titles** (build item 10), after item 4. The milestone goals then join the chain.
-7. **Welcome-back message** (build item 11), branch `gameplay-welcome-back`, **PR #61, open.** A server pop-up through `ShopServer.notify`; the offline pay and the CLAIMLOAD block are unchanged. If ux wants a full card later, I can add display-only player attributes (Cash, seconds away, capped).
+7. **Welcome-back message** (build item 11), branch `gameplay-welcome-back`, **PR #61, merged 2026-10-19.** A server pop-up through `ShopServer.notify`; the offline pay and the CLAIMLOAD block are unchanged. If ux wants a full card later, I can add display-only player attributes (Cash, seconds away, capped).
 8. **Headhunter E2** (build item 13) and **D6 poach prices** (build item 14). **Needs the owner:** a paid item changes and economy numbers move.
 9. **Ux R2:** a saved list of the HUD hints a player has seen. **Needs the owner:** it's a new top-level save section (rule A10). Only when ux asks for it.
 
@@ -52,11 +52,21 @@ The owner's answers (owner.md, 2026-10-18), and what they change in the plan:
 
 ## Doing now
 
-waiting for review of PR #61
+idle (PR #61 merged; the next free item needs the owner or gate G1, see the run notes)
 
 ## Last PR
 
-#61 `gameplay-welcome-back`, open since 2026-10-18. Before it: #52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+#61 `gameplay-welcome-back`, merged 2026-10-19 08:59 UTC. Before it: #52 `gameplay-gift-first-pause`, merged 2026-10-18 11:45 UTC. Before it: #51 `gameplay-first-hour-fixes`, merged 2026-10-18. Before it: #43 `gameplay-goal-chain` (goal chain), merged 2026-10-18 08:19 UTC. Before it: #38 `gameplay-lobby-test-history` (ux R1), merged 2026-10-17.
+
+## Note (2026-10-19 09:00 UTC)
+
+- **PR #61 is merged.** I released my claims on TycoonCore, tools/lobby_test.py and tools/lobby_runtime.luau.
+- **For quality's batch:** its Studio step is the TycoonCore row under "Studio steps" below.
+- **Waiting for the owner:**
+  - Gate G1 (items 4 and 6).
+  - The offline valuation share, 10% or 0% (item 4).
+  - Written OKs for items 5 and 8.
+- **Waiting on the ux lane:** request U2 (item 3).
 
 ## Run (2026-10-18, manual fire: "continue with the next item of your backlog")
 
@@ -183,7 +193,7 @@ waiting for review of PR #61
 
 ## Studio steps (merged PRs not yet in Studio)
 
-PR #61 (open; for the batch once merged):
+PR #61 (merged 2026-10-19; for the batch):
 
 | Script | Studio | State | sha256 | bytes |
 |---|---|---|---|---|
