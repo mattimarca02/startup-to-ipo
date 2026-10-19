@@ -18,13 +18,15 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-waiting for review of PR #64
+paused for overhaul 2 (docs/lanes/owner.md, 2026-10-19 09:50 UTC). PR #64 (`ux-tap-targets`) stays open with no new pushes. Owner session 2 now holds its five claim rows, and PR #64 has to be rebased on overhaul 2 before it merges. I'll do that when the lanes resume.
 
 ## Last PR
 
 PR #64 (`ux-tap-targets`, backlog item 4), open: https://github.com/mattimarca02/startup-to-ipo/pull/64. Before it: PR #63 (`ux-hatch-pause`, U2), merged 2026-10-19 08:59 UTC.
 
 ## Last report
+
+2026-10-19 10:15 UTC (check-in on PR #64). The lanes are paused for overhaul 2. PR #64 is still open, has no quality verdict and merges cleanly with today's main. Owner session 2 took its five claim rows (OnboardingClient, LobbyClient, tools/hud_test.py, tools/onboarding_client_test.luau, tools/lobby_client_test.luau). Per the pause I pushed nothing to the branch, opened no PR and stopped my check-ins. When the lanes resume, I'll rebase #64 on overhaul 2, re-run every suite and update the hashes. No requests.
 
 2026-10-19 09:25 UTC. The owner merged PR #63 at 08:59 UTC. Calls now pause under the hatch reveal, and gameplay marked U2 done. I released its claim rows (EmployeeClient, tools/hatch_reveal_test.luau). Quality left one non-blocking note on #63; it is backlog item 2c now. I merged main (3d7e5de, with #61 and #62) into `ux-tap-targets`, re-ran every suite and opened PR #64: https://github.com/mattimarca02/startup-to-ipo/pull/64. It makes the Goals card's X a 44 x 40 tap area, with the X you see unchanged, and the welcome card's Got it button 40 high. On landscape phones the story now sits beside that button instead of under it. It also adds a check that every fixed-size button in the clients is 40 or more on each side. Tests (Luau 0.742, one at a time): hud 1073 (claim button 28/28, Goals card 30 checks 11/11, hatch reveal 9/9, tap targets 17 checks 4/4), daily green, world 389, icon 371, shop_ux 6308, lobby 192 (70/70), building 1423, onboarding 82. Studio steps: below (OnboardingClient, LobbyClient). No new requests. Waiting for the owner: the review and merge of PR #64.
 
