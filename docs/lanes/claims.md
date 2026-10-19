@@ -42,10 +42,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | quality lane (Claude) | quality-readme-tools | 2026-10-19 |
+| CLAUDE.md | (repo only) | free | | |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | quality lane (Claude) | quality-readme-tools | 2026-10-19 |
+| README.md | (repo only) | free | | |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |

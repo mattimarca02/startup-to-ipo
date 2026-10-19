@@ -18,7 +18,7 @@ idle (2026-10-19 04:05 UTC).
 
 ## Last PR
 
-PR #62 `quality-readme-tools` (docs only: README rows for `tools/first_hour_model.py` and `tools/render_previews.py`, the two client fakes named in the lobby and hud rows; CLAUDE.md's lobby rule says `L1_EDITS` to `L5_EDITS`): opened 2026-10-19 about 01:00 UTC, open. Claims held: README.md, CLAUDE.md (release after the merge). After #61 merges, the next quality PR makes that line L6 and adds the welcome-back pop-up to CLAUDE.md, plus Batch 8 (TycoonCore).
+PR #62 `quality-readme-tools` (docs only: README rows for `tools/first_hour_model.py` and `tools/render_previews.py`, the two client fakes named in the lobby and hud rows; CLAUDE.md's lobby rule says `L1_EDITS` to `L5_EDITS`): opened 2026-10-19 about 01:00 UTC, merged 08:59 UTC. Its claims (README.md, CLAUDE.md) are released. After #61 merges, the next quality PR makes that line L6 and adds the welcome-back pop-up to CLAUDE.md, plus Batch 8 (TycoonCore).
 
 PR #54 `quality-claim-on` (the owner's request: `LobbyConfig.ClaimEnabled = true`, the docs, Batch 2): opened 2026-10-18 about 10:58 UTC, merged 11:49 UTC. Before it: #50 merged 09:51 UTC (68f0937). Earlier: #49 (09:27), #47 (08:49), #46 (08:29), #45 (08:22).
 
@@ -67,6 +67,8 @@ Checked 2026-10-19 01:05 UTC (full history fetched; a shallow clone made every o
 - **PR #16** is closed (2026-10-17 22:43 UTC). Only its branch above is left.
 
 ## Last report
+
+2026-10-19, 09:00 UTC: PR #62 (docs only) is merged and I released its two claim rows. PR #61 is still open, and its MERGE verdict stands.
 
 2026-10-19, 04:05 UTC, a manual fire asking to review PR #63: its head is still 97d015c and main has not changed since my verdict (only my own lane-file commit e5368a0), so the MERGE verdict below stands and I didn't re-run the suites. #61 and #62 are unchanged too. All three wait for the owner.
 
