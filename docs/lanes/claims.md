@@ -15,7 +15,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CreatureConfig | ReplicatedStorage | free | | |
 | CreatureModels | ReplicatedStorage | free | | |
 | ShopClient | StarterPlayerScripts | free | | |
-| EmployeeClient | StarterPlayerScripts | free | | |
+| EmployeeClient | StarterPlayerScripts | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
 | ChatTags | StarterPlayerScripts | free | | |
 | sync_monetization.py | (repo only) | free | | |
 | PoachServer | ServerScriptService | free | | |
@@ -42,10 +42,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | TaskServer | ServerScriptService | free | | |
 | TaskClient | StarterPlayerScripts | free | | |
 | ROADMAP.md | (repo only) | free | | |
-| CLAUDE.md | (repo only) | free | | |
+| CLAUDE.md | (repo only) | quality lane (Claude) | quality-readme-tools | 2026-10-19 |
 | PlotVisuals | ServerScriptService | free | | |
 | PlotArt | ServerScriptService | free | | |
-| README.md | (repo only) | free | | |
+| README.md | (repo only) | quality lane (Claude) | quality-readme-tools | 2026-10-19 |
 | docs/PLOT_VISUALS.md | (repo only) | free | | |
 | docs/STUDIO_SYNC.md | (repo only) | free | | |
 | docs/CUSTOMIZE_PROPOSAL.md | (repo only) | free | | |
@@ -60,7 +60,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | free | | |
+| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -102,4 +102,5 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
+| tools/hatch_reveal_test.luau | (repo only) | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
