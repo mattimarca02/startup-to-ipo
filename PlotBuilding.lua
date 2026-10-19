@@ -476,12 +476,6 @@ PlotBuilding.Stages = {
 			-- (No facade Block is named "...Band...": that name means the band's floor, the Static group, PlotBuilding.layout.)
 			{ block = { 82.4, 0.6, 0.6 }, role = "accent", name = "PodiumGold", x = 0, y = 11.6, z = 32.4 },
 			{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 46.7, z = 14.4 },
-			-- overhaul 2 phase 6 (the owner's point 15): four gold fins up the tower's front, on the glass seams and at the corners
-			-- (4 parts: the building stays within its 180 and the six garages plus the plaza under 4,000)
-			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinL", x = -8.67, y = 14.5, z = 14.55 },
-			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinR", x = 8.67, y = 14.5, z = 14.55 },
-			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinEdgeL", x = -25.6, y = 14.5, z = 14.55 },
-			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinEdgeR", x = 25.6, y = 14.5, z = 14.55 },
 		},
 		backBand = 8, -- P2: the BoardTable, the Rug and the Bell are 6 to 8 deep
 		furniture = {
@@ -520,6 +514,10 @@ PlotBuilding.Stages = {
 			-- (No facade Block is named "...Band...": that name means the band's floor, the Static group, PlotBuilding.layout.)
 			{ block = { 82.4, 0.6, 0.6 }, role = "accent", name = "PodiumGold", x = 0, y = 11.6, z = 32.4 },
 			{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 40.7, z = 14.4 },
+			-- overhaul 2 phase 6 (the owner's point 15): two gold fins up the tower's front, on its glass seams (2 parts: the
+			-- building stays within its 180 and the six garages plus the plaza under 4,000)
+			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinL", x = -8.67, y = 14.5, z = 14.55 },
+			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinR", x = 8.67, y = 14.5, z = 14.55 },
 		},
 		backBand = 8, -- P2: the BoardTable, the Rug and the Bell are 6 to 8 deep
 		furniture = {
