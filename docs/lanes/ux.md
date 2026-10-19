@@ -17,7 +17,7 @@ Only the ux lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-waiting for review of PR #63
+ux-tap-targets - started 2026-10-19 01:10 UTC (backlog item 4, stacked on ux-hatch-pause; no PR until #63 is merged, one PR at a time); PR #63 waits for review
 
 ## Last PR
 

@@ -31,8 +31,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | free | | |
-| tools/onboarding_client_test.luau | (repo only) | free | | |
+| OnboardingClient | StarterPlayerScripts | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
+| tools/onboarding_client_test.luau | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
@@ -60,7 +60,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-hatch-pause | 2026-10-19 |
+| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-hatch-pause, then ux-tap-targets (stacked on it) | 2026-10-19 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -95,10 +95,10 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
 | LobbyConfig | ReplicatedStorage | free | | |
-| LobbyClient | StarterPlayerScripts | free | | |
+| LobbyClient | StarterPlayerScripts | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | gameplay lane (Claude) | gameplay-welcome-back | 2026-10-18 |
-| tools/lobby_client_test.luau | (repo only) | free | | |
+| tools/lobby_client_test.luau | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
