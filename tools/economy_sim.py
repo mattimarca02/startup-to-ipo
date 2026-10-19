@@ -3756,6 +3756,14 @@ def report_pk(picked, n):
 O2_ACTIVITY = {"calls": 0.25, "sprint": 0.15, "brainstorm": 0.07, "bug": 0.08}  # PROPOSAL rates (seconds of Income per second)
 O2_ATTENTION = 0.85        # share of the activities an active player really does
 O2_FREE_EGG_AT = 80        # the onboarding's free Garage Egg hatches at about 1:20
+# The first hour's activity clock (overhaul 2 phase 3: TaskConfig and FounderConfig): a call every 20-40 s from the Desk
+# (TaskConfig every, no hires counted: the slowest case), a sprint when its 180 s wait is over (plus ~30 s to play it), a
+# brainstorm when its 300 s wait is over (from the first hire), a bug alarm every 240-420 s (from an unlock item).
+O2_CALL_GAP = (20, 40)
+O2_SPRINT_EVERY = 180 + 30
+O2_BRAINSTORM_EVERY = 300 + 10
+O2_BUG_GAP = (240, 420)
+O2_DEAD_LIMIT = 120        # the brief: no dead time over 2 minutes in the first hour
 O2_TARGETS = {"Seed": (60, 75), "SeriesA": (150, 210), "SeriesB": (360, 480), "SeriesC": (660, 780), "IpoReady": (1080, 1320)}
 
 _O2_LUAU_PRELUDE = r"""
@@ -3838,6 +3846,7 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
     incub, reached, log = [], {0: 0}, []
     free_egg = None if (kept or ipo_count) else O2_FREE_EGG_AT
     last_event, longest_wait = 0, 0
+    events, unlocks = [], {}  # every purchase and hatch in the first hour; when the Desk, the first hire, the bug come
     capacity = lambda: office["FreeDesks"] + desks
 
     def income(bb=None):
@@ -3878,6 +3887,9 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
                         team[0] = k
                 if t < 3600:
                     longest_wait = max(longest_wait, t - last_event); last_event = t
+                    events.append(t)
+        if team and "hire" not in unlocks:
+            unlocks["hire"] = t
         if t % 2:
             continue  # look at the shop every 2 s (a real player is slower still)
         opts = []
@@ -3914,6 +3926,10 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
             kind = best[0]
             if kind == "item":
                 it = items[best[3]]; owned.add(it["key"]); item_income += it["income"]
+                if it["key"] == "Desk":
+                    unlocks.setdefault("desk", t)
+                if (it.get("effect") or {}).get("unlock") == "bug":
+                    unlocks.setdefault("bug", t)
                 for a, v in (it.get("effect") or {}).items():
                     key = "unlock:" + v if a == "unlock" else a
                     effects[key] = effects.get(key, 0) + (1 if a == "unlock" else v)
@@ -3926,9 +3942,39 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
                 incub.append((best[3], t + eggs[best[3]]["hatchSeconds"]))
             if t < 3600:
                 longest_wait = max(longest_wait, t - last_event); last_event = t
+                events.append(t)
     times = {stage_keys[s]: reached[s] for s in reached}
     return {"times": times, "log": log, "wait": longest_wait, "income": income(), "items": len(owned),
-            "building": blds[b]["name"], "team": (team, desks)}
+            "building": blds[b]["name"], "team": (team, desks), "events": events, "unlocks": unlocks}
+
+
+def o2_dead_time(run, seed):
+    """The longest stretch in the first hour with nothing to do: no purchase, hatch, call, sprint, brainstorm or bug
+    (the brief's 'no dead time over 2 minutes'). Calls at the slowest gap draw; the sprint and brainstorm when ready."""
+    rng = random.Random(seed * 7919)
+    marks = [0] + list(run["events"])
+    desk, hire, bug = run["unlocks"].get("desk"), run["unlocks"].get("hire"), run["unlocks"].get("bug")
+    if desk is not None:
+        t = desk + rng.uniform(*O2_CALL_GAP)
+        while t < 3600:
+            marks.append(t)
+            t += rng.uniform(*O2_CALL_GAP)
+        t = desk + 5
+        while t < 3600:
+            marks.append(t)
+            t += O2_SPRINT_EVERY
+    if hire is not None:
+        t = hire + 10
+        while t < 3600:
+            marks.append(t)
+            t += O2_BRAINSTORM_EVERY
+    if bug is not None:
+        t = bug + rng.uniform(*O2_BUG_GAP)
+        while t < 3600:
+            marks.append(t)
+            t += rng.uniform(*O2_BUG_GAP)
+    marks = sorted(m for m in marks if m <= 3600) + [3600]
+    return max(b - a for a, b in zip(marks, marks[1:]))
 
 
 def report_o2(n):
@@ -3948,6 +3994,10 @@ def report_o2(n):
               fmt_time(ts[0] * 60), fmt_time(ts[-1] * 60), fmt_time(lo * 60), fmt_time(hi * 60)))
     print("\nLongest wait between two purchases or hatches in the first hour (the activities fill it): median %s" %
           fmt_time(statistics.median(r["wait"] for r in first)))
+    dead = [o2_dead_time(r, seed) for seed, r in enumerate(first, 1)]
+    print("Longest stretch with nothing to do in the first hour (purchases, hatches, calls, sprints, brainstorms, bugs): "
+          "worst %s, median %s (the brief's limit: %s) -> %s" % (fmt_time(max(dead)), fmt_time(statistics.median(dead)), fmt_time(O2_DEAD_LIMIT),
+                                                                  "OK" if max(dead) <= O2_DEAD_LIMIT else "OVER"))
     print("Items bought by the IPO bell: median %d of %d; Income at the bell: %s/s" % (
         statistics.median(r["items"] for r in first), len(cfg["office"]["Items"]), fmt_cash(statistics.median(r["income"] for r in first))))
     ex = first[0]
