@@ -6,6 +6,8 @@ The one Ownership table of the repo (moved here from CONTRIBUTING.md on 2026-10-
 
 Team: @mattimarca02 (owner) · @wildsheepchaser
 
+**2026-10-19, overhaul 2:** the owner session ("Claude (owner session 2)") holds every row below for docs/OVERHAUL2_PLAN.md, including the five rows the ux lane held for PR #64 (`OnboardingClient`, `LobbyClient`, `tools/hud_test.py`, `tools/onboarding_client_test.luau`, `tools/lobby_client_test.luau`): taken over because the lanes are paused (docs/lanes/owner.md). PR #64 must be rebased on overhaul 2 before it merges.
+
 | Script | Studio location | Being edited by | Branch | Since |
 |---|---|---|---|---|
 | TycoonCore | ServerScriptService | free | | |
@@ -31,8 +33,8 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | DailyClient | StarterPlayerScripts | free | | |
 | OnboardingServer | ServerScriptService | free | | |
 | OnboardingConfig | ReplicatedStorage | free | | |
-| OnboardingClient | StarterPlayerScripts | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
-| tools/onboarding_client_test.luau | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
+| OnboardingClient | StarterPlayerScripts | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| tools/onboarding_client_test.luau | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
 | tools/economy_sim.py | (repo only) | free | | |
 | docs/ECONOMY.md | (repo only) | free | | |
 | docs/PUBLISH_RULES.md | (repo only) | free | | |
@@ -60,7 +62,7 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | CompanyConfig | ReplicatedStorage | free | | |
 | SectorConfig | ReplicatedStorage | free | | |
 | docs/CUSTOMIZE_PR1_NOTES.md | (repo only) | free | | |
-| tools/hud_test.py | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
+| tools/hud_test.py | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
 | docs/STUDIO_SYNC_HUD.md | (repo only) | free | | |
 | WorldArt | ServerScriptService | free | | |
 | WorldVisuals | ServerScriptService | free | | |
@@ -95,12 +97,20 @@ Team: @mattimarca02 (owner) · @wildsheepchaser
 | docs/STUDIO_SYNC_BUILDING.md | (repo only) | free | | |
 | docs/building_pass_integration.patch | (repo only) | free | | |
 | LobbyConfig | ReplicatedStorage | free | | |
-| LobbyClient | StarterPlayerScripts | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
+| LobbyClient | StarterPlayerScripts | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
 | docs/KIT_MODELS.md | (repo only) | free | | |
 | tools/lobby_runtime.luau | (repo only) | free | | |
-| tools/lobby_client_test.luau | (repo only) | ux lane (Claude) | ux-tap-targets | 2026-10-19 |
+| tools/lobby_client_test.luau | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
 | tools/onboarding_test.py | (repo only) | free | | |
 | ClaimButtonClient | StarterPlayerScripts | free | | |
 | tools/claim_button_test.luau | (repo only) | free | | |
 | tools/hatch_reveal_test.luau | (repo only) | free | | |
 | docs/STUDIO_SYNC_BATCH.md | (repo only) | free | | |
+| docs/OVERHAUL2_PLAN.md | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| docs/OVERHAUL2_REPORT.md | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| OfficeConfig | ReplicatedStorage | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| FounderConfig | ReplicatedStorage | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| FounderServer | ServerScriptService | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| FounderClient | StarterPlayerScripts | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| IntroClient | StarterPlayerScripts | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
+| tools/office_test.py | (repo only) | Claude (owner session 2) | overhaul2-phase1..6 | 2026-10-19 |
