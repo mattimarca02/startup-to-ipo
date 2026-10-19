@@ -14,7 +14,7 @@ Only the quality lane edits this file. See docs/LANES.md.
 
 ## Doing now
 
-idle (2026-10-18 11:50 UTC). PR #54 is merged; its claim rows are released.
+2026-10-19 00:45 UTC: scheduled run. Reviewing PR #61 (gameplay, head 36c310a); then the docs and the batch from the merged PRs.
 
 ## Last PR
 
