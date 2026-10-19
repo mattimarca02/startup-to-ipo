@@ -411,6 +411,37 @@ Playtests: (a) 1 player, F5: the plaza's paths are concrete, the lawns grass, th
 
 Run on: (see the pull request of `overhaul-phase5`)
 
+## Batch 8 (overhaul 2 phase 1: the new economy, the office catalog, buildings bought in the shop; branch `overhaul2-phase1`)
+
+Opened 2026-10-19 by the owner session 2 (docs/OVERHAUL2_PLAN.md phase 1). Pushed by the owner session through the Studio MCP: each script was fetched by Studio from the pushed commit on GitHub (raw.githubusercontent.com, `HttpService.HttpEnabled` switched on only for the fetch and put back to false in the same command) and hash-checked: **all 38 scripts in Studio match the repo** (IconArt and IconVisuals are not in Studio, on purpose). This batch is the record.
+
+**What the owner sees after this batch:** SHOP > Office is the catalog by funding stage (seven chips: Garage ... IPO, and Hire), each stage's building on top ("The Small Office is in SHOP > Office" when Seed is reached), desks and direct hires on the Hire chip; Seed at $30K, Series A $10M, Series B $100M, Series C $300M (new), IPO $1B; the HQ Tower is the sixth building. The owner's own save keeps the Big Corporate its old stage showed and 4 bought desks. **Save change: a new `office` section** (publish with Shut down all servers, docs/PUBLISH_RULES.md 2e).
+
+| Script | Studio | State | sha256 (`overhaul2-phase1`) | bytes |
+|---|---|---|---|---|
+| `OfficeConfig` | ModuleScript, ReplicatedStorage | new | `1013a6ca30edb09ab07df9d35fd8eae91822386c6da1393a9357547b13b83188` | 20306 |
+| `IpoConfig` | ModuleScript, ReplicatedStorage | changed | `7055d28b6b38b65e4df5282479975169248e85ea1d02300b27b58f8507d3b9e6` | 10275 |
+| `CreatureConfig` | ModuleScript, ReplicatedStorage | changed | `a2eae8d6603de064c2a5120dd4d1f4aeb023538aa0334ea8f197b7fc2f6d7b36` | 18483 |
+| `CompanyConfig` | ModuleScript, ReplicatedStorage | changed | `12ffc9bbaf801a95ed5beb24922eea09784e0c174c93f07b37f5a37ecca86636` | 41346 |
+| `OnboardingConfig` | ModuleScript, ReplicatedStorage | changed | `9d854ea0626f76458efe99982084e750cfbff1f1595b7d2ef6036755295eeeb2` | 9379 |
+| `TaskConfig` | ModuleScript, ReplicatedStorage | changed | `36b63103131dfdb345d54f09530f9138fb4128c826061ee2044026b581c9847b` | 14643 |
+| `CompanyServer` | ModuleScript, ServerScriptService | changed | `53798034b23ee3e392854cc6f35b353309249648b1e7177a5a97e755ab02f35f` | 10923 |
+| `EmployeeServer` | ModuleScript, ServerScriptService | changed | `89063230dc6f1832612264d9656aaf0bec16da167c7c7f2631be36177dbf56c3` | 34991 |
+| `OnboardingServer` | ModuleScript, ServerScriptService | changed | `bcbc71f903255c53f2af3f705c2688a3fb6a42f552958c1bc31b9445872c6bf9` | 18871 |
+| `PlotArt` | ModuleScript, ServerScriptService | changed | `beac9e2e88e4740d941cb0ff6cbc66b4db0e906d7a3325d9e0541bec64ba4443` | 64692 |
+| `PlotBuilding` | ModuleScript, ServerScriptService | changed | `04b31a2da2d9b667bfa3bd91e27cf95cd6a782fb6deecc37143523b15c5590e8` | 51645 |
+| `PoachServer` | ModuleScript, ServerScriptService | changed | `362defea39db742e3968a78815f653874da037c0394c4627153194cb87d48add` | 36696 |
+| `ShopServer` | ModuleScript, ServerScriptService | changed | `4e5db911390d29a86f06382f87cafaebe2e2192df36006ea51e5ca471b26c326` | 34347 |
+| `TycoonCore` | Script, ServerScriptService | changed | `279d40a8a4475965ae1c4f9c062834e1b9b63febca66fd25a0de5fdebdaa1bd3` | 67375 |
+| `EmployeeClient` | LocalScript, StarterPlayerScripts | changed | `c3ad0309651c875392e58592c3d6cf2777f8d060ed8e28f727b4ded5de315898` | 37832 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `8668705e6a19be143d86f31f4b174a53786bc3382b4b56116dab3279f7212b57` | 54357 |
+
+Create `OfficeConfig` (ModuleScript, ReplicatedStorage) **before** pasting TycoonCore, EmployeeServer, CompanyServer, ShopServer and ShopClient (they wait for it with no timeout). The hash block is Batch 1's with these 16 `WANT` rows; it must print `ALL OK: 16 scripts match the repo`.
+
+Playtests (run by the owner session, 1 player, F5, on the owner's save): the claim works; the save moved to overhaul 2 (Output: "keeps the Big Corporate their old stage showed"), Building 5, 4 desks, 8 workstations with the pass, 8 desks and one ghost in the room; offline pay $2.25M paid in full and $225K added to the valuation (10%); ShopAction: Office answers, an item of the stage reached is bought, a Series A item is refused ("Unlocks at Series A"), the HQ Tower is refused before IPO-ready, the 5th desk is refused ("Every desk is bought"), a direct hire joins the team, bad numbers are refused; with Debug valuation and Cash the HQ Tower is bought (171 parts, one light). No error from our scripts in the Output. **Not run:** 2 players, Test > Device (phone), a brand-new account from zero (the economy's first hour is checked by the sim only). **Note:** these tests ran on the owner's account in the place's own DataStore (Studio with API access): that save now has the HQ Tower, about $1B Cash and an IPO-ready valuation from the Debug buttons.
+
+Run on: 2026-10-19 by the owner session 2 (MCP), hash check ALL OK (38 scripts).
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

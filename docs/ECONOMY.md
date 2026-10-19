@@ -238,3 +238,175 @@ Rerun with `python3 tools/economy_sim.py --daily --runs 30`. Every simulated pla
 - **Calendar Cash is a gift and stays out of the valuation** (`DailyServer` adds it to Cash only; the simulator asserts it). Correction to `docs/M6_PLAN.md` section 2: the plan says counting it would bring the first IPO 25% sooner (8.7 min). The real hook doesn't reproduce that: before the first IPO the only calendar Cash is Day 1 (about $300, 0.4% of the IPO-ready valuation), so the first IPO moves from 11.7 to 11.3 min (-3%). The rule is still right: later Cash days (20-30 min of income) would add real valuation to every run.
 - **The idler's first IPO moves from hour 48 to hour 24**, and their Shares fall. Both come from the simulator going public the moment it can (an earlier IPO pays the base 10 Shares instead of a bigger offline overshoot; see section 3b). It is not a real loss for players.
 
+
+
+## 10. Overhaul 2: the new economy (2026-10-19, the owner's numbers and written OK)
+
+Everything in this section is read by `python3 tools/economy_sim.py --o2` straight from `OfficeConfig.lua`, `CreatureConfig.lua` and `IpoConfig.lua` (through Luau: `LUAU=/path/to/luau`), so nothing here is a hand copy. Sections 1 to 9 above describe the game before overhaul 2 and are kept as history (their CONFIG block still holds the old numbers).
+
+### 10.1 The ladder
+
+| Stage | Valuation to reach it | What it unlocks in SHOP > Office |
+|---|---|---|
+| Garage | 0 | the Garage's 11 items, desks 2 and 3 |
+| Seed | $30K | the Small Office ($12K), 11 items, desk 4 |
+| Series A | $10M | the Big Office ($3M), 11 items, desk 5 |
+| Series B | $100M | the Small Corporate ($25M), 11 items |
+| Series C (new) | $300M | the Big Corporate ($70M), 11 items |
+| IPO-ready | $1B | the HQ Tower ($250M), 8 items, and going public |
+
+- Valuation is still the Cash earned in the run, but **offline Cash and Cash packs count 10%** (`OfficeConfig.GiftValuationShare`): their Cash is paid in full, they just can't skip a stage. The owner's D-C decision (offline pay stays 50% of Income for up to 8 h) is kept.
+- `StageGrowthPerIpo` 2.5 → **1.1**: later runs are faster through the IPO multiplier and what is kept (employees, desks, perks).
+- Shares: `SharesPerIpo` 10 → **40**, `SharesGrowthPerIpo` 0.8 → **0.5** (a run is ~20 h now, was 12 min): IPO 1 = 40, IPO 2 = 60, IPO 3 = 80 (x2 with Shareholder). The perk shop (1,770 Shares) is unchanged.
+- Income = (items' income x the building's **office** multiplier + employees' income x its **team** multiplier) x the IPO multiplier x passes.
+
+| Building | Price | Office x | Team x |
+|---|---|---|---|
+| Garage | free | 1 | 0.1 |
+| Small Office | $12K | 2 | 0.8 |
+| Big Office | $3M | 3 | 5.1 |
+| Small Corporate | $25M | 3.3 | 9.2 |
+| Big Corporate | $70M | 3.8 | 15.8 |
+| HQ Tower | $250M | 4.4 | 20 |
+
+### 10.2 Workstations, eggs, hires, HR
+
+- **Desks:** 1 free, then $2.5K and $5K (Garage), $60K (Seed), $1.5M (Series A): 5 in all, as the old 5 base slots. **Extra Employee Slots stays exactly +3 free** workstations, the Extra Desk perk +1 per level: 11 at most (the hire spots). Desks are kept through an IPO (the `office` save section).
+- **Eggs:** Garage $800 (was 250), Startup $40K (was 2,500), Unicorn $2M (was 25,000). Hatch times, odds and creature incomes are unchanged; an employee earns its income x the building's team multiplier.
+- **Direct hires (Office > Hire):** commons $4.6K, uncommons $13K: 4x what a Garage Egg pays on average for that rarity ($1.14K, $3.2K). Fixed creature, no roll (FR-13 untouched). Shown with the egg comparison.
+- **HR Department:** $5K, $150K, $3M, $40M, $200M (was 2.5K to 350K). **Poach cost** = 300 s of the employee's income x the attacker's team multiplier (at least $500).
+
+### 10.3 The office catalog (63 items)
+
+Income is per second before the building's office multiplier. Effects: calls / sprint / bug / brainstorm / pitch = that founder activity pays that share more (the activities come in phase 3), hatch = eggs hatch that share faster, unlock bug = production bugs start.
+
+| # | Item | Stage | Price | Income (base, /s) | Effect |
+|---|---|---|---|---|---|
+| 1 | 🪑 Desk | Garage | free | 1 |  |
+| 2 | ☕ Coffee Machine | Garage | $120 | 1 |  |
+| 3 | 🖥️ Second Monitor | Garage | $250 | - | sprint 0.25 |
+| 4 | 💻 Laptop | Garage | $450 | 1 |  |
+| 5 | 📡 Router | Garage | $700 | - | calls 0.2 |
+| 6 | 💺 Better Chair | Garage | $1K | - | sprint 0.2 |
+| 7 | 🧃 Mini Fridge | Garage | $1.4K | - | brainstorm 0.3 |
+| 8 | 🗄️ Server Rack | Garage | $2K | 1 | unlock "bug" |
+| 9 | 📋 Whiteboard | Garage | $2.8K | - | brainstorm 0.5 |
+| 10 | 📚 Bookshelf | Garage | $3.8K | - | pitch 0.2 |
+| 11 | 💡 Neon Logo | Garage | $5.5K | 2 |  |
+| 12 | 🧍 Standing Desks | Seed | $15K | 23 |  |
+| 13 | 🍽️ Team Table | Seed | $30K | 32 |  |
+| 14 | 📞 Phone Booth | Seed | $50K | - | calls 0.25 |
+| 15 | 🗣️ Meeting Corner | Seed | $80K | 45 |  |
+| 16 | 🌿 Plant Wall | Seed | $120K | 59 |  |
+| 17 | ☕ Espresso Bar | Seed | $200K | 77 |  |
+| 18 | 📽️ Pitch Screen | Seed | $350K | - | pitch 0.25 |
+| 19 | 🖨️ Printer Station | Seed | $550K | 113 |  |
+| 20 | 📶 Wi-Fi Mesh | Seed | $900K | 147 |  |
+| 21 | 🧰 Dev Kit Shelf | Seed | $1.5M | - | sprint 0.3 |
+| 22 | 🎨 Brand Mural | Seed | $2.5M | 226 |  |
+| 23 | 🚪 Meeting Room | Series A | $2.5M | 46 |  |
+| 24 | 🧪 QA Lab | Series A | $3.5M | - | bug 0.5 |
+| 25 | ✏️ Design Studio | Series A | $4.5M | 64 |  |
+| 26 | 🖧 Server Row | Series A | $6M | 77 |  |
+| 27 | 🍿 Snack Bar | Series A | $7.5M | 86 |  |
+| 28 | 🎙️ Podcast Booth | Series A | $9M | - | calls 0.3 |
+| 29 | 🧠 Whiteboard Wall | Series A | $11M | - | brainstorm 0.5 |
+| 30 | 🎮 Game Corner | Series A | $14M | 118 |  |
+| 31 | 📈 Analytics Screens | Series A | $17M | 136 |  |
+| 32 | 😴 Nap Pod | Series A | $21M | - | hatch 0.15 |
+| 33 | 🪧 Rooftop Sign | Series A | $25M | 181 |  |
+| 34 | 🏭 Data Center Room | Series B | $12M | 67 |  |
+| 35 | 📣 Marketing Floor | Series B | $15M | 80 |  |
+| 36 | 🤝 Recruiting Office | Series B | $19M | - | hatch 0.2 |
+| 37 | 🛋️ Lounge Sofas | Series B | $23M | 100 |  |
+| 38 | 🎓 Training Room | Series B | $28M | 114 |  |
+| 39 | 🎧 Customer Success Desk | Series B | $33M | - | calls 0.35 |
+| 40 | 🛡️ Security Desk | Series B | $38M | 133 |  |
+| 41 | 📬 Mail Room | Series B | $44M | 147 |  |
+| 42 | 📖 Library | Series B | $50M | 160 |  |
+| 43 | 🎬 Video Studio | Series B | $55M | - | pitch 0.3 |
+| 44 | 🫘 Coffee Roastery | Series B | $60M | 187 |  |
+| 45 | 🥗 Cafeteria | Series C | $30M | 94 |  |
+| 46 | 🏋️ Gym | Series C | $40M | 113 |  |
+| 47 | 🌇 Rooftop Terrace | Series C | $50M | 132 |  |
+| 48 | ⚖️ Legal Office | Series C | $62M | - | bug 0.5 |
+| 49 | 🎤 Demo Stage | Series C | $75M | 160 |  |
+| 50 | 🔬 Innovation Lab | Series C | $90M | - | sprint 0.4 |
+| 51 | 🧘 Wellness Room | Series C | $105M | 190 |  |
+| 52 | 🥂 Investor Lounge | Series C | $120M | - | pitch 0.4 |
+| 53 | 🏟️ Auditorium | Series C | $140M | 228 |  |
+| 54 | 🌳 Green Roof | Series C | $165M | 247 |  |
+| 55 | 🖼️ Art Gallery | Series C | $190M | 275 |  |
+| 56 | 🪑 Boardroom | IPO-ready | $150M | 207 |  |
+| 57 | 💹 Trading Screens | IPO-ready | $200M | 248 |  |
+| 58 | 📰 Press Room | IPO-ready | $260M | - | pitch 0.5 |
+| 59 | 🏢 Executive Floor | IPO-ready | $330M | 310 |  |
+| 60 | 🏆 Trophy Wall | IPO-ready | $420M | 351 |  |
+| 61 | 🚁 Helipad | IPO-ready | $520M | 413 |  |
+| 62 | 🏛️ Shareholder Hall | IPO-ready | $630M | 455 |  |
+| 63 | 🔔 Golden Bell | IPO-ready | $750M | 517 |  |
+
+### 10.4 Paid items: what changes for players (Robux prices and product IDs never change)
+
+| Item | Before | Overhaul 2 | Fair? |
+|---|---|---|---|
+| 2x Cash (199) | x2 Cash | x2 Cash (and x2 valuation from income) | yes: Seed in 27 min instead of 55 for a perfect player |
+| VIP (249) | x1.5 Cash | unchanged | yes |
+| Extra Employee Slots (149) | +3 slots | **+3 free workstations**, on top of the 5 a player can buy | yes: never less than +3 |
+| Shareholder (199) | x2 Shares | x2 Shares (IPOs pay 4x more Shares now) | yes |
+| Auto-Hatch, Headhunter | | unchanged | yes |
+| Pile / Bag / Vault of Cash (29/99/299) | 10 / 45 / 180 min of income, min $250 / $2.5K / $15K, all counted as valuation | same Cash (income-scaled), **10% counted as valuation** | yes: same buying power; it can no longer skip a funding stage |
+| Luck Boost, Instant Hatch, Poach Shield | | unchanged | yes |
+
+### 10.5 Daily rewards and goals
+
+- Daily Cash days are minutes of income (5/10/20/30) with a $300 floor: they scale by themselves; eggs (days 3, 5, 7) are worth more now with the new egg prices; Day 7's 3 Shares stay. No number changed in `DailyConfig`.
+- The goal chain follows the ladder: Answer 3 calls, Own 3 office items, Hire 3, Calls in a row, the Server Rack, Seed, **Move into the Small Office**, Hire 5, Series A, **the Big Office**, Series B, **the Small Corporate**, **Series C**, **the Big Corporate**, IPO-ready, the first IPO.
+
+### 10.6 The sim: the first run, minutes of active play (median of 9 runs; perfect player)
+
+| Stage | Valuation | Reached at (median) | Range | Target |
+|---|---|---|---|---|
+| Seed | 30.00K | 55 min | 52 min to 59 min | 60 min to 75 min |
+| Series A | 10.00M | 3.0 h | 2.8 h to 3.1 h | 2.5 h to 3.5 h |
+| Series B | 100.00M | 6.9 h | 6.3 h to 7.2 h | 6.0 h to 8.0 h |
+| Series C | 300.00M | 11.0 h | 10.3 h to 11.6 h | 11.0 h to 13.0 h |
+| IPO-ready | 1.00B | 18.4 h | 16.5 h to 19.3 h | 18.0 h to 22.0 h |
+
+Longest wait between two purchases or hatches in the first hour (the activities fill it): median 14 min
+Items bought by the IPO bell: median 63 of 63; Income at the bell: 33.80K/s
+
+One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min Server Rack, 10 min Second Monitor, 24 min Neon Logo, 25 min Router, 26 min Better Chair, 30 min Desk 2, 34 min Mini Fridge, 38 min Whiteboard, 44 min Desk 3, 53 min Bookshelf, 68 min Small Office, 73 min Standing Desks, 77 min Team Table, 83 min Meeting Corner, 88 min Plant Wall, 1.6 h Espresso Bar, 1.6 h Phone Booth, 1.8 h Printer Station, 2.0 h Wi-Fi Mesh, 2.4 h Brand Mural, 2.4 h Desk 4, 2.6 h Dev Kit Shelf, 2.6 h Pitch Screen, 3.2 h Big Office, 3.3 h Meeting Room, 3.6 h Design Studio, 3.9 h Server Row, 4.3 h Snack Bar, 4.4 h QA Lab, 4.8 h Podcast Booth, 5.4 h Game Corner, 6.1 h Analytics Screens, 7.0 h Small Corporate, 8.8 h Rooftop Sign, 8.8 h Desk 5, 9.3 h Whiteboard Wall, 9.7 h Data Center Room ...
+
+### Later runs (employees and desks kept, IPO multiplier, thresholds x1.10 per IPO)
+
+| Run | Reaches IPO-ready at |
+|---|---|
+| 1 | 18.5 h |
+| 2 | 10.7 h |
+| 3 | 9.2 h |
+| 4 | 8.7 h |
+
+### With the 2x Cash pass (first run)
+
+| Seed | Series A | Series B | Series C | IPO-ready |
+|---|---|---|---|---|
+| 27 min | 90 min | 3.4 h | 5.6 h | 9.4 h |
+
+### Direct hires (OfficeConfig.hireList)
+
+| Creature | Rarity | Price | An egg pays on average |
+|---|---|---|---|
+| CoffeeCapybara | Common | 4.60K | 1.14K (Garage Egg) |
+| CodingCat | Common | 4.60K | 1.14K (Garage Egg) |
+| PixelPigeon | Common | 4.60K | 1.14K (Garage Egg) |
+| HustleHamster | Uncommon | 13.00K | 3.20K (Garage Egg) |
+| BugBeetle | Uncommon | 13.00K | 3.20K (Garage Egg) |
+| MemoMole | Uncommon | 13.00K | 3.20K (Garage Egg) |
+
+
+What this does not tell you: the sim player is perfect (it buys the best payback the moment it can and never pauses), so real players are slower (a guess: +10 to 25%, Seed at about 60 to 70 min). The founder activities are modeled at the proposal's rates (calls 0.25, coding sprint 0.15, brainstorm 0.07, production bug 0.08 seconds of Income per second, 85% attention): phase 3 builds them; until then only calls exist (Studio only). The "longest wait in the first hour" is between purchases or hatches; the activities (a call every 20 to 40 s, a sprint every 3 min) fill it. Offline Cash is not modeled (active play only).
+
+### 10.7 Existing saves (the migration)
+
+The first load under overhaul 2 gives a save **the building its old stage showed** (old thresholds 1,800 / 6,300 / 23,400 / 81,000 x2.5 per IPO, frozen in `OfficeConfig.LegacyStages`), written to `pokedex.active.building` with the mark `active.o2 = 1`, and **4 bought desks** (its old 5 base slots) in the new `office` section. Cash, Shares, employees, perks, owned upgrades, the IPO count and the valuation are untouched. Checked on the owner's own test save in Studio: IPO count 1, valuation $1.9M (old IPO-ready) → keeps the Big Corporate; under the new ladder that valuation is Seed, so Seed's items are what unlocks next.
