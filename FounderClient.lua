@@ -7,7 +7,8 @@
 --               the server's player attributes FounderDesk, FounderRack, FounderBoard): "Coding sprint" and "Investor
 --               pitch" at the desk, "Fix the bug" at the Server Rack while its alarm rings, "Brainstorm" at the blackboard.
 --               RequiresLineOfSight is off: the furniture's solid boxes would hide them.
---   The window  one activity at a time, in the middle of the screen (phone first: at most 360 x 320). It counts as a
+--   The window  one activity at a time, in the middle of the screen (phone first: at most 360 x 320, smaller on a short
+--               screen, every button at least 44 high: windowLayout, tested by tools/plaza_test.py). It counts as a
 --               window (PlayerGui "OpenPanel" = "Founder"): another window opening closes it (the activity is cancelled).
 --   The desk    while a call waits, a board over the founder desk shows "Incoming call" with Answer and Decline. Answer
 --               asks the server at once (the server grades it then), walks the founder to the desk, sits them down for
@@ -75,12 +76,48 @@ end
 -- The window -------------------------------------------------------------------------------------------
 
 local gui = make("ScreenGui", { Name = "FounderGui", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 4, Parent = playerGui })
+-- WINDOWLAYOUT-START
+-- (tools/plaza_test.py runs the code between the WINDOWLAYOUT markers, so keep it free of Roblox calls.)
+-- The window on a screen of screenW x screenH pixels (the GUI's size, without Roblox's top bar), for `count` buttons
+-- (`grid`: the bug's 2 x 2 fixes). Phone first: at most 360 x 320, never taller than the screen minus 16; on a short
+-- screen (a phone held sideways under a top bar) the help line gets smaller and four rows become a 2 x 2 grid, so
+-- every button stays at least 44 high (a touch target). Returns { w, h, helpY, helpH, trackY, buttons = { { x, y, w, h } } }.
+local TOUCH = 44
+local function windowLayout(screenW, screenH, count, grid)
+	local w = math.min(360, math.floor(screenW * 0.92))
+	local h = math.min(320, screenH - 16)
+	local short = h < 300
+	local helpY, helpH = 46, short and 28 or 40
+	local trackY = helpY + helpH + 4
+	local top, bottom, gap = trackY + 12, h - 10, short and 6 or 4
+	local avail = bottom - top
+	local out = { w = w, h = h, helpY = helpY, helpH = helpH, trackY = trackY, buttons = {} }
+	local listRow = math.min(46, math.floor((avail - gap * (count - 1)) / math.max(1, count)))
+	if not grid and listRow < TOUCH and count == 4 then
+		grid = true
+	end
+	if grid then
+		local rows = math.ceil(count / 2)
+		local rowH = math.min(88, math.floor((avail - gap * (rows - 1)) / rows))
+		local colW = math.floor((w - 28 - gap) / 2)
+		for i = 1, count do
+			local col, row = (i - 1) % 2, (i - 1) // 2
+			out.buttons[i] = { x = 14 + col * (colW + gap), y = top + row * (rowH + gap), w = colW, h = rowH }
+		end
+	else
+		for i = 1, count do
+			out.buttons[i] = { x = 14, y = top + (i - 1) * (listRow + gap), w = w - 28, h = listRow }
+		end
+	end
+	return out
+end
+-- WINDOWLAYOUT-END
+
 local window = make("Frame", {
-	Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0.92, 0, 0, 320),
+	Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(330, 320),
 	BackgroundColor3 = COLORS.panel, BackgroundTransparency = 0.05, Visible = false, Parent = gui,
 })
 round(window, 14)
-make("UISizeConstraint", { MaxSize = Vector2.new(360, 320), Parent = window })
 make("UIStroke", { Thickness = 2, Color = COLORS.gold, Transparency = 0.5, Parent = window })
 local title = make("TextLabel", { Position = UDim2.fromOffset(14, 8), Size = UDim2.new(1, -72, 0, 30), BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold, TextColor3 = COLORS.gold, TextXAlignment = Enum.TextXAlignment.Left, Text = "", Parent = window })
@@ -106,19 +143,27 @@ for i = 1, 4 do
 	fitText(button, 18)
 	buttons[i] = button
 end
+local shownCount, shownGrid = 0, false
 local function layoutButtons(count, grid)
+	shownCount, shownGrid = count, grid
+	local screen = gui.AbsoluteSize
+	local L = windowLayout(screen.X > 0 and screen.X or 800, screen.Y > 0 and screen.Y or 600, count, grid)
+	window.Size = UDim2.fromOffset(L.w, L.h)
+	help.Position, help.Size = UDim2.fromOffset(14, L.helpY), UDim2.new(1, -28, 0, L.helpH)
+	track.Position = UDim2.fromOffset(14, L.trackY)
 	for i, button in ipairs(buttons) do
-		button.Visible = i <= count
-		if grid then
-			local col, row = (i - 1) % 2, (i - 1) // 2
-			button.Position = UDim2.new(col * 0.5, col == 0 and 14 or 4, 0, 112 + row * 96)
-			button.Size = UDim2.new(0.5, -18, 0, 88)
-		else
-			button.Position = UDim2.new(0, 14, 0, 112 + (i - 1) * 50)
-			button.Size = UDim2.new(1, -28, 0, 46)
+		local b = L.buttons[i]
+		button.Visible = b ~= nil
+		if b then
+			button.Position, button.Size = UDim2.fromOffset(b.x, b.y), UDim2.fromOffset(b.w, b.h)
 		end
 	end
 end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() -- the phone turned: lay the window out again
+	if shownCount > 0 then
+		layoutButtons(shownCount, shownGrid)
+	end
+end)
 
 -- Pop-up message (bottom middle, like the call tray's)
 local front = make("ScreenGui", { Name = "FounderFrontGui", ResetOnSpawn = false, DisplayOrder = 6, Parent = playerGui })
