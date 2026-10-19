@@ -4450,7 +4450,7 @@ do
 		local r = room(2)
 		check("stage 2: twelve warm string-light bulbs, all glowing (Neon), on two cords", count(r, "StringBulb", "Neon") == 12 and count(r, "StringCord") == 2)
 		check("stage 2: a new door of four panels with a smoked glass band", count(r, "DoorPanel") == 4 and find(r, "DoorGlassBand").Material.Name == "Glass")
-		check("stage 2: fresh paint is smooth (SmoothPlastic), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "SmoothPlastic" and count(r, "SideWall", "CorrodedMetal") == 0)
+		check("stage 2: fresh paint on plaster (Concrete since overhaul 2 phase 6), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "Concrete" and count(r, "SideWall", "CorrodedMetal") == 0)
 		check("stage 2: a rug of two layers and a sofa of five parts", count(r, "Rug") == 2 and count(r, "Sofa") == 5)
 		check("stage 2: every workstation has an oak top, two legs, a monitor and a chair (8 parts)", #PlotArt.Stages[2].desk == 8)
 	end
