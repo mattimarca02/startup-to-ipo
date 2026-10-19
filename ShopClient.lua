@@ -1303,7 +1303,7 @@ if debugRemote then
 	debugRow("📅", "Daily: next day (fake)", "Pretends one UTC day passed for you. After a claim: once = next day, twice = 1 missed day (place kept), 3 times = 2 missed days (back to Day 1).", "+1 day", "DailyNextDay")
 	debugRow("🗓️", "Daily: reset calendar", "Like a save from before milestone 6: next claim is Day 1, no streak.", "Reset", "DailyReset")
 
-	-- Task engine (PR 1, customer calls). The task Debug actions exist only while TaskConfig is active (Studio).
+	-- Task engine (customer calls). The task Debug actions exist only while TaskConfig is active.
 	-- (waits 5 s at most: a Studio place that doesn't have TaskConfig yet must never freeze the rest of this script)
 	local taskConfigModule = ReplicatedStorage:WaitForChild("TaskConfig", 5)
 	local TaskConfig = taskConfigModule and require(taskConfigModule)
@@ -1315,6 +1315,11 @@ if debugRemote then
 		end
 		debugRow("🔁", "Task rung: your real stage", "Back to the rung your funding stage gives.", "Set", "TaskSetRung", "auto")
 	end
+
+	-- Founder activities (overhaul 2 phase 3)
+	debugRow("🚨", "Founder: production bug now", "The Server Rack's alarm rings in a moment (needs the Server Rack).", "Ring", "FounderBugNow")
+	debugRow("⏱️", "Founder: sprint and brainstorm ready", "Skips the coding sprint's and the brainstorm's wait.", "Ready", "FounderReady")
+	debugRow("💼", "Founder: pitch again", "Offers this funding round's investor pitch again (saved, like a real pitch).", "Offer", "FounderPitchAgain")
 end
 
 -- Tabs, opening and closing ---------------------------------------------

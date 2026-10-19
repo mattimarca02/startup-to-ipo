@@ -1450,10 +1450,231 @@ end
 )
 
 
+# Overhaul 2 phase 3's edits outside the CLAIMLOAD markers (docs/OVERHAUL2_PLAN.md: FounderServer wired in, its save section and income boost, the blackboard that replaced the next-upgrade sign), applied after O2_EDITS.
+O3_EDITS = (
+    ('''local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
+local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
+''',
+     '''local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
+local FounderServer = require(script.Parent:WaitForChild("FounderServer")) -- overhaul 2 phase 3: the founder's activities
+local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
+'''),
+    ('''local PLOT_SPACING = 90
+local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the garage sign that names the next upgrade (front of the plot)
+local MAX_PLOTS = 6
+''',
+     '''local PLOT_SPACING = 90
+local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the blackboard over the lane at the front of the plot (was the next-upgrade sign)
+local MAX_PLOTS = 6
+'''),
+    ('''-- newer (or other) code: it's kept and written back unchanged, never deleted.
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true, office = true }
+
+''',
+     '''-- newer (or other) code: it's kept and written back unchanged, never deleted.
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true, office = true, founder = true }
+
+'''),
+    ('''	if not data then return end
+	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player))
+	local building, number = OfficeConfig.building(buildingOf(data))
+''',
+     '''	if not data then return end
+	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player) * FounderServer.incomeBoost(player))
+	local building, number = OfficeConfig.building(buildingOf(data))
+'''),
+    ('''-- reached says so once (stageUpToast). data.debugStage is the Studio Debug button's (in memory only, never saved).
+local function syncRoom(data)
+''',
+     '''-- reached says so once (stageUpToast). data.debugStage is the Studio Debug button's (in memory only, never saved).
+local writeBoard -- the blackboard (below, with refreshSign): syncRoom rewrites it every second
+local function syncRoom(data)
+'''),
+    ('''	syncBuilding(data.slot, stage)
+end
+''',
+     '''	syncBuilding(data.slot, stage)
+	if data.board then
+		pcall(writeBoard, data) -- the goal chain moves on every second (looks only; refreshSign warns about a failure)
+	end
+end
+'''),
+    ('''
+-- The sign in the garage names the next upgrade. It is only a sign: nothing happens when you step
+-- on it. Upgrades are bought in the shop's Office tab (buyUpgrade below).
+local function refreshSign(player)
+''',
+     '''
+-- The blackboard (overhaul 2 phase 3, the owner's point 10; it replaced the green "Next: ..." sign): a chalk board hung
+-- between two posts over the lane at the front of the garage, its face turned to the spawn, so it is the first thing a
+-- player sees on landing, and high enough to walk under. The server writes the next steps of the goal chain on it in
+-- chalk (OnboardingServer.boardLines), then the cheapest item to buy. A SurfaceGui on a part (it hides behind walls
+-- like any part, never drawn on top). Looks only: it collides with nothing, is touched by nothing, is never saved.
+-- The brainstorm (FounderServer) happens here: FounderClient puts its prompt on the board.
+local BOARD_SIZE = Vector3.new(8.4, 4.4, 0.3) -- the slate
+local BOARD_UP = 8.4 -- its center above the floor top (bottom at 6.2: a character walks under it)
+local BOARD_LINES = 3 -- goals written on it
+
+local function boardText(data)
+	local lines = { "Next steps:" }
+	for _, line in ipairs(OnboardingServer.boardLines(data, BOARD_LINES)) do
+		table.insert(lines, "- " .. line)
+	end
+	local _, upg = nextUpgrade(data)
+	if upg then
+		table.insert(lines, "- Shop: " .. upg.name .. " " .. OfficeConfig.money(upg.cost))
+	end
+	if #lines == 1 then
+		table.insert(lines, "- Grow, hire, go public!")
+	end
+	return table.concat(lines, "\\n")
+end
+
+writeBoard = function(data)
+	local board = data.board
+	if not board then
+		local origin = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage; the part's front (-Z) faces the spawn
+		local model = Instance.new("Model")
+		model.Name = "Blackboard"
+		local function piece(name, size, offset, color, material)
+			local part = makePart(model, name, size, origin * CFrame.new(offset), color, material)
+			part.CanCollide, part.CanTouch, part.CanQuery, part.CastShadow = false, false, false, false
+			return part
+		end
+		local wood, woodDark = Color3.fromRGB(122, 84, 52), Color3.fromRGB(86, 58, 36)
+		local slate = piece("Slate", BOARD_SIZE, Vector3.new(0, BOARD_UP, 0), Color3.fromRGB(38, 52, 44), Enum.Material.Slate)
+		piece("FrameTop", Vector3.new(8.9, 0.3, 0.45), Vector3.new(0, BOARD_UP + 2.35, 0), wood, Enum.Material.Wood)
+		piece("FrameBottom", Vector3.new(8.9, 0.3, 0.45), Vector3.new(0, BOARD_UP - 2.35, 0), wood, Enum.Material.Wood)
+		piece("FrameLeft", Vector3.new(0.3, 4.4, 0.45), Vector3.new(-4.3, BOARD_UP, 0), wood, Enum.Material.Wood)
+		piece("FrameRight", Vector3.new(0.3, 4.4, 0.45), Vector3.new(4.3, BOARD_UP, 0), wood, Enum.Material.Wood)
+		piece("ChalkTray", Vector3.new(7.6, 0.15, 0.5), Vector3.new(0, BOARD_UP - 2.55, -0.3), woodDark, Enum.Material.Wood)
+		piece("Chalk", Vector3.new(0.6, 0.12, 0.12), Vector3.new(-2.4, BOARD_UP - 2.42, -0.35), Color3.fromRGB(240, 240, 232), Enum.Material.SmoothPlastic)
+		piece("PostLeft", Vector3.new(0.3, BOARD_UP + 2.5, 0.3), Vector3.new(-4.45, (BOARD_UP + 2.5) / 2, 0.25), woodDark, Enum.Material.Wood)
+		piece("PostRight", Vector3.new(0.3, BOARD_UP + 2.5, 0.3), Vector3.new(4.45, (BOARD_UP + 2.5) / 2, 0.25), woodDark, Enum.Material.Wood)
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 50
+		gui.LightInfluence = 0
+		gui.Parent = slate
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0.05, 0.06)
+		label.Size = UDim2.fromScale(0.9, 0.88)
+		label.Font = Enum.Font.IndieFlower
+		label.TextColor3 = Color3.fromRGB(240, 240, 228)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		label.TextScaled = true
+		label.Text = ""
+		label.Parent = gui
+		local limit = Instance.new("UITextSizeConstraint")
+		limit.MaxTextSize = 48
+		limit.Parent = label
+		model.Parent = data.folder
+		board = { model = model, label = label, text = nil }
+		data.board = board
+	end
+	local text = boardText(data)
+	if text ~= board.text then
+		board.text = text
+		board.label.Text = text
+	end
+end
+
+-- Publishes the owned upgrades and writes the blackboard (the load, a purchase, an IPO). Upgrades are bought in the
+-- shop's Office tab (buyUpgrade below); nothing in the garage buys anything by touch.
+local function refreshSign(player)
+'''),
+    ('''	if not data then return end
+	if data.sign then
+		data.sign:Destroy()
+		data.sign = nil
+	end
+''',
+     '''	if not data then return end
+	publishUpgrades(player)
+	local ok, err = pcall(writeBoard, data) -- looks only: a failure never stops the load, a purchase or an IPO
+	if not ok then
+		warn("The blackboard failed: " .. tostring(err))
+	end
+'''),
+    ('''	end
+	publishUpgrades(player)
+
+	local i, upg = nextUpgrade(data)
+	if not i then return end -- everything bought
+
+	local pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage
+	local post = makePart(data.folder, "BuySign", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
+	post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
+	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
+	board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
+	addLabel(board, string.format("Next: %s  %s\\nBuy it in SHOP > Office", upg.name, OfficeConfig.money(upg.cost)), 3)
+	data.sign = post
+end
+''',
+     '''	end
+end
+'''),
+    ('''			daily = DailyServer.serialize(data),
+			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep: Studio only in PR 1
+			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
+''',
+     '''			daily = DailyServer.serialize(data),
+			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep
+			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
+'''),
+    ('''			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
+			pokedex = CompanyServer.serialize(data), -- the company, its sector and the Pokedex (a locked newer section is written back as it was)
+''',
+     '''			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
+			founder = FounderServer.serialize(data), -- overhaul 2 phase 3: the pitches of this run (nil until there is one)
+			pokedex = CompanyServer.serialize(data), -- the company, its sector and the Pokedex (a locked newer section is written back as it was)
+'''),
+    ('''	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex and data.office) then -- a save must have every part
+		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
+''',
+     '''	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex and data.office and data.founder) then -- a save must have every part
+		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
+'''),
+    ('''
+-- Daily login calendar (milestone 6) -------------------------------------
+''',
+     '''
+-- Founder activities (overhaul 2 phase 3) ----------------------------------
+-- Plugged in after TaskServer (it pays through TaskServer.payReward) and before DailyServer, which stays last.
+
+FounderServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	updateIncome = updateIncome,
+	plotFrame = plotFrame,
+	stageOf = stageOf,
+	notify = function(player, text)
+		ShopServer.notify(player, text)
+	end,
+})
+
+-- Daily login calendar (milestone 6) -------------------------------------
+'''),
+    ('''	setupOffice(player, data, saved) -- overhaul 2: the desks bought (no yield since the block above: nothing saved yet)
+	data.stageSeen = stageOf(data) -- the stage this session started at: only a later round reached is told
+''',
+     '''	setupOffice(player, data, saved) -- overhaul 2: the desks bought (no yield since the block above: nothing saved yet)
+	FounderServer.setupPlayer(player, data, saved and saved.founder) -- overhaul 2 phase 3: the pitches (no yield either)
+	data.stageSeen = stageOf(data) -- the stage this session started at: only a later round reached is told
+'''),
+)
+
+
 def with_l1_edits(base):
-    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS, O1_EDITS and O2_EDITS applied, or None when an old text is not there exactly once."""
+    """BASE's TycoonCore.lua (bytes) with L1_EDITS to L6_EDITS and O1_EDITS to O3_EDITS applied, or None when an old text is not there exactly once."""
     text = base.decode("utf-8")
-    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS:
+    for old, new in L1_EDITS + L2_EDITS + L3_EDITS + L4_EDITS + L5_EDITS + L6_EDITS + O1_EDITS + O2_EDITS + O3_EDITS:
         if text.count(old) != 1:
             return None
         text = text.replace(old, new)

@@ -14,10 +14,11 @@
 -- Employees still take routine calls for the player as designed (teamPays, auto), once calls are on.
 -- Before that no call is scheduled or arrives, and the screen shows nothing about calls.
 --
--- PR 1 runs ONLY in Studio (isActive: Enabled and (StudioOnly is off or this is Studio), like ShopConfig.DebugInStudio): outside
--- Studio the engine builds no remotes, starts no loop and shows nothing. The reason: task Cash
--- must not count 100% toward the IPO valuation before the economy core (PR 2: addEarnings(kind),
--- the 3 h/day full-value cap). PR 2 sets StudioOnly = false.
+-- Live since overhaul 2 phase 3 (the economy core): StudioOnly is false, so calls run on live servers. What PR 1 waited
+-- for is in place: Cash packs and offline pay count only 10% toward the valuation (TycoonCore.addEarnings), task rewards
+-- pay full value for EngagedCap.seconds engaged seconds a day and EngagedCap.share after that, and a rejoin on the same
+-- day starts with an empty reward bank (TaskServer.setupPlayer). isActive stays the one switch: Enabled = false turns
+-- the whole engine off again; StudioOnly = true would bring back the Studio-only test mode.
 --
 -- Numbers are starting values from docs/ACTIVE_LOOPS_PROPOSAL.md and docs/LONG_GAME_PROPOSAL.md,
 -- to be measured in Studio (gate G1). Safe to change any time. Never rename or reuse a row "key"
@@ -30,7 +31,7 @@ local RunService = game:GetService("RunService")
 local TaskConfig = {}
 
 TaskConfig.Enabled = true
-TaskConfig.StudioOnly = true -- PR 2 turns this off, when tasks can pay through addEarnings(kind)
+TaskConfig.StudioOnly = false -- overhaul 2 phase 3: the economy core is in, calls run on live servers
 
 -- True when the engine runs in this server (and when the client may build its screen)
 function TaskConfig.isActive()
@@ -94,6 +95,10 @@ TaskConfig.OverBudgetShare = 0.20
 -- Engaged: the server graded a valid answer in the last EngagedSeconds. Only a graded answer sets it
 -- (not a skip, a team-taken call, movement or anything the client says).
 TaskConfig.EngagedSeconds = 180
+
+-- The daily cap (the economy core): task and founder rewards pay full value for the first `seconds` engaged seconds of
+-- the day (the daily calendar's day, 08:00 UTC), then `share` of it. Counted on the saved tasks.engagedSeconds.
+TaskConfig.EngagedCap = { seconds = 3 * 60 * 60, share = 0.25 }
 TaskConfig.MinReaction = 0.25 -- seconds. A faster answer pays 0, is not graded and does not count as engaged
 
 -- Quiet mode: after this many expired calls in a row, or this long without a graded answer, no new
@@ -146,6 +151,15 @@ TaskConfig.Texts = {
 }
 
 -- Helpers used by the server, the screen and the tests -----------------------------
+
+-- The share of a reward paid after `engagedToday` engaged seconds today: 1, then EngagedCap.share past the cap
+function TaskConfig.capShare(engagedToday)
+	local cap = TaskConfig.EngagedCap
+	if typeof(engagedToday) == "number" and engagedToday >= cap.seconds then
+		return cap.share
+	end
+	return 1
+end
 
 function TaskConfig.getRow(key)
 	for _, row in ipairs(TaskConfig.Rows) do
@@ -286,6 +300,10 @@ do
 	end
 	if #TaskConfig.Rows == 0 then
 		warn("TaskConfig: no task rows")
+	end
+	local cap = TaskConfig.EngagedCap
+	if typeof(cap) ~= "table" or not number(cap.seconds, 0) or not number(cap.share, 0) or cap.share > 1 then
+		warn("TaskConfig: EngagedCap must be { seconds >= 0, share from 0 to 1 }")
 	end
 	if #TaskConfig.Budget ~= #TaskConfig.RungNames then
 		warn("TaskConfig: Budget and RungNames need one entry per rung")
