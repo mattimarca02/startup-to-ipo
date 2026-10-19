@@ -19,6 +19,7 @@ local function signal()
 	return s
 end
 local REMOTES = 0
+local SCREEN = vec(390, 800)
 local Mt = {}
 local M = {}
 Mt.__index = function(t, k)
@@ -42,7 +43,7 @@ end
 local function new(class)
 	if class == "RemoteEvent" or class == "RemoteFunction" then REMOTES += 1 end
 	local o = setmetatable({ ClassName = class, _children = {}, _attrs = {}, _attrSignals = {}, _props = { Name = class } }, Mt)
-	if class == "ScreenGui" then o._props.AbsoluteSize = vec(390, 800) end -- a phone, portrait
+	if class == "ScreenGui" then o._props.AbsoluteSize = SCREEN end -- a phone, portrait unless a scenario sets SCREEN
 	if class == "TextButton" then o._props.Activated = signal() end -- the welcome card's button
 	return o
 end
@@ -184,5 +185,36 @@ do
 		W.sign3.Enabled == true and W.prompt3.Enabled == false and W.lamp3.Transparency == 1 and W.sign2.Enabled == false)
 	ranClean(W, "no Free garage")
 end
+-- The welcome card's layout (ux backlog item 4): its Got it button is a tap target of 40 or more on each side, inside the
+-- card, and the story never runs under it, on a tall phone (the full 150-high card) and on landscape phones (shorter)
+local function rectOf(o, pw, ph)
+	local s, p, a = o.Size, o.Position, o.AnchorPoint or { X = 0, Y = 0 }
+	local w, h = s.X.Scale * pw + s.X.Offset, s.Y.Scale * ph + s.Y.Offset
+	local x, y = p.X.Scale * pw + p.X.Offset - a.X * w, p.Y.Scale * ph + p.Y.Offset - a.Y * h
+	return { x = x, y = y, w = w, h = h }
+end
+for _, screen in ipairs({ { 390, 800 }, { 375, 667 }, { 667, 375 }, { 812, 375 }, { 568, 320 } }) do
+	SCREEN = vec(screen[1], screen[2], 0)
+	local W = start(world(true, 0))
+	frames(W, 2)
+	local label = screen[1] .. "x" .. screen[2]
+	local welcome = W.gui and W.gui:FindFirstChild("Welcome")
+	local button, body = welcome and welcome:FindFirstChild("GotIt"), welcome and welcome:FindFirstChild("Body")
+	if welcome and button and body then
+		local cw, ch = welcome.Size.X.Offset, welcome.Size.Y.Offset
+		local b, t = rectOf(button, cw, ch), rectOf(body, cw, ch)
+		check("welcome card " .. label .. ": Got it is a tap target of 40 or more on each side", b.w >= 40 and b.h >= 40, b.w .. "x" .. b.h)
+		check("welcome card " .. label .. ": Got it is inside the card", b.x >= 0 and b.y >= 0 and b.x + b.w <= cw and b.y + b.h <= ch,
+			string.format("%d,%d %dx%d in %dx%d", b.x, b.y, b.w, b.h, cw, ch))
+		local apart = t.x + t.w <= b.x or t.y + t.h <= b.y
+		check("welcome card " .. label .. ": the story never runs under Got it (above it or beside it)", apart and t.h > 0 and t.y + t.h <= ch,
+			string.format("story %d,%d %dx%d, button %d,%d", t.x, t.y, t.w, t.h, b.x, b.y))
+	else
+		check("welcome card " .. label .. ": Got it is a tap target of 40 or more on each side", false, "no welcome card")
+	end
+	ranClean(W, "welcome card " .. label)
+end
+SCREEN = vec(390, 800)
+
 print_real(string.format("%d passed, %d failed", passed, failed))
 print_real("DONE")

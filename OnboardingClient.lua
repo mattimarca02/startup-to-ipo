@@ -228,21 +228,32 @@ local title = make("TextLabel", {
 })
 fitText(title, 16)
 
--- X: closes the tracker for good (the server saves it)
+-- X: closes the tracker for good (the server saves it). The X you see is 30 x 26 in the header's corner, as
+-- before; the button around it is an invisible 44 x 40 tap area (ux backlog item 4: every tap target is 40 or
+-- more on each side). It reaches GAP (6) px up into the gap over the valuation bar (never onto the bar), 3 px past
+-- the card's right edge and 4 px into the first row's top margin.
 local closeButton = make("TextButton", {
 	Name = "Close",
 	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.new(1, -4, 0, 4),
+	Position = UDim2.new(1, 3, 0, -GAP),
+	Size = UDim2.fromOffset(44, 40),
+	BackgroundTransparency = 1,
+	Text = "",
+	Parent = card,
+})
+local closeMark = make("TextLabel", {
+	Name = "Mark",
+	Position = UDim2.fromOffset(7, 4 + GAP), -- the X stays where it was: 4 from the card's top, 4 from its right
 	Size = UDim2.fromOffset(30, 26),
 	BackgroundColor3 = COLORS.panel,
 	BackgroundTransparency = 0.3,
 	Font = Enum.Font.GothamBold,
 	Text = "✕",
 	TextColor3 = COLORS.subtext,
-	Parent = card,
+	Parent = closeButton,
 })
-round(closeButton, 8)
-fitText(closeButton, 16)
+round(closeMark, 8)
+fitText(closeMark, 16)
 
 local rows = {} -- one per slot, top to bottom: { name, progress }; the goal in each slot changes
 for i = 1, SLOTS do

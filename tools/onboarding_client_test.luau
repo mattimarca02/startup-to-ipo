@@ -270,6 +270,22 @@ do -- the X still closes the card and asks the server to keep it closed
 	goal(W, "Own3", 0, 3, true)
 	set(W, "OnboardingTracker", true)
 	local close = W.card and W.card:FindFirstChild("Close")
+	-- ux backlog item 4: the X's tap area is 40 or more on each side; the X you see stays 30 x 26, 4 from the card's
+	-- top and right; the tap area never reaches above the 6 px gap over the valuation bar (it opens the IPO window)
+	local mark = close and close:FindFirstChild("Mark")
+	local cardW = W.card and W.card.Size.X.Offset or 0
+	if close and mark then
+		local s, p = close.Size, close.Position
+		local left = p.X.Scale * cardW + p.X.Offset - close.AnchorPoint.X * s.X.Offset
+		local top = p.Y.Offset
+		check("close: the X's tap area is 40 or more on each side", s.X.Offset >= 40 and s.Y.Offset >= 40, s.X.Offset .. "x" .. s.Y.Offset)
+		check("close: the tap area stays below the valuation bar (6 px gap) and in the first row's top margin", top >= -6 and top + s.Y.Offset <= 30 + 4, top)
+		check("close: the X you see is still 30 x 26 at 4 from the card's top and right",
+			mark.Size.X.Offset == 30 and mark.Size.Y.Offset == 26 and left + mark.Position.X.Offset == cardW - 34 and top + mark.Position.Y.Offset == 4,
+			tostring(left + mark.Position.X.Offset) .. "," .. tostring(top + mark.Position.Y.Offset))
+	else
+		check("close: the X's tap area is 40 or more on each side", false, "no Close button with a Mark")
+	end
 	if close then
 		local ok, err = pcall(close.Activated.Fire, close.Activated)
 		if not ok and not W.err then W.err = err end
