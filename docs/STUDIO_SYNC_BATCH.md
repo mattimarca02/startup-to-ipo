@@ -551,6 +551,21 @@ Playtest (owner session, 1 player, on the owner's save, Studio window 1193x434):
 
 Run on: 2026-10-19 by the owner session 2 (MCP), the hash checked.
 
+## Batch 15 (world signs: nothing seen through walls but the onboarding arrow; branch `world-signs`, on top of main after PR #74)
+
+Opened 2026-10-19 by the owner session 3. Pushed through the Studio MCP from commit `ecc8d9d` (`HttpEnabled` back to false); both hashes read back from Studio match.
+
+**What changes for players:** the owner's name over each garage is a normal world sign: walls and roofs hide it (AlwaysOnTop off), it fades out past 220 studs, and it floats 3 studs over the roof of the building the garage shows (it moves up when the building changes). The IPO sign's text is written on its board, on both faces (a SurfaceGui; it was a floating label drawn on top of everything). The onboarding arrow is unchanged: it is still seen through walls, on purpose. **Save change: none.**
+
+| Script | Studio | State | sha256 (`world-signs`) | bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `94a22b6a755475d54d7e01956fe010a1529f8a3b8d890872abd93dc47d78d52b` | 76113 |
+| `IpoServer` | ModuleScript, ServerScriptService | changed | `cec14ea870292551190b944ea4c10e808bcb9e08cff9952bf0a0d7737290b986` | 17993 |
+
+Playtest (owner session, 1 player, on the owner's save): the six garages' names have AlwaysOnTop off and MaxDistance 220; a free Garage's name stands at 32.4 (its roof's top is 29.4); after the claim the owner's HQ Tower name stands at 106.5, over the roof; the IPO sign shows "GO PUBLIC! Tap the IPO button" on both faces of its board, with no BillboardGui left; no BillboardGui in the Workspace is AlwaysOnTop. No error from our scripts. **Not checked by eye:** how far the name reads on a phone (the MCP's captures are unreliable).
+
+Run on: 2026-10-19 by the owner session 3 (MCP), the 2 hashes checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

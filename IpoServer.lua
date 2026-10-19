@@ -79,6 +79,9 @@ local function refreshSign(ipo)
 		local text = signText(ipo)
 		if ipo.signLabel.Text ~= text then
 			ipo.signLabel.Text = text
+			if ipo.signBack then
+				ipo.signBack.Text = text
+			end
 		end
 	end
 end
@@ -310,22 +313,32 @@ local function buildSign(player, data)
 	local post = part(data.folder, "IpoSign", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
 	local board = part(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), SIGN_COLOR, Enum.Material.SmoothPlastic)
 
-	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(10, 2.6) -- in studs
-	gui.StudsOffset = Vector3.new(0, 3, 0)
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = 90
-	gui.Parent = board
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
-	label.TextColor3 = WHITE
-	label.TextStrokeTransparency = 0
-	label.Text = ""
-	label.Parent = gui
-	data.ipo.signLabel = label
+	-- The text is written on the board, on both faces: a SurfaceGui, hidden by walls like any part (the old label floated
+	-- over the board and was drawn on top of everything, seen through the walls). refreshSign writes both faces the same.
+	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = face
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 50
+		gui.LightInfluence = 0
+		gui.MaxDistance = 90
+		gui.Parent = board
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, -20, 1, -12)
+		label.Position = UDim2.fromOffset(10, 6)
+		label.BackgroundTransparency = 1
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBold
+		label.TextColor3 = WHITE
+		label.TextStrokeTransparency = 0
+		label.Text = ""
+		label.Parent = gui
+		if face == Enum.NormalId.Front then
+			data.ipo.signLabel = label
+		else
+			data.ipo.signBack = label
+		end
+	end
 	refreshSign(data.ipo)
 end
 
@@ -345,6 +358,7 @@ function IpoServer.setupPlayer(player, data, savedIpo, legacyValuation)
 		perks = {}, -- perk key -> level (saved)
 		busy = false, -- true while an IPO is being saved
 		signLabel = nil,
+		signBack = nil, -- the board's back face (the same text)
 	}
 	local function number(value)
 		value = tonumber(value)

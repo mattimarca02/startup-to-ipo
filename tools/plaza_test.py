@@ -123,6 +123,21 @@ def pins(files=None):
         '"FreeSign"' in build and "Enum.NormalId.Front, Enum.NormalId.Back" in build and "addLabel(post" not in build)
     add("free sign: setGarageState writes the board's text and shows it", 'claimPart(slot, "FreeSign")' in state and "LobbyConfig.Texts.FreeSign" in state)
     add("free sign: never AlwaysOnTop (TycoonCore's claim spot, LobbyClient's marker)", "AlwaysOnTop = true" not in lobby_client and "AlwaysOnTop" not in build)
+    # The world signs pass (after overhaul 2): only the onboarding arrow is drawn on top of walls, on purpose
+    on_top = {n: read(n, files).count("AlwaysOnTop = true") for n in sorted(os.listdir(ROOT)) if n.endswith(".lua")}
+    add("world signs: nothing is drawn on top of walls but the onboarding arrow (AlwaysOnTop = true only in OnboardingClient)",
+        all(c == 0 for n, c in on_top.items() if n != "OnboardingClient.lua"))
+    add("world signs: the onboarding arrow stays drawn on top (it must be seen through walls)", "marker.AlwaysOnTop = true" in read("OnboardingClient.lua", files))
+    ipo = read("IpoServer.lua", files)
+    ipo_sign = ipo[ipo.find("local function buildSign("):ipo.find("-- Saving (TycoonCore calls these)")]
+    add("world signs: the IPO sign is written on its board (a SurfaceGui on both faces, no BillboardGui), front and back the same",
+        'Instance.new("SurfaceGui")' in ipo_sign and "Enum.NormalId.Front, Enum.NormalId.Back" in ipo_sign and "BillboardGui" not in ipo_sign
+        and "AlwaysOnTop" not in ipo_sign and "ipo.signBack.Text = text" in ipo)
+    label = core[core.find("local function addLabel("):core.find("local function plotCenter(")]
+    sync = core[core.find("local function syncBuilding("):core.find("-- The name over a garage")]
+    add("world signs: the owner's name over a garage is not drawn on top, fades out with distance and stands over the roof",
+        "gui.AlwaysOnTop = false" in label and "gui.MaxDistance = LABEL_DISTANCE" in label and "placeGarageLabel(slot, model)" in sync
+        and "size.Y / 2 - sign.Position.Y + 3" in core)
     add("free sign: the text says FREE OFFICE and how to claim", re.search(r'FreeSign = "FREE OFFICE[^"]*claim"', config) is not None)
     add("free sign: LobbyClient hides the board on this client once the player has a garage", 'spot:FindFirstChild("FreeSign")' in lobby_client)
     # The arch: about 42 x 34, a 12 x 20 archway, eight columns, the inscription, four solid piers
@@ -157,6 +172,11 @@ MUTANTS = [
     ("the marker drawn on top again", "LobbyClient.lua", "\tAlwaysOnTop = false,", "\tAlwaysOnTop = true,", "free sign: never AlwaysOnTop"),
     ("a solid box on the arch's beam", "WorldArt.lua", "solid(5, 24, 4, 17.5, 0) },", "solid(5, 24, 4, 17.5, 0), solid(12, 4, 4, 0, 0) },", "arch: solid on the four piers only"),
     ("the lounge's inside not in a pcall", "ShopServer.lua", "local furnished, why = pcall(furnishVipLounge)", "local furnished, why = true, furnishVipLounge()", "lounge: its inside is built in a pcall"),
+    ("the IPO sign drawn on top again", "IpoServer.lua", "\t\tgui.MaxDistance = 90\n", "\t\tgui.MaxDistance = 90\n\t\tgui.AlwaysOnTop = true\n", "world signs: nothing is drawn on top"),
+    ("the IPO sign's back face left blank", "IpoServer.lua", "\t\t\t\tipo.signBack.Text = text\n", "\n", "world signs: the IPO sign is written on its board"),
+    ("the owner's name drawn on top again", "TycoonCore.lua", "\tgui.AlwaysOnTop = false", "\tgui.AlwaysOnTop = true", "world signs: nothing is drawn on top"),
+    ("the owner's name left inside a tall building", "TycoonCore.lua", "\t\tplaceGarageLabel(slot, model)\n", "\n", "world signs: the owner's name over a garage"),
+    ("the onboarding arrow hidden by walls", "OnboardingClient.lua", "marker.AlwaysOnTop = true", "marker.AlwaysOnTop = false", "world signs: the onboarding arrow stays"),
 ]
 
 

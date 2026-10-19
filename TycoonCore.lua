@@ -133,11 +133,13 @@ local function makePart(parent, name, size, position, color, material)
 	return p
 end
 
+local LABEL_DISTANCE = 220 -- studs: the owner's name reads from across the plaza (the garages' fronts are 95 from its center)
 local function addLabel(part, text, height)
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromOffset(220, 50)
-	gui.StudsOffset = Vector3.new(0, height or 3, 0)
-	gui.AlwaysOnTop = true
+	gui.StudsOffsetWorldSpace = Vector3.new(0, height or 3, 0)
+	gui.AlwaysOnTop = false -- a sign in the world: walls and roofs hide it (it was drawn on top, seen through walls)
+	gui.MaxDistance = LABEL_DISTANCE
 	gui.Parent = part
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
@@ -328,6 +330,20 @@ local function clearFreeRoom(slot)
 	if room then room:Destroy() end
 end
 
+-- The owner's name floats 3 studs over the roof of the building the garage shows (it is not drawn on top of walls, so
+-- it must stand above the roof to be seen from the plaza). Keeps its height when the building can't be measured.
+local function placeGarageLabel(slot, model)
+	local sign = garages[slot] and garages[slot]:FindFirstChild("GarageSign")
+	local gui = sign and sign:FindFirstChildOfClass("BillboardGui")
+	if not (gui and model) then return end
+	local ok, box, size = pcall(function()
+		return model:GetBoundingBox()
+	end)
+	if ok and box and size then
+		gui.StudsOffsetWorldSpace = Vector3.new(0, box.Position.Y + size.Y / 2 - sign.Position.Y + 3, 0)
+	end
+end
+
 -- The building of a garage at a funding stage (nothing to do when it already shows it). A new building is never
 -- allowed to trap anyone: a character standing where a solid box now is goes to the garage's landing spot.
 local buildingWarned = false -- it runs every second: a broken building is told once per server, not every second
@@ -348,6 +364,7 @@ local function syncBuilding(slot, stage)
 		end
 		pcall(PlotBuildingVisuals.unstick, model, roots, plotFrame(slot) * CFrame.new(0, 4, 12)) -- teleportToPlot's landing
 		applyFacadeSign(slot) -- a new building: its sign is blank until it is written again
+		placeGarageLabel(slot, model)
 	end
 end
 
