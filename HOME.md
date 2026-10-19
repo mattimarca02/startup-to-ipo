@@ -31,8 +31,8 @@ Cosa vuoi, perché, ed eventuali decisioni già prese.
 
 La lane la legge al suo prossimo giro (il manager gira ogni 3 ore).
 
-## Idee (scrivi qui, poi le trasformiamo in richieste)
-- 
+## Idee
+Scrivile in [[docs/lanes/idee|idee.md]] come ti vengono, anche disordinate: il manager le trasforma in richieste per le lane (ogni 3 ore). Per le idee grosse, parlane prima con Claude in chat.
 
 ## Dove sono le cose
 - Il piano e lo stato: [[ROADMAP]], [[docs/OVERHAUL_REPORT|OVERHAUL_REPORT]], [[docs/OVERHAUL_PLAN|OVERHAUL_PLAN]]
