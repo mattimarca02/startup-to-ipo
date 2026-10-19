@@ -3815,8 +3815,10 @@ def o2_load():
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
-def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horizon=48 * 3600):
-    """One run. kept = (team incomes, desks bought) from the run before (employees and desks survive an IPO)."""
+def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horizon=48 * 3600, guided=False):
+    """One run. kept = (team incomes, desks bought) from the run before (employees and desks survive an IPO).
+    guided: the player follows the blackboard (TycoonCore cheapestItem): the cheapest item, desk or building first, and a
+    Garage Egg whenever a workstation is free; otherwise (the perfect player) the best payback first, waiting for it."""
     rng = random.Random(seed)
     office, cre, ipo = cfg["office"], cfg["creatures"], cfg["ipo"]
     items, blds, bought_desks = office["Items"], office["Buildings"], office["Bought"]
@@ -3920,7 +3922,11 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
                     opts.append(("egg", eggs[key]["price"], gain * blds[b]["team"] * mult, key))
         if not opts:
             continue
-        best = min(opts, key=lambda o: o[1] / max(o[2], 1e-9))
+        if guided:  # an egg too while a workstation is free (the EGGS button), the cheapest first
+            free = len(team) + len(incub) < capacity()
+            best = min([o for o in opts if o[0] != "egg" or free] or opts, key=lambda o: o[1])
+        else:
+            best = min(opts, key=lambda o: o[1] / max(o[2], 1e-9))
         if best[1] <= cash:
             cash -= best[1]
             kind = best[0]
@@ -3939,7 +3945,7 @@ def o2_run(cfg, seed, ipo_count=0, kept=None, cash_mult=1.0, stop_stage=6, horiz
             elif kind == "desk":
                 desks += 1; log.append((t, "Desk %d" % capacity(), best[1]))
             else:
-                incub.append((best[3], t + eggs[best[3]]["hatchSeconds"]))
+                incub.append((best[3], t + eggs[best[3]]["hatchSeconds"])); log.append((t, best[3] + " Egg", best[1]))
             if t < 3600:
                 longest_wait = max(longest_wait, t - last_event); last_event = t
                 events.append(t)
@@ -3977,6 +3983,13 @@ def o2_dead_time(run, seed):
     return max(b - a for a, b in zip(marks, marks[1:]))
 
 
+def o2_first_hour_gaps(run):
+    """The waits between two purchases (items, desks, buildings, eggs) in the first hour, or until Seed when it comes first."""
+    end = min(3600, run["times"].get("Seed", 3600))
+    marks = [0] + [t for t, _, _ in run["log"] if t < end] + [end]
+    return [b - a for a, b in zip(marks, marks[1:])]
+
+
 def report_o2(n):
     cfg = o2_load()
     keys = [st["key"] for st in cfg["ipo"]["Stages"]][1:]
@@ -3994,6 +4007,20 @@ def report_o2(n):
               fmt_time(ts[0] * 60), fmt_time(ts[-1] * 60), fmt_time(lo * 60), fmt_time(hi * 60)))
     print("\nLongest wait between two purchases or hatches in the first hour (the activities fill it): median %s" %
           fmt_time(statistics.median(r["wait"] for r in first)))
+    print("\n### The first hour's purchases (items, desks, buildings, eggs; until Seed when it comes first)\n")
+    print("| Player | Seed (median) | Seed range | Longest wait between two purchases (worst run) | Median run | Mean wait |")
+    print("|---|---|---|---|---|---|")
+    for label, guided in (("perfect (best payback first, waits for it)", False), ("guided (follows the blackboard: cheapest first)", True)):
+        runs_ = first if not guided else [o2_run(cfg, seed, stop_stage=1, horizon=2 * 3600, guided=True) for seed in range(1, runs + 1)]
+        gaps, worst, seeds = [], [], []
+        for r in runs_:
+            p = o2_first_hour_gaps(r)
+            gaps += p; worst.append(max(p)); seeds.append(r["times"].get("Seed", 1e9))
+        print("| %s | %s | %s to %s | %s | %s | %s |" % (label, fmt_time(statistics.median(seeds)), fmt_time(min(seeds)), fmt_time(max(seeds)),
+              fmt_time(max(worst)), fmt_time(statistics.median(worst)), fmt_time(statistics.mean(gaps))))
+        if guided:
+            ex_g = runs_[0]
+    print("\nThe guided player's purchases (seed 1): " + ", ".join("%s %s" % (fmt_time(t), name) for t, name, _ in ex_g["log"] if t < 3600))
     dead = [o2_dead_time(r, seed) for seed, r in enumerate(first, 1)]
     print("Longest stretch with nothing to do in the first hour (purchases, hatches, calls, sprints, brainstorms, bugs): "
           "worst %s, median %s (the brief's limit: %s) -> %s" % (fmt_time(max(dead)), fmt_time(statistics.median(dead)), fmt_time(O2_DEAD_LIMIT),

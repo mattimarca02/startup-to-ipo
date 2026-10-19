@@ -1,7 +1,7 @@
 -- OfficeConfig: what the office sells, in one place (overhaul 2, docs/OVERHAUL2_PLAN.md).
 -- Put this ModuleScript in ReplicatedStorage (the server and the shop screen both read it).
 --
---   Items      the office catalog: 63 things a startup buys on its way to the IPO, by funding stage. The first six keys
+--   Items      the office catalog: 64 things a startup buys on its way to the IPO, by funding stage. The first six keys
 --              (Desk, Coffee Machine, Laptop, Server Rack, Whiteboard, Neon Logo) are the old garage upgrades: their names
 --              are saved in the `owned` list, so they never change. Every name of an owned item is saved in `owned`
 --              (older code loads and writes back any name there), and an IPO clears them, like the old upgrades.
@@ -35,9 +35,10 @@ OfficeConfig.Items = {
 	{ key = "Better Chair", icon = "💺", stage = 1, price = 1000, income = 0, effect = { sprint = 0.2 }, text = "Coding sprints pay 20% more." },
 	{ key = "Mini Fridge", icon = "🧃", stage = 1, price = 1400, income = 0, effect = { brainstorm = 0.3 }, text = "Snacks for brainstorms: boosts 30% stronger." },
 	{ key = "Server Rack", icon = "🗄️", stage = 1, price = 2000, income = 1, effect = { unlock = "bug" }, text = "Your first servers. Production bugs start ringing." },
+	{ key = "Headset", icon = "🎧", stage = 1, price = 2400, income = 1, effect = { calls = 0.15 }, text = "A real headset: calls pay 15% more." },
 	{ key = "Whiteboard", icon = "📋", stage = 1, price = 2800, income = 0, effect = { brainstorm = 0.5 }, text = "Brainstorm boosts are 50% stronger." },
 	{ key = "Bookshelf", icon = "📚", stage = 1, price = 3800, income = 0, effect = { pitch = 0.2 }, text = "Startup books: pitch bonuses are 20% bigger." },
-	{ key = "Neon Logo", icon = "💡", stage = 1, price = 5500, income = 2, text = "Your name in lights." },
+	{ key = "Neon Logo", icon = "💡", stage = 1, price = 4000, income = 1, text = "Your name in lights." },
 	-- Seed (stage 2)
 	{ key = "Standing Desks", icon = "🧍", stage = 2, price = 15000, income = 23, text = "Healthier, faster founders." },
 	{ key = "Team Table", icon = "🍽️", stage = 2, price = 30000, income = 32, text = "Lunch together, ship together." },
