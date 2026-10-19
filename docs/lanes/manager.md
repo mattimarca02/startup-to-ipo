@@ -109,3 +109,6 @@ Only the lanes manager (a scheduled Claude run) edits this file. One line per ac
 2026-10-19 03:44 ux not started: PR #63 open (head 97d015c), no verdict yet; goes to quality.
 2026-10-19 03:44 quality started: review PR #63 (ux, head 97d015c), no verdict for its head.
 2026-10-19 03:45 notified owner: #61 and #62 ready to merge (clean); world start denied, he can start it himself.
+2026-10-19 06:43 world start FAILED (permission denied by the run classifier, second time in a row since 03:44): no PR, lane file still idle; stop trying, sent to the owner.
+2026-10-19 06:43 ux not started: PR #63 MERGE at its head 97d015c, mergeable clean; sent to the owner.
+2026-10-19 06:43 notified owner: #63 ready to merge (clean; #61 and #62 still clean and waiting); world start denied twice (start it himself).
