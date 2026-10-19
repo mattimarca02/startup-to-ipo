@@ -498,6 +498,30 @@ Playtest (owner session, 1 player, on the owner's save): a Garage Egg bought ($8
 
 Run on: 2026-10-19 by the owner session 2 (MCP), the three hashes checked.
 
+## Batch 12 (overhaul 2 phase 5: the Roman arch, the plaza and fountain, the join cinematic, the FREE sign, the VIP Lounge and the Investor dinner; branch `overhaul2-phase5`, on top of Batch 11)
+
+Opened 2026-10-19 by the owner session 2. Pushed through the Studio MCP from commit `146f814` (`HttpEnabled` back to false); every hash below was read back from Studio and matches (`IntroClient` is new).
+
+**What the owner sees after this batch:** on joining, a 7-second flight over the plaza (a tap skips it); the welcome gate is a white marble Roman triumphal arch (about 42 wide and 34 high, a 12 x 20 archway, side passages, columns, BUILD YOUR STARTUP carved on the attic); the fountain has a basin with a rim, two tiers of bowls, a jet, a splash and a soft water sound; benches and lamps at a character's size; the FREE sign is a green board on the claim post ("FREE OFFICE · walk here to claim"), hidden by walls like any object; the VIP Lounge has sofas, a bar, lamps, a dinner table, and a podium and board showing the richest VIP's rarest employee and valuation (seen through the glass); VIPs get an "Investor dinner" prompt at the table once a day. **Save change: none new** (the dinner writes `founder.dinnerDay`, in the `founder` section from Batch 10).
+
+| Script | Studio | State | sha256 (`overhaul2-phase5`) | bytes |
+|---|---|---|---|---|
+| `TycoonCore` | Script, ServerScriptService | changed | `a3b063c8f826b72643bd22c3c886e4ec66bdc4a9ba311524a277fca6daaa83fc` | 75145 |
+| `LobbyConfig` | ModuleScript, ReplicatedStorage | changed | `32da731e1889e2e5c70207c9bd4c893d18412bcf9989bb2299c7df43a5674bdd` | 6924 |
+| `LobbyClient` | LocalScript, StarterPlayerScripts | changed | `4ca78d6f67d19d55b4669956aa76783b9300a0b1be6b2b37c8dbcde4ebff70c5` | 9575 |
+| `WorldArt` | ModuleScript, ServerScriptService | changed | `0b2d6100b4352019244a6dda39e077e412aaf01cfd2bd2596b9a83961076cfc8` | 25743 |
+| `WorldVisuals` | ModuleScript, ServerScriptService | changed | `9ff18f01e953808b0c98efb899b9d0bcb87b3d665407256aa40d772b4e02d034` | 65077 |
+| `ShopServer` | ModuleScript, ServerScriptService | changed | `b7524515d00def967b26e3bc7e611a83ed5632092e6b649871efd65ff8bedb70` | 42760 |
+| `FounderConfig` | ModuleScript, ReplicatedStorage | changed | `b4cef39e068f2fed8f1e7311c483c936dc7aa2950ec005d66019f4a78b3510be` | 9266 |
+| `FounderServer` | ModuleScript, ServerScriptService | changed | `80f9e42593a48aa01bd99bbe67987fc37f4330f1011571fc3029ff843dd8cf29` | 32656 |
+| `FounderClient` | LocalScript, StarterPlayerScripts | changed | `0fa6d2aae4fa4187467342344ce8f7934249a1b17fce1864434b35b576be3fcc` | 22516 |
+| `ShopClient` | LocalScript, StarterPlayerScripts | changed | `9b47b04a6dd5c4aa2c2666ba751d621aa6900e0594468048eb776cfa98b0f551` | 55978 |
+| `IntroClient` | LocalScript, StarterPlayerScripts | **new** | `4d390bd1beac987d8f7c4558d81653cf923c75de602bebdd9d2515470da3323b` | 7202 |
+
+Playtest (owner session, 1 player, on the owner's save): the cinematic ran (camera Scriptable and OpenPanel "Intro" for about 6.5 s, then the player's camera back and OpenPanel free); the arch built with 50 parts, 34.0 high; the fountain's splash and sound on the client; Garage 2's FREE board shows its text, no BillboardGui on the post; the lounge's inside (42 parts) and, after the claim, the showcase "realmarca11's Startup, Valuation $1.2B" with a Venture Dragon on the podium; the Investor dinner at the table (2/2, +$2.6M), refused again the same day, then offered again through Debug (so the owner can try it). No error from our scripts. Client render rate 14.9 FPS with 2,296 parts (Studio in the background: not a phone number). **Not run:** 2 players (Test > Clients and Servers: the MCP drives one client), a phone, watching the cinematic and the arch by eye.
+
+Run on: 2026-10-19 by the owner session 2 (MCP), the 11 hashes checked.
+
 ## How the quality lane fills a batch
 
 After a merge, on `main`, for each script the merged PR changed or created (its lane file's "Studio steps" says which): `sha256sum <Name>.lua` and `wc -c <Name>.lua` give the row and the `WANT` line (the hash is of the file's bytes as they are in the repo, LF line endings, trailing newline kept). A hash in the lane file that differs from `main`'s is the lane file's mistake: `main` wins, and the quality lane tells the lane in docs/lanes/quality.md. When the owner has run the batch and written "Run on", the next merge opens Batch 2 below this one; a batch is never rewritten after it was run.

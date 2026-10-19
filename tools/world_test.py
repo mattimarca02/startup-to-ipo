@@ -1118,7 +1118,7 @@ do
 	for _, c in ipairs(saved) do c.Parent = SSS end
 	runPreview()
 end
-check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 320 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
+check("preview: it prints the part and light counts with their budgets", has("PREVIEW_WORLD: 381 parts (budget 600), 6 lights (budget 8). Delete it before publishing."))
 check("preview: the SpawnLocation and the Baseplate were not changed", spawnPad.CFrame == spawnBefore and baseplate.Size == baseBefore and spawnPad.Parent == workspace and baseplate.Parent == workspace)
 check("preview: the ghosts are see-through and never solid", (function()
 	for _, g in ipairs(folder:FindFirstChild("Ghosts"):GetChildren()) do
