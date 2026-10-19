@@ -760,6 +760,19 @@ section("negative tests", function()
 		trunk.CFrame = trunkCf * CFrame.Angles(0, 0, math.rad(10))
 		check("negative flags: a part turned by 10 degrees is caught", failsWith(w, site, "flags", "quarter turns"))
 		trunk.CFrame = trunkCf
+		-- the one exception to quarter turns: the arch's voussoirs turn freely, but only about their own Z axis
+		local voussoir = anyPart(w, "ArchVoussoir2")
+		check("flags: the arch's voussoirs are turned freely about Z (30 degrees) and pass", voussoir ~= nil
+			and math.abs(select(4, voussoir.CFrame:GetComponents()) - math.cos(math.rad(30))) < 1e-6 and #results(w, WorldArt, site).flags == 0)
+		local voussoirCf = voussoir.CFrame
+		voussoir.CFrame = voussoirCf * CFrame.Angles(math.rad(10), 0, 0)
+		check("negative flags: a voussoir also tipped about X is caught", failsWith(w, site, "flags", "quarter turns"))
+		voussoir.CFrame = voussoirCf
+		local named = anyPart(w, "ArchLintel")
+		local namedCf = named.CFrame
+		named.CFrame = namedCf * CFrame.Angles(0, 0, math.rad(30))
+		check("negative flags: a part not named ArchVoussoir turned about Z is caught", failsWith(w, site, "flags", "quarter turns"))
+		named.CFrame = namedCf
 		local wedge = newInstance("WedgePart")
 		wedge.Size = vec(1, 1, 1)
 		wedge.Position = vec(-500, 0.5, -500)
@@ -889,6 +902,12 @@ section("negative tests", function()
 		bad = deepCopy(WorldArt)
 		bad.Pieces.Lamp[2].rot = { 0, 0, 80 }
 		check("negative data: a rotation that is not a quarter turn is caught", anyMatch(WorldVisuals.validate(bad), "quarter turns"))
+		bad = deepCopy(WorldArt)
+		for _, sp in ipairs(bad.Pieces.Arch) do if sp.name == "ArchVoussoir3" then sp.rot = { 10, 0, 50 } end end
+		check("negative data: a voussoir turned about X as well as Z is caught", anyMatch(WorldVisuals.validate(bad), "quarter turns"))
+		bad = deepCopy(WorldArt)
+		for _, sp in ipairs(bad.Pieces.Arch) do if sp.name == "ArchLintel" then sp.rot = { 0, 0, 30 } end end
+		check("negative data: only a voussoir may turn freely (the lintel turned 30 degrees is caught)", anyMatch(WorldVisuals.validate(bad), "quarter turns"))
 		bad = deepCopy(WorldArt)
 		bad.Pieces.Bench[1].material = "Neon"
 		check("negative data: Neon on a bench is caught", anyMatch(WorldVisuals.validate(bad), "Neon is only for lights"))
@@ -2024,6 +2043,10 @@ A = "WorldArt.lua"
 # Group A: WorldVisuals.lua. The builder breaks a rule (the default world's named check must fail), or a check is
 # weakened (the negative test that proves that check must fail).
 MUTANTS_A = [
+    ("any part may turn freely about Z", V, "return type(name) == \"string\" and string.sub(name, 1, #WorldVisuals.FREE_TURN_PREFIX) == WorldVisuals.FREE_TURN_PREFIX",
+     "return type(name) == \"string\"", "negative flags: a part not named ArchVoussoir"),
+    ("a voussoir may turn about any axis", V, "return math.abs(r12) < 1e-6 and", "return true or", "negative flags: a voussoir also tipped"),
+    ("any part's data may turn freely about Z", V, "and not (i == 3 and freeTurnName(name)) then", "and not (i == 3) then", "negative data: only a voussoir may turn freely"),
     ("decor that collides", V, "part.CanCollide = false", "part.CanCollide = true", "default site: check flags"),
     ("decor that stops rays and the camera", V, "part.CanQuery = false", "part.CanQuery = true", "default site: check flags"),
     ("decor that can be touched", V, "part.CanTouch = false", "part.CanTouch = true", "default site: check flags"),

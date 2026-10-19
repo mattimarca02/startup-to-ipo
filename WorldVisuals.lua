@@ -38,6 +38,10 @@ WorldVisuals.MATERIALS = {
 	Metal = true, Fabric = true, Grass = true, Neon = true, Marble = true, -- Marble: the triumphal arch (overhaul 2 phase 5)
 }
 WorldVisuals.SHAPES = { Block = true, Cylinder = true, Ball = true }
+-- The one exception to "quarter turns only": the Roman arch's voussoirs (the wedge stones of its curve, named
+-- ArchVoussoir...) turn freely about their own Z axis, which must lie along the world's X or Z, so the archway's curve is
+-- smooth (it was steps). Their front and back faces stay flat and square to the world; the flicker check reads only those.
+WorldVisuals.FREE_TURN_PREFIX = "ArchVoussoir"
 WorldVisuals.FONTS = { GothamBold = true, FredokaOne = true, GothamBlack = true, Garamond = true } -- Garamond: the arch's inscription
 WorldVisuals.FACES = { Front = true, Back = true, Left = true, Right = true, Top = true }
 WorldVisuals.LIGHT_WORDS = { "Lamp", "Light", "Glow", "Bulb" }
@@ -132,6 +136,15 @@ local function quarterTurns(cframe)
 		end
 	end
 	return true
+end
+
+-- A voussoir's turn: about its own Z axis only, that axis along the world's X or Z (see FREE_TURN_PREFIX)
+local function freeTurnName(name)
+	return type(name) == "string" and string.sub(name, 1, #WorldVisuals.FREE_TURN_PREFIX) == WorldVisuals.FREE_TURN_PREFIX
+end
+local function turnsAboutZ(cframe)
+	local _, _, _, _, _, r02, _, _, r12, _, _, r22 = cframe:GetComponents()
+	return math.abs(r12) < 1e-6 and (math.abs(math.abs(r02) - 1) < 1e-6 or math.abs(math.abs(r22) - 1) < 1e-6)
 end
 
 -- The part above the ground: a Ball sunk into it shows only its cap, as wide as the circle where it meets y 0
@@ -856,7 +869,8 @@ function WorldVisuals.validate(art)
 				problem(where .. ": rot must be 3 numbers (degrees)")
 			else
 				for i = 1, 3 do
-					if sp.rot[i] % 90 ~= 0 then
+					-- a voussoir may turn by any angle about Z (its X and Y turns stay quarter turns: caught at i = 1 and 2)
+					if sp.rot[i] % 90 ~= 0 and not (i == 3 and freeTurnName(name)) then
 						problem(where .. ": rot must be quarter turns (0, 90, 180, 270)")
 						break
 					end
@@ -1017,7 +1031,12 @@ local function facesOf(info)
 		local u, v = axis == 1 and 2 or 1, axis == 3 and 2 or 3
 		table.insert(out, { axis = axis, side = side, at = at, u0 = b[u * 2 - 1], u1 = b[u * 2], v0 = b[v * 2 - 1], v1 = b[v * 2], who = info })
 	end
-	if info.shape == "Block" then
+	if info.shape == "Block" and info.freeTurn then -- a voussoir: only its two faces square to the world (its own Z)
+		local _, _, _, _, _, r02 = info.part.CFrame:GetComponents()
+		local axis = math.abs(r02) > 0.5 and 1 or 3
+		face(axis, -1)
+		face(axis, 1)
+	elseif info.shape == "Block" then
 		for axis = 1, 3 do
 			face(axis, -1)
 			face(axis, 1)
@@ -1037,6 +1056,7 @@ local function partInfo(d)
 	local above = aboveGround(shape, b)
 	return {
 		part = d, name = d:GetFullName(), box = b, above = above, shape = shape,
+		freeTurn = freeTurnName(d.Name) and not quarterTurns(d.CFrame) and turnsAboutZ(d.CFrame),
 		flat = b[4] - b[3] <= WorldVisuals.FLAT and b[3] >= -WorldVisuals.TOUCH and b[3] <= WorldVisuals.TOUCH,
 		Name = d.Name,
 		solid = d.Parent ~= nil and d.Parent.Name == WorldVisuals.SOLID_GROUP, -- a solid box: its own rules (the "solid" check)
@@ -1129,8 +1149,8 @@ function WorldVisuals.checks(world, art, site, options)
 			if not WorldVisuals.SHAPES[p.shape] then
 				problem(p.name .. ": shape not allowed: " .. p.shape)
 			end
-			if not quarterTurns(part.CFrame) then
-				problem(p.name .. ": turned by something other than quarter turns")
+			if not quarterTurns(part.CFrame) and not (freeTurnName(part.Name) and turnsAboutZ(part.CFrame)) then
+				problem(p.name .. ": turned by something other than quarter turns (only a voussoir may turn freely, about Z)")
 			end
 			if WorldVisuals.RESERVED_NAMES[part.Name] then
 				problem(p.name .. ": named like a part of the game")
