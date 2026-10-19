@@ -30,6 +30,10 @@ And it runs the REAL OnboardingClient.lua's Goals card in a fake client (tools/o
 ChainEnabled off and on, it draws only the goals the server marks as shown, in list order, in ShowAtOnce rows at most;
 then its own mutation runs.
 
+And it runs the REAL hatch reveal block of EmployeeClient.lua (HATCHPANEL, tools/hatch_reveal_test.luau): while the
+reveal plays it holds the PlayerGui attribute "OpenPanel" as "Hatch" (so the calls freeze), never takes it from an open
+window and gives it back only if it still says "Hatch"; then its own mutation runs.
+
 It changes nothing in the game or in Studio. It never edits tools/daily_test.py.
 """
 
@@ -2209,6 +2213,135 @@ def goals_card_main(luau, mutations=True):
     return code
 
 
+
+# tools/hatch_reveal_test.luau runs the REAL HATCHPANEL block of EmployeeClient.lua (request U2 of the gameplay lane:
+# the hatch reveal holds the PlayerGui attribute "OpenPanel" as "Hatch", so TaskClient freezes the calls) against a fake
+# PlayerGui; static checks pin where playReveal calls it. Then each break below must fail its named check; a block
+# that errored never counts.
+HATCH_CLIENT = "EmployeeClient.lua"
+HATCH_TEST = os.path.join("tools", "hatch_reveal_test.luau")
+HATCH_CLEAN = "block: ran without an error"
+HATCH_DONE = "hatch reveal: the program ran to the end"
+
+
+def hatch_checks(luau, client_text=None):
+    """[(name, ok, extra)] of the real HATCHPANEL block against a fake PlayerGui."""
+    client = client_text if client_text is not None else read(HATCH_CLIENT)
+    start = client.find("-- HATCHPANEL-START")
+    end = client.find("-- HATCHPANEL-END")
+    if start < 0 or end < start:
+        return [(HATCH_DONE + " (EmployeeClient.lua has no HATCHPANEL-START / HATCHPANEL-END block)", False, None)]
+    head = "local BLOCK = function(playerGui)\n" + client[start:end] + "\nreturn setRevealShowing\nend\n"
+    body = read(HATCH_TEST)
+    at = body.index("local function start(")
+    result = run_luau(luau, body[:at] + head + body[at:])
+    out = []
+    for line in result.stdout.splitlines():
+        if line.startswith("FAIL: "):
+            name, _, extra = line[len("FAIL: "):].partition(" -- ")
+            out.append((name, False, extra or None))
+    m = re.search(r"(\d+) passed, (\d+) failed", result.stdout)
+    out += [("hatch reveal", True, None)] * (int(m.group(1)) if m else 0)
+    if result.returncode != 0 or "DONE" not in result.stdout.splitlines():
+        out.append((HATCH_DONE + " (it crashed: a crash is never a catch)", False, (result.stderr or result.stdout)[-300:]))
+    return out
+
+
+def hatch_static_checks(text):
+    code = code_only(text)
+    at = code.find("local function playReveal(")
+    reveal = code[at:code.find("\nend\n", at)] if at >= 0 else ""
+    handler_at = code.find("eggHatched.OnClientEvent:Connect(")
+    handler = code[handler_at:code.find("\nend)\n", handler_at)] if handler_at >= 0 else ""
+    block = code_only(text[text.find("-- HATCHPANEL-START"):text.find("-- HATCHPANEL-END")]) if "-- HATCHPANEL-END" in text else ""
+    first_wait = reveal.find("task.wait(")
+    hold = reveal.find("setRevealShowing(true)")
+    hidden = reveal.find("revealGui.Enabled = false")
+    release = reveal.find("setRevealShowing(false)")
+    team = reveal.find("setOpen(true, \"Team\")")
+    return [
+        ("hatch static: playReveal holds OpenPanel (setRevealShowing(true)) before the egg's first wait",
+         0 <= hold < first_wait, None),
+        ("hatch static: playReveal gives OpenPanel back (setRevealShowing(false)) once the reveal is hidden, before it"
+         " opens the team window for a full team",
+         0 <= hidden < release < team, None),
+        ("hatch static: a reveal that errors is caught (pcall) and gives OpenPanel back",
+         "pcall(playReveal," in handler and "setRevealShowing(false)" in handler[handler.find("pcall(playReveal,"):], None),
+        ("hatch static: the block only sets the PlayerGui attribute (no remote, nothing saved)",
+         block != "" and "InvokeServer" not in block and "FireServer" not in block, None),
+    ]
+
+
+HATCH_MUTANTS = [
+    ("the reveal never takes OpenPanel", "\t\tplayerGui:SetAttribute(\"OpenPanel\", REVEAL_PANEL)\n", "",
+     "no window: while the reveal plays"),
+    ("the reveal takes OpenPanel from an open window", "\tif revealShowing and playerGui:GetAttribute(\"OpenPanel\") == nil then\n",
+     "\tif revealShowing then\n", "window open: the reveal never takes OpenPanel"),
+    ("the end of the reveal always clears OpenPanel", "\telseif playerGui:GetAttribute(\"OpenPanel\") == REVEAL_PANEL then\n",
+     "\telse\n", "window open: after the reveal"),
+    ("the end of the reveal never clears OpenPanel", "== REVEAL_PANEL then\n\t\tplayerGui:SetAttribute(\"OpenPanel\", nil)\n", "== REVEAL_PANEL then\n",
+     "no window: after the reveal OpenPanel is nil"),
+    ("a window closing during the reveal is not covered", "playerGui:GetAttributeChangedSignal(\"OpenPanel\"):Connect(holdRevealPanel)\n", "",
+     "window closed during the reveal"),
+    ("the block keeps holding after the reveal", "\tif revealShowing and playerGui:GetAttribute(\"OpenPanel\") == nil then\n",
+     "\tif playerGui:GetAttribute(\"OpenPanel\") == nil then\n", "after the reveal:"),
+    ("playReveal never holds OpenPanel", "\tsetRevealShowing(true)\n\trevealGui.Enabled = true\n", "\trevealGui.Enabled = true\n",
+     "hatch static: playReveal holds OpenPanel"),
+    ("playReveal never gives OpenPanel back", "\trevealGui.Enabled = false\n\tsetRevealShowing(false)\n", "\trevealGui.Enabled = false\n",
+     "hatch static: playReveal gives OpenPanel back"),
+    ("a broken reveal is not caught", "local ok, err = pcall(playReveal, table.remove(revealQueue, 1))",
+     "local ok, err = true, playReveal(table.remove(revealQueue, 1))", "hatch static: a reveal that errors"),
+]
+# Must be reported as NOT caught: the block errors, so the OpenPanel checks fail too, but an error is never a catch.
+HATCH_SELF_TEST = ("a block that errors", "local function setRevealShowing(showing)\n",
+                   "local function setRevealShowing(showing)\n\terror(\"crash (test)\")\n", "no window: while the reveal plays")
+
+
+def hatch_mutant(luau, source, old, new, want):
+    """(caught, why) for one mutant of EmployeeClient.lua."""
+    if source.count(old) != 1:
+        return False, "not applied (%d matches)" % source.count(old)
+    mutated = source.replace(old, new)
+    failed = [n for n, ok, _ in hatch_checks(luau, mutated) + hatch_static_checks(mutated) if not ok]
+    if any(n.startswith(HATCH_CLEAN) or n.startswith(HATCH_DONE) for n in failed):
+        return False, "the block errored: an error is never a catch"
+    if any(n.startswith(want) for n in failed):
+        return True, None
+    return False, "no failing check starts with \"%s\" (failed: %s)" % (want, failed[:3])
+
+
+def hatch_main(luau, mutations=True):
+    """Runs the hatch reveal's checks and mutants; returns 0 or 1."""
+    code = 0
+    source = read(HATCH_CLIENT)
+    results = hatch_checks(luau) + hatch_static_checks(source)
+    bad = [(n, e) for n, ok, e in results if not ok]
+    for n, e in bad:
+        print("FAIL: " + n + (" -- " + str(e) if e is not None else ""))
+    print("Hatch reveal (EmployeeClient's HATCHPANEL block) in a fake PlayerGui: %d passed, %d failed" % (len(results) - len(bad), len(bad)))
+    if bad:
+        code = 1
+    if not mutations:
+        return code
+    caught = 0
+    for label, old, new, want in HATCH_MUTANTS:
+        ok, why = hatch_mutant(luau, source, old, new, want)
+        if ok:
+            caught += 1
+        else:
+            print("NOT CAUGHT: %s -- %s" % (label, why))
+    print("Hatch reveal mutations: %d of %d caught, each by its named check (never by an error)" % (caught, len(HATCH_MUTANTS)))
+    if caught != len(HATCH_MUTANTS):
+        code = 1
+    label, old, new, want = HATCH_SELF_TEST
+    self_ok, why = hatch_mutant(luau, source, old, new, want)
+    good = (not self_ok) and why is not None and "errored" in why
+    print("Hatch reveal harness self-test (a block that errors never counts): %d of 1 reported as not caught" % (1 if good else 0))
+    if not good:
+        print("FAIL: the hatch reveal harness counted an erroring block as caught (%s)" % why)
+        code = 1
+    return code
+
 def main():
     luau = os.environ.get("LUAU") or shutil.which("luau")
     if not luau:
@@ -2263,6 +2396,8 @@ def main():
     if claim_main(luau, "--no-mutations" not in sys.argv):
         code = 1
     if goals_card_main(luau, "--no-mutations" not in sys.argv):
+        code = 1
+    if hatch_main(luau, "--no-mutations" not in sys.argv):
         code = 1
     return code
 
