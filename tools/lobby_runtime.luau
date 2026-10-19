@@ -233,6 +233,7 @@ local function newWorld(opts)
 	lobby.Garages = lobby.garages(lobby.ClaimEnabled)
 	W.LobbyConfig = lobby
 	module(W.ReplicatedStorage, "IpoConfig", (IPOCONFIG_SOURCE)())
+	module(W.ReplicatedStorage, "OfficeConfig", (OFFICECONFIG_SOURCE)()) -- overhaul 2: the office catalog (real)
 	module(W.ReplicatedStorage, "LobbyConfig", lobby)
 	local sections = { ShopServer = "shop", EmployeeServer = "team", PoachServer = "poach", IpoServer = "ipo", OnboardingServer = "onboarding",
 		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex" }

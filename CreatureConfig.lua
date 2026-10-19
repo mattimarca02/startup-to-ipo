@@ -24,7 +24,7 @@ CreatureConfig.Eggs = {
 	{
 		key = "Garage",
 		name = "Garage Egg",
-		price = 250,
+		price = 800,
 		hatchSeconds = 60,
 		color = Color3.fromRGB(165, 120, 75),
 		odds = { Common = 70, Uncommon = 25, Rare = 5 },
@@ -32,7 +32,7 @@ CreatureConfig.Eggs = {
 	{
 		key = "Startup",
 		name = "Startup Egg",
-		price = 2500,
+		price = 40000,
 		hatchSeconds = 5 * 60,
 		color = Color3.fromRGB(60, 150, 255),
 		odds = { Common = 40, Uncommon = 35, Rare = 18, Epic = 6, Legendary = 1 },
@@ -40,7 +40,7 @@ CreatureConfig.Eggs = {
 	{
 		key = "Unicorn",
 		name = "Unicorn Egg",
-		price = 25000,
+		price = 2000000,
 		hatchSeconds = 15 * 60,
 		color = Color3.fromRGB(255, 120, 210),
 		odds = { Common = 10, Uncommon = 25, Rare = 35, Epic = 22, Legendary = 8 },
@@ -127,11 +127,11 @@ CreatureConfig.Poaching = {
 	-- HR Department: defense levels bought with Cash on the purple pad in the garage.
 	-- defense is taken off every poacher's chance (0.05 = 5% less).
 	HRDepartment = {
-		{ cost = 2500, defense = 0.05 },
-		{ cost = 10000, defense = 0.1 },
-		{ cost = 40000, defense = 0.15 },
-		{ cost = 120000, defense = 0.2 },
-		{ cost = 350000, defense = 0.25 },
+		{ cost = 5000, defense = 0.05 }, -- overhaul 2: priced along the new ladder (Garage, Seed, Series A, B, C)
+		{ cost = 150000, defense = 0.1 },
+		{ cost = 3000000, defense = 0.15 },
+		{ cost = 40000000, defense = 0.2 },
+		{ cost = 200000000, defense = 0.25 },
 	},
 }
 

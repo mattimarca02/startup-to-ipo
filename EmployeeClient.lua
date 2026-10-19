@@ -473,11 +473,21 @@ local function nextHireName(creature)
 	return string.format('<font color="%s">%s %s</font>', hex(rarityColor(creature.rarity)), creature.emoji or "", creature.name)
 end
 
+-- What a creature earns per second in the player's building now (overhaul 2: the building's team multiplier, the
+-- server's TeamMultiplier attribute; passes and IPOs come on top), as "$2" or "$0.3"
+local function earns(creature)
+	local value = creature.income * (player:GetAttribute("TeamMultiplier") or 1)
+	if value >= 1000 then
+		return IpoConfig.formatShort(value)
+	end
+	return "$" .. (value < 10 and (string.format("%.1f", value):gsub("%.0$", "")) or tostring(math.floor(value)))
+end
+
 -- The full line under the egg card (full width, so it stays readable on a phone)
 local function nextHireText(egg, creature)
 	local text = "<b>Next hire from this egg: " .. nextHireName(creature) .. "</b>"
 	if creature then
-		text ..= string.format(" (%s · %s · $%d/s)", creature.rarity, creature.role, creature.income)
+		text ..= string.format(" (%s · %s · %s/s)", creature.rarity, creature.role, earns(creature))
 	end
 	return text .. ". Your hires follow a fixed order, not a random roll: the next " .. egg.name .. " that hatches brings this hire."
 end
@@ -626,7 +636,7 @@ pendingCard.button.Activated:Connect(function()
 end)
 
 local function employeeLine(creature)
-	return string.format('<font color="%s">%s</font> · %s · $%d/s', hex(rarityColor(creature.rarity)), creature.rarity, creature.role, creature.income)
+	return string.format('<font color="%s">%s</font> · %s · %s/s', hex(rarityColor(creature.rarity)), creature.rarity, creature.role, earns(creature))
 end
 
 local function rebuildTeamCards()
@@ -684,7 +694,8 @@ table.insert(refreshers, function()
 		local creature = CreatureConfig.getCreature(employee.creature)
 		base += creature and creature.income or 0
 	end
-	teamStatus.Text = string.format("Team %d/%d · earns $%d/s", #state.employees, state.maxEmployees, base)
+	base *= player:GetAttribute("TeamMultiplier") or 1 -- overhaul 2: the building's team multiplier
+	teamStatus.Text = string.format("Team %d/%d · earns $%d/s", #state.employees, state.maxEmployees, math.floor(base))
 		.. (bonus > 1 and string.format(" (%s with passes and IPOs = $%d/s)", IpoConfig.formatMultiplier(bonus), math.floor(base * bonus)) or "")
 	emptyLine.Visible = #state.employees == 0
 
@@ -932,7 +943,7 @@ local function playReveal(info)
 	rarityLabel.TextColor3 = color
 	nameLabel.Text = creature.name
 	nameLabel.TextColor3 = color
-	roleLabel.Text = creature.role .. " · $" .. creature.income .. "/s"
+	roleLabel.Text = creature.role .. " · " .. earns(creature) .. "/s"
 	if info.hired then
 		statusLabel.Text = (info.auto and "Auto-Hatch: " or "") .. "Joined your team!"
 		okButton.Text = "Nice!"

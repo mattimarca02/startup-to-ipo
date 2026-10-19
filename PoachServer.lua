@@ -30,7 +30,7 @@ local DUMMY_TEAM = { "CoffeeCapybara", "CodingCat", "HustleHamster", "SalesShark
 
 local PoachServer = {}
 
-local core -- { getData, save, updateIncome, plotCenter, peekSave }, given by TycoonCore
+local core -- { getData, save, updateIncome, plotCenter, peekSave, teamMultiplier }, given by TycoonCore
 local remotes = {}
 local rng = Random.new()
 local negotiations = {} -- target user ID -> the negotiation against them (one at a time)
@@ -152,12 +152,14 @@ local function protection(target, now)
 	return nil
 end
 
--- What this attacker pays to poach the creature (the Recruiter Network IPO perk makes it cheaper)
+-- What this attacker pays to poach the creature (the Recruiter Network IPO perk makes it cheaper). Overhaul 2: times
+-- the attacker's team multiplier (their building's), so a poach costs what the employee earns for them at their stage.
 local function costFor(attacker, creature)
 	local cost = CreatureConfig.poachCost(creature)
 	if isDummy(attacker) then return cost end
 	local _, data = getPoach(attacker)
-	return math.floor(cost * math.max(0, 1 - IpoServer.perk(data, "CheaperPoach")))
+	local team = core.teamMultiplier and core.teamMultiplier(attacker) or 1
+	return math.max(CreatureConfig.Poaching.MinCost, math.floor(cost * team * math.max(0, 1 - IpoServer.perk(data, "CheaperPoach"))))
 end
 
 local function chanceFor(attacker, target, creature)

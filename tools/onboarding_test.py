@@ -30,11 +30,10 @@ def read(name):
 
 
 def upgrade_names():
-    """The upgrade names in TycoonCore's UPGRADES list."""
-    text = read("TycoonCore.lua")
-    block = text[text.index("local UPGRADES = {"):]
-    block = block[:block.index("\n}")]
-    return re.findall(r'name = "([^"]+)"', block)
+    """The office item names (overhaul 2: TycoonCore's UPGRADES list is OfficeConfig's catalog, by key)."""
+    text = read("OfficeConfig.lua")
+    block = text[text.index("--ITEMS-START"):text.index("--ITEMS-END")]
+    return re.findall(r'key = "([^"]+)"', block)
 
 
 PRELUDE = r"""
@@ -87,6 +86,7 @@ MODULES.EmployeeServer = { grantEgg = function(player, key)
 	return nil
 end }
 MODULES.ShopServer = { addDebugAction = function() end }
+MODULES.CompanyServer = { getBuilding = function(data) return data.building or 1 end } -- overhaul 2: the building bought
 local CONFIG_WARNINGS = #WARNINGS
 """)
     parts.append("local Server = load('OnboardingServer', %s)\n" % lua_long(server_source))
@@ -195,7 +195,7 @@ do
 	for _, g in ipairs(Config.Chain) do inChain[g.key] = true end
 	check("config: the chain keeps Hire3 and Seed", inChain.Hire3 and inChain.Seed)
 	local stagesOk, wordsOk, kindsOk = true, true, true
-	local KINDS = { employees = 1, stage = 1, upgrades = 1, owns = 1, calls = 1, chain = 1, ipos = 1 }
+	local KINDS = { employees = 1, stage = 1, upgrades = 1, owns = 1, calls = 1, chain = 1, ipos = 1, building = 1 }
 	for _, g in ipairs(Config.Chain) do
 		if g.kind == "stage" then
 			local found = false
@@ -266,25 +266,27 @@ do
 	p.data.owned["Server Rack"] = true; tick()
 	check("live: owns goal finished", p.data.onboarding.goals.ServerRack == true)
 	tick(Config.DoneShowSeconds)
-	check("live: Seed is skipped (finished while hidden), Hire 5 comes next", shownKeys(p) == "Hire3,Hire5", shownKeys(p))
+	check("live: Seed is skipped (finished while hidden), the Small Office comes next (overhaul 2: bought in the shop)", shownKeys(p) == "Hire3,SmallOffice", shownKeys(p))
 	local mine = {}
 	for _, t in ipairs(TOASTS) do if t.player == p and string.find(t.text, "New goal", 1, true) then table.insert(mine, t.text) end end
 	check("live: a goal that takes a row later gets one New goal pop-up with its why (the first two got none)",
-		#mine == 2 and string.find(mine[1], "New goal: Buy the Server Rack", 1, true) ~= nil and string.find(mine[1], "+$15", 1, true) ~= nil
-		and string.find(mine[2], "New goal: Hire 5 employees", 1, true) ~= nil, table.concat(mine, " | "))
+		#mine == 2 and string.find(mine[1], "New goal: Buy the Server Rack", 1, true) ~= nil and string.find(mine[1], "production bugs", 1, true) ~= nil
+		and string.find(mine[2], "New goal: Move into the Small Office", 1, true) ~= nil, table.concat(mine, " | "))
+	p.data.building = 2; tick()
+	check("live: the building goal finishes with the building bought", p.data.onboarding.goals.SmallOffice == true)
 	-- An IPO takes the player below: finished goals stay finished
 	p.data.owned = {}; p.data.ipo.valuation = 0; tick()
 	check("live: finished goals stay after the upgrades reset", p.data.onboarding.goals.Own3 and p.data.onboarding.goals.ServerRack)
 	check("live: a finished goal shows its target after a reset", p:GetAttribute("OnboardingGoal_Own3") == 3)
 	hire(p, 2); p.data.ipo.valuation = Ipo.stageValuation(3, 0); tick(Config.DoneShowSeconds + 1)
-	check("live: Hire3 and Series A done: Hire 5 and Series B are shown", shownKeys(p) == "Hire5,SeriesB", shownKeys(p))
-	hire(p, 2); p.data.ipo.valuation = Ipo.stageValuation(5, 0); tick(Config.DoneShowSeconds + 1)
+	check("live: Hire3 and Series A done: Hire 5 and the Big Office are shown", shownKeys(p) == "Hire5,BigOffice", shownKeys(p))
+	hire(p, 2); p.data.ipo.valuation = Ipo.stageValuation(6, 0); p.data.building = 5; tick(Config.DoneShowSeconds + 1)
 	check("live: only the IPO is left", shownKeys(p) == "FirstIpo", shownKeys(p))
 	check("live: tracker still up", p:GetAttribute("OnboardingTracker") == true)
 	p.data.ipo.count = 1; tick()
 	check("live: the IPO goal finishes", p.data.onboarding.goals.FirstIpo == true)
 	check("live: every reachable goal done hides the tracker (call goals skipped, not blocking)", p:GetAttribute("OnboardingTracker") == false)
-	check("live: the save lists every finished key, sorted", savedKeys(p) == "FirstIpo,Hire3,Hire5,IpoReady,Own3,Seed,SeriesA,SeriesB,ServerRack", savedKeys(p))
+	check("live: the save lists every finished key, sorted", savedKeys(p) == "BigCorporate,BigOffice,FirstIpo,Hire3,Hire5,IpoReady,Own3,Seed,SeriesA,SeriesB,SeriesC,ServerRack,SmallCorporate,SmallOffice", savedKeys(p))
 end
 
 -- 4. Chain on, calls running (Studio) ------------------------------------------------------

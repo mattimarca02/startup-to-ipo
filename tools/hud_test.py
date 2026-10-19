@@ -1102,7 +1102,8 @@ scenario("progress", function()
 		local to = last and from or IpoConfig.stageValuation(index + 1, count)
 		return last and 1 or math.clamp((valuation - from) / math.max(1, to - from), 0, 1)
 	end
-	local cases = { { 0, 0 }, { 900, 0 }, { 1800, 0 }, { 4050, 0 }, { 6299, 0 }, { 30000, 0 }, { 81000, 0 }, { 500000, 0 }, { 0, 1 }, { 2250, 1 }, { 11000, 3 } }
+	-- overhaul 2's ladder: Seed 30K, Series A 10M, Series B 100M, Series C 300M, IPO-ready 1B (x1.1 per IPO)
+	local cases = { { 0, 0 }, { 15000, 0 }, { 30000, 0 }, { 5000000, 0 }, { 9999999, 0 }, { 100000000, 0 }, { 300000000, 0 }, { 2e9, 0 }, { 0, 1 }, { 33000, 1 }, { 40000, 3 } }
 	for _, c in ipairs(cases) do
 		local E = boot({ attrs = { IpoValuation = c[1], IpoCount = c[2] }, stats = { 123, 4 } })
 		local want = progressFor(c[1], c[2])
@@ -1111,12 +1112,12 @@ scenario("progress", function()
 		check("progress, " .. c[1] .. "/" .. c[2] .. ": the track is 12 px high, 10 px in from each side, at y 26 (unchanged)",
 			E.track.Position.X.Offset == 10 and E.track.Position.Y.Offset == 26 and E.track.Size.X.Offset == -20 and E.track.Size.Y.Offset == 12 and E.track.Size.X.Scale == 1, E.track.Size.Y.Offset)
 	end
-	local E = boot({ attrs = { IpoValuation = 900, IpoCount = 0 }, stats = { 123, 4 } })
+	local E = boot({ attrs = { IpoValuation = 15000, IpoCount = 0 }, stats = { 123, 4 } })
 	check("progress: half way to Seed is 0.5", math.abs(E.fill.Size.X.Scale - 0.5) < 1e-9, E.fill.Size.X.Scale)
-	E.W.player:SetAttribute("IpoValuation", 1200)
+	E.W.player:SetAttribute("IpoValuation", 20000)
 	advance(0)
-	check("progress: it follows the valuation attribute", math.abs(E.fill.Size.X.Scale - 1200 / 1800) < 1e-9, E.fill.Size.X.Scale)
-	local ready = boot({ attrs = { IpoValuation = 90000 }, stats = { 123, 4 } })
+	check("progress: it follows the valuation attribute", math.abs(E.fill.Size.X.Scale - 20000 / 30000) < 1e-9, E.fill.Size.X.Scale)
+	local ready = boot({ attrs = { IpoValuation = 1200000000 }, stats = { 123, 4 } })
 	check("progress: IPO-ready shows a full bar and the IPO button says IPO!", ready.fill.Size.X.Scale == 1 and ready.button.Text == "🔔\nIPO!", ready.button.Text)
 	check("progress: the IPO button text is back to normal below IPO-ready", E.button.Text == "📈\nIPO", E.button.Text)
 end)
@@ -1127,36 +1128,36 @@ scenario("bottom", function()
 	local BELL = "🔔"
 	-- wide bar
 	local E = boot({ attrs = { IpoValuation = 0 }, stats = { 123, 4 } })
-	local tiers = { icon(1) .. " Garage → Seed · $0 / $1.8K", icon(1) .. " Garage · $0 / $1.8K", icon(1) .. " $0 / $1.8K", "$0 / $1.8K" }
+	local tiers = { icon(1) .. " Garage → Seed · $0 / $30K", icon(1) .. " Garage · $0 / $30K", icon(1) .. " $0 / $30K", "$0 / $30K" }
 	check("bottom, wide, Garage at 0: the fullest of the stage forms that fits", E.info.Text == first(tiers, 14, room(E)), E.info.Text)
 	check("bottom, wide: the multiplier and Shares are not shown at x1 and 0 Shares", not has(E.info.Text, "x1") and not has(E.info.Text, "📜"), E.info.Text)
-	E = boot({ attrs = { IpoValuation = 2000 }, stats = { 123, 4 } })
-	tiers = { icon(2) .. " Seed → Series A · $2K / $6.3K", icon(2) .. " Seed · $2K / $6.3K", icon(2) .. " $2K / $6.3K", "$2K / $6.3K" }
-	check("bottom, wide, Seed at 2000", E.info.Text == first(tiers, 14, room(E)), E.info.Text)
+	E = boot({ attrs = { IpoValuation = 40000 }, stats = { 123, 4 } })
+	tiers = { icon(2) .. " Seed → Series A · $40K / $10M", icon(2) .. " Seed · $40K / $10M", icon(2) .. " $40K / $10M", "$40K / $10M" }
+	check("bottom, wide, Seed at 40000", E.info.Text == first(tiers, 14, room(E)), E.info.Text)
 	-- a font half as wide as the estimate: the whole line fits, so the extras show too
-	local roomy = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 0, IpoShares = 12 }, stats = { 123, 4 } })
-	check("bottom: with room, 12 Shares add ' · 📜 12' to the line", roomy.info.Text == icon(2) .. " Seed → Series A · $2K / $6.3K · 📜 12", roomy.info.Text)
-	local index = IpoConfig.stageIndex(2000, 2)
+	local roomy = boot({ widthScale = 0.5, attrs = { IpoValuation = 40000, IpoCount = 0, IpoShares = 12 }, stats = { 123, 4 } })
+	check("bottom: with room, 12 Shares add ' · 📜 12' to the line", roomy.info.Text == icon(2) .. " Seed → Series A · $40K / $10M · 📜 12", roomy.info.Text)
+	local index = IpoConfig.stageIndex(40000, 2)
 	local mult = IpoConfig.formatMultiplier(IpoConfig.multiplier(2))
-	local want = string.format("%s %s → %s · $2K / %s · %s · 📜 12", icon(index), IpoConfig.Stages[index].name, IpoConfig.Stages[index + 1].name, IpoConfig.formatShort(IpoConfig.stageValuation(index + 1, 2)), mult)
-	local two = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 2, IpoShares = 12 }, stats = { 123, 4 } })
+	local want = string.format("%s %s → %s · $40K / %s · %s · 📜 12", icon(index), IpoConfig.Stages[index].name, IpoConfig.Stages[index + 1].name, IpoConfig.formatShort(IpoConfig.stageValuation(index + 1, 2)), mult)
+	local two = boot({ widthScale = 0.5, attrs = { IpoValuation = 40000, IpoCount = 2, IpoShares = 12 }, stats = { 123, 4 } })
 	check("bottom: after 2 IPOs with 12 Shares and room, the multiplier and the Shares follow the valuation: " .. want, two.info.Text == want, two.info.Text)
-	local onlyMult = boot({ widthScale = 0.5, attrs = { IpoValuation = 2000, IpoCount = 2, IpoShares = 0 }, stats = { 123, 4 } })
+	local onlyMult = boot({ widthScale = 0.5, attrs = { IpoValuation = 40000, IpoCount = 2, IpoShares = 0 }, stats = { 123, 4 } })
 	check("bottom: after 2 IPOs and 0 Shares only the multiplier is added", has(onlyMult.info.Text, mult) and not has(onlyMult.info.Text, "📜"), onlyMult.info.Text)
 	-- narrow bar
 	local N = boot({ w = 320, h = 568, attrs = { IpoValuation = 0 }, stats = { 123, 4 } })
 	check("bottom, narrow (138 px): fits at 14 px", modelWidth(N.info.Text, N.info.TextSize) <= 138 and N.info.TextSize == 14, N.info.Text)
-	check("bottom, narrow: the valuation and its target are both there", has(N.info.Text, "$0 / $1.8K"), N.info.Text)
+	check("bottom, narrow: the valuation and its target are both there", has(N.info.Text, "$0 / $30K"), N.info.Text)
 	N = boot({ w = 320, h = 568, attrs = { IpoValuation = 2000, IpoCount = 1, IpoShares = 99 }, stats = { 123, 4 } })
 	check("bottom, narrow, with a multiplier and 99 Shares: still fits at 14 px", modelWidth(N.info.Text, N.info.TextSize) <= 138, N.info.Text)
 	check("bottom, narrow: the valuation is kept (the extras go first)", has(N.info.Text, "$2K / "), N.info.Text)
 	-- IPO-ready
-	local Rd = boot({ attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
-	local rt = { BELL .. " IPO-ready! Tap to go public", BELL .. " IPO-ready! · $81K", BELL .. " IPO-ready!", BELL .. " IPO!" }
+	local Rd = boot({ attrs = { IpoValuation = 1200000000 }, stats = { 123, 4 } })
+	local rt = { BELL .. " IPO-ready! Tap to go public", BELL .. " IPO-ready! · $1.2B", BELL .. " IPO-ready!", BELL .. " IPO!" }
 	check("bottom, wide, IPO-ready: the fullest IPO-ready text that fits", Rd.info.Text == first(rt, 14, room(Rd)), Rd.info.Text)
-	Rd = boot({ w = 320, h = 568, attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
+	Rd = boot({ w = 320, h = 568, attrs = { IpoValuation = 1200000000 }, stats = { 123, 4 } })
 	check("bottom, narrow, IPO-ready: fits at 14 px and says IPO", modelWidth(Rd.info.Text, 14) <= 138 and has(Rd.info.Text, "IPO"), Rd.info.Text)
-	Rd = boot({ widthScale = 0.5, attrs = { IpoValuation = 81000 }, stats = { 123, 4 } })
+	Rd = boot({ widthScale = 0.5, attrs = { IpoValuation = 1200000000 }, stats = { 123, 4 } })
 	check("bottom, IPO-ready with room: 'IPO-ready! Tap to go public' (the text it had before)", Rd.info.Text == BELL .. " IPO-ready! Tap to go public", Rd.info.Text)
 	-- odd attribute values do not break the row
 	local Odd = boot({ attrs = { IpoValuation = NAN, IpoCount = 0, IpoShares = 0 }, stats = { 123, 4 } })
@@ -1631,12 +1632,18 @@ def coupling_checks(core_text, client_text, others):
     check, refuse, refresh = (re.search(p, buy) for p in (r"\bcheckUpgradePurchase\s*\(", r"\bif\s+not\s+i\s+then\s+return\b", r"\brefreshSign\s*\("))
     add("buyUpgrade asks checkUpgradePurchase and returns on a refusal before it calls refreshSign",
         bool(check and refuse and refresh) and check.start() < refuse.start() < refresh.start(), REVIEW_HINT)
-    cs, ce = function_span(spans, "checkUpgradePurchase")
+    # overhaul 2: the ready test moved into checkBuyRequest (shared by every office purchase), which checkUpgradePurchase
+    # calls before anything is checked against the catalog (OfficeConfig.checkItem)
+    cs, ce = function_span(spans, "checkBuyRequest")
     cbody = blank[cs:ce]
     after_params = cbody[cbody.index(")"):]
     first_if = re.search(r"\bif\b", after_params)
-    add("checkUpgradePurchase's first test is `if not data.ready then return` (a purchase never publishes before the load is done)",
-        bool(first_if) and re.match(r"if\s+not\s+data\.ready\s+then\s+return\b", after_params[first_if.start():]) is not None, REVIEW_HINT)
+    us, ue = function_span(spans, "checkUpgradePurchase")
+    ubody = blank[us:ue]
+    req, item = re.search(r"\bcheckBuyRequest\s*\(", ubody), re.search(r"\bOfficeConfig\.checkItem\s*\(", ubody)
+    add("checkBuyRequest's first test is `if not data.ready then return`, and checkUpgradePurchase asks it before the catalog check (a purchase never publishes before the load is done)",
+        bool(first_if) and re.match(r"if\s+not\s+data\.ready\s+then\s+return\b", after_params[first_if.start():]) is not None
+        and bool(req and item) and req.start() < item.start(), REVIEW_HINT)
 
     # the IPO commit: only IpoServer's goPublic calls it, only onAction calls goPublic, and onAction refuses while not data.ready
     ipo = others.get("IpoServer.lua")
@@ -1660,8 +1667,9 @@ def coupling_checks(core_text, client_text, others):
     # the client's end of it
     ck = lua_views(client_text)[0]
     attr = re.search(r"""\blocal\s+LOADED_ATTRIBUTE\s*=\s*(["'])(\w+)\1""", ck)
-    table = re.search(r"\blocal\s+UPGRADES\s*=\s*\{(.*?)\n\}", keep, re.S)
-    count = len(re.findall(r"""\bname\s*=\s*["']""", table.group(1))) if table else 0
+    # overhaul 2: UPGRADES is built from OfficeConfig.Items (publishUpgrades sets Upgrade1 .. Upgrade<items>)
+    office = read("OfficeConfig.lua")
+    count = len(re.findall(r'\{ key = "[^"]+", icon = ', office)) if "for _, item in ipairs(OfficeConfig.Items) do" in keep else 0
     number = re.fullmatch(r"Upgrade(\d+)", attr.group(2)) if attr else None
     add("IpoClient's LOADED_ATTRIBUTE is one of the attributes publishUpgrades sets (Upgrade1 to the last UPGRADES entry)",
         bool(number) and 1 <= int(number.group(1)) <= count, "%s, TycoonCore sets Upgrade1 .. Upgrade%d. %s" % (attr.group(2) if attr else None, count, REVIEW_HINT))
@@ -1864,7 +1872,7 @@ COUPLING_MUTATIONS = [
     ("IpoServer's onAction no longer refuses while not data.ready", IPO_SERVER, [("if not ipo or not data.ready then", "if not ipo then")]),
     ("goPublic (the IPO commit) called from a second place in IpoServer", IPO_SERVER, [("\tipo.shares -= cost\n\tipo.perks[perk.key] = level + 1\n", "\tgoPublic(player, ipo.count + 1)\n\tipo.shares -= cost\n\tipo.perks[perk.key] = level + 1\n")]),
     ("IpoClient waits for a different attribute (IpoCount)", CLIENT_FILE, [('local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "IpoCount"')]),
-    ("IpoClient waits for an Upgrade attribute the server never sets (Upgrade7)", CLIENT_FILE, [('local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "Upgrade7"')]),
+    ("IpoClient waits for an Upgrade attribute the server never sets (Upgrade99: overhaul 2 has 63 items)", CLIENT_FILE, [('local LOADED_ATTRIBUTE = "Upgrade1"', 'local LOADED_ATTRIBUTE = "Upgrade99"')]),
     ("IpoClient's 30 s safety delay changed to 3 s", CLIENT_FILE, [("local MONEY_WAIT = 30", "local MONEY_WAIT = 3")]),
     ("IpoClient's 30 s safety delay changed to 25 s", CLIENT_FILE, [("local MONEY_WAIT = 30", "local MONEY_WAIT = 25")]),
 ]

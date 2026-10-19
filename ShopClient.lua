@@ -1,11 +1,13 @@
 -- ShopClient: the Shop button and shop window (milestone 3).
 -- Put this LocalScript in StarterPlayer > StarterPlayerScripts. It builds the screen by itself.
 -- It only opens Roblox's purchase prompts. Everything is granted by ShopServer on the server.
--- The Office tab buys the garage upgrades: it sends only the upgrade's number, and the server decides.
+-- The Office tab buys the office catalog by funding stage and the next building, and (its Hire chip) desks and direct hires
+-- (overhaul 2, the Office tab's seventh chip): it sends only an item's or a hire's number, and the server decides.
 -- Every size comes from ShopLayout (a ModuleScript in ReplicatedStorage, pure functions that tools/shop_ux_test.py
 -- checks): the tabs in a rail on the left in landscape and in a row in portrait, 44 px header items and tap
 -- targets, no text under 16 px. The tutorial finds its targets by name under ShopGui.Window: TabOffice ... TabDebug,
--- OfficePage ... DebugPage, Office1 ... Office6, BuyButton (every card's button), HelpButton and TutorialStrip.
+-- OfficePage ... DebugPage, Office1 ... Office63 (the catalog's cards), OfficeBuilding, HireDesk, BuyButton (every card's
+-- button), HelpButton and TutorialStrip.
 
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -19,6 +21,7 @@ local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig"))
 local ShopLayout = require(ReplicatedStorage:WaitForChild("ShopLayout")) -- the window's sizes (pure functions)
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- Luck Boost odds, egg Debug buttons
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the Talent Scouts perk, for Luck Boost's odds
+local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- the office catalog, buildings, desks, hires (overhaul 2)
 local remotes = ReplicatedStorage:WaitForChild("ShopRemotes")
 local notifyEvent = remotes:WaitForChild("ShopNotify")
 local debugRemote = RunService:IsStudio() and remotes:FindFirstChild("ShopDebug") or nil -- Studio only
@@ -46,8 +49,8 @@ local COLORS = {
 
 local MIN_TEXT = ShopLayout.MIN_TEXT -- 16: nothing a player must read is smaller
 local HELP_LINES = { -- the "How the shop works" card (HelpButton): three lines, no reward
-	"Office: buy the upgrades in order with Cash. Each one adds Cash every second.",
-	"The next upgrade's bar fills with your Cash. More Income fills it faster.",
+	"Office: each funding stage unlocks its building and new items. Buy them with Cash.",
+	"Office > Hire: a desk for each employee, and employees you choose (eggs cost less).",
 	"Passes, Boosts and Cash cost Robux. Roblox asks you to confirm every purchase.",
 }
 
@@ -337,11 +340,7 @@ for i, name in ipairs(tabNames) do
 		Visible = false,
 		Parent = pages,
 	})
-	if name == "Office" then
-		page.AutomaticCanvasSize = Enum.AutomaticSize.None -- the Office places its own rows (ShopLayout.stack) and canvas
-	else
-		make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page })
-	end
+	make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page })
 	make("UIPadding", { PaddingRight = UDim.new(0, ShopLayout.SCROLLBAR_ROOM), Parent = page }) -- room for the scrollbar
 	tabPages[name] = page
 end
@@ -865,492 +864,310 @@ for i, product in ipairs(ShopConfig.Products) do
 	end
 end
 
--- Office tab: the six garage upgrades, bought in order (docs/SHOP_UX_PROPOSAL.md 3.2). The list (name, price,
--- income) comes from the server, and a Buy tap sends only the upgrade's number: the server checks the order, the Cash
--- and everything else, and answers with a short message. ShopLayout.ladder decides what every rung shows: the owned
--- ones fold into a summary row, the next one is the hero card with a progress bar, the others are locked ("Unlocks
--- after ..."). Only the hero offers Buy, and only when the Cash is there: "Need $X more" sends nothing. No rung ever
--- asks for a confirmation (decided by the owner). The rows are placed top to bottom by ShopLayout.stack.
-local officePage = tabPages.Office -- no UIListLayout: its canvas is set here, so the hero can scroll into view at once
-local officeBusy = false
-local office = {
-	list = nil, -- the server's list ({ name, cost, income, icon }), once it arrived
-	failed = false, -- all 5 tries failed: the sentence and the Retry button
-	fetching = false,
-	rungs = {}, -- Office1 ... Office6: the pieces of each rung
-	unfolded = false, -- the owned rungs shown under the summary row (tap the row)
-	bought = nil, -- the upgrade just bought: its card stays the hero a moment ("Bought!")
-	shownHero = nil, -- the hero on screen now (a new one scrolls into view)
-	reveal = false, -- scroll the hero into view at the next placing: only after a buy or a hero change (a Retry is one)
-	buying = nil, -- the upgrade whose buy request runs now
-	actionRemote = nil,
-}
+-- Office tab (overhaul 2, docs/OVERHAUL2_PLAN.md 1.2): the office catalog by funding stage. A row of six stage chips
+-- picks the stage shown (the stage reached, when the shop opens); each stage shows its building first, then its items.
+-- A stage not reached yet is shown greyed ("Unlocks at Series A"). Names, prices and effects come from OfficeConfig
+-- (display only); a Buy tap sends only the item's number ("BuyUpgrade") or "BuyBuilding", and the server checks
+-- everything and answers with a short message. Owned items come from the server's Upgrade<i> attributes; the building,
+-- the desks and the hires from the "Office" request (asked when the shop opens and after every purchase).
+-- The seventh chip, "Hire", shows the next desk (a workstation for one more employee) and the direct hires, with what an
+-- egg pays on average for the same rarity (eggs stay the better deal: OfficeConfig.HireFactor).
+local officePage = tabPages.Office
+local hirePage = officePage -- the Hire chip's cards live on the Office page (a phone has no room for a fifth tab)
+local office = { state = nil, shown = nil, busy = false, actionRemote = nil, fetching = false }
+local SHORT_STAGE = { "Garage", "Seed", "Series A", "Series B", "Series C", "IPO" }
+local HIRE = 7 -- office.shown for the Hire chip
 
-local function officeText(parent, name, font, color, maxSize)
-	local label = make("TextLabel", {
-		Name = name,
-		BackgroundTransparency = 1,
-		Font = font,
-		Text = "",
-		TextColor3 = color,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = parent,
-	})
-	fitText(label, maxSize)
-	return label
+-- The stage the valuation reached (the server's attributes; the server decides every purchase anyway)
+local function stageNow()
+	local valuation = player:GetAttribute("IpoValuation") or 0
+	local count = player:GetAttribute("IpoCount") or 0
+	return IpoConfig.stageIndex(valuation, count)
 end
 
--- A check mark (owned) and a padlock (locked), drawn with frames: no emoji, no image
-local function makeBadge(parent)
-	local badge = make("Frame", { Name = "Badge", BackgroundTransparency = 1, ZIndex = 2, Parent = parent })
-	local check = make("Frame", { Name = "Check", Size = UDim2.fromScale(1, 1), BackgroundColor3 = COLORS.buy, ZIndex = 2, Parent = badge })
-	round(check, 10)
-	for _, stroke in ipairs({ { 0.37, 0.58, 0.32, 45 }, { 0.6, 0.47, 0.55, -45 } }) do
-		make("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(stroke[1], stroke[2]),
-			Size = UDim2.fromScale(stroke[3], 0.14),
-			Rotation = stroke[4],
-			BackgroundColor3 = COLORS.text,
-			BorderSizePixel = 0,
-			ZIndex = 3,
-			Parent = check,
-		})
-	end
-	local lock = make("Frame", { Name = "Lock", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 2, Parent = badge })
-	local shackle = make("Frame", {
-		Name = "Shackle",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		Size = UDim2.fromScale(0.56, 0.6),
-		BackgroundTransparency = 1,
-		ZIndex = 2,
-		Parent = lock,
-	})
-	round(shackle, 6)
-	make("UIStroke", { Thickness = 2, Color = COLORS.lock, Parent = shackle })
-	local body = make("Frame", {
-		Name = "Body",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.fromScale(0.5, 1),
-		Size = UDim2.fromScale(0.84, 0.56),
-		BackgroundColor3 = COLORS.lock,
-		BorderSizePixel = 0,
-		ZIndex = 3,
-		Parent = lock,
-	})
-	round(body, 3)
-	return badge, check, lock
+local function ownsItem(i)
+	return player:GetAttribute("Upgrade" .. i) == true
 end
 
--- While "Upgrades" is asked: three gray rungs
-local skeletons = {}
-for i = 1, 3 do
-	local row = make("Frame", { Name = "OfficeSkeleton" .. i, BackgroundColor3 = COLORS.skeleton, Parent = officePage })
-	round(row, 12)
-	local dot = make("Frame", { Name = "Dot", Position = UDim2.fromOffset(8, 8), Size = UDim2.fromOffset(48, 48), BackgroundColor3 = COLORS.tab, BorderSizePixel = 0, Parent = row })
-	round(dot, 12)
-	local line = make("Frame", { Name = "Line", Position = UDim2.fromOffset(64, 18), Size = UDim2.new(0.45, 0, 0, 14), BackgroundColor3 = COLORS.tab, BorderSizePixel = 0, Parent = row })
-	round(line, 7)
-	skeletons[i] = row
+local function cashNow()
+	return cashValue and cashValue.Value or 0
 end
 
--- After 5 failed tries: the sentence and a Retry button (the same 5 tries again)
-local officeError = make("TextLabel", {
-	Name = "OfficeError",
+-- The building the player owns this run (the server's Building attribute, display only)
+local function buildingNow()
+	return player:GetAttribute("Building") or (office.state and office.state.building) or 1
+end
+
+-- The six stage chips and the Hire chip, in two rows of four (every chip shows on the narrowest phone, nothing to scroll)
+local chipRow = make("Frame", {
+	Name = "StageChips",
+	LayoutOrder = 0,
+	Size = UDim2.new(1, 0, 0, 94),
 	BackgroundTransparency = 1,
-	Font = Enum.Font.GothamBold,
-	Text = "The office upgrades aren't available right now.",
-	TextColor3 = COLORS.subtext,
-	Visible = false,
 	Parent = officePage,
 })
-fixedText(officeError)
-local retryButton = make("TextButton", {
-	Name = "RetryButton",
+-- chip k's place in the two rows of four
+local function chipPlace(chip, k)
+	local row, col = (k - 1) // 4, (k - 1) % 4
+	chip.Position = UDim2.new(col * 0.25, 3, 0, row * 50)
+	chip.Size = UDim2.new(0.25, -6, 0, 44)
+end
+local chips = {}
+for stage, label in ipairs(SHORT_STAGE) do
+	local chip = make("TextButton", {
+		Name = "Stage" .. stage,
+		LayoutOrder = stage,
+		BackgroundColor3 = COLORS.tab,
+		Font = Enum.Font.GothamBold,
+		Text = label,
+		TextColor3 = COLORS.text,
+		Parent = chipRow,
+	})
+	round(chip, 10)
+	fitText(chip, 18)
+	chipPlace(chip, stage)
+	chips[stage] = chip
+	chip.Activated:Connect(function()
+		office.shown = stage
+		refreshAll()
+	end)
+end
+local hireChip = make("TextButton", {
+	Name = "StageHire",
+	LayoutOrder = HIRE,
 	BackgroundColor3 = COLORS.tab,
 	Font = Enum.Font.GothamBold,
-	Text = "Retry",
+	Text = "Hire",
 	TextColor3 = COLORS.text,
-	Visible = false,
-	Parent = officePage,
+	Parent = chipRow,
 })
-round(retryButton, 10)
-fitText(retryButton, 20)
-
--- The owned rungs, folded into one row: "3 of 6 bought" and what they earn; a tap shows or hides them
-local summary = make("TextButton", {
-	Name = "OfficeSummary",
-	BackgroundColor3 = COLORS.card,
-	Text = "",
-	TextSize = MIN_TEXT,
-	Visible = false,
-	Parent = officePage,
-})
-round(summary, 12)
-local summaryBadge, _, summaryLock = makeBadge(summary)
-summaryLock.Visible = false
-local summaryTitle = officeText(summary, "SummaryTitle", Enum.Font.GothamBold, COLORS.text, 22)
-local summaryInfo = officeText(summary, "SummaryInfo", Enum.Font.Gotham, COLORS.subtext, 18)
-local summaryToggle = officeText(summary, "SummaryToggle", Enum.Font.GothamBold, COLORS.subtext, 18)
-summaryToggle.TextXAlignment = Enum.TextXAlignment.Center
-
--- All six bought: a gold banner, a hint and no button
-local banner = make("Frame", { Name = "OfficeComplete", BackgroundColor3 = COLORS.gold, Visible = false, Parent = officePage })
-round(banner, 12)
-local bannerTitle = officeText(banner, "BannerTitle", Enum.Font.GothamBold, COLORS.panel, 24)
-local bannerInfo = officeText(banner, "BannerInfo", Enum.Font.GothamBold, COLORS.panel, 18)
-
-local function ladderNow()
-	local owned = {}
-	for i = 1, #office.list do
-		owned[i] = player:GetAttribute("Upgrade" .. i) == true
-	end
-	-- The server may mark the upgrade as owned before its answer arrives: while the request runs, that rung stays the
-	-- hero (it says Bought!) instead of folding for a moment and coming back with the answer (the page would jump twice)
-	local bought = office.bought
-	if bought == nil and officeBusy and office.buying and owned[office.buying] then
-		bought = office.buying
-	end
-	return ShopLayout.ladder(office.list, owned, cashValue and cashValue.Value or 0, incomeValue and incomeValue.Value or 0,
-		ShopConfig.formatCash, bought, officeBusy)
-end
-
--- The hero scrolls into view (just enough to show it whole, never past its top). Only after a buy or a hero change:
--- a message line, the tutorial's strip, a tab or a new screen size never move the page (decided by the owner)
-local function revealHero()
-	if office.shownHero and office.heroY then
-		officePage.CanvasPosition = Vector2.new(0, ShopLayout.revealScroll(office.heroY, office.heroH, pagesHeight, office.total or 0))
-	end
-end
-
--- One rung as the ladder says: owned (folded), the hero, or locked (dimmed, a padlock, "Unlocks after ...")
-local function showRung(parts, row, hero, width)
-	local isHero = row.state == "next"
-	local locked = row.state == "locked"
-	local R = isHero and ShopLayout.hero(width) or ShopLayout.officeRow(width, row.state)
-	parts.height = R.height
-	place(parts.icon, R.icon)
-	place(parts.name, R.name)
-	place(parts.info, R.info)
-	parts.card.BackgroundTransparency = locked and 0.45 or 0
-	parts.icon.TextTransparency = locked and 0.55 or 0
-	parts.name.TextColor3 = locked and COLORS.subtext or COLORS.text
-	parts.badge.Visible = not isHero
-	if not isHero then
-		place(parts.badge, R.badge)
-		parts.check.Visible = row.state == "owned"
-		parts.lock.Visible = locked
-	end
-	parts.bar.Visible = isHero
-	parts.progress.Visible = isHero
-	local message = parts.statusText
-	if isHero then
-		-- "+$40 every second", or "+$40/s" where that does not fit its box on one line at 16 px (the 140 px box at 568 x 320)
-		parts.info.Text = textWidth(hero.info, parts.info.Font) <= R.info.w and hero.info or hero.infoShort
-		place(parts.bar, R.bar)
-		parts.fill.Size = UDim2.fromScale(hero.fill, 1)
-		parts.progress.Text = hero.progress
-		place(parts.progress, R.progress)
-		place(parts.time, R.time)
-		place(parts.status, R.status)
-		parts.time.Text = hero.time or ""
-		parts.time.TextXAlignment = R.narrow and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
-		parts.time.TextYAlignment = Enum.TextYAlignment.Top
-		parts.time.Visible = hero.time ~= nil and not (message and R.statusSharesTime)
-		parts.status.Text = message or ""
-		parts.status.TextColor3 = parts.statusColor or COLORS.refusal
-		parts.status.TextYAlignment = Enum.TextYAlignment.Top
-		parts.status.Visible = message ~= nil
-	else
-		parts.info.Text = row.info
-		parts.time.Visible = false
-		parts.status.Visible = false
-	end
-	local button = parts.button
-	if row.state == "owned" then
-		setButton(button, "Owned", COLORS.owned, false)
-	elseif isHero then
-		setButton(button, hero.button, COLORS[hero.color], hero.action == "buy")
-	end
-	-- A locked rung offers no Buy: only the hero does (and only with the Cash there); a button is only ever placed
-	-- where its row's layout has one
-	button.Visible = row.state ~= "locked"
-	if button.Visible and R.button then
-		place(button, R.button)
-	end
-end
-
--- Places the Office page: loading rungs, or the error and Retry, or the banner, the summary and the rungs
-local function refreshOffice()
-	local width = cardWidth
-	local rowH = ShopLayout.officeRow(width, "locked").height
-	local items = {} -- what shows, top to bottom: { inst = ..., height = ..., width = (fixed, or the page's) }
-	local loading = office.list == nil and not office.failed
-	for _, row in ipairs(skeletons) do
-		row.Visible = loading
-		if loading then
-			table.insert(items, { inst = row, height = rowH })
-		end
-	end
-	officeError.Visible = office.failed
-	retryButton.Visible = office.failed
-	if office.failed then
-		table.insert(items, { inst = officeError, height = textHeight(officeError.Text, officeError.Font, width) + 8 })
-		table.insert(items, { inst = retryButton, height = ShopLayout.BUTTON_H, width = 120 })
-	end
-	local S = office.list and ladderNow()
-	banner.Visible = S ~= nil and S.complete
-	summary.Visible = S ~= nil and S.summary ~= nil
-	office.heroY = nil
-	if S then
-		if S.banner then
-			local R = ShopLayout.officeRow(width, "banner")
-			bannerTitle.Text, bannerInfo.Text = S.banner.title, S.banner.info
-			place(bannerTitle, R.name)
-			place(bannerInfo, R.info)
-			table.insert(items, { inst = banner, height = R.height })
-		end
-		if S.summary then
-			local R = ShopLayout.officeRow(width, "summary")
-			summaryTitle.Text, summaryInfo.Text = S.summary.title, S.summary.info
-			summaryToggle.Text = office.unfolded and "Hide" or "Show"
-			place(summaryBadge, R.icon)
-			place(summaryTitle, R.name)
-			place(summaryInfo, R.info)
-			place(summaryToggle, R.button)
-			table.insert(items, { inst = summary, height = R.height })
-		end
-		for i, parts in ipairs(office.rungs) do
-			local row = S.rows[i]
-			showRung(parts, row, S.hero, width)
-			local shown = row.state ~= "owned" or office.unfolded
-			parts.card.Visible = shown
-			if shown then
-				table.insert(items, { inst = parts.card, height = parts.height, hero = row.state == "next" })
-			end
-		end
-	end
-	local heights = {}
-	for k, item in ipairs(items) do
-		heights[k] = item.height
-	end
-	local ys, total = ShopLayout.stack(heights, ShopLayout.OFFICE_GAP)
-	for k, item in ipairs(items) do
-		item.inst.Position = UDim2.fromOffset(0, ys[k])
-		item.inst.Size = item.width and UDim2.fromOffset(item.width, item.height) or UDim2.new(1, 0, 0, item.height)
-		if item.hero then
-			office.heroY, office.heroH = ys[k], item.height
-		end
-	end
-	office.total = total
-	officePage.CanvasSize = UDim2.fromOffset(0, total)
-	-- a new hero (the list arrived, also after a Retry, or the one before was bought) scrolls into view; once all are
-	-- bought the page goes back to its top, where the "Office complete" banner is
-	local heroIndex = S and S.nextIndex or nil
-	if heroIndex ~= office.shownHero then
-		office.shownHero = heroIndex
-		office.reveal = heroIndex ~= nil
-		if heroIndex == nil then
-			officePage.CanvasPosition = Vector2.new(0, 0)
-		end
-	end
-	if office.reveal and office.heroY then
-		office.reveal = false
-		revealHero()
-	elseif officePage.CanvasPosition.Y > math.max(0, total - pagesHeight) then
-		-- anything else keeps the player's place, only clamped to the new canvas (a shorter page, a new screen size)
-		officePage.CanvasPosition = Vector2.new(0, math.max(0, total - pagesHeight))
-	end
-end
-
--- The hero card's line for a refusal (red) or a hint, for 3 s
-local function rungStatus(i, text, color)
-	local parts = office.rungs[i]
-	if not parts then return end
-	parts.statusToken += 1
-	local myToken = parts.statusToken
-	parts.statusText, parts.statusColor = text, color
+round(hireChip, 10)
+fitText(hireChip, 18)
+chipPlace(hireChip, HIRE)
+chips[HIRE] = hireChip
+hireChip.Activated:Connect(function()
+	office.shown = HIRE
 	refreshAll()
-	task.delay(3, function()
-		if parts.statusToken == myToken then
-			parts.statusText = nil
-			refreshAll()
-		end
-	end)
-end
+end)
 
--- Bought: the icon pops and what it earns floats up from the button
-local function celebrate(i)
-	local parts = office.rungs[i]
-	if not parts then return end
-	TweenService:Create(parts.pop, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), { Scale = 1.08 }):Play()
-	local p = parts.button.Position
-	local float = make("TextLabel", {
-		Name = "Float",
-		Position = p,
-		Size = parts.button.Size,
-		BackgroundTransparency = 1,
-		Font = Enum.Font.GothamBold,
-		Text = "+" .. ShopConfig.formatCash(office.list[i].income) .. "/s",
-		TextColor3 = COLORS.gold,
-		ZIndex = 4,
-		Parent = parts.card,
-	})
-	fitText(float, 24)
-	TweenService:Create(float, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Position = UDim2.new(p.X.Scale, p.X.Offset, p.Y.Scale, p.Y.Offset - 34),
-		TextTransparency = 1,
-	}):Play()
-	task.delay(0.85, function()
-		float:Destroy()
-	end)
-end
-
--- Not enough Cash: the bar shakes (nothing is sent)
-local function shakeBar(parts)
-	local p = parts.bar.Position
-	TweenService:Create(parts.bar, TweenInfo.new(0.05, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 3, true), {
-		Position = UDim2.new(p.X.Scale, p.X.Offset + 6, p.Y.Scale, p.Y.Offset),
-	}):Play()
-end
-
--- The one request that buys: only the upgrade's number. The server checks everything and answers.
-local function buyOffice(actionRemote, index)
-	if officeBusy then return end
-	officeBusy, office.buying = true, index
+-- One purchase request; the answer goes to the status line, then the office is asked again
+local fetchOfficeState -- below
+local function officeRequest(action, index)
+	if office.busy or not office.actionRemote then return end
+	office.busy = true
 	refreshAll()
 	local ok, fine, message = pcall(function()
-		return actionRemote:InvokeServer("BuyUpgrade", index)
+		if index == nil then
+			return office.actionRemote:InvokeServer(action) -- BuyBuilding, BuyDesk: nothing but the request
+		end
+		return office.actionRemote:InvokeServer(action, index)
 	end)
-	officeBusy, office.buying = false, nil
+	office.busy = false
+	local text = ok and typeof(message) == "string" and message ~= "" and message or "Couldn't buy that. Please try again."
+	showMessage(text)
 	if ok and fine == true then
-		office.bought = index
-		office.reveal = true -- the card says Bought! whole
-		celebrate(index)
-		refreshAll()
-		task.delay(0.8, function()
-			if office.bought == index then
-				office.bought = nil -- now it folds into the summary row and the next rung is the hero
-				refreshAll()
-			end
-		end)
+		task.spawn(fetchOfficeState)
+	end
+	refreshAll()
+end
+
+-- The building card of the stage shown: owned, the next one to buy, or locked
+local buildingDesc, buildingButton, buildingParts = makeCard(officePage, 1, "🏢", "Building", "OfficeBuilding")
+buildingButton.Activated:Connect(function()
+	local shown = office.shown or stageNow()
+	if shown ~= HIRE and shown == buildingNow() + 1 and stageNow() >= shown then
+		officeRequest("BuyBuilding")
+	end
+end)
+table.insert(cards, function()
+	local shown = office.shown or stageNow()
+	buildingParts.card.Visible = shown ~= HIRE
+	if shown == HIRE then return end
+	local building = OfficeConfig.Buildings[shown]
+	buildingParts.name.Text = building.name
+	buildingParts.icon.Text = ({ "🏚️", "🏢", "🏬", "🏙️", "🏦", "🗼" })[shown] or "🏢"
+	local effect = string.format("Items earn x%s, employees x%s.", tostring(building.office), tostring(building.team))
+	local have = buildingNow()
+	if shown <= have then
+		buildingDesc.Text = effect .. (shown == have and " Your office now." or "")
+		setButton(buildingButton, shown == have and "Yours" or "Moved on", COLORS.owned, false)
+	elseif stageNow() < shown then
+		buildingDesc.Text = effect .. " " .. OfficeConfig.unlockText(shown) .. "."
+		setButton(buildingButton, "Locked", COLORS.disabled, false)
+	elseif shown > have + 1 then
+		buildingDesc.Text = effect .. " Buy the " .. OfficeConfig.Buildings[have + 1].name .. " first."
+		setButton(buildingButton, "Later", COLORS.disabled, false)
+	elseif office.busy then
+		buildingDesc.Text = effect
+		setButton(buildingButton, "...", COLORS.disabled, false)
 	else
-		local text = ok and typeof(message) == "string" and message ~= "" and message or "Couldn't buy that. Please try again."
-		rungStatus(index, text, COLORS.refusal)
+		buildingDesc.Text = effect .. " The room and the building change at once."
+		setButton(buildingButton, OfficeConfig.money(building.price), cashNow() >= building.price and COLORS.buy or COLORS.disabled, true)
 	end
+end)
+
+-- What an item does, in one line under its name
+local function itemText(item, shown)
+	local text = item.text
+	if item.income > 0 then
+		local office = OfficeConfig.Buildings[math.max(buildingNow(), 1)].office
+		text = string.format("+%s/s. %s", OfficeConfig.money(item.income * office), text)
+	end
+	if stageNow() < item.stage then
+		text ..= " " .. OfficeConfig.unlockText(item.stage) .. "."
+	end
+	return text
 end
 
--- A tap on a rung's button: only the hero's does something
-local function tapRung(i)
-	if not office.list or not office.actionRemote then return end
-	local hero = ladderNow().hero
-	if not hero or hero.index ~= i then
-		return -- an owned rung says "Owned"; a locked one has no button
-	end
-	if hero.action == "buy" then
-		buyOffice(office.actionRemote, i)
-	elseif hero.action == "short" then
-		shakeBar(office.rungs[i])
-		rungStatus(i, hero.hint, COLORS.subtext)
-	end
-end
-
-local function makeRung(i, upg)
-	local card = make("Frame", { Name = "Office" .. i, BackgroundColor3 = COLORS.card, Parent = officePage })
-	round(card, 12)
-	local icon = make("TextLabel", {
-		Name = "Icon",
-		BackgroundTransparency = 1,
-		Font = Enum.Font.GothamBold,
-		Text = upg.icon or "🏢",
-		TextColor3 = COLORS.text,
-		Parent = card,
-	})
-	fitText(icon, 48)
-	local parts = { card = card, icon = icon, statusToken = 0 }
-	parts.pop = make("UIScale", { Name = "Pop", Parent = icon })
-	parts.badge, parts.check, parts.lock = makeBadge(card)
-	parts.name = officeText(card, "ItemName", Enum.Font.GothamBold, COLORS.text, 22)
-	parts.name.Text = tostring(upg.name)
-	parts.info = officeText(card, "Info", Enum.Font.Gotham, COLORS.subtext, 18)
-	parts.bar = make("Frame", { Name = "Bar", BackgroundColor3 = COLORS.bar, BorderSizePixel = 0, Parent = card })
-	round(parts.bar, 6)
-	parts.fill = make("Frame", { Name = "Fill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = COLORS.buy, BorderSizePixel = 0, Parent = parts.bar })
-	round(parts.fill, 6)
-	parts.progress = officeText(card, "Progress", Enum.Font.Gotham, COLORS.text, 18)
-	parts.time = officeText(card, "Time", Enum.Font.Gotham, COLORS.subtext, 18)
-	parts.status = officeText(card, "Status", Enum.Font.GothamBold, COLORS.refusal, 18)
-	parts.button = make("TextButton", {
-		Name = "BuyButton",
-		BackgroundColor3 = COLORS.buy,
-		Font = Enum.Font.GothamBold,
-		Text = "",
-		TextColor3 = COLORS.text,
-		TextWrapped = true,
-		Parent = card,
-	})
-	round(parts.button, 10)
-	fitText(parts.button, 20)
-	parts.pulse = make("UIScale", { Name = "Pulse", Parent = parts.button })
-	parts.button.Activated:Connect(function()
-		tapRung(i)
+-- One card per item, shown only on its stage's page
+for i, item in ipairs(OfficeConfig.Items) do
+	local desc, button, parts = makeCard(officePage, 10 + i, item.icon, item.key, "Office" .. i)
+	button.Activated:Connect(function()
+		if ownsItem(i) or stageNow() < item.stage then return end
+		officeRequest("BuyUpgrade", i)
 	end)
-	return parts
+	table.insert(cards, function()
+		local shown = office.shown or stageNow()
+		parts.card.Visible = item.stage == shown
+		if not parts.card.Visible then return end
+		desc.Text = itemText(item, shown)
+		if ownsItem(i) then
+			setButton(button, "Owned", COLORS.owned, false)
+		elseif stageNow() < item.stage then
+			setButton(button, "Locked", COLORS.disabled, false)
+		elseif i ~= 1 and not ownsItem(1) then
+			setButton(button, OfficeConfig.FirstItem .. " first", COLORS.disabled, false)
+		elseif office.busy then
+			setButton(button, "...", COLORS.disabled, false)
+		else
+			setButton(button, item.price == 0 and "Free" or OfficeConfig.money(item.price), cashNow() >= item.price and COLORS.buy or COLORS.disabled, true)
+		end
+	end)
 end
 
--- Asks for the list (5 tries, 2 s apart); the gray rungs show meanwhile
-local function fetchOffice()
-	if office.fetching or office.list then return end
-	office.fetching, office.failed = true, false
-	refreshOffice()
-	local actionRemote = remotes:WaitForChild("ShopAction", 10)
-	local list
+-- The chips: the stage shown is green, a stage not reached yet is darker
+table.insert(cards, function()
+	local shown = office.shown or stageNow()
+	local reached = stageNow()
+	for stage, chip in pairs(chips) do
+		local open = stage <= reached or stage == HIRE
+		chip.BackgroundColor3 = stage == shown and COLORS.buy or (open and COLORS.tab or COLORS.panel)
+		chip.TextColor3 = open and COLORS.text or COLORS.lock
+	end
+end)
+
+-- The Hire chip: the desks card
+local deskDesc, deskButton, deskParts = makeCard(hirePage, 200, "🪑", "A new desk", "HireDesk")
+deskButton.Activated:Connect(function()
+	officeRequest("BuyDesk")
+end)
+table.insert(cards, function()
+	deskParts.card.Visible = office.shown == HIRE
+	local state = office.state
+	if not state then
+		deskDesc.Text = "Loading your office..."
+		setButton(deskButton, "...", COLORS.disabled, false)
+		return
+	end
+	local nextDesk = OfficeConfig.Bought[state.desks + 1]
+	local line = string.format("Desks: %d (team %d). Every employee needs a desk.", state.capacity, state.team)
+	if not nextDesk or state.capacity >= OfficeConfig.MaxWorkstations then
+		deskDesc.Text = line .. " Every desk you can buy is bought (Extra Employee Slots and the Extra Desk perk add more for free)."
+		setButton(deskButton, "All bought", COLORS.owned, false)
+	elseif stageNow() < nextDesk.stage then
+		deskDesc.Text = line .. " The next desk: " .. OfficeConfig.unlockText(nextDesk.stage) .. "."
+		setButton(deskButton, "Locked", COLORS.disabled, false)
+	elseif office.busy then
+		deskDesc.Text = line
+		setButton(deskButton, "...", COLORS.disabled, false)
+	else
+		deskDesc.Text = line .. " A desk, a chair and a computer, kept after an IPO."
+		setButton(deskButton, OfficeConfig.money(nextDesk.price), cashNow() >= nextDesk.price and COLORS.buy or COLORS.disabled, true)
+	end
+end)
+
+-- Why eggs are better: one line over the hires
+local hireNote = make("TextLabel", {
+	Name = "HireNote",
+	LayoutOrder = 201,
+	BackgroundTransparency = 1,
+	Font = Enum.Font.Gotham,
+	Text = string.format("Hire someone you choose, no surprise. Eggs are the better deal: a hire here costs %dx what an egg pays on average for the same rarity.", OfficeConfig.HireFactor),
+	TextColor3 = COLORS.subtext,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = hirePage,
+})
+fitLabel(hireNote, 4)
+table.insert(cards, function()
+	hireNote.Visible = office.shown == HIRE
+end)
+
+-- One card per direct hire (the list is OfficeConfig's, the same the server checks)
+for i, offer in ipairs(OfficeConfig.hireList(CreatureConfig)) do
+	local creature = CreatureConfig.getCreature(offer.creature)
+	local egg = CreatureConfig.getEgg(offer.egg)
+	local desc, button, parts = makeCard(hirePage, 210 + i, creature.emoji or "👤", string.format("%s (%s)", creature.name, offer.rarity), "Hire" .. i)
+	button.Activated:Connect(function()
+		officeRequest("Hire", i)
+	end)
+	table.insert(cards, function()
+		parts.card.Visible = office.shown == HIRE
+		if not parts.card.Visible then return end
+		local team = OfficeConfig.Buildings[buildingNow()].team
+		desc.Text = string.format("%s, earns %s/s here. A %s gives a %s for about %s on average.", creature.role,
+			OfficeConfig.money(creature.income * team), egg and egg.name or "egg", offer.rarity, OfficeConfig.money(offer.eggAverage))
+		local state = office.state
+		if office.busy or not state then
+			setButton(button, "...", COLORS.disabled, false)
+		elseif state.team >= state.capacity then
+			setButton(button, "No free desk", COLORS.disabled, false)
+		else
+			setButton(button, OfficeConfig.money(offer.price), cashNow() >= offer.price and COLORS.buy or COLORS.disabled, true)
+		end
+	end)
+end
+
+-- Asks the server for the office (the building, the desks, the team); 5 tries, 2 s apart, on the first call
+fetchOfficeState = function()
+	if office.fetching then return end
+	office.fetching = true
+	office.actionRemote = office.actionRemote or remotes:WaitForChild("ShopAction", 10)
 	for _ = 1, 5 do
-		if not actionRemote then break end
+		if not office.actionRemote then break end
 		local ok, fine, result = pcall(function()
-			return actionRemote:InvokeServer("Upgrades")
+			return office.actionRemote:InvokeServer("Office")
 		end)
 		if ok and fine and typeof(result) == "table" then
-			list = result
+			office.state = result
 			break
 		end
 		task.wait(2)
 	end
 	office.fetching = false
-	if list then
-		office.list, office.actionRemote = list, actionRemote
-		for i, upg in ipairs(list) do
-			office.rungs[i] = makeRung(i, upg)
-		end
-	else
-		office.failed = true
-	end
 	refreshAll()
 end
 
--- A soft pulse on an affordable Buy, every 4 s while the Office shows (the main loop calls this every second)
+-- The Office tab opens on the stage reached; the office is asked again every time the shop opens
+local function onShopOpened()
+	office.shown = stageNow()
+	task.spawn(fetchOfficeState)
+end
+
+-- A soft pulse on the building's Buy when it can be bought (the main loop calls this every second)
 local pulseTicks = 0
+local buildingPulse = make("UIScale", { Name = "Pulse", Parent = buildingButton })
 local function pulseHero()
 	pulseTicks += 1
-	if pulseTicks % 4 ~= 0 or not office.list or not officePage.Visible then return end
-	local hero = ladderNow().hero
-	if hero and hero.action == "buy" then
-		TweenService:Create(office.rungs[hero.index].pulse, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, true), { Scale = 1.05 }):Play()
+	if pulseTicks % 4 ~= 0 or not officePage.Visible then return end
+	local shown = office.shown or stageNow()
+	local building = shown ~= HIRE and OfficeConfig.Buildings[shown]
+	if building and shown == buildingNow() + 1 and stageNow() >= shown and cashNow() >= building.price then
+		TweenService:Create(buildingPulse, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, true), { Scale = 1.05 }):Play()
 	end
 end
-
-summary.Activated:Connect(function()
-	office.unfolded = not office.unfolded
-	refreshAll()
+player:GetAttributeChangedSignal("Garage"):Connect(function()
+	task.spawn(fetchOfficeState)
 end)
-retryButton.Activated:Connect(function()
-	fetchOffice()
-end)
-table.insert(cards, refreshOffice)
-table.insert(layoutHooks, refreshOffice)
-task.spawn(fetchOffice)
 
 -- Studio-only Debug tab: pretend to own passes and push fake receipts through the real server code
 if debugRemote then
@@ -1536,6 +1353,7 @@ local function setOpen(open)
 	-- Hide the phone joystick and jump button while a window is open, so they don't cover buttons
 	GuiService.TouchControlsEnabled = playerGui:GetAttribute("OpenPanel") == nil
 	if open then
+		onShopOpened() -- the Office tab on the stage reached, the office asked again (overhaul 2)
 		if toast.Visible then
 			-- a message that is still up moves into the window (the pop-up would cover it)
 			toastToken += 1

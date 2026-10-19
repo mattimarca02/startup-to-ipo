@@ -44,7 +44,7 @@ local NOT_YET = Enum.ProductPurchaseDecision.NotProcessedYet
 
 local ShopServer = {}
 
-local core -- { getData, save, updateIncome, addEarnings, buyUpgrade, upgradeList, claimedAt }, given by TycoonCore
+local core -- { getData, save, updateIncome, addEarnings, buyUpgrade, upgradeList, officeState, buyBuilding, buyDesk, hireDirect, claimedAt }, given by TycoonCore
 local notifyEvent
 local lastDebugReceipt = {} -- player -> { product, purchaseId } (Studio debug only)
 local extraDebugActions = {} -- name -> function(player, data, arg), added by other systems
@@ -548,7 +548,7 @@ local function applyProduct(player, data, product)
 	if effect.incomeMinutes then
 		local amount = ShopConfig.cashPackAmount(product, data.income.Value)
 		data.cash.Value += amount
-		core.addEarnings(player, amount) -- Cash packs count toward the valuation (IPO)
+		core.addEarnings(player, amount, "gift") -- overhaul 2: a Cash pack counts only a share toward the valuation (OfficeConfig.GiftValuationShare)
 		table.insert(gained, "+" .. ShopConfig.formatCash(amount))
 	end
 	if effect.luckMinutes and shop.randomRestricted then
@@ -713,20 +713,34 @@ end
 
 -- SHOPACTION-START
 -- (tools/daily_test.py runs the code between the SHOPACTION markers, with a fake core.)
--- The one request of the Office tab. "Upgrades" lists the six (name, cost, income, icon: display only).
--- "BuyUpgrade" passes the upgrade's number to TycoonCore's buyUpgrade, which checks everything. Any
--- other argument the client sends (a price, an amount) is never read: only the action and the number.
+-- The one request of the Office and Hire tabs. "Upgrades" lists the catalog (name, cost, income, icon: display only),
+-- "Office" the player's office as the server has it (overhaul 2). "BuyUpgrade" passes the item's number to TycoonCore's
+-- buyUpgrade, "Hire" the hire's number to hireDirect; "BuyBuilding" and "BuyDesk" send nothing but the request. Each
+-- checks everything. Any other argument the client sends (a price, an amount) is never read: only the action and the number.
 local function handleShopAction(player, action, id)
 	if typeof(action) ~= "string" then
 		return false, "Bad request"
 	end
 	if action == "Upgrades" then
 		return true, core.upgradeList()
-	elseif action == "BuyUpgrade" then
+	elseif action == "Office" then
+		local state = core.officeState and core.officeState(player)
+		if not state then
+			return false, "Still loading, try again in a moment"
+		end
+		return true, state
+	elseif action == "BuyUpgrade" or action == "Hire" then
 		if typeof(id) ~= "number" then
 			return false, "Bad request"
 		end
+		if action == "Hire" then
+			return core.hireDirect(player, id)
+		end
 		return core.buyUpgrade(player, id)
+	elseif action == "BuyBuilding" then
+		return core.buyBuilding(player)
+	elseif action == "BuyDesk" then
+		return core.buyDesk(player)
 	end
 	return false, "Unknown action"
 end

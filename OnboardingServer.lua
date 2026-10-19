@@ -21,6 +21,7 @@ local RunService = game:GetService("RunService")
 
 local OnboardingConfig = require(ReplicatedStorage:WaitForChild("OnboardingConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
+local CompanyServer = require(script.Parent:WaitForChild("CompanyServer")) -- the building bought (overhaul 2 goals)
 local CreatureConfig = require(ReplicatedStorage:WaitForChild("CreatureConfig")) -- the free egg's name, for the toast
 local TaskConfig = require(ReplicatedStorage:WaitForChild("TaskConfig")) -- the call goals: only while calls run
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
@@ -157,6 +158,8 @@ local function goalProgress(data, goal)
 		end
 	elseif goal.kind == "ipos" then
 		return data.ipo.count, goal.target
+	elseif goal.kind == "building" then
+		return CompanyServer.getBuilding(data), goal.target -- overhaul 2: the building bought this run
 	elseif goal.kind == "calls" or goal.kind == "chain" then
 		-- Only while calls run for real (Studio only until the economy core): a goal nobody can reach is skipped
 		local tasks = data.tasks

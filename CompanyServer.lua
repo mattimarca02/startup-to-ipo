@@ -14,11 +14,18 @@
 --   "Sync"                 -> the office as the server has it (to draw it, and to preview a placement with CompanyConfig)
 -- It sends no price, amount, building number or sector. The server checks everything (ready, rate, types, ownership,
 -- inside the building, reserved zones, overlap, limits) with CompanyConfig.checkPlacement and refuses anything else.
+--
+-- Overhaul 2 (docs/OVERHAUL2_PLAN.md): `active.building` is the building the player BOUGHT this run (1 Garage ... 6 HQ
+-- Tower; TycoonCore's buyBuilding is the only buyer, through setBuilding). An IPO by this version puts it back to 1.
+-- The first load under overhaul 2 (no `active.o2` yet) gives a save from before it the building its old stage showed
+-- (OfficeConfig.legacyStage), never less than it has, and writes `o2 = 1` (an unknown field to older loaders, which
+-- keep it). It still never touches Cash, Income or the valuation.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CompanyConfig = require(ReplicatedStorage:WaitForChild("CompanyConfig"))
+local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- the buildings (overhaul 2)
 
 local CompanyServer = {}
 
@@ -116,7 +123,8 @@ end
 
 -- Called right after the player's save loads, after OnboardingServer and before TaskServer (IpoServer ran earlier,
 -- so data.ipo.count is there for the run check). savedPokedex is the "pokedex" part of the save, or nil (every save
--- from before this version, and new players): a new founding. Nothing is granted or changed here. A bad section is
+-- from before this version, and new players): a new founding. Nothing is granted or changed here except overhaul 2's
+-- one-time building move (below). A bad section is
 -- repaired with a warning; one this version can't read is kept as it was (state.locked) and writes nothing new.
 function CompanyServer.setupPlayer(player, data, savedPokedex)
 	local ctx = {
@@ -133,6 +141,43 @@ function CompanyServer.setupPlayer(player, data, savedPokedex)
 	end
 	state.bucket = CompanyConfig.newBucket(os.clock()) -- the request limit (not saved)
 	data.pokedex = state
+	-- Overhaul 2's one-time move (docs/OVERHAUL2_PLAN.md 1.3): the building the old stage showed is kept as bought
+	local active = not state.locked and typeof(state.section) == "table" and state.section.active
+	if typeof(active) == "table" and active.o2 == nil then
+		local ipo = data.ipo
+		local old = OfficeConfig.legacyStage(ipo and ipo.valuation or 0, ipo and ipo.count or 0)
+		local have = typeof(active.building) == "number" and active.building or 1
+		active.building = math.clamp(math.max(have, old), 1, #OfficeConfig.Buildings)
+		active.o2 = 1
+		if old > 1 then
+			print(player.Name .. " keeps the " .. OfficeConfig.Buildings[active.building].name .. " their old stage showed (overhaul 2)")
+		end
+	end
+end
+
+-- The building bought this run (1 = the Garage). A locked section shows the number it was saved with, never changed.
+function CompanyServer.getBuilding(data)
+	local state = data and data.pokedex
+	if not state then return 1 end
+	local active
+	if state.locked then
+		active = typeof(state.raw) == "table" and state.raw.active
+	else
+		active = typeof(state.section) == "table" and state.section.active
+	end
+	local n = typeof(active) == "table" and active.building
+	if typeof(n) ~= "number" or n ~= n then return 1 end
+	return math.clamp(math.floor(n), 1, #OfficeConfig.Buildings)
+end
+
+-- TycoonCore's buyBuilding (it checked the stage and took the Cash): the new building. False for a locked section.
+function CompanyServer.setBuilding(data, n)
+	local state = data and data.pokedex
+	if not state or state.locked or typeof(state.section) ~= "table" or typeof(state.section.active) ~= "table" then
+		return false
+	end
+	state.section.active.building = n
+	return true
 end
 
 -- The part of the save file that belongs to the Pokedex (nil only for a section that failed to load and never existed)
@@ -153,12 +198,18 @@ function CompanyServer.writeIpoRun(data, payload, count)
 	local state = data and data.pokedex
 	if state == nil or state.locked or typeof(payload) ~= "table" or typeof(payload.pokedex) ~= "table" then return end
 	payload.pokedex.run = count
+	if typeof(payload.pokedex.active) == "table" then
+		payload.pokedex.active.building = 1 -- overhaul 2: a new run starts in the Garage
+	end
 end
 
 function CompanyServer.onIpo(data, count)
 	local state = data and data.pokedex
 	if state == nil or state.locked or typeof(state.section) ~= "table" then return end
 	state.section.run = count
+	if typeof(state.section.active) == "table" then
+		state.section.active.building = 1 -- overhaul 2: a new run starts in the Garage
+	end
 end
 
 -- True while this session must not change the company: the section is from a newer version (or its sector is), or

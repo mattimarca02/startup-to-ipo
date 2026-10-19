@@ -39,6 +39,7 @@ OnboardingConfig.TrackerAfterEmployees = 1
 --               (TaskConfig.isActive: Studio only until the economy core); otherwise skipped, never blocking.
 -- kind "chain": answer `target` calls in a row (TaskServer's saved best chain). Same rule as "calls".
 -- kind "ipos": go public `target` times.
+-- kind "building": own building number `target` on your current run (overhaul 2: bought in SHOP > Office, 2 = Small Office).
 -- A goal this version can't check is skipped: it is never shown and never blocks the tracker.
 
 -- The two goals the tracker showed from milestone 5 until the chain went on (overhaul phase 4). Kept as the
@@ -55,15 +56,20 @@ OnboardingConfig.Goals = {
 -- The order is the order of play: the first upgrades and hires, the Server Rack, then each funding round, then the IPO.
 OnboardingConfig.Chain = {
 	{ key = "Calls3", icon = "📞", text = "Answer 3 calls", kind = "calls", target = 3, why = "A customer call pays a few seconds of income" },
-	{ key = "Own3", icon = "🛒", text = "Own 3 upgrades", kind = "upgrades", target = 3, why = "SHOP > Office: each upgrade raises your income" },
-	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3, why = "EGGS: every hire earns for you, even while you're away" },
+	{ key = "Own3", icon = "🛒", text = "Own 3 office items", kind = "upgrades", target = 3, why = "SHOP > Office: items raise your income or make an activity pay more" },
+	{ key = "Hire3", icon = "👥", text = "Hire 3 employees", kind = "employees", target = 3, why = "EGGS: every hire earns for you. Each needs a desk: SHOP > Hire" },
 	{ key = "Calls10Row", icon = "🔥", text = "Answer 10 calls in a row", kind = "chain", target = 10, why = "A chain of calls pays up to double" },
-	{ key = "ServerRack", icon = "🗄️", text = "Buy the Server Rack", kind = "owns", upgrade = "Server Rack", why = "SHOP > Office: +$15 a second" },
-	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed", why = "Your first funding round: the garage becomes a Small Office" },
+	{ key = "ServerRack", icon = "🗄️", text = "Buy the Server Rack", kind = "owns", upgrade = "Server Rack", why = "SHOP > Office: your first servers, and production bugs to fix" },
+	{ key = "Seed", icon = "🌱", text = "Reach Seed stage", kind = "stage", stage = "Seed", why = "Your first funding round: the Small Office unlocks in SHOP > Office" },
+	{ key = "SmallOffice", icon = "🏢", text = "Move into the Small Office", kind = "building", target = 2, why = "SHOP > Office: a real office doubles what your items earn" },
 	{ key = "Hire5", icon = "👥", text = "Hire 5 employees", kind = "employees", target = 5, why = "A full team: more income every second" },
-	{ key = "SeriesA", icon = "💼", text = "Reach Series A", kind = "stage", stage = "SeriesA", why = "The next round: a two-story Big Office" },
-	{ key = "SeriesB", icon = "🚀", text = "Reach Series B", kind = "stage", stage = "SeriesB", why = "The next round: a glass tower" },
-	{ key = "IpoReady", icon = "🔔", text = "Reach IPO-ready", kind = "stage", stage = "IpoReady", why = "The last round: then you can go public" },
+	{ key = "SeriesA", icon = "💼", text = "Reach Series A", kind = "stage", stage = "SeriesA", why = "The next round unlocks the Big Office and 11 new items" },
+	{ key = "BigOffice", icon = "🏬", text = "Move into the Big Office", kind = "building", target = 3, why = "SHOP > Office: two stories, and your team earns far more" },
+	{ key = "SeriesB", icon = "🚀", text = "Reach Series B", kind = "stage", stage = "SeriesB", why = "The next round unlocks a glass tower" },
+	{ key = "SmallCorporate", icon = "🏙️", text = "Move into the Small Corporate", kind = "building", target = 4, why = "SHOP > Office: four stories of blue glass" },
+	{ key = "SeriesC", icon = "🏙️", text = "Reach Series C", kind = "stage", stage = "SeriesC", why = "The next round unlocks the Big Corporate" },
+	{ key = "BigCorporate", icon = "🏦", text = "Move into the Big Corporate", kind = "building", target = 5, why = "SHOP > Office: a tower on a marble podium" },
+	{ key = "IpoReady", icon = "🔔", text = "Reach IPO-ready", kind = "stage", stage = "IpoReady", why = "The last round: the HQ Tower unlocks, and you can go public" },
 	{ key = "FirstIpo", icon = "🔔", text = "Go public (your first IPO)", kind = "ipos", target = 1, why = "IPO: you start again stronger, with x1.5 income and Shares for permanent perks" },
 }
 
@@ -105,7 +111,7 @@ OnboardingConfig.Arrow = {
 
 -- Warn early about mistakes that would break the first minute
 do
-	local KINDS = { employees = true, stage = true, upgrades = true, owns = true, calls = true, chain = true, ipos = true }
+	local KINDS = { employees = true, stage = true, upgrades = true, owns = true, calls = true, chain = true, ipos = true, building = true }
 	local byKey = {}
 	for _, list in ipairs({ OnboardingConfig.Goals, OnboardingConfig.Chain }) do
 		local seen = {}

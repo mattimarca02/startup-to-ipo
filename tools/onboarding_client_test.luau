@@ -203,14 +203,14 @@ do -- the chain on: 8 goals, 2 rows; the server says which
 	goal(W, "Calls3", nil, nil, false)
 	set(W, "OnboardingTracker", true)
 	local t = rowTexts(W)
-	check("chain: the card draws the goals the server shows (Own 3 upgrades, Hire 3 employees), in list order",
-		hasText(t[1], "Own 3 upgrades") and hasText(t[2], "Hire 3 employees"), dump(t))
+	check("chain: the card draws the goals the server shows (Own 3 office items, Hire 3 employees), in list order",
+		hasText(t[1], "Own 3 office items") and hasText(t[2], "Hire 3 employees"), dump(t))
 	check("chain: a goal the server does not show is not drawn (Answer 3 calls, Reach Seed stage)",
 		not hasText(dump(t), "Answer 3 calls") and not hasText(dump(t), "Reach Seed stage"), dump(t))
 	-- Own3 finished: the server keeps it shown with its tick for a moment
 	goal(W, "Own3", 3, 3, true)
 	t = rowTexts(W)
-	check("chain: a shown goal just finished keeps its row, with a tick", hasText(t[1], "✅") and hasText(t[1], "Own 3 upgrades"), dump(t))
+	check("chain: a shown goal just finished keeps its row, with a tick", hasText(t[1], "✅") and hasText(t[1], "Own 3 office items"), dump(t))
 	-- Then the server moves on: Own3 hidden, ServerRack shown after Hire3
 	goal(W, "Own3", 3, 3, false)
 	goal(W, "ServerRack", 0, 1, true)
@@ -232,7 +232,7 @@ do -- more goals marked shown than rows: the first ones in list order, never a t
 	goal(W, "Hire3", 0, 3, true)
 	set(W, "OnboardingTracker", true)
 	local t, n = rowTexts(W)
-	check("chain: three goals marked shown still draw 2 rows, the first two of the list", n == 2 and hasText(t[1], "Answer 3 calls") and hasText(t[2], "Own 3 upgrades"), dump(t))
+	check("chain: three goals marked shown still draw 2 rows, the first two of the list", n == 2 and hasText(t[1], "Answer 3 calls") and hasText(t[2], "Own 3 office items"), dump(t))
 	ranClean(W, "too many shown")
 end
 

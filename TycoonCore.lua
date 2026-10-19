@@ -44,6 +44,7 @@ end
 
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig"))
 local LobbyConfig = require(ReplicatedStorage:WaitForChild("LobbyConfig")) -- the garages, the plaza and the claim (ClaimEnabled)
+local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- the office catalog, buildings, desks, hires (overhaul 2)
 local ShopServer = require(script.Parent:WaitForChild("ShopServer"))
 local IpoServer = require(script.Parent:WaitForChild("IpoServer"))
 local EmployeeServer = require(script.Parent:WaitForChild("EmployeeServer"))
@@ -63,16 +64,26 @@ if not (visualsOk and artOk) then
 	PlotVisuals, PlotArt = nil, nil
 end
 
--- Upgrades are bought in this order, in the shop's Office tab (ShopClient). cost = Cash, income = Cash per second.
--- icon is only for that tab.
-local UPGRADES = {
-	{ name = "Desk",           cost = 0,    income = 1,   color = Color3.fromRGB(160, 110, 60),  size = Vector3.new(6, 3, 4),  icon = "🪑" },
-	{ name = "Coffee Machine", cost = 25,   income = 2,   color = Color3.fromRGB(60, 60, 60),    size = Vector3.new(2, 4, 2),  icon = "☕" },
-	{ name = "Laptop",         cost = 100,  income = 5,   color = Color3.fromRGB(200, 200, 210), size = Vector3.new(3, 1, 2),  icon = "💻" },
-	{ name = "Server Rack",    cost = 400,  income = 15,  color = Color3.fromRGB(30, 30, 40),    size = Vector3.new(4, 8, 3),  icon = "🗄️" },
-	{ name = "Whiteboard",     cost = 1500, income = 40,  color = Color3.fromRGB(245, 245, 245), size = Vector3.new(8, 5, 1),  icon = "📋" },
-	{ name = "Neon Logo",      cost = 5000, income = 120, color = Color3.fromRGB(0, 170, 255),   size = Vector3.new(10, 4, 1), icon = "💡" },
+-- The office catalog (overhaul 2): OfficeConfig.Items, bought in the shop's Office tab (ShopClient), any order inside
+-- the funding stages reached (the Desk first). name = the key saved in `owned`, cost = Cash, income = Cash per second
+-- before the building's office multiplier, stage = the funding stage that unlocks it. Only the six old garage upgrades
+-- have a station prop (slot = their old station, itemOffset) and a plain block for when the plot visuals are off.
+local OLD_STATIONS = {
+	Desk =             { slot = 1, color = Color3.fromRGB(160, 110, 60),  size = Vector3.new(6, 3, 4) },
+	["Coffee Machine"] = { slot = 2, color = Color3.fromRGB(60, 60, 60),    size = Vector3.new(2, 4, 2) },
+	Laptop =           { slot = 3, color = Color3.fromRGB(200, 200, 210), size = Vector3.new(3, 1, 2) },
+	["Server Rack"] =  { slot = 4, color = Color3.fromRGB(30, 30, 40),    size = Vector3.new(4, 8, 3) },
+	Whiteboard =       { slot = 5, color = Color3.fromRGB(245, 245, 245), size = Vector3.new(8, 5, 1) },
+	["Neon Logo"] =    { slot = 6, color = Color3.fromRGB(0, 170, 255),   size = Vector3.new(10, 4, 1) },
 }
+local UPGRADES = {}
+for _, item in ipairs(OfficeConfig.Items) do
+	local station = OLD_STATIONS[item.key]
+	table.insert(UPGRADES, {
+		name = item.key, cost = item.price, income = item.income, icon = item.icon, stage = item.stage,
+		slot = station and station.slot, color = station and station.color, size = station and station.size,
+	})
+end
 
 local PLOT_SPACING = 90
 local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the garage sign that names the next upgrade (front of the plot)
@@ -95,9 +106,10 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true, office = true }
 
 local plotOwners = {} -- slot number -> player
+local syncDesks -- the office's workstations (set with the employees, below; buyDesk calls it first)
 local playerData = {} -- player -> { owned, items, slot, folder, sign, cash, income, shop, team, fixedHires, poach, ipo, onboarding, daily, tasks, pokedex, unknownSections, loaded, ready, saving }
 
 -- Helpers ---------------------------------------------------------------
@@ -166,14 +178,15 @@ local function itemOffset(i)
 	return Vector3.new(-23 + col * 46, 0, -10 + row * 12)
 end
 
+-- The building bought this run (overhaul 2: CompanyServer keeps it in the pokedex; 1 = the Garage)
+local function buildingOf(data)
+	return CompanyServer.getBuilding(data)
+end
+
+-- Overhaul 2: the items' income times the building's office multiplier, plus the employees' times its team multiplier
 local function totalIncome(data)
-	local sum = 0
-	for _, upg in ipairs(UPGRADES) do
-		if data.owned[upg.name] then
-			sum += upg.income
-		end
-	end
-	return sum + EmployeeServer.getIncome(data) -- creature employees earn too
+	local building = OfficeConfig.building(buildingOf(data))
+	return OfficeConfig.itemIncome(data.owned) * building.office + EmployeeServer.getIncome(data) * building.team -- creature employees earn too
 end
 
 -- The Income on the leaderboard already includes game pass bonuses (2x Cash, VIP) and the IPO multiplier
@@ -181,15 +194,23 @@ local function updateIncome(player)
 	local data = playerData[player]
 	if not data then return end
 	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player))
+	local building, number = OfficeConfig.building(buildingOf(data))
+	player:SetAttribute("Building", number) -- overhaul 2: for display only (the shop, the Team window); nothing reads it back
+	player:SetAttribute("TeamMultiplier", building.team)
 end
 
+-- The cheapest item the player can buy at their stage (the Desk first), or nil when none is left there
 local function nextUpgrade(data)
+	local stage = data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
+	local best, bestIndex
 	for i, upg in ipairs(UPGRADES) do
-		if not data.owned[upg.name] then
-			return i, upg
+		if not data.owned[upg.name] and upg.stage <= stage and (data.owned[OfficeConfig.FirstItem] or upg.name == OfficeConfig.FirstItem) then
+			if not best or upg.cost < best.cost then
+				best, bestIndex = upg, i
+			end
 		end
 	end
-	return nil
+	return bestIndex, best
 end
 
 -- Plot looks: a failing look is warned about and skipped, never allowed to stop loading, a
@@ -204,7 +225,7 @@ local function looks(what, fn, ...)
 	return result
 end
 
--- The funding stage decides the room (the same rule as the IPO pad's sign)
+-- The funding stage the valuation reached (what can be unlocked; overhaul 2: the room follows the building bought)
 local function stageOf(data)
 	return data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
 end
@@ -419,17 +440,16 @@ if LobbyConfig.ClaimEnabled then
 	end
 end
 
--- A funding round reached (overhaul phase 2): one pop-up that says what just happened and what the player sees now
--- ("Seed reached! Your Garage becomes a Small Office"). Looks only; the client's own look at the facade is BuildingClient's.
-local function stageUpToast(data, from, to)
+-- A funding round reached (overhaul 2): one pop-up that says what it unlocked ("Seed reached! The Small Office and 11
+-- new items are in SHOP > Office"). The building is the player's choice: buying it is buyBuilding's moment.
+local function stageUpToast(data, to)
 	local player = data.player
 	local stage = IpoConfig.Stages[to]
 	if not (player and stage and player.Parent) then return end
-	local was = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(from)] and PlotBuilding.Stages[PlotBuilding.shownStage(from)].name
-	local now = PlotBuilding and PlotBuilding.Stages[PlotBuilding.shownStage(to)] and PlotBuilding.Stages[PlotBuilding.shownStage(to)].name
 	local text = string.format("%s %s reached!", stage.icon or "", stage.name)
-	if was and now and was ~= now then
-		text ..= string.format(" Your %s becomes a %s", was, now)
+	local building = OfficeConfig.Buildings[to]
+	if building and buildingOf(data) < to then
+		text ..= string.format(" The %s is in SHOP > Office", building.name)
 	end
 	if to == #IpoConfig.Stages then
 		text ..= " · tap IPO to go public"
@@ -437,23 +457,27 @@ local function stageUpToast(data, from, to)
 	ShopServer.notify(player, text)
 end
 
--- Runs every second (income loop): a new funding stage, or back to the Garage after an IPO,
--- swaps the room with a quick flash (the bought props move along) and the building around it.
--- data.debugStage is the Studio Debug button's (in memory only, never saved): it only changes what is shown.
+-- Runs every second (income loop) and after a building is bought: the room and the building follow the building owned
+-- (overhaul 2; never the valuation by itself), with a quick flash (the bought props move along). A funding stage
+-- reached says so once (stageUpToast). data.debugStage is the Studio Debug button's (in memory only, never saved).
 local function syncRoom(data)
-	local stage = data.debugStage or stageOf(data)
+	local reached = stageOf(data)
+	if data.stageSeen and reached > data.stageSeen then
+		stageUpToast(data, reached) -- a round reached, never the Garage after an IPO
+	end
+	data.stageSeen = reached
+	local stage = data.debugStage or buildingOf(data)
 	if data.looks and data.looks.stage ~= stage then
-		local from = data.looks.stage
 		looks("stage", PlotVisuals.setStage, data.looks, stage, true)
-		if type(from) == "number" and stage > from then
-			stageUpToast(data, from, stage) -- a round reached, never the Garage after an IPO
-		end
 	end
 	syncBuilding(data.slot, stage)
 end
 
--- An upgrade shows its prop from PlotArt in its slot (popIn on a purchase); without one, the plain block
+-- An upgrade shows its prop from PlotArt in its station (popIn on a purchase); without one, the plain block. Overhaul 2:
+-- only the six old upgrades have a station (upg.slot); the other catalog items are placed by phase 2's office layout.
 local function spawnItem(data, i, upg, popIn)
+	if not upg.slot then return end
+	i = upg.slot
 	local prop = data.looks and looks("prop " .. upg.name, PlotVisuals.addProp, data.looks, upg.name, itemOffset(i), popIn)
 	if prop then
 		data.items[upg.name] = prop
@@ -495,43 +519,43 @@ local function refreshSign(player)
 	post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
 	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
 	board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
-	addLabel(board, string.format("Next: %s  $%d\nBuy it in SHOP > Office", upg.name, upg.cost), 3)
+	addLabel(board, string.format("Next: %s  %s\nBuy it in SHOP > Office", upg.name, OfficeConfig.money(upg.cost)), 3)
 	data.sign = post
 end
 
--- Buying an upgrade: the shop's Office tab asks, only with the upgrade's number. The server decides
--- everything (ready, number, owned, order, Cash, rate). The price is always UPGRADES', never the client's.
+-- Buying an item of the office catalog: the shop's Office tab asks, only with the item's number. The server decides
+-- everything (ready, number, owned, the Desk first, the funding stage, Cash, rate: OfficeConfig.checkItem). The price is
+-- always OfficeConfig's, never the client's. Overhaul 2: any order inside the stages reached (was: the six in order).
 -- BUYUPGRADE-START
 -- (tools/daily_test.py runs the code between the BUYUPGRADE markers, with fakes for the Roblox parts.)
 local BUY_MIN_INTERVAL = 0.4 -- seconds between two requests from one player (spam is refused, not queued)
 
--- Returns the index of the upgrade the player may buy now, or nil and the reason (shown to them).
+-- The request rate and data.ready, shared by every office purchase (items, the building, desks, hires).
 -- Stamps data.lastBuyAt on every request it looks at, so a spammed button is only looked at once per interval.
-local function checkUpgradePurchase(upgrades, data, cash, id, now)
+local function checkBuyRequest(data, now)
 	if not data.ready then
 		return nil, "Still loading, try again in a moment" -- loading, or an IPO is being saved
-	end
-	if typeof(id) ~= "number" or id ~= id or id % 1 ~= 0 or id < 1 or id > #upgrades then
-		return nil, "Unknown upgrade"
 	end
 	if data.lastBuyAt and now - data.lastBuyAt < BUY_MIN_INTERVAL then
 		return nil, "Too fast"
 	end
 	data.lastBuyAt = now
-	local upg = upgrades[id]
-	if data.owned[upg.name] then
-		return nil, upg.name .. " is already yours"
+	return true
+end
+
+-- Returns the index of the item the player may buy now, or nil and the reason (shown to them)
+local function checkUpgradePurchase(upgrades, data, cash, id, now)
+	if typeof(id) ~= "number" or id ~= id or id % 1 ~= 0 or id < 1 or id > #upgrades then
+		return nil, "Unknown upgrade"
 	end
-	for i, earlier in ipairs(upgrades) do
-		if not data.owned[earlier.name] then
-			if i ~= id then
-				return nil, "Buy " .. earlier.name .. " first"
-			end
-			break
-		end
+	local ok, reason = checkBuyRequest(data, now)
+	if not ok then
+		return nil, reason
 	end
-	if cash < upg.cost then
-		return nil, "You need $" .. upg.cost .. " for " .. upg.name
+	local stage = data.ipo and IpoConfig.stageIndex(data.ipo.valuation, data.ipo.count) or 1
+	local item, refusal = OfficeConfig.checkItem(id, stage, data.owned, cash)
+	if not item then
+		return nil, refusal
 	end
 	return id
 end
@@ -555,6 +579,67 @@ local function buyUpgrade(player, id)
 end
 -- BUYUPGRADE-END
 
+-- The next building (overhaul 2): unlocked by its funding stage, bought here, never given. The client sends nothing but
+-- the request; the price and the number are OfficeConfig's. The room and the building change at once (syncRoom), and
+-- BuildingClient gives the owner the look at the new facade.
+local function buyBuilding(player)
+	local data = playerData[player]
+	if not data then
+		return false, "Still loading, try again in a moment"
+	end
+	local ok, reason = checkBuyRequest(data, os.clock())
+	if not ok then
+		return false, reason
+	end
+	if CompanyServer.isLocked(data) then
+		return false, "Your office was saved by a newer version of the game: it can't change here"
+	end
+	local from = buildingOf(data)
+	local building, n = OfficeConfig.checkBuilding(from, stageOf(data), data.cash.Value)
+	if not building then
+		return false, n
+	end
+	data.cash.Value -= building.price
+	CompanyServer.setBuilding(data, n)
+	updateIncome(player)
+	syncRoom(data)
+	return true, string.format("Your %s becomes a %s!", OfficeConfig.Buildings[from].name, building.name)
+end
+
+-- The next workstation (overhaul 2): a desk, a chair and a computer at the next hire spot, kept through an IPO
+local function buyDesk(player)
+	local data = playerData[player]
+	if not (data and data.office) then
+		return false, "Still loading, try again in a moment"
+	end
+	local ok, reason = checkBuyRequest(data, os.clock())
+	if not ok then
+		return false, reason
+	end
+	local desk, refusal = OfficeConfig.checkDesk(data.office.desks, stageOf(data), data.cash.Value, EmployeeServer.capacity(player))
+	if not desk then
+		return false, refusal
+	end
+	data.cash.Value -= desk.price
+	data.office.desks += 1
+	EmployeeServer.refreshCapacity(player)
+	syncDesks(data, true)
+	return true, "New desk: room for one more employee"
+end
+
+-- A direct hire from the Hire tab (EmployeeServer checks the workstation, the price and Cash)
+local function hireDirect(player, index)
+	local data = playerData[player]
+	if not data then
+		return false, "Still loading, try again in a moment"
+	end
+	local ok, reason = checkBuyRequest(data, os.clock())
+	if not ok then
+		return false, reason
+	end
+	return EmployeeServer.hireDirect(player, index)
+end
+
 -- What the Office tab shows (it never sends a price: only the number)
 local function upgradeList()
 	local list = {}
@@ -562,6 +647,32 @@ local function upgradeList()
 		table.insert(list, { name = upg.name, cost = upg.cost, income = upg.income, icon = upg.icon })
 	end
 	return list
+end
+
+-- Everything the Office and Hire tabs draw (overhaul 2), as the server has it: the stage reached, the building owned,
+-- what is owned, the desks and the hires. Display only: every purchase is checked again on its own request.
+local function officeState(player)
+	local data = playerData[player]
+	if not (data and data.ready and data.office) then
+		return nil
+	end
+	local owned = {}
+	for i, upg in ipairs(UPGRADES) do
+		owned[i] = data.owned[upg.name] == true
+	end
+	local hires = {}
+	for _, offer in ipairs(EmployeeServer.hireList()) do
+		table.insert(hires, { creature = offer.creature, rarity = offer.rarity, price = offer.price, eggAverage = offer.eggAverage, egg = offer.egg })
+	end
+	return {
+		stage = stageOf(data),
+		building = buildingOf(data),
+		owned = owned,
+		desks = data.office.desks,
+		capacity = EmployeeServer.capacity(player),
+		team = data.team and #data.team.employees or 0,
+		hires = hires,
+	}
 end
 
 -- Saving and loading ----------------------------------------------------
@@ -673,6 +784,19 @@ local function peekSave(userId)
 	return result, true
 end
 
+-- The `office` section as it is saved (overhaul 2): its fields, and the unknown ones it was loaded with, at the same level
+local function officeToSave(data)
+	local office = data.office
+	if not office then return nil end
+	local out = { v = office.v, desks = office.desks }
+	for key, value in pairs(office.extra or {}) do
+		if out[key] == nil then
+			out[key] = value
+		end
+	end
+	return out
+end
+
 -- BUILDSAVE-START
 -- (tools/daily_test.py runs the code between the BUILDSAVE markers, so keep it free of Roblox calls except warn.)
 -- Builds the payload save() writes, inside a pcall. If a module's serialize or the IPO transform throws,
@@ -696,6 +820,7 @@ local function buildPayload(data, transform, playerName)
 			onboarding = OnboardingServer.serialize(data),
 			daily = DailyServer.serialize(data),
 			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep: Studio only in PR 1
+			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
 			pokedex = CompanyServer.serialize(data), -- the company, its sector and the Pokedex (a locked newer section is written back as it was)
 			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
 		}
@@ -748,7 +873,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex and data.office) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -868,15 +993,19 @@ local function commitIpo(player, newIpo)
 end
 -- COMMITIPO-END
 
--- Cash the startup earned (not refunds or gifts): raises the valuation
-local function addEarnings(player, amount)
+-- Cash the startup earned (not refunds or gifts): raises the valuation. kind "gift" (a Cash pack) and the join load's
+-- offline pay count only OfficeConfig.GiftValuationShare of it (overhaul 2: Cash is paid in full, but a long absence
+-- or a purchase can't skip a funding stage).
+local function addEarnings(player, amount, kind)
 	local data = playerData[player]
+	local gift = kind == "gift"
 	if data and not data.ready then
 		-- Before data.ready the only earnings are the join load's offline pay: noted for the welcome-back
 		-- pop-up (welcomeBack), in memory only, never saved
 		data.offlineEarned = (data.offlineEarned or 0) + amount
+		gift = true
 	end
-	IpoServer.addEarnings(player, amount)
+	IpoServer.addEarnings(player, gift and amount * OfficeConfig.GiftValuationShare or amount)
 end
 
 -- "3h 12m", "45m" (whole minutes, for the welcome-back pop-up)
@@ -945,6 +1074,10 @@ ShopServer.init({
 	addEarnings = addEarnings,
 	buyUpgrade = buyUpgrade, -- the Office tab
 	upgradeList = upgradeList,
+	officeState = officeState, -- overhaul 2: the Office and Hire tabs
+	buyBuilding = buyBuilding,
+	buyDesk = buyDesk,
+	hireDirect = hireDirect,
 	claimedAt = function(player) -- when they claimed their garage (nil: not yet): a Robux receipt waits for the save from then
 		return claimedAt[player]
 	end,
@@ -961,11 +1094,11 @@ end
 
 -- Eggs and employees (milestone 2) --------------------------------------
 
--- The office grows with the team (overhaul phase 3): a desk for each hire and a see-through one at the next spot,
--- derived from the team's size every time it changes (looks only, never saved; nothing before the room exists)
-local function syncDesks(data, popIn)
-	if data.looks and data.team then
-		looks("desks", PlotVisuals.setDesks, data.looks, #data.team.employees, popIn)
+-- The office's workstations (overhaul 2): a desk at each workstation the player has (the free one, the ones bought, the
+-- pass's and the perk's) and a see-through one at the next spot; looks only, nothing before the room exists
+syncDesks = function(data, popIn)
+	if data.looks and data.team and data.player then
+		looks("desks", PlotVisuals.setDesks, data.looks, EmployeeServer.capacity(data.player), popIn)
 	end
 end
 
@@ -979,6 +1112,12 @@ EmployeeServer.init({
 	onTeamChanged = function(data)
 		syncDesks(data, true)
 	end,
+	desksBought = function(data) -- overhaul 2: the desks bought (the old 5 base slots until the `office` section is read)
+		return data and data.office and data.office.desks or OfficeConfig.LegacyDesks
+	end,
+	hatchBonus = function(data) -- overhaul 2: the office items that make eggs hatch faster
+		return data and OfficeConfig.effect(data.owned, "hatch") or 0
+	end,
 })
 
 -- Poaching (milestone 3 poaching) ---------------------------------------
@@ -991,6 +1130,10 @@ PoachServer.init({
 	updateIncome = updateIncome,
 	plotCenter = plotCenter,
 	peekSave = peekSave,
+	teamMultiplier = function(player) -- overhaul 2: a poach costs what the employee earns at the attacker's building
+		local data = playerData[player]
+		return data and OfficeConfig.building(buildingOf(data)).team or 1
+	end,
 })
 
 -- First minute for new players (milestone 5) -----------------------------
@@ -1059,6 +1202,39 @@ local function teleportToPlot(character, slot)
 		pcall(player.RequestStreamAroundAsync, player, spawnPos) -- streaming: the garage is there before they land (lobby L4)
 	end
 	root.CFrame = CFrame.lookAt(spawnPos, signPos)
+end
+
+-- The `office` save section (overhaul 2, rule A10: a new top-level section, optional on load): the desks bought, kept
+-- through an IPO. A save from before overhaul 2 (no section) gets OfficeConfig.LegacyDesks, its old 5 base slots, so no
+-- team shrinks; a new player has none (1 free desk). Bad values get a safe default with a warning; unknown fields are
+-- kept and written back (extra). Runs right after the claim's load block, with no yield since data.loaded was set.
+local function setupOffice(player, data, saved)
+	local section = saved and saved.office
+	local office = { v = 1, desks = 0, extra = nil }
+	if saved ~= nil and section == nil then
+		office.desks = OfficeConfig.LegacyDesks
+	elseif typeof(section) == "table" then
+		local desks = section.desks
+		if typeof(desks) == "number" and desks == desks and desks >= 0 then
+			office.desks = math.clamp(math.floor(desks), 0, #OfficeConfig.Bought)
+		else
+			warn("Ignoring a bad desks value in " .. player.Name .. "'s office section: " .. tostring(desks))
+		end
+		if typeof(section.v) == "number" and section.v > office.v then
+			office.v = section.v -- a newer version wrote it: keep its number
+		end
+		for key, value in pairs(section) do
+			if key ~= "v" and key ~= "desks" and typeof(key) == "string" then
+				office.extra = office.extra or {}
+				office.extra[key] = value
+			end
+		end
+	elseif section ~= nil then
+		warn("Ignoring a bad office section in " .. player.Name .. "'s save: " .. tostring(section))
+		office.desks = OfficeConfig.LegacyDesks
+	end
+	data.office = office
+	EmployeeServer.refreshCapacity(player)
 end
 
 -- Moves a player into a garage: the claim (a prompt, or the server itself while ClaimEnabled is off). The caller asked
@@ -1194,7 +1370,10 @@ local function claimGarage(player, slot)
 	data.ready = true -- the shop waits for this before granting purchases
 	-- CLAIMLOAD-END
 
-	syncDesks(data, false) -- the desks of the team that loaded (the room above starts with none)
+	setupOffice(player, data, saved) -- overhaul 2: the desks bought (no yield since the block above: nothing saved yet)
+	data.stageSeen = stageOf(data) -- the stage this session started at: only a later round reached is told
+	syncRoom(data) -- the room and the building of the building owned
+	syncDesks(data, false) -- the workstations that loaded (the room above starts with none)
 	welcomeBack(player, data, lastSeen) -- what the offline pay above gave, said once
 	setGarageState(slot, "Taken", player.DisplayName)
 	player.CharacterAdded:Connect(function(character)

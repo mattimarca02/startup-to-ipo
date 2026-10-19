@@ -2,7 +2,8 @@
 -- Put this ModuleScript in ServerScriptService, next to PlotVisuals (which builds it) and TycoonCore
 -- (which decides when). Data only: built-in Parts and materials, no assets, nothing random.
 --
--- Stages[i] is the room for IpoConfig.Stages[i] (same key): add a funding stage, add a room here.
+-- Stages[i] is the room for IpoConfig.Stages[i] (same key): add a funding stage, add a room here. Overhaul 2: six rooms;
+-- the room shown follows the building bought (TycoonCore buildingOf), building n = room n.
 -- Props[upgrade name] is the prop that stands in that upgrade's slot once it's bought (the names
 -- are TycoonCore's UPGRADES names: they are saved, never rename them).
 --
@@ -857,7 +858,21 @@ ipoReady.desk = {
 	B("Keyboard", 0, 2.03, 0.4, 1.3, 0.06, 0.4, C.graphite, "SmoothPlastic"),
 }
 
-PlotArt.Stages = { garage, seed, seriesA, seriesB, ipoReady }
+-- Series C (overhaul 2: the sixth stage, between Series B and IPO-ready): the HQ room's layout in a warmer finish, a
+-- walnut plank floor under the same glass back wall, with the Big Corporate around it; the HQ Tower's room (IPO-ready)
+-- keeps its polished floor. A deep copy, so the two rooms never share a table.
+local function copyRoom(room)
+	local out = {}
+	for k, v in pairs(room) do
+		out[k] = type(v) == "table" and copyRoom(v) or v
+	end
+	return out
+end
+local seriesC = copyRoom(ipoReady)
+seriesC.key = "SeriesC"
+seriesC.floor = { color = { 122, 86, 58 }, material = "WoodPlanks" }
+
+PlotArt.Stages = { garage, seed, seriesA, seriesB, seriesC, ipoReady }
 
 -- Upgrade props ----------------------------------------------------------------
 -- Each stands in its upgrade's slot (offsets from the slot on the floor), facing the front. Every prop
