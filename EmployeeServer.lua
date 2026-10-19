@@ -317,6 +317,14 @@ local function refreshIncubator(data, index, now)
 	if egg then
 		parts.egg.Color = egg.color
 	end
+	if parts.band then -- the egg's pattern shows with the egg, in its colors
+		parts.band.Transparency = egg and 0 or 1
+		parts.band.Color = egg and egg.band or WHITE
+		for _, dot in ipairs(parts.spots) do
+			dot.Transparency = egg and 0 or 1
+			dot.Color = egg and egg.spots or WHITE
+		end
+	end
 	parts.prompt.Enabled = ready
 	parts.prompt.ObjectText = egg and egg.name or ""
 end
@@ -650,6 +658,19 @@ local function buildIncubator(player, data, i)
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
 	mesh.Parent = egg
+	-- overhaul 2 phase 4: the egg's pattern, a band round its middle and four spots, in the egg's colors (looks only)
+	local band = makePart(egg, "Band", Vector3.new(0.34, 2.46, 2.46), spot + Vector3.new(0, 3.1, 0), WHITE)
+	band.CFrame = CFrame.new(band.Position) * CFrame.Angles(0, 0, math.pi / 2)
+	band.Shape = Enum.PartType.Cylinder
+	local spots = {}
+	local turn = core.plotFrame(data.slot).Rotation -- the spots sit on the egg's side that faces the garage's front (+Z)
+	for s, at in ipairs({ Vector3.new(-0.55, 4.05, 1.0), Vector3.new(0.6, 3.65, 1.05), Vector3.new(0.05, 4.55, 0.8), Vector3.new(-0.35, 2.45, 1.05) }) do
+		spots[s] = makePart(egg, "Spot" .. s, Vector3.new(0.45, 0.45, 0.45), spot + turn * at, WHITE)
+		spots[s].Shape = Enum.PartType.Ball
+	end
+	for _, part in ipairs({ band, table.unpack(spots) }) do
+		part.CanCollide, part.CanTouch, part.CanQuery, part.CastShadow = false, false, false, false
+	end
 
 	local gui = Instance.new("BillboardGui")
 	gui.Size = UDim2.fromScale(7, 2.4) -- in studs, like the employee name tags
@@ -673,7 +694,7 @@ local function buildIncubator(player, data, i)
 		end
 	end)
 
-	team.incubatorParts[i] = { base = base, glow = glow, egg = egg, label = label, prompt = prompt }
+	team.incubatorParts[i] = { base = base, glow = glow, egg = egg, band = band, spots = spots, label = label, prompt = prompt }
 	refreshIncubator(data, i, os.time())
 end
 

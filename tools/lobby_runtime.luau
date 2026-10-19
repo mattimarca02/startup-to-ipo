@@ -59,6 +59,7 @@ end
 local function enum(names) local t = {} for _, n in ipairs(names) do t[n] = { Name = n } end return t end
 local Enum = { Material = enum({ "SmoothPlastic", "Metal", "Neon", "Plastic", "Marble", "Concrete", "Glass", "Fabric" }), SurfaceType = enum({ "Smooth" }),
 	Font = enum({ "GothamBold" }), NormalId = enum({ "Back", "Front" }), ModelStreamingMode = enum({ "Default", "Atomic", "Persistent" }),
+	SurfaceGuiSizingMode = enum({ "PixelsPerStud" }), -- overhaul 2 phase 5: the FREE board's SurfaceGuis
 	ProductPurchaseDecision = enum({ "PurchaseGranted", "NotProcessedYet" }) }
 local GRANTED, NOT_YET = Enum.ProductPurchaseDecision.PurchaseGranted, Enum.ProductPurchaseDecision.NotProcessedYet
 local Color3 = { fromRGB = function(r, g, b) return { r, g, b } end, new = function(r, g, b) return { r, g, b } end }
@@ -138,7 +139,7 @@ local function newWorld(opts)
 		if class == "Part" then o._props.CFrame = cf(0, 0, 0) o._props.Transparency = 0 o._props.CanCollide = true end
 		if class == "IntValue" then o._props.Value = 0 end
 		if class == "ProximityPrompt" then o._props.Triggered = signal() o._props.Enabled = true end
-		if class == "BillboardGui" then o._props.Enabled = true end
+		if class == "BillboardGui" or class == "SurfaceGui" then o._props.Enabled = true end
 		if class == "Model" then o._props.ModelStreamingMode = Enum.ModelStreamingMode.Default end
 		if class == "RemoteEvent" then -- ShopServer's pop-up messages (the real ShopServer's notify)
 			o._props.FireClient = function(_, player, text) table.insert(W.notes, { player = player, text = text }) end
@@ -236,10 +237,13 @@ local function newWorld(opts)
 	module(W.ReplicatedStorage, "OfficeConfig", (OFFICECONFIG_SOURCE)()) -- overhaul 2: the office catalog (real)
 	module(W.ReplicatedStorage, "LobbyConfig", lobby)
 	local sections = { ShopServer = "shop", EmployeeServer = "team", PoachServer = "poach", IpoServer = "ipo", OnboardingServer = "onboarding",
-		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex" }
+		DailyServer = "daily", TaskServer = "tasks", CompanyServer = "pokedex", FounderServer = "founder" }
 	if opts.realShop then
 		sections.ShopServer = nil
 		W.ShopConfig = (SHOPCONFIG_SOURCE)()
+		-- overhaul 2 phase 5: the lounge's showcase reads the creatures (fakes: no creature, no model)
+		module(W.ReplicatedStorage, "CreatureConfig", { Rarities = {}, getCreature = function() return nil end })
+		module(W.ReplicatedStorage, "CreatureModels", { build = function() return nil end })
 		module(W.ReplicatedStorage, "ShopConfig", W.ShopConfig)
 		module(W.ServerScriptService, "ShopServer", nil, function()
 			return SHOP_SOURCE(W.game, W.script, W.workspace, W.task, W.os, W.warn, W.require, function(class) return new(class) end,
@@ -272,6 +276,7 @@ local function newWorld(opts)
 		W.mods.ShopServer.getCashMultiplier = function() return 1 end
 	end
 	W.mods.IpoServer.getMultiplier = function() return 1 end
+	W.mods.FounderServer.incomeBoost = function() return 1 end -- overhaul 2 phase 3: no brainstorm boost
 	W.mods.IpoServer.perk = function() return 0 end
 	W.mods.EmployeeServer.getIncome = function() return 0 end
 	W.mods.EmployeeServer.countEggs = function() return 0 end
@@ -544,7 +549,10 @@ do
 	W.boot()
 	local H = W.H
 	check("claim off: no prompt is on and no FREE sign shows", (function()
-		for s = 1, 6 do if promptOf(W, s).Enabled or postOf(W, s):FindFirstChildOfClass("BillboardGui").Enabled then return false end end return true end)())
+		for s = 1, 6 do
+			local board = garage(W, s):FindFirstChild("ClaimSpot"):FindFirstChild("FreeSign") -- overhaul 2 phase 5: the board on the post
+			if promptOf(W, s).Enabled or not board or board:FindFirstChildOfClass("SurfaceGui").Enabled then return false end
+		end return true end)())
 	local p = W.join("Hal", 81, Vector3.new(-1, 3, -1))
 	W.run(0.05)
 	check("claim off: the join claims the first free garage at once (leaderstats at the join, as before)", H.plotOwners[1] == p and p:FindFirstChild("leaderstats") ~= nil

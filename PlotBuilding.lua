@@ -227,18 +227,18 @@ PlotBuilding.Styles = {
 		furniture = "SmoothPlastic",
 		light = { color = rgb(255, 214, 160), brightness = 0.8, range = 44 }, -- a warm bulb under the garage's roof
 	},
-	{ -- 2 Small Office: white walls, mint trim, clear glass
+	{ -- 2 Small Office: white rendered walls (Concrete since overhaul 2 phase 6: a plaster grain, not flat plastic), mint trim, clear glass
 		roles = {
-			main = S(rgb(242, 243, 240), "SmoothPlastic"), trim = S(rgb(46, 110, 100), "SmoothPlastic"), accent = S(rgb(232, 128, 102), "SmoothPlastic"),
+			main = S(rgb(240, 240, 236), "Concrete"), trim = S(rgb(46, 110, 100), "SmoothPlastic"), accent = S(rgb(232, 128, 102), "Plastic"),
 			glass = S(rgb(166, 214, 240), "Glass", GLASS), dark = S(rgb(52, 55, 61), "Metal"),
 		},
 		looks = { roof = { main = S(rgb(150, 156, 160), "Concrete") }, floor = { main = S(rgb(200, 204, 210), "SmoothPlastic") } },
 		furniture = "SmoothPlastic",
 		light = { color = rgb(255, 246, 230), brightness = 0.9, range = 48 }, -- white office light
 	},
-	{ -- 3 Big Office: white and warm wood
+	{ -- 3 Big Office: white-painted brick (overhaul 2 phase 6: a converted loft) and warm wood
 		roles = {
-			main = S(rgb(244, 244, 241), "SmoothPlastic"), trim = S(rgb(170, 122, 78), "Wood"), accent = S(rgb(246, 154, 52), "SmoothPlastic"),
+			main = S(rgb(238, 234, 226), "Brick"), trim = S(rgb(170, 122, 78), "Wood"), accent = S(rgb(246, 154, 52), "SmoothPlastic"),
 			glass = S(rgb(170, 210, 232), "Glass", GLASS), dark = S(rgb(44, 52, 66), "Metal"),
 		},
 		looks = { roof = { main = S(rgb(120, 124, 130), "Concrete") }, floor = { main = S(rgb(196, 160, 118), "WoodPlanks") } },
@@ -247,7 +247,7 @@ PlotBuilding.Styles = {
 	},
 	{ -- 4 Small Corporate: blue glass, a darker crown band
 		roles = {
-			main = S(rgb(70, 120, 196), "Glass"), trim = S(rgb(34, 42, 62), "SmoothPlastic"), accent = S(rgb(52, 120, 230), "SmoothPlastic"),
+			main = S(rgb(70, 120, 196), "Glass"), trim = S(rgb(34, 42, 62), "Metal"), accent = S(rgb(52, 120, 230), "Metal"), -- metal frames (overhaul 2 phase 6)
 			glass = S(rgb(96, 156, 232), "Glass", GLASS), dark = S(rgb(28, 32, 44), "Metal"),
 		},
 		keys = { RoofEdge = { trim = S(rgb(22, 28, 44), "Metal") } },
@@ -514,6 +514,10 @@ PlotBuilding.Stages = {
 			-- (No facade Block is named "...Band...": that name means the band's floor, the Static group, PlotBuilding.layout.)
 			{ block = { 82.4, 0.6, 0.6 }, role = "accent", name = "PodiumGold", x = 0, y = 11.6, z = 32.4 },
 			{ block = { 52, 0.5, 0.6 }, role = "trim", look = "tower", name = "TowerLine", x = 0, y = 40.7, z = 14.4 },
+			-- overhaul 2 phase 6 (the owner's point 15): two gold fins up the tower's front, on its glass seams (2 parts: the
+			-- building stays within its 180 and the six garages plus the plaza under 4,000)
+			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinL", x = -8.67, y = 14.5, z = 14.55 },
+			{ block = { 0.6, 81.5, 0.7 }, role = "accent", name = "TowerFinR", x = 8.67, y = 14.5, z = 14.55 },
 		},
 		backBand = 8, -- P2: the BoardTable, the Rug and the Bell are 6 to 8 deep
 		furniture = {

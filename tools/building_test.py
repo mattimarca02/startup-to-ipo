@@ -755,8 +755,8 @@ do
 		and stories(6) > stories(5))
 	local mats = {}
 	for s = 1, 5 do mats[s] = PB.styleOf(s, "Wall", "main").material end
-	check("look: Brick for the garage, SmoothPlastic for the office, Glass for the tower, Marble for the headquarters",
-		mats[1] == "Brick" and mats[2] == "SmoothPlastic" and mats[4] == "Glass" and mats[5] == "Marble" and PB.styleOf(5, "Column", "accent").color[1] == 255)
+	check("look: Brick for the garage, Concrete for the office, white brick for the loft, Glass for the tower, Marble for the headquarters (overhaul 2 phase 6)",
+		mats[1] == "Brick" and mats[2] == "Concrete" and mats[3] == "Brick" and mats[4] == "Glass" and mats[5] == "Marble" and PB.styleOf(5, "Column", "accent").color[1] == 255)
 	local want = { "WallGarage", "WallDoor", "WallDoor", "none", "none", "none" }
 	local wrong = nil
 	for s = 1, 6 do

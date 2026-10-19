@@ -143,7 +143,7 @@ local marker = make("BillboardGui", {
 	Name = "FreeGarageMarker",
 	Size = UDim2.fromOffset(120, 60),
 	StudsOffset = Vector3.new(0, 7, 0),
-	AlwaysOnTop = true,
+	AlwaysOnTop = false, -- overhaul 2 phase 5 (the owner's point 4): hidden by walls like the world, never drawn on top
 	ResetOnSpawn = false,
 	Enabled = false,
 	Parent = player:WaitForChild("PlayerGui"),
@@ -183,7 +183,7 @@ local function nearestFreePost()
 	return best
 end
 
--- The claim spots as this client sees them: with a garage, every FREE sign, lamp and prompt is hidden here; without one,
+-- The claim spots as this client sees them: with a garage, every FREE sign (the board on the post), lamp and prompt is hidden here; without one,
 -- what the server set (the same rule as TycoonCore's setGarageState, from the garage's State attribute)
 local function showClaimSpots(show)
 	local garages = workspace:FindFirstChild("Garages")
@@ -204,6 +204,16 @@ local function showClaimSpots(show)
 			local lamp = spot:FindFirstChild("FreeLamp")
 			if lamp then
 				lamp.Transparency = free and 0 or 1
+			end
+			local board = spot:FindFirstChild("FreeSign") -- overhaul 2 phase 5: the board on the post (its SurfaceGuis)
+			if board then
+				local shown = show and state ~= "Taken"
+				board.Transparency = shown and 0 or 1
+				for _, child in ipairs(board:GetChildren()) do
+					if child.ClassName == "SurfaceGui" then
+						child.Enabled = shown
+					end
+				end
 			end
 		end
 	end

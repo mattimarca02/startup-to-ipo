@@ -1,12 +1,17 @@
--- TaskServer: the task engine (PR 1: customer calls only).
+-- TaskServer: the task engine (customer calls; live since overhaul 2 phase 3).
 -- Put this ModuleScript in ServerScriptService, next to TycoonCore.
 -- TycoonCore owns player data and saving, and plugs this module in with TaskServer.init, after
 -- EmployeeServer and IpoServer and BEFORE DailyServer (which stays last). The rules live in
 -- TaskConfig (ReplicatedStorage).
 --
--- PR 1 runs only in Studio (TaskConfig.isActive): outside Studio this module builds no remotes,
--- starts no loop, registers no Debug button and never creates a call. It still loads and saves the
--- "tasks" section as it was, so a player's data is never lost. PR 2 (the economy core) turns it on.
+-- TaskConfig.isActive is the switch (on everywhere since overhaul 2 phase 3, the economy core): when it is off this
+-- module builds no remotes, starts no loop, registers no Debug button and never creates a call. It still loads and saves
+-- the "tasks" section as it was, so a player's data is never lost.
+-- The economy core (overhaul 2 phase 3): every reward pays full value for TaskConfig.EngagedCap.seconds engaged seconds a
+-- day, then EngagedCap.share (capShare, on the saved engaged counter); a rejoin on a day the player was already engaged
+-- starts with an empty reward bank (setupPlayer), and the flags of a player who leaves are remembered for an hour by
+-- this server (a rejoin here does not clear them). The founder activities (FounderServer) pay through payReward, the
+-- same budget and cap.
 --
 -- Calls start when the player OWNS THE DESK (the first upgrade), or after the first IPO (an IPO resets the
 -- upgrades, and calls must not stop in the middle of a run): TaskConfig.isUnlocked, fed with data.owned, the
@@ -38,12 +43,13 @@
 --   TaskServer.isEngaged(player)       -> a valid answer was graded in the last 3 minutes
 --   TaskServer.engagedSeconds(player)  -> engaged seconds today (the day starts at 08:00 UTC, like the daily calendar)
 --   TaskServer.getStats(player)        -> this session's measurement numbers (gate G1)
--- The 3 h per day at full value, then 5%, is PR 2's rule and lives in IpoServer.addEarnings(kind): here
--- we only record the counters.
+--   TaskServer.payReward(player, seconds, kind) -> pays a founder activity (FounderServer): the same bank and cap
+--   TaskServer.setCallsBoost(player, share, seconds) -> a brainstorm idea: calls pay `share` more for a while
+-- Calls pay more with the office items that say so (OfficeConfig.effect "calls") and a brainstorm's boost.
 --
 -- Pay path: task Cash goes to data.cash and then through core.addEarnings (TycoonCore's wrapper over
 -- IpoServer.addEarnings), the one existing earnings path. That is the only addEarnings call in this
--- file. It runs only while the engine is active (Studio in PR 1).
+-- file. It runs only while the engine is active.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -53,6 +59,7 @@ local TaskConfig = require(ReplicatedStorage:WaitForChild("TaskConfig"))
 local IpoConfig = require(ReplicatedStorage:WaitForChild("IpoConfig")) -- the funding stage, for the rung
 local DailyConfig = require(ReplicatedStorage:WaitForChild("DailyConfig")) -- dayNumber: the shared 08:00 UTC reset
 local ShopConfig = require(ReplicatedStorage:WaitForChild("ShopConfig")) -- money format, DebugInStudio
+local OfficeConfig = require(ReplicatedStorage:WaitForChild("OfficeConfig")) -- the items that make calls pay more
 local IpoServer = require(script.Parent:WaitForChild("IpoServer")) -- isBusy
 local ShopServer = require(script.Parent:WaitForChild("ShopServer")) -- for the Studio Debug tab
 
@@ -70,6 +77,8 @@ local remotes = {}
 local KNOWN_FIELDS = { sharesRun = true, done = true, bestChain = true, seen = true, engagedDay = true, engagedSeconds = true }
 local COUNT_MAX = { sharesRun = 1e6, done = 1e9, bestChain = 1e6 } -- whole numbers, clamped to this on load
 local SEEN_MAX = 50 -- most task keys kept in `seen`
+local REMEMBER_SECONDS = 3600 -- a player who leaves: their flags are kept this long for a rejoin on this server
+local remembered = {} -- UserId -> { at = os.clock(), flags = { os.clock() of flags } } (memory only)
 
 -- Helpers ---------------------------------------------------------------
 
@@ -91,7 +100,7 @@ local function newStats()
 	}
 end
 
-local function newRun(now)
+local function newRun(now, bank)
 	return {
 		open = {}, order = {}, nextId = 1, -- waiting tasks by id, and in arrival order
 		chain = 0, misses = 0, quiet = false,
@@ -102,9 +111,10 @@ local function newRun(now)
 		answers = {}, reactions = {}, flags = {}, -- os.clock() of graded answers (last minute), last reaction times, flags (last hour)
 		paused = false, settledAt = now,
 		layout = nil, -- Studio only: { w, h, inset } the client's TaskGui size (Debug > Task stats), never saved
-		-- PR 2 (economy core): a rejoin gives a full bank and an empty flag list again, because `run` is not
-		-- saved. Fix it there (save the bank and the flags' cool-down, or start a rejoin with an empty bank).
-		bank = TaskConfig.BudgetBank, -- reward budget, in seconds of Income
+		-- `run` is not saved: a rejoin on a day already engaged starts with an empty bank (setupPlayer), and the flags
+		-- come back from `remembered` when the rejoin is on this server
+		bank = bank or TaskConfig.BudgetBank, -- reward budget, in seconds of Income
+		boost = nil, -- { share, untilAt }: a brainstorm idea makes calls pay more (FounderServer, memory only)
 		handled = 0, handledAt = now, -- calls the team took, not yet told to the player
 		rungOverride = nil, -- Studio Debug "Set rung" (not saved)
 		lastWarnAt = -math.huge,
@@ -271,23 +281,37 @@ local function settle(player, data, run, now)
 end
 
 -- Pays `seconds` of the player's current Income. The reward budget is the autoclicker wall: up to the
--- banked seconds it pays in full, the rest pays TaskConfig.OverBudgetShare. Returns the Cash and the
--- seconds really paid.
-local function pay(player, data, run, seconds)
-	local full = math.min(seconds, run.bank)
-	run.bank -= full
+-- banked seconds it pays in full, the rest pays TaskConfig.OverBudgetShare (kind "bonus", a funding round's pitch,
+-- skips the bank: it comes once per round). Past the daily cap everything pays TaskConfig.EngagedCap.share
+-- (capShare). Returns the Cash and the seconds really paid.
+local function pay(player, data, run, seconds, kind)
+	local full = kind == "bonus" and seconds or math.min(seconds, run.bank)
+	if kind ~= "bonus" then
+		run.bank -= full
+	end
 	local over = seconds - full
-	local paid = full + over * TaskConfig.OverBudgetShare
+	rollDay(data.tasks)
+	local paid = (full + over * TaskConfig.OverBudgetShare) * TaskConfig.capShare(data.tasks.engagedSeconds)
 	local cash = math.floor(paid * data.income.Value + 1e-6) -- the + keeps 7 x 1.3 x 10 from landing on 90.99999
 	if cash > 0 then
 		data.cash.Value += cash
-		core.addEarnings(player, cash) -- the one existing earnings path (Studio only in PR 1)
+		core.addEarnings(player, cash) -- the one existing earnings path
 	end
 	local stats = run.stats
 	stats.cash += cash
 	stats.rewardSeconds += paid
 	stats.overBudget += over
 	return cash, paid
+end
+
+-- How much more calls pay: the office items that say so, and a brainstorm's boost while it lasts
+local function callsFactor(data, run, now)
+	local share = OfficeConfig.effect(data.owned or {}, "calls")
+	local boost = run.boost
+	if boost and now < boost.untilAt then
+		share += boost.share
+	end
+	return 1 + share
 end
 
 -- Tasks ---------------------------------------------------------------------------------
@@ -355,7 +379,7 @@ local function arrive(player, data, run, row, now)
 	if row.routine and isEngagedRun(run, now) then
 		local share = TaskConfig.autoShare(row, roleCount(data, row.role))
 		if share > 0 and math.random() < share then
-			local cash = pay(player, data, run, row.reward.seconds * row.teamPays)
+			local cash = pay(player, data, run, row.reward.seconds * row.teamPays * callsFactor(data, run, now))
 			run.stats.teamCash += cash
 			run.stats.autoResolved += 1
 			run.handled += 1
@@ -470,7 +494,7 @@ local function answerTask(player, data, run, id, now)
 		leaveQuiet(data, run, now)
 	end
 	local mult = TaskConfig.chainMultiplier(row, run.chain)
-	local cash = pay(player, data, run, row.reward.seconds * mult)
+	local cash = pay(player, data, run, row.reward.seconds * mult * callsFactor(data, run, now))
 	run.chain += 1
 	tasks.done += 1
 	tasks.bestChain = math.max(tasks.bestChain, run.chain)
@@ -643,7 +667,7 @@ end
 
 -- One tick for one player (the loop below calls it; the tests call it with a fake clock)
 function TaskServer.step(player, now)
-	if not core or not TaskConfig.isActive() then return end -- off (live server in PR 1, or Enabled = false): never creates or pays anything
+	if not core or not TaskConfig.isActive() then return end -- off (Enabled = false): never creates or pays anything
 	local data = core.getData(player)
 	local tasks = data and data.tasks
 	if not tasks then return end
@@ -743,6 +767,36 @@ function TaskServer.engagedSeconds(player)
 	return tasks.engagedDay >= today() and math.floor(tasks.engagedSeconds) or 0
 end
 
+-- A founder activity's reward (FounderServer): `seconds` of Income through the same bank and daily cap as calls (kind
+-- "bonus": a round's pitch, not from the bank). A graded activity makes the player engaged, like an answered call.
+-- Returns the Cash paid (0 when the engine is off or the player isn't loaded).
+function TaskServer.payReward(player, seconds, kind)
+	if not core or not TaskConfig.isActive() or typeof(seconds) ~= "number" or seconds ~= seconds or seconds <= 0 then
+		return 0
+	end
+	local data = core.getData(player)
+	local tasks = data and data.tasks
+	if not tasks or not data.ready then
+		return 0
+	end
+	local run = tasks.run
+	local now = os.clock()
+	settle(player, data, run, now)
+	run.lastGradedAt = now
+	run.lastActionAt = now
+	return (pay(player, data, run, math.min(seconds, 600), kind))
+end
+
+-- A brainstorm idea (FounderServer): calls pay `share` more for `seconds` (one boost at a time, memory only)
+function TaskServer.setCallsBoost(player, share, seconds)
+	local data = core and core.getData(player)
+	local tasks = data and data.tasks
+	if not tasks or typeof(share) ~= "number" or typeof(seconds) ~= "number" then
+		return
+	end
+	tasks.run.boost = { share = math.clamp(share, 0, 2), untilAt = os.clock() + math.clamp(seconds, 0, 3600) }
+end
+
 function TaskServer.getStats(player)
 	local data = core and core.getData(player)
 	return data and data.tasks and statsNumbers(data) or nil
@@ -764,8 +818,9 @@ function TaskServer.setupPlayer(player, data, savedTasks)
 		engagedSeconds = 0, -- engaged seconds on that day (saved)
 		unknown = {}, -- fields of the saved section this version doesn't know (saved back as they were)
 		dirty = false, -- true once there is something to save: a loaded section, or any change
-		run = newRun(os.clock()),
+		run = nil, -- below: the bank depends on the saved day
 	}
+	local rejoin = false
 	if typeof(savedTasks) == "table" then
 		tasks.dirty = true
 		for field, maximum in pairs(COUNT_MAX) do
@@ -826,9 +881,21 @@ function TaskServer.setupPlayer(player, data, savedTasks)
 			tasks.engagedDay = 0
 			tasks.engagedSeconds = 0
 		end
+		-- The economy core: engaged today already (this save's day is today and has engaged seconds) means a rejoin, and a
+		-- rejoin's bank starts empty: leaving and coming back never refills it
+		rejoin = tasks.engagedDay == today() and tasks.engagedSeconds > 0
 		rollDay(tasks) -- an older day's seconds are ignored
 	elseif savedTasks ~= nil then
 		warn("Skipped a bad tasks section in " .. player.Name .. "'s save")
+	end
+	local now = os.clock()
+	tasks.run = newRun(now, rejoin and 0 or nil)
+	local kept = player.UserId and remembered[player.UserId]
+	if kept and now - kept.at <= REMEMBER_SECONDS then
+		tasks.run.flags = kept.flags -- a rejoin on this server keeps the flags of the last hour
+	end
+	if player.UserId then
+		remembered[player.UserId] = nil
 	end
 	data.tasks = tasks
 end
@@ -917,7 +984,7 @@ end
 function TaskServer.init(coreApi)
 	core = coreApi
 	if not TaskConfig.isActive() then
-		return -- outside Studio in PR 1: no remotes, no loop, no Debug buttons
+		return -- the engine is off: no remotes, no loop, no Debug buttons
 	end
 
 	local folder = Instance.new("Folder")
@@ -939,6 +1006,16 @@ function TaskServer.init(coreApi)
 		local data = core.getData(player)
 		if data and data.tasks and data.tasks.run.stats.offered > 0 then
 			print(statsLine(player, data))
+		end
+		local run = data and data.tasks and data.tasks.run
+		local now = os.clock()
+		if run and #run.flags > 0 and player.UserId then
+			remembered[player.UserId] = { at = now, flags = run.flags }
+		end
+		for userId, kept in pairs(remembered) do -- old entries go
+			if now - kept.at > REMEMBER_SECONDS then
+				remembered[userId] = nil
+			end
 		end
 	end)
 

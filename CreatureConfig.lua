@@ -19,6 +19,7 @@ CreatureConfig.Rarities = {
 }
 
 -- Recruiting eggs, bought with Cash. odds are weights per rarity (they don't have to add up to 100).
+-- color, band and spots are the egg's looks (the incubator's egg and the hatch reveal); they never change a roll.
 -- The hatch timer keeps running while you're offline.
 CreatureConfig.Eggs = {
 	{
@@ -27,6 +28,7 @@ CreatureConfig.Eggs = {
 		price = 800,
 		hatchSeconds = 60,
 		color = Color3.fromRGB(165, 120, 75),
+		band = Color3.fromRGB(240, 222, 180), spots = Color3.fromRGB(105, 70, 42), -- overhaul 2 phase 4: the egg's pattern (looks only)
 		odds = { Common = 70, Uncommon = 25, Rare = 5 },
 	},
 	{
@@ -35,6 +37,7 @@ CreatureConfig.Eggs = {
 		price = 40000,
 		hatchSeconds = 5 * 60,
 		color = Color3.fromRGB(60, 150, 255),
+		band = Color3.fromRGB(245, 248, 255), spots = Color3.fromRGB(20, 55, 140),
 		odds = { Common = 40, Uncommon = 35, Rare = 18, Epic = 6, Legendary = 1 },
 	},
 	{
@@ -43,6 +46,7 @@ CreatureConfig.Eggs = {
 		price = 2000000,
 		hatchSeconds = 15 * 60,
 		color = Color3.fromRGB(255, 120, 210),
+		band = Color3.fromRGB(255, 210, 80), spots = Color3.fromRGB(150, 240, 255),
 		odds = { Common = 10, Uncommon = 25, Rare = 35, Epic = 22, Legendary = 8 },
 	},
 }

@@ -824,6 +824,7 @@ local CompanyServer = { serialize = function(data)
 	return POKEDEX
 end }
 local function officeToSave(data) return data.office and { v = 1, desks = data.office.desks } or nil end -- overhaul 2 (TycoonCore, outside the markers)
+local FounderServer = { serialize = function(data) return data.founder and { v = 1, run = 0, pitched = {}, dinnerDay = 0 } or nil end } -- overhaul 2 phase 3
 __BUILDSAVE__
 local passed, failed = 0, 0
 local function check(name, cond, extra)
@@ -2015,6 +2016,9 @@ MODULES.ShopConfig = { formatCash = function(n) return "$" .. n end, DebugInStud
 local DEBUG = {}
 MODULES.ShopServer = { addDebugAction = function(name, f) DEBUG[name] = f end }
 MODULES.IpoServer = { isBusy = function(data) return data ~= nil and data.ipo ~= nil and data.ipo.busy == true end }
+MODULES.OfficeConfig = (function()
+__OFFICECONFIG__
+end)()
 MODULES.TaskConfig = (function()
 __TASKCONFIG__
 end)()
@@ -2103,7 +2107,7 @@ check("active in Studio", active(true, true, true) == true)
 check("not active on a live server in PR 1", active(true, true, false) == false)
 check("Enabled = false: never active", active(false, true, true) == false and active(false, false, false) == false)
 check("StudioOnly = false (PR 2): active everywhere", active(true, false, false) == true)
-check("shipped config: Enabled and StudioOnly", C.Enabled == true and C.StudioOnly == true)
+check("shipped config: Enabled, and live everywhere (overhaul 2 phase 3: StudioOnly = false, the economy core is in)", C.Enabled == true and C.StudioOnly == false)
 
 local EARNINGS = {}
 local core = {
@@ -2128,8 +2132,8 @@ local function newPlayerFor(server, saved, opts)
 end
 
 for _, off in ipairs({ "live server", "Enabled = false" }) do
-	local oldE, oldStudio = C.Enabled, IS_STUDIO
-	if off == "live server" then IS_STUDIO = false else C.Enabled = false end
+	local oldE, oldS, oldStudio = C.Enabled, C.StudioOnly, IS_STUDIO
+	if off == "live server" then IS_STUDIO, C.StudioOnly = false, true else C.Enabled = false end -- "live server": the Studio-only test mode
 	local created, spawned, debugCount = #CREATED, #SPAWNED, 0
 	for _ in pairs(DEBUG) do debugCount += 1 end
 	local removing = #PLAYER_REMOVING
@@ -2160,7 +2164,7 @@ for _, off in ipairs({ "live server", "Enabled = false" }) do
 	local out = server.serialize(d2)
 	check(off .. ": a saved section is kept as it was",
 		out and out.done == 5 and out.sharesRun == 2 and out.bestChain == 4 and out.seen.Call == true and out.engagedDay == 20000 and out.engagedSeconds == 77 and out.future.x == 1)
-	C.Enabled, IS_STUDIO = oldE, oldStudio
+	C.Enabled, C.StudioOnly, IS_STUDIO = oldE, oldS, oldStudio
 end
 
 -- 3. The active engine ---------------------------------------------------------------
@@ -3857,6 +3861,8 @@ local Enum = {
 	NormalId = enumType({ "Top", "Bottom", "Left", "Right", "Front", "Back" }),
 	Font = enumType({ "GothamBold", "PermanentMarker", "IndieFlower", "LuckiestGuy", "FredokaOne" }),
 	SurfaceGuiSizingMode = enumType({ "PixelsPerStud" }),
+	TextXAlignment = enumType({ "Left", "Center", "Right" }), -- overhaul 2 phase 3: the blackboard's chalk text
+	TextYAlignment = enumType({ "Top", "Center", "Bottom" }),
 }
 local Color3 = { fromRGB = function(r, g, b) return { R = r / 255, G = g / 255, B = b / 255, rgb = { r, g, b } } end }
 local UDim2 = { fromScale = function(x, y) return { x, y } end }
@@ -4444,7 +4450,7 @@ do
 		local r = room(2)
 		check("stage 2: twelve warm string-light bulbs, all glowing (Neon), on two cords", count(r, "StringBulb", "Neon") == 12 and count(r, "StringCord") == 2)
 		check("stage 2: a new door of four panels with a smoked glass band", count(r, "DoorPanel") == 4 and find(r, "DoorGlassBand").Material.Name == "Glass")
-		check("stage 2: fresh paint is smooth (SmoothPlastic), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "SmoothPlastic" and count(r, "SideWall", "CorrodedMetal") == 0)
+		check("stage 2: fresh paint on plaster (Concrete since overhaul 2 phase 6), not the Garage's corroded metal", find(r, "BackWall").Material.Name == "Concrete" and count(r, "SideWall", "CorrodedMetal") == 0)
 		check("stage 2: a rug of two layers and a sofa of five parts", count(r, "Rug") == 2 and count(r, "Sofa") == 5)
 		check("stage 2: every workstation has an oak top, two legs, a monitor and a chair (8 parts)", #PlotArt.Stages[2].desk == 8)
 	end
@@ -7187,6 +7193,7 @@ local function getStore() return fakeStore end
 local function updateIncome() COUNT.income += 1 end
 local function refreshSign() COUNT.sign += 1 end
 local function officeToSave(data) return data.office and { v = 1, desks = data.office.desks } or nil end -- overhaul 2 (TycoonCore, outside the markers)
+local FounderServer = { serialize = function(data) return data.founder and { v = 1, run = 0, pitched = {}, dinnerDay = 0 } or nil end } -- overhaul 2 phase 3
 __BUILDSAVE__
 __SAVENOTE__
 __SAVEFN__
@@ -7199,7 +7206,7 @@ local function newPlayer(savedPokedex, count)
 		owned = { Desk = true, Laptop = true }, cash = { Value = 250 },
 		items = { Desk = { Destroy = function() COUNT.destroyed += 1 end }, Laptop = { Destroy = function() COUNT.destroyed += 1 end } },
 		unknownSections = { future = { x = 1 } },
-		shop = {}, onboarding = {}, daily = {}, tasks = {}, poachLevel = 2, poach = {}, office = { v = 1, desks = 0 },
+		shop = {}, onboarding = {}, daily = {}, tasks = {}, poachLevel = 2, poach = {}, office = { v = 1, desks = 0 }, founder = {},
 		team = { employees = {}, incubators = { { egg = "Garage" }, false, false } },
 		ipo = { count = count or 1, shares = 5, valuation = 900, lifetime = 900, best = 900 },
 	}
@@ -7548,13 +7555,13 @@ def pads_gone_checks():
     core = read("TycoonCore.lua")
     code = code_only(core)
     check("TycoonCore: one purchase function, and the shop gets it", "buyUpgrade = buyUpgrade," in code and code.count("local function buyUpgrade(") == 1)
-    check("TycoonCore: the sign has no touch, collision or query", "post.CanCollide, post.CanTouch, post.CanQuery = false, false, false" in code
-          and "board.CanCollide, board.CanTouch, board.CanQuery = false, false, false" in code)
+    check("TycoonCore: the blackboard (overhaul 2 phase 3, was the sign) has no touch, collision or query",
+          "part.CanCollide, part.CanTouch, part.CanQuery, part.CastShadow = false, false, false, false" in code and "BillboardGui" not in core[core.index("writeBoard = function"):core.index("local function refreshSign")])
     check("TycoonCore: a join and an IPO reset refresh the sign and the Office state", code.count("refreshSign(player)") >= 3)
     check("TycoonCore: spawning on a plot buys nothing (the character only lands and faces the sign)", "auto-buy" not in core and "Touched" not in core)
     sections = re.search(r"local KNOWN_SECTIONS = \{([^}]*)\}", core).group(1)
-    check("TycoonCore: the known sections are the old ones plus overhaul 2's office (the catalog itself saves in owned)",
-          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks pokedex office".split()), sections)
+    check("TycoonCore: the known sections are the old ones plus overhaul 2's office and founder (the catalog itself saves in owned)",
+          sorted(re.findall(r"(\w+) = true", sections)) == sorted("cash owned lastSeen shop team poach ipo onboarding daily fixedHires tasks pokedex office founder".split()), sections)
     check("TycoonCore: nothing new is written to the save for the Office (no lastBuyAt or Upgrade attribute in the payload)",
           "lastBuyAt" not in core[core.index("local function buildPayload"):core.index("-- BUILDSAVE-END")])
 
@@ -7644,7 +7651,7 @@ def task_wiring_checks(files=None, failures=None):
     check("TaskServer only touches data.tasks, data.cash and data.income of the player's data",
           not re.search(r"data\.(shop|team|poach|ipo|onboarding|daily|fixedHires)\s*(=[^=]|\.[A-Za-z_]+\s*(=[^=]|\+=|-=))", server))
     config = read("TaskConfig.lua")
-    check("TaskConfig: Enabled and StudioOnly are on (PR 1 runs only in Studio)", "TaskConfig.Enabled = true" in config and "TaskConfig.StudioOnly = true" in config)
+    check("TaskConfig: Enabled on and StudioOnly off (overhaul 2 phase 3: calls run on live servers)", "TaskConfig.Enabled = true" in config and "TaskConfig.StudioOnly = false" in config)
 
     forbidden = ("odds", "chance", "luck", "random", "probab", "%")
     for filename in ("TaskClient.lua", "TaskServer.lua", "CompanyServer.lua", "CompanyConfig.lua", "SectorConfig.lua"):
@@ -7678,7 +7685,8 @@ def task_wiring_checks(files=None, failures=None):
     check("desk wiring: the Call row's `owns` is the name of TycoonCore's first upgrade",
           first_upgrade is not None and re.search(r'unlock = \{ rung = 0, owns = "%s" \}' % re.escape(first_upgrade.group(1)), config) is not None)
     check("desk wiring: TaskServer reads the Desk from data.owned in one place (rowOn) and never writes it",
-          server.count("data.owned") == 1 and "TaskConfig.isUnlocked(row, rungOf(data), ipoCountOf(data), data.owned)" in server
+          server.count("data.owned") == 2 and "TaskConfig.isUnlocked(row, rungOf(data), ipoCountOf(data), data.owned)" in server
+          and 'OfficeConfig.effect(data.owned or {}, "calls")' in server
           and not re.search(r"\.owned\s*(\[[^\]]*\])?\s*(=[^=]|\+=|-=)", server) and "table.insert(data.owned" not in server and "table.clear(data.owned" not in server)
     check("desk wiring: TaskServer asks TaskConfig.isUnlocked only through rowOn (Start, the tick and the state share it)",
           server.count("TaskConfig.isUnlocked(") == 1 and server.count("rowOn(data, row)") >= 3 and "on = callsOn(data)," in server)
@@ -7706,7 +7714,8 @@ def marked_text(text, name):
 def task_engine_source(files=None):
     """The TASK_TESTS program with the real TaskConfig and TaskServer (`files` replaces a file's text, for the mutants)."""
     return (TASK_TESTS.replace("__DAILYCONFIG__", source_file("DailyConfig.lua", files)).replace("__IPOCONFIG__", source_file("IpoConfig.lua", files))
-            .replace("__TASKCONFIG__", source_file("TaskConfig.lua", files)).replace("__TASKSERVER__", source_file("TaskServer.lua", files)))
+            .replace("__TASKCONFIG__", source_file("TaskConfig.lua", files)).replace("__TASKSERVER__", source_file("TaskServer.lua", files))
+            .replace("__OFFICECONFIG__", source_file("OfficeConfig.lua", files)))
 
 
 def tray_source(files=None, dump=False):
@@ -7776,7 +7785,7 @@ TASK_MUTANTS = [
      "owned ~= nil and owned[needs] == true", "owned ~= nil and next(owned) ~= nil",
      "engine", "desk: owning other upgrades without the Desk starts no call"),
     ("the team's call pays nothing", "TaskServer.lua",
-     "pay(player, data, run, row.reward.seconds * row.teamPays)", "pay(player, data, run, 0)",
+     "pay(player, data, run, row.reward.seconds * row.teamPays * callsFactor(data, run, now))", "pay(player, data, run, 0)",
      "engine", "desk: once the Desk is bought the team takes calls for the player"),
     ("the miss counter is not reset when calls turn on", "TaskServer.lua",
      "\t\t\trun.misses = 0\n\t\t\trun.lastActionAt = now\n", "\t\t\trun.lastActionAt = now\n",
@@ -8333,7 +8342,8 @@ do
 		end
 		check("blocks at " .. turn .. " degrees: the six plain upgrade blocks are the 0-degree blocks turned", same, why)
 	end
-	local function buySign(core, slot)
+	-- overhaul 2 phase 3: the blackboard (it replaced the next-upgrade sign) hangs over the lane at SIGN_OFFSET
+	local function blackboard(core, slot)
 		ROOT = newInstance("Folder")
 		local player = newPlayer()
 		local folder = newInstance("Folder")
@@ -8341,25 +8351,35 @@ do
 		local data = { slot = slot, folder = folder, owned = {}, items = {} }
 		core.playerData[player] = data
 		core.refreshSign(player)
-		local post = data.sign
-		return post, post and post:FindFirstChild("Board")
+		local parts = {}
+		local model = data.board and data.board.model
+		for _, name in ipairs({ "Slate", "FrameTop", "FrameBottom", "FrameLeft", "FrameRight", "ChalkTray", "Chalk", "PostLeft", "PostRight" }) do
+			table.insert(parts, model and model:FindFirstChild(name))
+		end
+		return parts, data
 	end
-	local exactSign = true
+	local exactSign, flagsOk = true, true
 	for slot = 1, 6 do
-		local post, board = buySign(core0, slot)
+		local parts, data = blackboard(core0, slot)
 		local foot = rowCenter(slot) + core0.SIGN_OFFSET
-		if not (post and board and exactCF(post.CFrame, cf(foot.X, foot.Y + 1.5, foot.Z)) and exactCF(board.CFrame, cf(foot.X, foot.Y + 4.3, foot.Z))) then exactSign = false end
+		local slate = parts[1]
+		if not (slate and #parts == 9 and exactCF(slate.CFrame, cf(foot.X, foot.Y + 8.4, foot.Z))) then exactSign = false end
+		for _, part in ipairs(parts) do
+			if part.CanCollide or part.CanTouch or part.CanQuery then flagsOk = false end
+		end
+		if not (data.board and string.find(data.board.label.Text, "Answer 3 calls (0/3)", 1, true)) then exactSign = false end
 	end
-	check("BuySign at 0 degrees: the next-upgrade sign's post and board are main's, exactly", exactSign)
+	check("Blackboard at 0 degrees: nine parts, the slate's center 8.4 over SIGN_OFFSET, exactly, with the goal chain written on it", exactSign)
+	check("Blackboard: no part collides, is touched or blocks a ray (the lane stays open; the camera sees through it)", flagsOk)
 	for _, turn in ipairs({ 90, 180, 270 }) do
 		local same, why = true, nil
 		for _, slot in ipairs(slotsAt(turn)) do
-			local p0, b0 = buySign(core0, slot)
-			local pT, bT = buySign(coreT, slot)
-			local ok, w = turnedMatch({ p0, b0 }, { pT, bT }, core0.plotFrame(slot), coreT.plotFrame(slot))
+			local l0 = blackboard(core0, slot)
+			local lT = blackboard(coreT, slot)
+			local ok, w = turnedMatch(l0, lT, core0.plotFrame(slot), coreT.plotFrame(slot))
 			if not ok then same = false; why = why or w end
 		end
-		check("BuySign at " .. turn .. " degrees: the next-upgrade sign (post and board) is the 0-degree sign turned", same, why)
+		check("Blackboard at " .. turn .. " degrees: every part of the blackboard is the 0-degree one turned", same, why)
 	end
 end
 
@@ -8578,7 +8598,8 @@ def frame_line(text, prefix):
 
 FRAME_CORE_FUNCTIONS = ("local function makePart(", "local function addLabel(", "local function plotCenter(", "local function plotFrame(",
                         "local function itemOffset(", "local function nextUpgrade(", "local function looks(", "local function spawnItem(",
-                        "local function publishUpgrades(", "local function refreshSign(", "local function teleportToPlot(")
+                        "local function publishUpgrades(", "local function boardText(", "writeBoard = function(", "local function refreshSign(",
+                        "local function teleportToPlot(")
 
 
 def frame_upgrades(core, texts):
@@ -8594,7 +8615,9 @@ def frame_upgrades(core, texts):
 def frame_source(texts):
     """The frame test program, with the (possibly mutated) scripts in texts."""
     core, ipo, employee = texts["TycoonCore.lua"], texts["IpoServer.lua"], texts["EmployeeServer.lua"]
-    constants = "\n".join(frame_line(core, "local %s = " % name) for name in ("PLOT_SPACING", "SIGN_OFFSET", "MAX_PLOTS"))
+    constants = "\n".join(frame_line(core, "local %s = " % name) for name in ("PLOT_SPACING", "SIGN_OFFSET", "MAX_PLOTS", "BOARD_SIZE", "BOARD_UP", "BOARD_LINES"))
+    # overhaul 2 phase 3: the blackboard (writeBoard) is declared before syncRoom and reads the goal chain's lines
+    constants += "\nlocal writeBoard\nlocal OnboardingServer = { boardLines = function() return { \"Answer 3 calls (0/3)\" } end }"
     functions = "\n".join(frame_extract_function(core, header) for header in FRAME_CORE_FUNCTIONS)
     functions = frame_line(core, "local QUARTER_TURNS = ") + "\n" + functions
     zones_at = core.find("\tplotZones = function()")
@@ -8622,14 +8645,16 @@ def frame_enclosing(text, index):
     """The name of the top-level function (or init table) the character at index sits in."""
     import re
     best = "(top level)"
-    for m in re.finditer(r"^(?:local function (\w+)|function ([\w.:]+)|(\w+)\.init\(\{)", text[:index], re.M):
-        best = m.group(1) or m.group(2) or (m.group(3) + ".init")
+    for m in re.finditer(r"^(?:local function (\w+)|function ([\w.:]+)|(\w+)\.init\(\{|(\w+) = function\()", text[:index], re.M):
+        best = m.group(1) or m.group(2) or (m.group(3) and m.group(3) + ".init") or m.group(4)
     return best
 
 
 # Where a garage position may be computed (file, function) -> how many lines use plotFrame. A new site fails until it is reviewed.
 FRAME_SITES = {
-    ("TycoonCore.lua", "spawnItem"): 1, ("TycoonCore.lua", "refreshSign"): 1,
+    ("TycoonCore.lua", "spawnItem"): 1, ("TycoonCore.lua", "writeBoard"): 1,  # overhaul 2 phase 3: the blackboard (was refreshSign's sign)
+    # overhaul 2 phase 3: the founder's stations (FounderServer: where to measure the reach, and the client's prompts)
+    ("TycoonCore.lua", "FounderServer.init"): 1, ("FounderServer.lua", "stationPosition"): 1, ("FounderServer.lua", "FounderServer.setupPlayer"): 1,
     ("TycoonCore.lua", "IpoServer.init"): 1, ("TycoonCore.lua", "EmployeeServer.init"): 1,
     ("TycoonCore.lua", "teleportToPlot"): 2,
     # lobby L2: the Floor and the garage sign are made once, in buildGarages; syncBuilding builds the building in the
@@ -8637,7 +8662,7 @@ FRAME_SITES = {
     ("TycoonCore.lua", "buildGarages"): 3, ("TycoonCore.lua", "syncBuilding"): 2,
     # lobby L3: the claim post (buildGarages) and the Free garage's room (buildFreeRoom, from the frame's position)
     ("TycoonCore.lua", "buildFreeRoom"): 1,
-    ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 1, ("IpoServer.lua", "buildSign"): 1,
+    ("EmployeeServer.lua", "placeEmployees"): 1, ("EmployeeServer.lua", "buildIncubator"): 2, ("IpoServer.lua", "buildSign"): 1,  # overhaul 2 phase 4: buildIncubator's egg spots face the garage's front
 }
 # WorldArt and WorldVisuals are not wired yet: PR L4 builds the ring from the garages' frames (docs/LOBBY_GARAGE_PROPOSAL.md)
 FRAME_UNWIRED = ("WorldArt.lua", "WorldVisuals.lua")
@@ -8682,7 +8707,7 @@ def frame_static_checks(texts=None):
         not offsets, offsets[:3])
     add("center plus offset: no module computes from core.plotCenter (IpoServer and EmployeeServer get core.plotFrame)", not core_center, core_center[:3])
     want = {k: v for k, v in FRAME_SITES.items() if v}
-    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, refreshSign, teleportToPlot x2, buildGarages x3, syncBuilding x2, buildFreeRoom, two core tables; "
+    add("center plus offset: every plotFrame use is pinned (TycoonCore: spawnItem, writeBoard, teleportToPlot x2, buildGarages x3, syncBuilding x2, buildFreeRoom, two core tables; "
         "EmployeeServer: placeEmployees, buildIncubator; IpoServer: buildSign)", sites == want,
         sorted(set(sites.items()) ^ set(want.items())))
     core = code_only(texts.get("TycoonCore.lua", ""))
@@ -8723,8 +8748,8 @@ FRAME_MUTATIONS = [
                                           "\t\t\tb = { b[1] - o.X, b[2] - o.X, b[3] - o.Y, b[4] - o.Y, b[5] - o.Z, b[6] - o.Z }\n")],
      "room at 90 degrees: PlotVisuals.check in the garage's frame"),
     # Every other site of section 4.3
-    ("the next-upgrade sign not turned", [("TycoonCore.lua", "local pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET)",
-                                           "local pos = CFrame.new(plotFrame(data.slot).Position + SIGN_OFFSET)")], "BuySign at 90 degrees"),
+    ("the blackboard not turned", [("TycoonCore.lua", "local origin = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET)",
+                                    "local origin = CFrame.new(plotFrame(data.slot).Position + SIGN_OFFSET)")], "Blackboard at 90 degrees"),
     ("the plain upgrade block not turned", [("TycoonCore.lua", "local pos = plotFrame(data.slot) * CFrame.new(itemOffset(i)",
                                              "local pos = CFrame.new(plotFrame(data.slot).Position + itemOffset(i)")], "blocks at 90 degrees"),
     ("the landing not turned", [("TycoonCore.lua", "local spawnPos = plotFrame(slot) * Vector3.new(0, 4, 12)",
@@ -8737,7 +8762,7 @@ FRAME_MUTATIONS = [
                                             "local frame = center")], "room at 90 degrees: every stage room"),
     ("makePart drops the turn of a CFrame (places only its position)", [("TycoonCore.lua", "\t\tp.CFrame = position -- a part placed in a garage's frame",
                                                                         "\t\tp.Position = position.Position -- a part placed in a garage's frame")],
-     "BuySign at 90 degrees"),
+     "Blackboard at 90 degrees"),
     ("every garage takes the first garage's turn", [("TycoonCore.lua", "local c, s = QUARTER_TURNS[GARAGE_TURNS[slot]][1], QUARTER_TURNS[GARAGE_TURNS[slot]][2]",
                                                      "local c, s = QUARTER_TURNS[GARAGE_TURNS[1]][1], QUARTER_TURNS[GARAGE_TURNS[1]][2]")],
      "turn math: at 180 degrees"),
@@ -8912,7 +8937,10 @@ def pokedex_wiring_checks():
     check("TycoonCore: CompanyServer.setupPlayer runs before DailyServer.setupPlayer (Daily stays last)", 0 <= code.find("CompanyServer.setupPlayer(") < code.find("DailyServer.setupPlayer("))
     check("TycoonCore: CompanyServer.setupPlayer runs after IpoServer.setupPlayer (the run check reads the IPO count)", 0 <= code.find("IpoServer.setupPlayer(") < code.find("CompanyServer.setupPlayer("))
     setups = re.findall(r"(\w+Server)\.setupPlayer\(", code)
-    check("TycoonCore: DailyServer is the last module set up for a player", setups[-1] == "DailyServer", setups)
+    # overhaul 2 phase 3: FounderServer is set up after the marked load block, next to the `office` section (no yield between)
+    check("TycoonCore: DailyServer is the last module set up inside the load (FounderServer comes after the block, next to setupOffice)",
+          [x for x in setups if x != "FounderServer"][-1] == "DailyServer" and setups.count("FounderServer") == 1
+          and re.search(r"setupOffice\(player, data, saved\)[^\n]*\n\tFounderServer\.setupPlayer\(player, data, saved and saved\.founder\)", core) is not None, setups)
     check("TycoonCore: CompanyServer is required with the other modules", 'local CompanyServer = require(script.Parent:WaitForChild("CompanyServer"))' in core)
     check("TycoonCore: pokedex is a known section and the payload is built with CompanyServer.serialize", re.search(r"local KNOWN_SECTIONS = \{[^}]*\bpokedex = true", core) is not None and "pokedex = CompanyServer.serialize(data)" in core)
     init_block = code[code.index("CompanyServer.init({"):]
@@ -9022,8 +9050,8 @@ WIRING_MUTATIONS = [
     ("a D9 word in CompanyServer", "CompanyServer.lua", "\"Too fast\"", "\"Good luck\""),
     ("a DataStore in CompanyConfig", "CompanyConfig.lua", "return CompanyConfig\n", "local s = game:GetService(\"DataStoreService\"):GetDataStore(\"Other\")\nreturn CompanyConfig\n"),
     ("an IPO allowed while the pokedex is locked", "TycoonCore.lua", "\tif CompanyServer.isLocked(data) then\n\t\t-- The Pokedex is from a newer version", "\tif false then\n\t\t-- The Pokedex is from a newer version"),
-    ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex and data.office) then", "data.tasks and data.office) then"),
-    ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true, office = true }", "tasks = true, office = true }"),
+    ("the save gate without data.pokedex", "TycoonCore.lua", "data.tasks and data.pokedex and data.office and data.founder) then", "data.tasks and data.office and data.founder) then"),
+    ("pokedex missing from KNOWN_SECTIONS", "TycoonCore.lua", "tasks = true, pokedex = true, office = true, founder = true }", "tasks = true, office = true, founder = true }"),
     ("the payload without the pokedex", "TycoonCore.lua", "pokedex = CompanyServer.serialize(data),", "pokedex = nil,"),
     ("commitIpo no longer writes the pokedex's run in the IPO's save", "TycoonCore.lua", "\t\tCompanyServer.writeIpoRun(data, payload, newIpo.count) -- the pokedex's run follows the new count in this very save\n", ""),
     ("commitIpo writes the wrong run in the IPO's save", "TycoonCore.lua", "CompanyServer.writeIpoRun(data, payload, newIpo.count)", "CompanyServer.writeIpoRun(data, payload, newIpo.count - 1)"),

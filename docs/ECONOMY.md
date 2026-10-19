@@ -374,6 +374,8 @@ Income is per second before the building's office multiplier. Effects: calls / s
 | IPO-ready | 1.00B | 18.4 h | 16.5 h to 19.3 h | 18.0 h to 22.0 h |
 
 Longest wait between two purchases or hatches in the first hour (the activities fill it): median 14 min
+
+Longest stretch with nothing to do in the first hour (purchases, hatches, calls, sprints, brainstorms, bugs; overhaul 2 phase 3's real clocks: a call every 20 to 40 s from the Desk, a sprint every 3.5 min, a brainstorm every 5 min from the first hire, a bug every 4 to 7 min from the Server Rack): **worst 40 s, median 40 s of 12 runs, under the brief's 2 minutes** (`o2_dead_time`, added at the end of overhaul 2).
 Items bought by the IPO bell: median 63 of 63; Income at the bell: 33.80K/s
 
 One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min Server Rack, 10 min Second Monitor, 24 min Neon Logo, 25 min Router, 26 min Better Chair, 30 min Desk 2, 34 min Mini Fridge, 38 min Whiteboard, 44 min Desk 3, 53 min Bookshelf, 68 min Small Office, 73 min Standing Desks, 77 min Team Table, 83 min Meeting Corner, 88 min Plant Wall, 1.6 h Espresso Bar, 1.6 h Phone Booth, 1.8 h Printer Station, 2.0 h Wi-Fi Mesh, 2.4 h Brand Mural, 2.4 h Desk 4, 2.6 h Dev Kit Shelf, 2.6 h Pitch Screen, 3.2 h Big Office, 3.3 h Meeting Room, 3.6 h Design Studio, 3.9 h Server Row, 4.3 h Snack Bar, 4.4 h QA Lab, 4.8 h Podcast Booth, 5.4 h Game Corner, 6.1 h Analytics Screens, 7.0 h Small Corporate, 8.8 h Rooftop Sign, 8.8 h Desk 5, 9.3 h Whiteboard Wall, 9.7 h Data Center Room ...
@@ -405,7 +407,7 @@ One run's purchases (seed 1): 2s Desk, 88s Coffee Machine, 3 min Laptop, 10 min 
 | MemoMole | Uncommon | 13.00K | 3.20K (Garage Egg) |
 
 
-What this does not tell you: the sim player is perfect (it buys the best payback the moment it can and never pauses), so real players are slower (a guess: +10 to 25%, Seed at about 60 to 70 min). The founder activities are modeled at the proposal's rates (calls 0.25, coding sprint 0.15, brainstorm 0.07, production bug 0.08 seconds of Income per second, 85% attention): phase 3 builds them; until then only calls exist (Studio only). The "longest wait in the first hour" is between purchases or hatches; the activities (a call every 20 to 40 s, a sprint every 3 min) fill it. Offline Cash is not modeled (active play only).
+What this does not tell you: the sim player is perfect (it buys the best payback the moment it can and never pauses), so real players are slower (a guess: +10 to 25%, Seed at about 60 to 70 min). The founder activities are modeled at the proposal's rates (calls 0.25, coding sprint 0.15, brainstorm 0.07, production bug 0.08 seconds of Income per second, 85% attention): phase 3 built them (calls live on every server since then). The "longest wait in the first hour" is between purchases or hatches; the activities (a call every 20 to 40 s, a sprint every 3 min) fill it. Offline Cash is not modeled (active play only).
 
 ### 10.7 Existing saves (the migration)
 

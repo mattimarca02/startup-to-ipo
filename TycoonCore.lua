@@ -52,6 +52,7 @@ local PoachServer = require(script.Parent:WaitForChild("PoachServer"))
 local OnboardingServer = require(script.Parent:WaitForChild("OnboardingServer"))
 local CompanyServer = require(script.Parent:WaitForChild("CompanyServer"))
 local TaskServer = require(script.Parent:WaitForChild("TaskServer"))
+local FounderServer = require(script.Parent:WaitForChild("FounderServer")) -- overhaul 2 phase 3: the founder's activities
 local DailyServer = require(script.Parent:WaitForChild("DailyServer"))
 
 -- The garage that grows with the startup: PlotVisuals builds it from the data in PlotArt (both in
@@ -86,7 +87,7 @@ for _, item in ipairs(OfficeConfig.Items) do
 end
 
 local PLOT_SPACING = 90
-local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the garage sign that names the next upgrade (front of the plot)
+local SIGN_OFFSET = Vector3.new(0, 0.5, 24) -- the blackboard over the lane at the front of the plot (was the next-upgrade sign)
 local MAX_PLOTS = 6
 -- Each garage's turn in degrees, one per slot (quarter turns only: 0, 90, 180 or 270). Offsets inside a garage are in
 -- its own frame (+X right, +Z the front, toward the signs), so they turn with it (plotFrame). All 0 for now: every
@@ -106,7 +107,7 @@ local LOAD_FAILED_MESSAGE = "Your startup couldn't load. Please rejoin in a mome
 
 -- The parts of the save this version writes. Any other part of a loaded save was written by
 -- newer (or other) code: it's kept and written back unchanged, never deleted.
-local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true, office = true }
+local KNOWN_SECTIONS = { cash = true, owned = true, lastSeen = true, shop = true, team = true, poach = true, ipo = true, onboarding = true, daily = true, fixedHires = true, tasks = true, pokedex = true, office = true, founder = true }
 
 local plotOwners = {} -- slot number -> player
 local syncDesks -- the office's workstations (set with the employees, below; buyDesk calls it first)
@@ -193,7 +194,7 @@ end
 local function updateIncome(player)
 	local data = playerData[player]
 	if not data then return end
-	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player))
+	data.income.Value = math.floor(totalIncome(data) * ShopServer.getCashMultiplier(player) * IpoServer.getMultiplier(player) * FounderServer.incomeBoost(player))
 	local building, number = OfficeConfig.building(buildingOf(data))
 	player:SetAttribute("Building", number) -- overhaul 2: for display only (the shop, the Team window); nothing reads it back
 	player:SetAttribute("TeamMultiplier", building.team)
@@ -297,10 +298,16 @@ local function setGarageState(slot, state, ownerName)
 		post.Transparency = LobbyConfig.ClaimEnabled and 0 or 1
 		local prompt = post:FindFirstChildOfClass("ProximityPrompt")
 		if prompt then prompt.Enabled = free end
-		local gui = post:FindFirstChildOfClass("BillboardGui")
-		if gui then
-			gui.Enabled = LobbyConfig.ClaimEnabled and state ~= "Taken"
-			gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.Free) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+	end
+	local board = claimPart(slot, "FreeSign") -- overhaul 2 phase 5: a board with a SurfaceGui on each face
+	if board then
+		local shown = LobbyConfig.ClaimEnabled and state ~= "Taken"
+		board.Transparency = shown and 0 or 1
+		for _, gui in ipairs(board:GetChildren()) do
+			if gui.ClassName == "SurfaceGui" then
+				gui.Enabled = shown
+				gui.TextLabel.Text = (state == "Free" and LobbyConfig.Texts.FreeSign) or (state == "MovingIn" and LobbyConfig.Texts.MovingIn) or LobbyConfig.Texts.Closing
+			end
 		end
 	end
 	local lamp = claimPart(slot, "FreeLamp")
@@ -407,9 +414,28 @@ local function buildGarages()
 		prompt.Triggered:Connect(function(player)
 			requestClaim(player, slot)
 		end)
-		local freeSign = addLabel(post, LobbyConfig.Texts.Free, 4)
-		freeSign.TextColor3 = Color3.fromRGB(90, 230, 120)
-		freeSign.Parent.Enabled = false
+		-- The FREE sign (overhaul 2 phase 5, the owner's point 4): a board on the post with the text on both faces, a SurfaceGui
+		-- (hidden by walls like any part, never drawn on top); setGarageState shows it and writes its text
+		local board = makePart(spot, "FreeSign", Vector3.new(4.6, 2, 0.2), postAt * CFrame.new(0, 0.9, 0), Color3.fromRGB(28, 60, 40), Enum.Material.SmoothPlastic)
+		board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
+		for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+			local gui = Instance.new("SurfaceGui")
+			gui.Face = face
+			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			gui.PixelsPerStud = 50
+			gui.LightInfluence = 0
+			gui.Enabled = false
+			gui.Parent = board
+			local label = Instance.new("TextLabel")
+			label.Name = "TextLabel"
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundTransparency = 1
+			label.TextScaled = true
+			label.Font = Enum.Font.GothamBold
+			label.TextColor3 = Color3.fromRGB(110, 240, 140)
+			label.Text = LobbyConfig.Texts.FreeSign
+			label.Parent = gui
+		end
 		garage.Parent = root
 		garages[slot] = garage
 	end
@@ -460,6 +486,7 @@ end
 -- Runs every second (income loop) and after a building is bought: the room and the building follow the building owned
 -- (overhaul 2; never the valuation by itself), with a quick flash (the bought props move along). A funding stage
 -- reached says so once (stageUpToast). data.debugStage is the Studio Debug button's (in memory only, never saved).
+local writeBoard -- the blackboard (below, with refreshSign): syncRoom rewrites it every second
 local function syncRoom(data)
 	local reached = stageOf(data)
 	if data.stageSeen and reached > data.stageSeen then
@@ -474,6 +501,9 @@ local function syncRoom(data)
 		looks("items", PlotVisuals.setItems, data.looks, data.owned) -- the catalog items on show follow `owned` (an IPO clears them)
 	end
 	syncBuilding(data.slot, stage)
+	if data.board then
+		pcall(writeBoard, data) -- the goal chain moves on every second (looks only; refreshSign warns about a failure)
+	end
 end
 
 -- An upgrade shows its prop from PlotArt in its station (popIn on a purchase); without one, the plain block. Overhaul 2:
@@ -509,27 +539,93 @@ local function publishUpgrades(player)
 	end
 end
 
--- The sign in the garage names the next upgrade. It is only a sign: nothing happens when you step
--- on it. Upgrades are bought in the shop's Office tab (buyUpgrade below).
+-- The blackboard (overhaul 2 phase 3, the owner's point 10; it replaced the green "Next: ..." sign): a chalk board hung
+-- between two posts over the lane at the front of the garage, its face turned to the spawn, so it is the first thing a
+-- player sees on landing, and high enough to walk under. The server writes the next steps of the goal chain on it in
+-- chalk (OnboardingServer.boardLines), then the cheapest item to buy. A SurfaceGui on a part (it hides behind walls
+-- like any part, never drawn on top). Looks only: it collides with nothing, is touched by nothing, is never saved.
+-- The brainstorm (FounderServer) happens here: FounderClient puts its prompt on the board.
+local BOARD_SIZE = Vector3.new(8.4, 4.4, 0.3) -- the slate
+local BOARD_UP = 8.4 -- its center above the floor top (bottom at 6.2: a character walks under it)
+local BOARD_LINES = 3 -- goals written on it
+
+local function boardText(data)
+	local lines = { "Next steps:" }
+	for _, line in ipairs(OnboardingServer.boardLines(data, BOARD_LINES)) do
+		table.insert(lines, "- " .. line)
+	end
+	local _, upg = nextUpgrade(data)
+	if upg then
+		table.insert(lines, "- Shop: " .. upg.name .. " " .. OfficeConfig.money(upg.cost))
+	end
+	if #lines == 1 then
+		table.insert(lines, "- Grow, hire, go public!")
+	end
+	return table.concat(lines, "\n")
+end
+
+writeBoard = function(data)
+	local board = data.board
+	if not board then
+		local origin = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage; the part's front (-Z) faces the spawn
+		local model = Instance.new("Model")
+		model.Name = "Blackboard"
+		local function piece(name, size, offset, color, material)
+			local part = makePart(model, name, size, origin * CFrame.new(offset), color, material)
+			part.CanCollide, part.CanTouch, part.CanQuery, part.CastShadow = false, false, false, false
+			return part
+		end
+		local wood, woodDark = Color3.fromRGB(122, 84, 52), Color3.fromRGB(86, 58, 36)
+		local slate = piece("Slate", BOARD_SIZE, Vector3.new(0, BOARD_UP, 0), Color3.fromRGB(38, 52, 44), Enum.Material.Slate)
+		piece("FrameTop", Vector3.new(8.9, 0.3, 0.45), Vector3.new(0, BOARD_UP + 2.35, 0), wood, Enum.Material.Wood)
+		piece("FrameBottom", Vector3.new(8.9, 0.3, 0.45), Vector3.new(0, BOARD_UP - 2.35, 0), wood, Enum.Material.Wood)
+		piece("FrameLeft", Vector3.new(0.3, 4.4, 0.45), Vector3.new(-4.3, BOARD_UP, 0), wood, Enum.Material.Wood)
+		piece("FrameRight", Vector3.new(0.3, 4.4, 0.45), Vector3.new(4.3, BOARD_UP, 0), wood, Enum.Material.Wood)
+		piece("ChalkTray", Vector3.new(7.6, 0.15, 0.5), Vector3.new(0, BOARD_UP - 2.55, -0.3), woodDark, Enum.Material.Wood)
+		piece("Chalk", Vector3.new(0.6, 0.12, 0.12), Vector3.new(-2.4, BOARD_UP - 2.42, -0.35), Color3.fromRGB(240, 240, 232), Enum.Material.SmoothPlastic)
+		piece("PostLeft", Vector3.new(0.3, BOARD_UP + 2.5, 0.3), Vector3.new(-4.45, (BOARD_UP + 2.5) / 2, 0.25), woodDark, Enum.Material.Wood)
+		piece("PostRight", Vector3.new(0.3, BOARD_UP + 2.5, 0.3), Vector3.new(4.45, (BOARD_UP + 2.5) / 2, 0.25), woodDark, Enum.Material.Wood)
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 50
+		gui.LightInfluence = 0
+		gui.Parent = slate
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0.05, 0.06)
+		label.Size = UDim2.fromScale(0.9, 0.88)
+		label.Font = Enum.Font.IndieFlower
+		label.TextColor3 = Color3.fromRGB(240, 240, 228)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		label.TextScaled = true
+		label.Text = ""
+		label.Parent = gui
+		local limit = Instance.new("UITextSizeConstraint")
+		limit.MaxTextSize = 48
+		limit.Parent = label
+		model.Parent = data.folder
+		board = { model = model, label = label, text = nil }
+		data.board = board
+	end
+	local text = boardText(data)
+	if text ~= board.text then
+		board.text = text
+		board.label.Text = text
+	end
+end
+
+-- Publishes the owned upgrades and writes the blackboard (the load, a purchase, an IPO). Upgrades are bought in the
+-- shop's Office tab (buyUpgrade below); nothing in the garage buys anything by touch.
 local function refreshSign(player)
 	local data = playerData[player]
 	if not data then return end
-	if data.sign then
-		data.sign:Destroy()
-		data.sign = nil
-	end
 	publishUpgrades(player)
-
-	local i, upg = nextUpgrade(data)
-	if not i then return end -- everything bought
-
-	local pos = plotFrame(data.slot) * CFrame.new(SIGN_OFFSET) -- turned with the garage
-	local post = makePart(data.folder, "BuySign", Vector3.new(0.4, 3, 0.4), pos * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 74, 86), Enum.Material.Metal)
-	post.CanCollide, post.CanTouch, post.CanQuery = false, false, false
-	local board = makePart(post, "Board", Vector3.new(8, 2.6, 0.3), pos * CFrame.new(0, 4.3, 0), Color3.fromRGB(0, 140, 70), Enum.Material.SmoothPlastic)
-	board.CanCollide, board.CanTouch, board.CanQuery = false, false, false
-	addLabel(board, string.format("Next: %s  %s\nBuy it in SHOP > Office", upg.name, OfficeConfig.money(upg.cost)), 3)
-	data.sign = post
+	local ok, err = pcall(writeBoard, data) -- looks only: a failure never stops the load, a purchase or an IPO
+	if not ok then
+		warn("The blackboard failed: " .. tostring(err))
+	end
 end
 
 -- Buying an item of the office catalog: the shop's Office tab asks, only with the item's number. The server decides
@@ -828,8 +924,9 @@ local function buildPayload(data, transform, playerName)
 			ipo = IpoServer.serialize(data),
 			onboarding = OnboardingServer.serialize(data),
 			daily = DailyServer.serialize(data),
-			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep: Studio only in PR 1
+			tasks = TaskServer.serialize(data), -- nil (no section) until there is something to keep
 			office = officeToSave(data), -- overhaul 2: the desks bought (unknown fields written back as they came)
+			founder = FounderServer.serialize(data), -- overhaul 2 phase 3: the pitches of this run (nil until there is one)
 			pokedex = CompanyServer.serialize(data), -- the company, its sector and the Pokedex (a locked newer section is written back as it was)
 			fixedHires = EmployeeServer.serializeFixedHires(data), -- nil (no section) until a restricted player hatches
 		}
@@ -882,7 +979,7 @@ end
 local function save(player, transform)
 	local data = playerData[player]
 	if not data or not data.loaded then return false end -- never overwrite data we failed (or haven't finished) loading
-	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex and data.office) then -- a save must have every part
+	if not (data.shop and data.team and data.poach and data.ipo and data.onboarding and data.daily and data.tasks and data.pokedex and data.office and data.founder) then -- a save must have every part
 		warn("Not saving " .. player.Name .. ": part of their data isn't set up")
 		return false
 	end
@@ -1228,6 +1325,21 @@ TaskServer.init({
 	end,
 })
 
+-- Founder activities (overhaul 2 phase 3) ----------------------------------
+-- Plugged in after TaskServer (it pays through TaskServer.payReward) and before DailyServer, which stays last.
+
+FounderServer.init({
+	getData = function(player)
+		return playerData[player]
+	end,
+	updateIncome = updateIncome,
+	plotFrame = plotFrame,
+	stageOf = stageOf,
+	notify = function(player, text)
+		ShopServer.notify(player, text)
+	end,
+})
+
 -- Daily login calendar (milestone 6) -------------------------------------
 
 DailyServer.init({
@@ -1419,6 +1531,7 @@ local function claimGarage(player, slot)
 	-- CLAIMLOAD-END
 
 	setupOffice(player, data, saved) -- overhaul 2: the desks bought (no yield since the block above: nothing saved yet)
+	FounderServer.setupPlayer(player, data, saved and saved.founder) -- overhaul 2 phase 3: the pitches (no yield either)
 	data.stageSeen = stageOf(data) -- the stage this session started at: only a later round reached is told
 	syncRoom(data) -- the room and the building of the building owned
 	syncDesks(data, false) -- the workstations that loaded (the room above starts with none)
